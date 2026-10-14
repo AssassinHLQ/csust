@@ -32,10 +32,13 @@ const SogRuntime := preload("res://scripts/sog_runtime.gd")
 ##    如果编辑器缓存还是旧的（编辑器一直开着没重扫），`GaussianSplatNode.new()`
 ##    会直接解析失败、整个脚本加载不了。preload 走文件路径，不受类名缓存影响。
 const GaussianSplatNodeScript := preload("res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd")
+const GaussianResourceScript := preload("res://addons/gdgs/runtime/resources/gaussian_resource.gd")
 const STRUCT_SIZE := 60          # 每点 60 个 float
 const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 
 @export_file("*.sogdata", "*.sog") var sog_path := "res://splatdata/school_playable.sogdata"
+## HUD 状态行上显示的名字
+@export var display_name := "泼溅场景"
 ## "off" 发行用；"auto" 开发期第二次启动秒进；"refresh" 强制重建缓存
 @export_enum("off", "auto", "refresh") var cache_mode := "auto"
 ## 扫描是「模型尺度」，需要放大。×25 时内容约 211 × 160 m（真实校园尺度）
@@ -46,6 +49,18 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 ## 自动摆放：内容水平居中到原点，且顶面沉到 top_gap 之下
 @export var auto_place := true
 @export var top_gap := 12.0
+## auto_place = false 时的第三种摆放方式：把**源坐标系**里的 anchor_source 点
+## 对到节点局部空间的 anchor_world。适合「把房间地板摆到平台地面上」这类诉求 ——
+## 源数据里「地板平面 + 房间中心」是量出来的常量，比手算 offset 稳。
+@export var use_anchor := false
+@export var anchor_source := Vector3.ZERO
+@export var anchor_world := Vector3.ZERO
+## 裁掉离群 floaters（俯拍重建里那些又大又远的椭球，放大后是糊满屏的白团）
+@export var crop_enabled := false
+## 裁剪盒 = 内容 1‰~99.9‰ 分位盒向外扩这么多（源坐标单位）
+@export var crop_margin := 0.5
+## > 0 时再丢弃椭球尺度超过它的点（同上单位）；0 = 只看位置
+@export var crop_max_scale := 0.0
 ## 是否再乘 GDGS 自带的「绕 Z -180°」姿态修正。本数据自身 Y 朝上，默认关。
 @export var use_default_orientation := false
 ## 是否挂上碰撞 GLB 的三角网格（本扫描的碰撞 GLB 与实际范围不符，默认关）
@@ -60,6 +75,8 @@ var splat_aabb := AABB()
 var content_min := Vector3.ZERO
 var content_max := Vector3.ZERO
 var point_count := 0
+## 裁剪结果（crop_enabled 时）：{"kept": int, "dropped": int, "box": AABB, "scale_dropped": int}
+var crop_stats := {}
 var loading := false
 var elapsed_seconds := 0.0
 
@@ -184,6 +201,19 @@ func _finish(result: Dictionary) -> void:
 	content_min = bounds["min"]
 	content_max = bounds["max"]
 
+	# 裁掉离群 floaters（必须在算内容盒之后、建节点之前）
+	crop_stats = {}
+	if crop_enabled:
+		var cropped := _crop_resource(res)
+		if bool(cropped.get("ok", false)):
+			crop_stats = cropped
+			res = cropped["resource"]
+			point_count = int(res.get("point_count"))
+			splat_aabb = res.get("aabb")
+			var cb := content_bounds(res)
+			content_min = cb["min"]
+			content_max = cb["max"]
+
 	splat_node = GaussianSplatNodeScript.new()
 	splat_node.name = "Splat"
 	splat_node.set("gaussian", res)
@@ -202,7 +232,12 @@ func _finish(result: Dictionary) -> void:
 		"elapsed": elapsed_seconds,
 		"from_cache": bool(result.get("from_cache", false)),
 		"source": String(result.get("source", sog_path)),
+		"crop": crop_stats,
 	}
+	if crop_enabled and not crop_stats.is_empty():
+		print("[SplatScene] 裁剪：留 %d 点，丢 %d 点（其中椭球过大 %d），盒 %s" % [
+			int(crop_stats["kept"]), int(crop_stats["dropped"]),
+			int(crop_stats["scale_dropped"]), str(crop_stats["box"])])
 	print("[SplatScene] 完成：%d 点，耗时 %.1f s（缓存 %s）" % [
 		point_count, elapsed_seconds, str(info["from_cache"])])
 	print("[SplatScene] 内容源尺寸 %s → 世界尺寸 %s，顶面 y=%.2f" % [
@@ -222,13 +257,97 @@ func _local_basis() -> Basis:
 
 ## 自动摆放：水平把内容中心对到原点，竖向把内容顶面沉到 -top_gap
 func _resolve_offset() -> Vector3:
-	if not auto_place:
-		return offset
-	var center := (content_min + content_max) * 0.5
-	return Vector3(
-		-center.x * world_scale,
-		-top_gap - content_max.y * world_scale,
-		-center.z * world_scale)
+	if auto_place:
+		var center := (content_min + content_max) * 0.5
+		return Vector3(
+			-center.x * world_scale,
+			-top_gap - content_max.y * world_scale,
+			-center.z * world_scale)
+	if use_anchor:
+		# 世界点 = 局部基 × 源点 + offset，所以把源锚点对到 anchor_world 就是
+		# offset = anchor_world − 局部基 × anchor_source
+		return anchor_world - _local_basis() * anchor_source
+	return offset
+
+
+## 按内容 1‰~99.9‰ 分位盒（外扩 crop_margin）+ 可选椭球尺度阈值裁剪点数据。
+##
+## 为什么要裁：俯拍重建里总有少量又大又远的离群椭球（本工程实测：0.2% 的点、
+## 单个椭球尺度可达 15 源单位）。放大到场地尺度后它们就是几百米的大白团，
+## 糊满半个屏幕 —— 校园那份只能靠 top_gap 把它们顶到平台上方，
+## 而摆在地面上的房间没有这个余量，必须在数据层裁掉。
+##
+## 实现按「连续段」整段复制（slice + append_array），不是逐点拷贝 240 字节，
+## 所以 277 万点只花 0.3 s 左右。
+func _crop_resource(res: Resource) -> Dictionary:
+	var bytes: PackedByteArray = res.get("point_data_byte")
+	var xyz: PackedVector3Array = res.get("xyz")
+	var count := int(res.get("point_count"))
+	if bytes.size() < count * BYTES_PER_SPLAT:
+		count = bytes.size() / BYTES_PER_SPLAT
+	if count <= 0:
+		return {"ok": false}
+	if xyz.size() < count:
+		xyz = PackedVector3Array()
+		xyz.resize(count)
+		for i in count:
+			var o := i * BYTES_PER_SPLAT
+			xyz[i] = Vector3(
+				bytes.decode_float(o), bytes.decode_float(o + 4), bytes.decode_float(o + 8))
+
+	var box := AABB(
+		content_min - Vector3.ONE * crop_margin,
+		(content_max - content_min) + Vector3.ONE * crop_margin * 2.0)
+	var box_hi := box.position + box.size
+
+	var out_bytes := PackedByteArray()
+	var out_xyz := PackedVector3Array()
+	var aabb_min := Vector3(INF, INF, INF)
+	var aabb_max := Vector3(-INF, -INF, -INF)
+	var kept := 0
+	var dropped := 0
+	var scale_dropped := 0
+	var run_start := -1
+	for i in count:
+		var p: Vector3 = xyz[i]
+		var keep := p.x >= box.position.x and p.x <= box_hi.x \
+			and p.y >= box.position.y and p.y <= box_hi.y \
+			and p.z >= box.position.z and p.z <= box_hi.z
+		if keep and crop_max_scale > 0.0:
+			var off := i * BYTES_PER_SPLAT
+			var worst := 0.0
+			for f in [4, 7, 9]:
+				worst = maxf(worst, sqrt(maxf(bytes.decode_float(off + f * 4), 0.0)))
+			if worst > crop_max_scale:
+				keep = false
+				scale_dropped += 1
+		if keep:
+			if run_start < 0:
+				run_start = i
+			kept += 1
+			aabb_min = aabb_min.min(p)
+			aabb_max = aabb_max.max(p)
+		else:
+			dropped += 1
+			if run_start >= 0:
+				out_bytes.append_array(bytes.slice(
+					run_start * BYTES_PER_SPLAT, i * BYTES_PER_SPLAT))
+				out_xyz.append_array(xyz.slice(run_start, i))
+				run_start = -1
+	if run_start >= 0:
+		out_bytes.append_array(bytes.slice(
+			run_start * BYTES_PER_SPLAT, count * BYTES_PER_SPLAT))
+		out_xyz.append_array(xyz.slice(run_start, count))
+
+	var cropped: Resource = GaussianResourceScript.new()
+	cropped.set("point_count", kept)
+	cropped.set("point_data_byte", out_bytes)
+	cropped.set("xyz", out_xyz)
+	cropped.set("aabb", AABB(aabb_min, aabb_max - aabb_min) if kept > 0 else AABB())
+	return {
+		"ok": true, "resource": cropped, "kept": kept, "dropped": dropped,
+		"scale_dropped": scale_dropped, "box": box,
+	}
 
 
 ## 抽样点数据算分位数包围盒。结构：每点 60 float，[0..2] = 已中心化的 xyz，
