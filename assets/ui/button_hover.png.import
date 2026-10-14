@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://irfae3msrb6m"
-path="res://.godot/imported/tile_panel.png-03c1028941f50812b2a8b5850712445e.ctex"
+uid="uid://cmlgwwewhwdac"
+path="res://.godot/imported/button_hover.png-4b92caaef1fac61fa5bd6833aa7648ff.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/tile_panel.png"
-dest_files=["res://.godot/imported/tile_panel.png-03c1028941f50812b2a8b5850712445e.ctex"]
+source_file="res://assets/ui/button_hover.png"
+dest_files=["res://.godot/imported/button_hover.png-4b92caaef1fac61fa5bd6833aa7648ff.ctex"]
 
 [params]
 

@@ -472,6 +472,11 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 > （日志里白纸黑字写着 `_trigger = false`），「按住不放」相关的用例集体假红。
 > 处理办法：`player.set_process_input(false)` —— 但**要测转身就不能关
 > `_physics_process`**，转身逻辑跑在里面。
+>
+> ⚠️ 还有一条**环境**要求：**跑自检时别碰鼠标和键盘。**
+> 移动鼠标会直接改 `player._yaw`（`_verify_spawnview` 第 1 节量的就是出生朝向，会红）；
+> 按 `Esc` 更糟 —— 设置界面（§1.12）会**暂停游戏**，之后所有移动 / 动画 / 站位类断言
+> 会一起变红，看起来像大面积回归，其实只是被暂停了。
 
 其它工具（都靠环境变量触发，平时空转）：
 
@@ -523,29 +528,42 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
 它没法负责「关掉菜单」。所以由 `settings_menu.gd` 自己用 `PROCESS_MODE_ALWAYS` 监听
 `Esc`（暂停也收得到）；原来 `player.gd` 里那段「`Esc` 来回切鼠标捕获」已经删掉了。
 
-### UI 与皮肤
+### UI 与皮肤（**可整套切换**）
 
-UI 全部**代码构建**（和 `hud.gd` 里 Boss 血条同一套做法），皮肤集中在 `assets/ui/`：
+UI 全部**代码构建**（和 `hud.gd` 里 Boss 血条同一套做法）。皮肤是**一整套**：
+一个目录 + 一套配色 + 九宫格边距，定义在 `settings_menu.gd` 顶部的 `SKINS` 里，
+**按优先级**挑第一套文件齐的。两套皮肤的文件名刻意保持一致，所以换皮肤只是换目录：
 
-| 文件 | 来源 | 用途 |
-|---|---|---|
-| `tile_panel.png` | Kenney UI Pack - Pixel Adventure（CC0）九宫格 | 面板 |
-| `tile_button*.png` | 同上 | 按钮的 normal / hover / pressed |
-| `font_pixel.ttf` | Fusion Pixel Font（OFL）12px **中文** | 全部文字 |
+| 皮肤 | 目录 | 授权 | 仓库里有吗 |
+|---|---|---|---|
+| **Sprout Lands**（优先） | `assets/ui_sprout/` | 免费，但**限非商业 + 禁止再分发** | ❌ 本地自备 |
+| Kenney（兜底） | `assets/ui/` | CC0 / OFL | ✅ 随仓库分发 |
 
-**想整体换风格，替换这几张图和字体就够了**（比如换成 Sprout Lands 的素材）——
-尺寸约定见 `settings_menu.gd` 顶部的常量（`NINE_MARGIN = 8`，素材是 32×32 的像素块）。
-滑块**刻意不用**九宫格：槽只有约 8 px 高，边距一拉伸就错位，改用同色系的平色块
-+ 代码生成的方块 grabber。
+文件名约定（两套一致）：`panel.png`、`button.png`、`button_pressed.png`、
+可选的 `button_hover.png`、`font.ttf`。
 
-⚠️ 两个坑：
+⚠️ **Sprout Lands 那套为什么不在仓库里**：它的授权原文写着
+`You can not redistribute or resale, even if modified.` —— 提交进仓库就等于「再分发」。
+所以 `.gitignore` 把它排除了，需要自己从
+[itch](https://cupnooble.itch.io/sprout-lands-ui-pack) 取得后放进 `assets/ui_sprout/`。
+**没有它会自动回退到 Kenney 那套**，不报错、也不缺图。
 
-1. **面板切片原本是「中空边框」**（中心 `alpha = 0`）——直接当面板用，背后的游戏画面会
-   透上来压着文字（第一版就是，截图里能看清后面的同伴）。已把 `tile_panel.png` 与
-   `tile_button_hover.png` 的中心填成白色，颜色完全交给 `modulate_color` 决定。
-2. **不要在运行时改 `FontFile` 的 `antialiasing` / `hinting` 那几项**：会触发字形缓存
-   重建，这个中文字体 7 MB 字形很多，很慢。直接用字体原生的 12px 设计即可
-   （`FONT_SIZE = 16` 实测清晰）；真要关抗锯齿，请去**导入设置**里配。
+现在 `assets/ui_sprout/` 里用的是从 `可用素材_待接入` 裁出来的三样：
+`Setting menu.png` 的空白面板（106×122，九宫格边距取 12）、
+`Square Buttons 26x26.png` 的 normal / pressed 两格（各 48×48）、
+以及官方 `pixelFont-7-8x14-sproutLands.ttf`（118 KB —— 比 Kenney 那套的 7 MB 中文字体小得多）。
+
+### ⚠️ 这里踩过的四个坑
+
+1. **面板切片可能是「中空边框」**（中心 `alpha = 0`）。Kenney 的 `tile_0008.png` 就是，
+   直接当面板用会让背后的游戏画面透上来压着文字（第一版截图里能清楚看到后面的同伴）。
+   已把中心填成白色，颜色完全交给 `modulate_color`。**裁新素材前务必先查中心像素 alpha。**
+2. **`CheckButton` 不能给 `SIZE_EXPAND_FILL`**：开关会跟着撑满整行、变成一条长绿条。
+   固定小尺寸（`76 × 28`）+ `SIZE_SHRINK_END` 才对。
+3. **滑块刻意不用九宫格素材**：槽只有约 8 px 高，而九宫格边距有 8~12 px，一拉伸就错位。
+   改用与皮肤同色系的平色块 + 代码生成的方块 grabber。
+4. **不要在运行时改 `FontFile` 的 `antialiasing` / `hinting`**：会触发字形缓存重建，
+   中文字体字形多、很慢。用字体原生的设计尺寸即可；真要关抗锯齿请去**导入设置**里配。
 
 自检 `_verify_settings.gd`（29 项），会顺带渲一张
 `_arisu_captures/_ui/96_settings_menu.png` 供人眼核对皮肤。
@@ -651,7 +669,8 @@ _arisu_learn/
 ├─ addons/
 │  └─ gdgs/                 GDGS 3.3.0 高斯泼溅插件（**纯 GDScript，无 DLL**，MIT，第六节）
 ├─ assets/
-│  └─ ui/                   设置界面的像素皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
+│  ├─ ui/                   设置界面的**内置**皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
+│  └─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）
 ├─ models/
 │  ├─ README.md             说明：要放什么模型、版权与换模型的三个注意点
 │  ├─ Arisu.glb             原模型（24 条动作）※不随仓库分发

@@ -89,14 +89,23 @@ func _run() -> void:
 	player.global_position = Vector3(0, 0.05, -8)
 
 	var moving_clip := ""
-	for i in 200:
+	# ⚠️ 这里原本是 `for i in 200: await physics_frame` —— **固定物理帧数不可靠**：
+	#    Godot 每个渲染帧最多推进 8 个物理步（`max_physics_steps_per_frame`），
+	#    渲染帧率一旦掉到 7.5 fps 以下，物理时间就比真实时间**慢**，
+	#    「200 物理帧」不再等于 3.33 秒。加了设置界面之后帧率略降，这条就随机红了。
+	#    改成「等条件 + 超时兜底」：通常 3 秒内到位；真坏了超时后照样断言失败。
+	var waited := 0
+	while waited < 480:
 		await physics_frame
-		if i == 60:
+		waited += 1
+		if waited == 60:
 			for c in list:
 				var clip := _clip(c)
 				if clip != "Normal_Idle":
 					moving_clip = clip
 					break
+		if waited > 60 and _all_close(list, 2.5):
+			break
 	var dists: Array[float] = []
 	for c in list:
 		dists.append(c.slot_distance())
@@ -112,7 +121,12 @@ func _run() -> void:
 	_check(not moving_clip.is_empty(), "追赶途中播的是移动动作，不是原地滑步")
 
 	print("\n========== 4. 站住回到 Idle ==========")
-	await _steps(90)
+	# 同理：等「都回到 Idle」，而不是等固定帧数
+	await _wait_until(func() -> bool:
+		for c in list:
+			if _clip(c) != "Normal_Idle":
+				return false
+		return true, 8.0)
 	for c in list:
 		print("  %-4s 站定后动作 = %s（速度 %.2f m/s）" % [c.display_name, _clip(c), c.speed()])
 		_check(_clip(c) == "Normal_Idle", "%s：站定后回到 Normal_Idle" % c.display_name)
@@ -134,13 +148,15 @@ func _run() -> void:
 	player._yaw = 0.0
 	player.rig.rotation.y = 0.0
 	player._pitch = -0.04
-	for _i in 220:
-		await physics_frame
+	# ⚠️ 必须等到**真的站定**（同伴自己的 `stop_distance` 是 0.45 m）。
+	#    下面两条屏幕位置断言对站位极敏感：只等到「差 < 1 m」的话，
+	#    「柚子不在画面中央」和「七人互相分开」会随那 1 m 上下浮动（实测稳定红）。
+	await _wait_until(func() -> bool: return _all_close(list, 0.5), 15.0)
 	var back := true
 	for c in list:
-		if c.slot_distance() > 1.0:
+		if c.slot_distance() > 0.6:
 			back = false
-	_check(back, "七名同伴都走回站位（差 < 1 m）")
+	_check(back, "七名同伴都走回站位（差 < 0.6 m）")
 
 	# “挡镜头”真正要防的是两件事：**贴脸**（离相机太近）和**占屏太大**。
 	# 一开始本喵用的是「不许进画面中心 50% 区域」——太糙了：
@@ -362,6 +378,28 @@ func _best_skeleton(node: Node) -> Skeleton3D:
 		if best == null or sk.get_bone_count() > best.get_bone_count():
 			best = sk
 	return best
+
+
+## 七名同伴是否都已走到各自站位的 `limit` 米内 —— 给「等条件」用
+func _all_close(list: Array, limit: float) -> bool:
+	for c in list:
+		if c.slot_distance() >= limit:
+			return false
+	return true
+
+
+## 等条件成立，**最多等 `timeout_sec` 秒**。
+## ⚠️ 超时后返回 false，调用方照常断言 —— 所以「等」只是消掉「时间不够」的假红，
+##    不会把真问题盖掉（真坏了就等满超时、然后照样红）。
+## ⚠️ 超时按**真实时间**判，不按帧数：`await physics_frame` 在低渲染帧率下会被
+##    `max_physics_steps_per_frame` 限流，物理时间比真实时间慢。
+func _wait_until(cond: Callable, timeout_sec: float) -> bool:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < int(timeout_sec * 1000.0):
+		if cond.call():
+			return true
+		await physics_frame
+	return cond.call()
 
 
 func _all(node: Node, cls: String) -> Array[Node]:

@@ -23,6 +23,11 @@
 # 同伴模型（未花 / 优香 / 诺亚，同样派生自 Blue Archive）
 /models/companions/**
 
+# Sprout Lands UI 素材（美术：Cup Nooble）—— 授权原文写着
+# 「You can not redistribute or resale, even if modified.」，
+# 所以**不能**随仓库分发。本地放进 assets/ui_sprout/ 就会自动启用（否则回退 assets/ui/）。
+/assets/ui_sprout/**
+
 # 但保留两个目录下的说明文件，克隆者要靠它们知道该放什么
 !/models/README.md
 !/splatdata/README.md
