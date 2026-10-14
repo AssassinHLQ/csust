@@ -17,8 +17,8 @@ var _weapon: Weapon
 var _spread := 8.0
 var _splat_label: Label
 var _splat_done := false
-var _boss_name: Label
-var _boss_bar: ProgressBar
+## 顶部 Boss 血条组：一个 Boss 一行，每行 {name: Label, bar: ProgressBar, title: String}
+var _boss_rows: Array[Dictionary] = []
 
 ## SogRuntime 的进度阶段 → 给人看的文案
 const SPLAT_PHASE := {
@@ -43,68 +43,91 @@ func _ready() -> void:
 	_splat_label.visible = false
 	add_child(_splat_label)
 
-	_build_boss_bar()
+	# Boss 血条不在这里建：见 bind_bosses()，要按场上实际有几位来排行数。
 
 
-## 顶部居中的 Boss 血条（木桩阶段就有，方便看伤害）
-func _build_boss_bar() -> void:
-	_boss_name = Label.new()
-	_boss_name.name = "BossName"
-	_boss_name.text = "霸王龙优香"
-	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_boss_name.add_theme_font_size_override("font_size", 15)
-	_boss_name.add_theme_color_override("font_color", Color(1.0, 0.88, 0.75, 0.95))
-	_boss_name.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
-	_boss_name.add_theme_constant_override("shadow_offset_x", 1)
-	_boss_name.add_theme_constant_override("shadow_offset_y", 1)
-	_boss_name.anchor_left = 0.5
-	_boss_name.anchor_right = 0.5
-	_boss_name.offset_left = -220.0
-	_boss_name.offset_right = 220.0
-	_boss_name.offset_top = 18.0
-	_boss_name.offset_bottom = 38.0
-	_boss_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_boss_name)
+## 顶部居中的 Boss 血条组。**一个 Boss 一行**，自上而下按索引排。
+## 加同伴那一轮场上变成两位 Boss（霸王龙优香 / 飞猪优香），所以从单条改成一组。
+const BOSS_ROW_HEIGHT := 38.0
+const BOSS_BAR_WIDTH := 440.0
 
-	_boss_bar = ProgressBar.new()
-	_boss_bar.name = "BossBar"
-	_boss_bar.min_value = 0.0
-	_boss_bar.max_value = 1.0
-	_boss_bar.value = 1.0
-	_boss_bar.show_percentage = false
-	_boss_bar.anchor_left = 0.5
-	_boss_bar.anchor_right = 0.5
-	_boss_bar.offset_left = -220.0
-	_boss_bar.offset_right = 220.0
-	_boss_bar.offset_top = 40.0
-	_boss_bar.offset_bottom = 54.0
-	_boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.92, 0.42, 0.34)
-	fill.set_corner_radius_all(3)
-	_boss_bar.add_theme_stylebox_override("fill", fill)
+
+func bind_bosses(bosses: Array) -> void:
+	_boss_rows.clear()
+	var index := 0
+	for b in bosses:
+		var boss := b as Boss
+		if boss == null:
+			continue
+		_add_boss_row(index, boss.display_name)
+		boss.health_changed.connect(_on_boss_health.bind(index))
+		_on_boss_health(boss.health, boss.max_health, index)
+		index += 1
+
+
+## 只接一位 Boss 的旧写法（保留，自检里还在用）
+func bind_boss(boss: Boss) -> void:
+	bind_bosses([boss])
+
+
+func _add_boss_row(index: int, title: String) -> void:
+	var top := 18.0 + float(index) * BOSS_ROW_HEIGHT
+
+	var label := Label.new()
+	label.name = "BossName%d" % index
+	label.text = title
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.75, 0.95))
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.offset_left = -BOSS_BAR_WIDTH * 0.5
+	label.offset_right = BOSS_BAR_WIDTH * 0.5
+	label.offset_top = top
+	label.offset_bottom = top + 20.0
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(label)
+
+	var bar := ProgressBar.new()
+	bar.name = "BossBar%d" % index
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = 1.0
+	bar.show_percentage = false
+	bar.anchor_left = 0.5
+	bar.anchor_right = 0.5
+	bar.offset_left = -BOSS_BAR_WIDTH * 0.5
+	bar.offset_right = BOSS_BAR_WIDTH * 0.5
+	bar.offset_top = top + 22.0
+	bar.offset_bottom = top + 36.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bg := StyleBoxFlat.new()
 	bg.bg_color = Color(0.12, 0.13, 0.16, 0.85)
 	bg.set_corner_radius_all(3)
-	_boss_bar.add_theme_stylebox_override("background", bg)
-	add_child(_boss_bar)
+	bar.add_theme_stylebox_override("background", bg)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.92, 0.42, 0.34)
+	fill.set_corner_radius_all(3)
+	bar.add_theme_stylebox_override("fill", fill)
+	add_child(bar)
+
+	_boss_rows.append({"name": label, "bar": bar, "title": title})
 
 
-func bind_boss(boss: Boss) -> void:
-	if boss == null:
+func _on_boss_health(current: float, maximum: float, index: int) -> void:
+	if index < 0 or index >= _boss_rows.size():
 		return
-	boss.health_changed.connect(_on_boss_health)
-	_on_boss_health(boss.health, boss.max_health)
-
-
-func _on_boss_health(current: float, maximum: float) -> void:
-	if _boss_bar == null:
-		return
+	var row: Dictionary = _boss_rows[index]
+	var bar: ProgressBar = row["bar"]
+	var label: Label = row["name"]
 	var ratio := 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
-	_boss_bar.value = ratio
-	_boss_name.text = "霸王龙优香　%d / %d" % [int(ceil(current)), int(maximum)]
+	bar.value = ratio
+	label.text = "%s　%d / %d" % [row["title"], int(ceil(current)), int(maximum)]
 	# 血量见底时闪红
-	var fill := _boss_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	var fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
 	if fill:
 		fill.bg_color = Color(1.0, 0.25, 0.2) if ratio < 0.25 else Color(0.92, 0.42, 0.34)
 

@@ -177,6 +177,10 @@ func _fire_raycast() -> void:
 
 	var q := PhysicsRayQueryParameters3D.create(origin, end)
 	q.collide_with_areas = false
+	# 全部层，唯独屏蔽「同伴层」，让子弹从同伴身上穿过去。
+	# ⚠️ create() 的默认 mask 是全部层；同伴跟得又近，不屏蔽的话
+	#    玩家会一直打在自己人背上（这一段是加同伴时补的）。
+	q.collision_mask = 0xFFFFFFFF & ~Companion.LAYER
 	q.exclude = [_player.get_rid()]
 	var hit := space.intersect_ray(q)
 

@@ -1,0 +1,259 @@
+extends SceneTree
+## 验三名同伴（未花 / 优香 / 诺亚）：
+##   1. 都在场、模型建好、骨架/动画绑定、都在「朋友层」
+##   2. 子弹**穿透**同伴（不会挡自己的输出）—— 并做反向对照，证明屏蔽是必要的
+##   3. 跟随：玩家跑开 14 m，同伴追上来并把站位收回来
+##   4. 动画状态：走动时不是 Idle，站住后回到 Idle
+##   5. 保险：被扔出平台会立刻拉回
+##   6. 不挡镜头（不在画面中心区域，且在相机前方）
+##   7. 渲图
+##
+## 用法（要真渲染）：godot --path <工程> --script res://scripts/_verify_companion.gd -- --splat=off
+
+const COMPANIONS := ["CompanionMika", "CompanionYuuka", "CompanionNoa"]
+
+var _fail := 0
+
+
+func _initialize() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	root.size = Vector2i(1600, 900)
+	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	root.add_child(game)
+	await _steps(30)
+
+	var player: Player = game.get_node("Player")
+	var list: Array[Companion] = []
+	for n in COMPANIONS:
+		list.append(game.get_node(n) as Companion)
+
+	print("========== 1. 三名同伴就位 ==========")
+	_check(list.size() == 3, "场景里有 3 名同伴")
+	for c in list:
+		var skel := _best_skeleton(c)
+		var ap := _first(c, "AnimationPlayer") as AnimationPlayer
+		var h := _local_height(c)
+		print("  %-4s 模型 %-12s 骨架 %3d 骨  动画 %2d 个  layer=%d mask=%d  身高 %.2f m" % [
+			c.display_name, c.model_path.get_file(),
+			skel.get_bone_count() if skel else 0,
+			ap.get_animation_list().size() if ap else 0,
+			c.collision_layer, c.collision_mask, h])
+		_check(c.model != null, "%s：模型已实例化" % c.display_name)
+		_check(skel != null and skel.get_bone_count() > 50,
+			"%s：骨架找对了（%d 骨）" % [c.display_name, skel.get_bone_count() if skel else 0])
+		_check(ap != null and ap.has_animation("Normal_Idle") and ap.has_animation("Cafe_Walk"),
+			"%s：动画找到 Normal_Idle + Cafe_Walk" % c.display_name)
+		_check(c.collision_layer == Companion.LAYER and c.collision_mask == 1,
+			"%s：在朋友层（layer=%d mask=%d）" % [c.display_name, c.collision_layer, c.collision_mask])
+		_check(h > 1.0 and h < 1.9, "%s：身高 %.2f m 在合理区间" % [c.display_name, h])
+
+	print("\n========== 2. 子弹穿透同伴 ==========")
+	# 把优香搬到「玩家 → Target1」的弹道正中间，从玩家眼高打一条射线过去
+	var target: Target = game.get_node("Target1")
+	var yuuka := game.get_node("CompanionYuuka") as Companion
+	player.global_position = Vector3(6, 0.05, -4)
+	yuuka.global_position = Vector3(6, 0.05, -7)
+	await _steps(5)
+	var from := Vector3(6, 1.2, -4)
+	var to := Vector3(6, 1.2, -10)
+	var q := PhysicsRayQueryParameters3D.create(from, to)
+	q.collide_with_areas = false
+	q.collision_mask = 0xFFFFFFFF & ~Companion.LAYER
+	q.exclude = [player.get_rid()]
+	var hit := player.get_world_3d().direct_space_state.intersect_ray(q)
+	print("  射线 %s → %s（优香站在 z=−7 挡在中间）" % [str(from), str(to)])
+	print("     屏蔽朋友层 → 命中 %s" % str(hit.get("collider")) if hit else "     屏蔽朋友层 → 空")
+	_check(hit.size() > 0 and hit.get("collider") == target, "子弹穿过同伴命中 Target1")
+	# 反向对照：不屏蔽朋友层的话确实会被同伴挡住 —— 说明这条屏蔽不是多余的
+	var q2 := PhysicsRayQueryParameters3D.create(from, to)
+	q2.collide_with_areas = false
+	q2.exclude = [player.get_rid()]
+	var hit2 := player.get_world_3d().direct_space_state.intersect_ray(q2)
+	print("     不屏蔽     → 命中 %s" % (str(hit2.get("collider")) if hit2 else "空"))
+	_check(hit2.size() > 0 and hit2.get("collider") == yuuka,
+		"（反向对照）不屏蔽朋友层时确实被同伴挡住")
+
+	print("\n========== 3. 跟随 ==========")
+	# 玩家往前（−Z）跑 14 m，同伴应该追上来
+	yuuka.global_position = Vector3(2, 0.05, 6.9)
+	for c in list:
+		c.global_position = c.slot_position()   # 先摆回各自站位，从零开始量
+	await _steps(5)
+	player.global_position = Vector3(0, 0.05, -8)
+
+	var moving_clip := ""
+	for i in 200:
+		await physics_frame
+		if i == 60:
+			for c in list:
+				var clip := _clip(c)
+				if clip != "Normal_Idle":
+					moving_clip = clip
+					break
+	var dists: Array[float] = []
+	for c in list:
+		dists.append(c.slot_distance())
+	print("  玩家瞬移到 (0, −8) 后等 200 物理帧：")
+	for i in list.size():
+		print("     %-4s 与站位差 %.2f m" % [list[i].display_name, dists[i]])
+	_check(dists[0] < 2.5 and dists[1] < 2.5 and dists[2] < 2.5, "三名同伴都跟上了（差 < 2.5 m）")
+	print("  追赶途中采样到的动作：%s" % ("（只采到 Idle）" if moving_clip.is_empty() else moving_clip))
+	_check(not moving_clip.is_empty(), "追赶途中播的是移动动作，不是原地滑步")
+
+	print("\n========== 4. 站住回到 Idle ==========")
+	await _steps(90)
+	for c in list:
+		print("  %-4s 站定后动作 = %s（速度 %.2f m/s）" % [c.display_name, _clip(c), c.speed()])
+		_check(_clip(c) == "Normal_Idle", "%s：站定后回到 Normal_Idle" % c.display_name)
+
+	print("\n========== 5. 保险（掉出平台）==========")
+	var noa := game.get_node("CompanionNoa") as Companion
+	noa.global_position = Vector3(0, -200, 0)
+	await _steps(5)
+	print("  把诺亚扔到 y=−200 之后：y=%.1f，与站位差 %.2f m" % [
+		noa.global_position.y, noa.slot_distance()])
+	_check(noa.global_position.y > -10.0, "掉出平台后立刻被拉回")
+	_check(noa.slot_distance() < 3.0, "拉回后回到站位附近")
+
+	print("\n========== 6. 不挡镜头 ==========")
+	# ⚠️ 先把玩家瞬移回出生点，**必须等同伴走回来**再量：
+	#    本喵第一版忘了等，结果量到的是还在 14 m 外往回赶的三个小点，
+	#    屏幕坐标全挤在画面中心，白白红了三条。移动类断言要等物理帧跑够。
+	player.global_position = Vector3(0, 0.05, 6)
+	player._yaw = 0.0
+	player.rig.rotation.y = 0.0
+	player._pitch = -0.04
+	for _i in 220:
+		await physics_frame
+	var back := true
+	for c in list:
+		if c.slot_distance() > 1.0:
+			back = false
+	_check(back, "三名同伴都走回站位（差 < 1 m）")
+
+	# “挡镜头”真正要防的是两件事：**贴脸**（离相机太近）和**占屏太大**。
+	# 一开始本喵用的是「不许进画面中心 50% 区域」——太糙了：
+	# 水平 FOV 94°（fov 62° 是垂直、16:9 换算），中心 50% 宽对应 ±28°，
+	# 侧后方站位本来就在 25° 左右，用那条判据会把正常站位也判红。
+	var cam := player.cam
+	var vp := Vector2(root.size)
+	var xs: Array[float] = []
+	for c in list:
+		var head: Vector3 = c.global_position + Vector3.UP * 1.5
+		var feet: Vector3 = c.global_position + Vector3.UP * 0.05
+		var dist := cam.global_position.distance_to(c.global_position)
+		var behind := cam.is_position_behind(c.global_position)
+		var sp := cam.unproject_position(head)
+		var px := absf(cam.unproject_position(head).y - cam.unproject_position(feet).y)
+		xs.append(sp.x)
+		print("  %-4s 距相机 %.2f m  屏幕 x=%.0f  屏幕高度 %.0f px（视口 %d×%d）" % [
+			c.display_name, dist, sp.x, px, int(vp.x), int(vp.y)])
+		_check(not behind, "%s 在相机前方（看得见）" % c.display_name)
+		_check(dist > 2.5, "%s 离相机 %.2f m（> 2.5，不会糊脸）" % [c.display_name, dist])
+		_check(px < vp.y * 0.6, "%s 屏幕高度 %.0f px < 视口高的 60%%" % [c.display_name, px])
+		_check(absf(sp.x - vp.x * 0.5) > vp.x * 0.1,
+			"%s 不在画面正中央 20%% 宽度内（偏离 %.0f px）" % [
+				c.display_name, absf(sp.x - vp.x * 0.5)])
+
+	# 站位是跟着**相机绕角**转的，所以「侧向 ÷ 纵深」比例相同的两人会**永远重叠**
+	# （诺亚原来就是这么被未花挡掉的，屏幕 x 451 vs 463）。这条守着「三个人都看得见」。
+	var min_gap := 1.0e9
+	for i in xs.size():
+		for j in range(i + 1, xs.size()):
+			min_gap = minf(min_gap, absf(xs[i] - xs[j]))
+	var xs_txt: Array[String] = []
+	for x in xs:
+		xs_txt.append("%.0f" % x)
+	print("  三人屏幕 x = [%s]   两两最小间距 %.0f px" % [", ".join(xs_txt), min_gap])
+	_check(min_gap > 60.0, "三人屏幕位置互相分开（最小间距 %.0f px > 60）" % min_gap)
+
+	print("\n========== 7. 渲图 ==========")
+	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
+		.path_join("_arisu_captures").path_join("_companion")
+	DirAccess.make_dir_recursive_absolute(out)
+	await _shot(out.path_join("80_spawn_with_companions.png"))
+
+	# 把镜头拉远，让三名同伴同框（相机在玩家背后 7 m）
+	player.spring.spring_length = 7.0
+	player._pitch = -0.09
+	await _steps(40)
+	await _shot(out.path_join("81_companions_group.png"))
+
+	print("\n================ 结果 ================")
+	print("失败 %d 项" % _fail)
+	quit(1 if _fail > 0 else 0)
+
+
+# --- 工具 ---
+
+func _clip(c: Companion) -> String:
+	if c.anim == null or not c.anim.has_method("current_clip"):
+		return "?"
+	return c.anim.current_clip()
+
+
+## 同伴的视觉高度，量在同伴节点自己的局部空间里
+func _local_height(node: Node3D) -> float:
+	var to_local := node.global_transform.affine_inverse()
+	var out := AABB()
+	var first := true
+	for m in _all(node, "VisualInstance3D"):
+		var vi := m as VisualInstance3D
+		if not vi.visible:
+			continue
+		var b: AABB = to_local * (vi.global_transform * vi.get_aabb())
+		if b.size.length() <= 0.0001:
+			continue
+		out = b if first else out.merge(b)
+		first = false
+	return out.size.y
+
+
+func _shot(path: String) -> void:
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png(path)
+	print("  [img] %s" % path)
+
+
+func _best_skeleton(node: Node) -> Skeleton3D:
+	var best: Skeleton3D = null
+	for s in _all(node, "Skeleton3D"):
+		var sk := s as Skeleton3D
+		if best == null or sk.get_bone_count() > best.get_bone_count():
+			best = sk
+	return best
+
+
+func _all(node: Node, cls: String) -> Array[Node]:
+	var out: Array[Node] = []
+	var stack: Array[Node] = [node]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n == null:
+			continue
+		if n.is_class(cls):
+			out.append(n)
+		for c in n.get_children():
+			stack.append(c)
+	return out
+
+
+func _first(node: Node, cls: String) -> Node:
+	var r := _all(node, cls)
+	return r[0] if not r.is_empty() else null
+
+
+func _check(cond: bool, label: String) -> void:
+	if cond:
+		print("  [PASS] ", label)
+	else:
+		print("  [FAIL] ", label)
+		_fail += 1
+
+
+func _steps(n: int) -> void:
+	for _i in maxi(n, 1):
+		await process_frame

@@ -18,6 +18,10 @@
 /models/school*.glb.import
 # Boss 模型（霸王龙优香，同样派生自 Blue Archive）
 /models/boss/**
+# 第二名 Boss：飞猪优香（FBX + 贴图 + 作者的对照渲染图）
+/models/boss_pig/**
+# 同伴模型（未花 / 优香 / 诺亚，同样派生自 Blue Archive）
+/models/companions/**
 
 # 但保留两个目录下的说明文件，克隆者要靠它们知道该放什么
 !/models/README.md

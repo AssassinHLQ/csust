@@ -45,12 +45,21 @@ var _auto_return := false
 
 func _ready() -> void:
 	player = get_node_or_null(animation_player_path) as AnimationPlayer
-	if player == null:
-		player = _find_first(get_tree().root, "AnimationPlayer") as AnimationPlayer
+	skeleton = get_node_or_null(skeleton_path) as Skeleton3D
+	# 两个 NodePath 都留空时，先在**自己所在的模型子树**里找，再退回整棵树。
+	# 同伴（companion.gd 运行时 new 出来的 AnimDriver）走的就是这条路：
+	# 三只 GLB 的内部节点名互不相同，写死路径没法共用。
+	if player == null or skeleton == null:
+		var scope: Node = get_parent()
+		if player == null:
+			player = _find_first(scope, "AnimationPlayer") as AnimationPlayer
+			if player == null and get_tree():
+				player = _find_first(get_tree().root, "AnimationPlayer") as AnimationPlayer
+		if skeleton == null:
+			skeleton = _find_first(scope, "Skeleton3D") as Skeleton3D
 	if player == null:
 		push_error("[AnimDriver] 找不到 AnimationPlayer")
 		return
-	skeleton = get_node_or_null(skeleton_path) as Skeleton3D
 
 	_configure_library()
 	if player.has_animation("Normal_Idle"):

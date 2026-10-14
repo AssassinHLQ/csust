@@ -8,7 +8,9 @@ var _player: Player
 var _weapon: Weapon
 var _hud: CanvasLayer
 var _splat: SplatScene
-var _boss: Boss
+## 场上所有 Boss「木桩」（现在是霸王龙优香 + 飞猪优香两位）
+var _bosses: Array[Boss] = []
+var _companions: Array[Companion] = []
 var _spawn := Vector3.ZERO
 var _score := 0
 var _shots := 0
@@ -20,15 +22,23 @@ func _ready() -> void:
 	_weapon = $Player/Weapon
 	_hud = $HUD
 	_splat = get_node_or_null("SplatScene") as SplatScene
-	_boss = get_node_or_null("Boss") as Boss
 	_spawn = _player.global_position
 
 	_hud.bind(_player, _weapon)
 	if _splat and _hud.has_method("bind_splat"):
 		_hud.bind_splat(_splat)
-	if _boss and _hud.has_method("bind_boss"):
-		_hud.bind_boss(_boss)
-		_boss.died.connect(_on_target_died)
+
+	# Boss 与同伴都是场景里的直接子节点，按类型收一遍（不写死节点名，
+	# 以后再加一位 Boss / 一名同伴只要往场景里摆就行）
+	for child in get_children():
+		if child is Boss:
+			var boss := child as Boss
+			_bosses.append(boss)
+			boss.died.connect(_on_target_died)
+		elif child is Companion:
+			_companions.append(child as Companion)
+	if not _bosses.is_empty() and _hud.has_method("bind_bosses"):
+		_hud.bind_bosses(_bosses)
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
 
 	for target in get_tree().get_nodes_in_group("targets"):

@@ -137,10 +137,17 @@ func _run() -> void:
 	_ok(weapon.is_reloading(), "进入换弹")
 	print("      try_reload 后计时器 = %.3f   is_processing = %s" % [
 		weapon._reload_timer, str(weapon.is_processing())])
-	for step in 16:
+	# 等换弹结束：按**真实时间**等，不按帧数。
+	# 原来是「16 步 × 20 帧 = 320 帧」——换弹要 1.05 s，帧率一高（实测能到 2000 fps）
+	# 320 帧只有 0.16 s，会在换弹没结束时就断言假红。
+	var t_reload := Time.get_ticks_msec()
+	var step := 0
+	while Time.get_ticks_msec() - t_reload < 4000:
 		await _wait(20)
-		print("      +%3d 帧  计时器 %.3f  还在换弹 %s  弹药 %d" % [
-			(step + 1) * 20, weapon._reload_timer, str(weapon.is_reloading()), weapon.current_ammo])
+		step += 1
+		print("      +%3d 帧 / %.2f s  计时器 %.3f  还在换弹 %s  弹药 %d" % [
+			step * 20, (Time.get_ticks_msec() - t_reload) / 1000.0,
+			weapon._reload_timer, str(weapon.is_reloading()), weapon.current_ammo])
 		if not weapon.is_reloading():
 			break
 	_ok(not weapon.is_reloading(), "换弹结束")

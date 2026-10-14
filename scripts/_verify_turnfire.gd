@@ -59,6 +59,10 @@ func _run() -> void:
 	weapon.spread_aim = 0.0
 	var shots0 := weapon._shot_index
 	var hp0 := target.health
+	# 关掉玩家自己的**输入**处理：真实鼠标的「松开」事件会经 _input() / _poll_mouse_buttons()
+	# 调 weapon.trigger_up()，把这条「按住不放」的测试链打断（mag 那套就是这么假红 6 条的）。
+	# ⚠️ 只关输入，**不能**关 _physics_process —— 转身逻辑就跑在里面。
+	player.set_process_input(false)
 	weapon.trigger_down()
 	await _wait(2)
 	var early := weapon._shot_index - shots0
@@ -88,7 +92,10 @@ func _run() -> void:
 	print("\n========== 3. 对准之后连发正常，且子弹真的打在正前方的靶子上 ==========")
 	var a := weapon._shot_index
 	guard = 0
-	while guard < 300:
+	# 按真实时间等（3 发 × fire_interval 0.05 s = 0.15 s；原来只给 300 帧，
+	# 高帧率下 300 帧可能连 0.05 s 都不到）
+	var t3 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t3 < 2000:
 		await process_frame
 		guard += 1
 		if weapon._shot_index >= a + 3:

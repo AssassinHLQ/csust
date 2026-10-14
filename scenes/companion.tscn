@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/companion.gd" id="1_companion"]
+
+[sub_resource type="CapsuleShape3D" id="Cap_companion"]
+radius = 0.3
+height = 1.5
+
+; 同伴：模型不在场景里写死，由 companion.gd 按 model_path 运行时实例化
+; （三只 GLB 的模型各不相同，共用一个场景就只能这样）。
+; collision_layer = 2 是「朋友层」：子弹穿透、玩家穿身。见 companion.gd 文件头。
+[node name="Companion" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_companion")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("Cap_companion")
+
+[node name="Rig" type="Node3D" parent="."]

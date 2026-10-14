@@ -121,7 +121,9 @@ func _run() -> void:
 	print("  等待 %d 帧后模型横滚 = %.1f°" % [guard, rad_to_deg(boss.model.rotation.x)])
 	_check(absf(boss.model.rotation.x) > 0.3,
 		"模型扑倒（%.1f 度）" % rad_to_deg(boss.model.rotation.x))
-	await _wait(400)
+	# 等重生按**真实时间**：补间是按秒推进的，而帧率不可控（实测几百到两千 fps 都有），
+	# 「等 400 帧」在高帧率下可能只过了 0.2 s，补间没跑完就断言会假红。
+	await _wait_seconds(2.0)
 	print("  等待重生后：血量 %d / %d  碰撞 disabled = %s  横滚 %.1f°" % [
 		int(boss.health), int(boss.max_health), str(col.disabled),
 		rad_to_deg(boss.model.rotation.x)])
@@ -221,4 +223,11 @@ func _check(cond: bool, label: String) -> void:
 
 func _wait(n: int) -> void:
 	for _i in maxi(n, 1):
+		await process_frame
+
+
+## 按真实时间等（帧率不可控，「等 N 帧」等不出确定的秒数）
+func _wait_seconds(sec: float) -> void:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < int(sec * 1000.0):
 		await process_frame

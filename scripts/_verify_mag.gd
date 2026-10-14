@@ -62,7 +62,15 @@ func _run() -> void:
 	player._facing_yaw = player._yaw + PI
 	player.model_root.rotation.y = player._yaw + PI
 	player._pitch = -0.02
-	await _wait(25)
+	await _wait_seconds(0.3)
+	# ⚠️ 测「按住不放」之前先把玩家的输入与物理处理关掉。
+	#    player.gd 的 `_poll_mouse_buttons()` 与 `_input()` 在收到**真实鼠标左键松开**时
+	#    会调 `weapon.trigger_up()`。上一次全量回归就撞上了：跑到一半 `_trigger` 被抢成
+	#    false（日志里写着 `_trigger = false`），于是「打空 → 自动换弹 → 自动续射」
+	#    整条链一起假红 6 条。测试自己驱动武器，就不该让真实鼠标插手。
+	#    顺带把抬枪后坐也冻住了（_apply_camera 在 _physics_process 里），弹道更确定。
+	player.set_physics_process(false)
+	player.set_process_input(false)
 	print("  调试：相机前方 = %s   枪口 = %s" % [
 		str(player.camera_forward().snappedf(0.01)),
 		str(weapon.muzzle.global_position.snappedf(0.01))])
@@ -99,10 +107,17 @@ func _run() -> void:
 
 	# 阶段 A：等弹药真的掉到 0，同时追踪靶子最低血量
 	# （靶子 100 血、每发 18，第 1 发就打死了，4 秒后还会重生 —— 所以必须看过程最低值）
+	#
+	# ⚠️ 上限必须是**真实时间**，不能是帧数。
+	#    本喵原来写的是 `while guard < 4000`（帧）：60 发 × fire_interval 0.05 s = 3 秒，
+	#    而实测这一轮帧率约 2000 fps，4000 帧只过了 2 秒 —— 弹药还剩 19 发就被判定
+	#    「打空了」，于是后面「自动换弹 / 满弹 / 续射」一连假红 6 条。
+	#    等换弹（1.05 s）和等补间同理，都得按秒等。
 	var guard := 0
 	var min_hp := 999.0
 	var saw_dead := false
-	while guard < 4000:
+	var t_a := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_a < 8000:
 		await process_frame
 		guard += 1
 		var t := game.get_node("Target1") as Target
@@ -112,7 +127,8 @@ func _run() -> void:
 			saw_dead = true
 		if weapon.current_ammo <= 0 and not weapon.is_reloading():
 			break
-	print("  弹药归零（第 %d 帧）  _trigger = %s" % [guard, str(weapon._trigger)])
+	print("  弹药归零（第 %d 帧 / %.2f s）  _trigger = %s" % [
+		guard, (Time.get_ticks_msec() - t_a) / 1000.0, str(weapon._trigger)])
 	print("  连发后：spring.rotation.x = %.3f  相机前方 = %s" % [
 		player.spring.rotation.x, str(player.camera_forward().snappedf(0.01))])
 	print("  靶子过程最低血量 = %.0f   出现过击毁状态 = %s" % [min_hp, str(saw_dead)])
@@ -121,46 +137,51 @@ func _run() -> void:
 	# 阶段 B：等自动换弹被触发
 	var saw_reload := false
 	guard = 0
-	while guard < 600:
+	var t_b := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_b < 2000:
 		await process_frame
 		guard += 1
 		if weapon.is_reloading():
 			saw_reload = true
 			break
-	print("  自动换弹触发 = %s（第 %d 帧）  _trigger = %s" % [
-		str(saw_reload), guard, str(weapon._trigger)])
+	print("  自动换弹触发 = %s（第 %d 帧 / %.2f s）  _trigger = %s" % [
+		str(saw_reload), guard, (Time.get_ticks_msec() - t_b) / 1000.0, str(weapon._trigger)])
 	_check(saw_reload, "打空后自动进入换弹（没让玩家手动按 R）")
 	_check(weapon._trigger, "换弹期间左键仍是「按住」状态")
 
-	# 阶段 C：等换弹结束
+	# 阶段 C：等换弹结束（reload_time 1.05 s + 收招余量）
 	guard = 0
-	while guard < 1500:
+	var t_c := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_c < 5000:
 		await process_frame
 		guard += 1
 		if not weapon.is_reloading():
 			break
-	print("  换弹结束（第 %d 帧）  弹药 = %d / %d" % [
-		guard, weapon.current_ammo, weapon.magazine_size])
+	print("  换弹结束（第 %d 帧 / %.2f s）  弹药 = %d / %d" % [
+		guard, (Time.get_ticks_msec() - t_c) / 1000.0, weapon.current_ammo, weapon.magazine_size])
 	_check(weapon.current_ammo == weapon.magazine_size, "换弹后满弹")
 	_check(weapon._trigger, "换弹结束时左键仍按住")
 
 	# 阶段 D：不松手，看是否自动续射
 	var shots_a := weapon._shot_index
 	guard = 0
-	while guard < 300:
+	var t_d := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_d < 2000:
 		await process_frame
 		guard += 1
 		if weapon._shot_index > shots_a:
 			break
 	var gained := weapon._shot_index - shots_a
-	print("  换弹后未松手，%d 帧内又打了 %d 发" % [guard, gained])
+	print("  换弹后未松手，%.2f s 内又打了 %d 发" % [(Time.get_ticks_msec() - t_d) / 1000.0, gained])
 	_check(gained > 0, "换完弹自动继续射击（不用再点一次鼠标）")
 
-	# 阶段 E：松开后应停火
+	# 阶段 E：松开后应停火。
+	# 观察窗口也要按秒给够（0.6 s ≈ 12 个连发间隔），
+	# 不然窗口比 fire_interval 还短的话「停火」是白给的。
 	weapon.trigger_up()
-	await _wait(30)
+	await _wait_seconds(0.2)
 	var s1 := weapon._shot_index
-	await _wait(80)
+	await _wait_seconds(0.6)
 	_check(weapon._shot_index == s1, "松开左键后停火（%d 发 → %d 发）" % [s1, weapon._shot_index])
 
 	print("\n  靶子过程最低血量 %.0f（开场 %.0f）  出现过击毁 = %s" % [
@@ -195,3 +216,12 @@ func _flat(v: Vector3) -> Vector3:
 func _wait(n: int) -> void:
 	for _i in maxi(n, 1):
 		await process_frame
+
+
+## 按**真实时间**等。帧率不可控（实测 2000 fps 上下），
+## 「等 N 帧」既可能只等了几十毫秒，也可能等过头 —— 凡是要等秒数的地方都用这个。
+func _wait_seconds(sec: float) -> void:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < int(sec * 1000.0):
+		await process_frame
+

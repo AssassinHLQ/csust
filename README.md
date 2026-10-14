@@ -67,7 +67,7 @@ HUD 右下角：弹药 / 当前状态（腰射 / 瞄准 / 跑动 / 蹲行 / 换�
 ## 1.2 代码结构
 
 ```
-scenes/game.tscn          竞技场：地面 + 3 根石柱 + 5 个靶子 + 灯光 + HUD
+scenes/game.tscn          竞技场：地面 + 3 根石柱 + 5 个靶子 + 2 位 Boss + 3 名同伴 + 灯光 + HUD
 scenes/player.tscn        Player(CharacterBody3D)
                           ├─ Collision   胶囊
                           ├─ Arisu       模型节点（绕 Y 转 180°，见 §1.4）
@@ -75,12 +75,15 @@ scenes/player.tscn        Player(CharacterBody3D)
                           │     └─ AnimDriver   动画驱动
                           ├─ Weapon      武器逻辑 + Muzzle 挂点
                           └─ CameraRig → SpringArm3D → Camera3D
+scenes/companion.tscn     Companion(CharacterBody3D)：Collision + Rig（模型运行时装进 Rig）
 scripts/player.gd         移动积分、相机、朝向、开火转身门控
+scripts/companion.gd      同伴跟随：站位 / 走近跑近 / 朋友层（第八节）
 scripts/anim_driver.gd    动画驱动（直接用 AnimationPlayer）
 scripts/weapon.gd         射线命中、弹药、换弹、弹丸、开火门控、特效
 scripts/target.gd         可击毁靶子（掉血 → 闪白 → 塌下 → 4 秒重生）
-scripts/hud.gd            准星、弹药、状态、速度、换弹条
-scripts/game.gd           玩法总控
+scripts/boss.gd           Boss 木桩基类（霸王龙 + 飞猪共用，第七节）
+scripts/hud.gd            准星、弹药、状态、速度、换弹条、Boss 血条组
+scripts/game.gd           玩法总控（按类型收 Boss / 同伴）
 scripts/main.gd           动画查看器主控
 ```
 
@@ -424,16 +427,33 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_mag.gd        # 12 项：开局视角/弹匣/自动换弹/连续射击
 & $g --path $p --script res://scripts/_verify_turnfire.gd   # 8 项：开火前强制转身（连子弹都必须朝准星飞）
 & $g --path $p --script res://scripts/_verify_spawnview.gd  # 12 项：初始视角 + 甩镜头点左键的真实鼠标时序
-& $g --path $p --script res://scripts/_verify_splat.gd      # 15 项：泼溅摆放 / 悬浮平台 / 隐形护栏（第六节）
+& $g --path $p --script res://scripts/_verify_boss.gd       # 19 项：霸王龙木桩（第七节）
+& $g --path $p --script res://scripts/_verify_boss_pig.gd   # 32 项：飞猪木桩 + HUD 双血条（§7.6）
+& $g --path $p --script res://scripts/_verify_companion.gd  # 39 项：三名同伴跟随 + 不挡镜头（第八节）
+& $g --path $p --script res://scripts/_verify_splat.gd      # 17 项：泼溅摆放 / 悬浮平台 / 隐形护栏（第六节）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-前五条建议加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例慢很多
-（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
+除 `_verify_splat` 外建议都加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例
+慢很多（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
 
-> ⚠️ headless 帧率极低（约 6 fps，每帧只推进 0.006 s），按时间推进的项
-> （换弹、连发）**必须按状态等**（等 `is_reloading()`、等弹药归零），
-> 不能按帧数算。也别拿 60 帧/秒去估算。
+> ⚠️ **自检里「等」什么，都要按状态或真实秒数，不要按帧数。**
+> 帧率在**两个方向**上都坑过本喵：
+>
+> - **headless 极低**（约 6 fps）：等 60 帧其实只推进了 0.1 s
+> - **真渲染窗口极高**（实测能到约 2000 fps）：等 4000 帧只过了 2 秒 ——
+>   `_verify_mag` 的「60 发打空」因此只打出 41 发就被判失败，连带
+>   「自动换弹 / 换弹后满弹 / 自动续射」假红 6 条；`_verify_final` 的换弹等待同理
+>
+> 所以：等状态用 `while not cond: await process_frame`，
+> 等时长用 `while Time.get_ticks_msec() - t0 < 毫秒: await process_frame`。
+>
+> ⚠️ 另一个坑：**测试自己驱动武器时，必须先关掉玩家的输入处理。**
+> `player.gd` 的 `_input()` / `_poll_mouse_buttons()` 只要收到真实鼠标左键「松开」，
+> 就会调 `weapon.trigger_up()`。本喵跑全量回归时手上正好有鼠标动作，`_trigger` 被打断
+> （日志里白纸黑字写着 `_trigger = false`），「按住不放」相关的用例集体假红。
+> 处理办法：`player.set_process_input(false)` —— 但**要测转身就不能关
+> `_physics_process`**，转身逻辑跑在里面。
 
 其它工具（都靠环境变量触发，平时空转）：
 
@@ -553,27 +573,39 @@ _arisu_learn/
 │  ├─ Arisu.glb             原模型（24 条动作）※不随仓库分发
 │  ├─ Arisu_ext.glb         **实际使用**的模型（27 条动作，见第五节）※不随仓库分发
 │  ├─ school.collision.glb  校园碰撞网格（默认不挂，见 §6.5）※不随仓库分发
-│  └─ Arisu*_*.png          自动解包的贴图 ※不随仓库分发
+│  ├─ Arisu*_*.png          自动解包的贴图 ※不随仓库分发
+│  ├─ companions/           三名同伴（第八节）※不随仓库分发
+│  │  ├─ Mika.glb           未花（145 骨、33 动作）
+│  │  ├─ Yuuka.glb          优香（108 骨、38 动作）
+│  │  └─ Noa.glb            诺亚（135 骨、31 动作）
+│  ├─ boss/                 霸王龙优香 FBX + 贴图（第七节）※不随仓库分发
+│  └─ boss_pig/             飞猪优香 FBX + 贴图 + 作者的对照渲染图（§7.6）※不随仓库分发
 ├─ splatdata/
 │  ├─ README.md             说明：泼溅数据要求与摆放参数
 │  ├─ school_playable.sogdata  **实际加载**的校园泼溅（清理版，86.6 MB）※不随仓库分发
 │  └─ school_raw.sogdata       原始未清理扫描（仅存档）※不随仓库分发
 ├─ scenes/
-│  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 四面隐形护栏 + 下沉校园）
+│  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 四面隐形护栏 + 下沉校园
+│  │                        + 2 位 Boss + 3 名同伴）
 │  ├─ player.tscn           玩家（模型 + 动画 + 武器 + 相机）
+│  ├─ companion.tscn        同伴（模型由 companion.gd 按 model_path 运行时实例化）
 │  └─ main.tscn             动画查看器
 ├─ scripts/
 │  ├─ player.gd             移动 / 相机 / 朝向 / 开火转身门控
+│  ├─ companion.gd          同伴跟随：站位 / 走近跑近 / 朋友层（第八节）
 │  ├─ anim_driver.gd        动画驱动（直接 AnimationPlayer）
-│  ├─ weapon.gd             开火 / 弹药 / 换弹 / 弹丸 / 特效
+│  ├─ weapon.gd             开火 / 弹药 / 换弹 / 弹丸 / 特效 / 子弹穿透朋友层
+│  ├─ boss.gd               Boss 木桩基类：骨架盒 or 网格盒定尺寸、贴图表、血条信号（第七节）
 │  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd
-│  ├─ _verify_*.gd          [工具] 自检（见 §1.11）
+│  ├─ _verify_*.gd          [工具] 自检（见 §1.11、§7.6、§8.4）
 │  ├─ _capture.gd           [工具] 24 条动作取样帧
 │  ├─ _pose_shots.gd        [工具] 多机位姿势检查
 │  ├─ _play_shots.gd        [工具] 玩法全流程截图
 │  ├─ _probe_ext_glb.gd     [工具] 两个 glb 的动作/时长/前倾对比
+│  ├─ _probe_companion.gd   [工具] 三只同伴的骨架/动画/**朝向**（Toe−Foot 向量判定）
+│  ├─ _probe_boss_pig.gd    [工具] 飞猪 FBX 导入后拿到了什么（材质/贴图/尺寸）
 │  ├─ _probe_lean_side.gd   [工具] 跑动侧视渲图（做前倾对照）
 │  ├─ _probe_platform.gd    [工具] 扫缩放×下沉量（泼溅摆放调参）
 │  ├─ _probe_splat.gd       [工具] 探测引擎有没有原生 3DGS
@@ -874,10 +906,20 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 
 ---
 
-# 七、Boss：霸王龙优香（木桩阶段）
+# 七、Boss（木桩阶段）：霸王龙优香 + 飞猪优香
 
-模型来源：`压缩文件_by_一个睿智_….rar` → `优香霸王龙.fbx`。**目前是「木桩」**：
-站在平台上、吃得下子弹、受击闪白、打光后扑倒并在 6 秒后站起来；AI / 冲撞 / 吐息留待后续。
+两位 Boss 都是「木桩」：站在平台上、吃得下子弹、受击闪白、打光后扑倒并在数秒后站起来；
+AI / 冲撞 / 吐息留待后续。两者**共用 `scripts/boss.gd`**，但在「怎么量尺寸」上是两条路（见 §7.6）。
+
+|  | 霸王龙优香 | 飞猪优香 |
+|---|---|---|
+| 来源 | `压缩文件_by_一个睿智_….rar` → `优香霸王龙.fbx` | `飞猪优香 (2)_by_一个睿智_….zip` → `猪猪优香.fbx` |
+| 有骨骼吗 | ✅ 73 根（名字全是 `Bone`/`Bone.001`… 未命名） | ❌ 纯静态网格 |
+| 有动画吗 | ❌ 空动画栈 | ❌ 没有 |
+| 定尺寸靠 | **骨架**包围盒 `_bone_box()` | **网格**包围盒 `_mesh_box()` |
+| 本体朝向 | +Z | +Z（鼻子 z=+2.17、尾巴 z=−1.95） |
+| 场上位置 | `(13, 0, −8)`，绕 Y −90° 朝 −X | `(−13, 0, −8)`，绕 Y +90° 朝 +X |
+| 身高 / 血量 | 4.5 m / 3000 | 2.6 m（含光环）/ 1800 |
 
 ## 7.1 这个 FBX 里有什么
 
@@ -932,12 +974,16 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
+| `display_name` | `霸王龙优香` | HUD 血条上显示的名字 |
 | `model_path` | `res://models/boss/优香霸王龙.fbx` | |
-| `TEXTURES`（常量表） | 见 §7.2 ② | 材质名 → 贴图路径，改这里就能换分配 |
-| `height` | **4.5 m** | 目标身高，脚本按骨架包围盒自动缩放（约 2.6 个 Arisu） |
+| `TEXTURES`（常量表） | 见 §7.2 ② | **霸王龙的默认**材质名 → 贴图路径表 |
+| `texture_map` | `{}`（空 = 用上面的表） | 逐实例覆盖；飞猪就是靠它绑自己那 4 个材质（§7.6） |
+| `height` | **4.5 m** | 目标身高，脚本按包围盒自动缩放（约 2.6 个 Arisu） |
 | `max_health` | 3000 | 顶部血条显示 |
 | `respawn_time` | 6.0 s | 扑倒后多久站起来 |
 | `hide_accessories` | **false** | 想只留身体（隐藏光环/胸牌/球/方块）就打开 |
+| `body_name_prefix` | `Tyrannosaurus` | 上面那个开关**只保留**名字带这个前缀的网格 |
+| `collision_factors` | `(0.55, 0.85, 0.62)` | 碰撞盒 = 归一化尺寸 × 这三个系数 |
 
 - 位置：`game.tscn` 里 `(13, 0, -8)`，绕 Y −90° 朝 **−X**（正对场地中心；模型自身脸朝 +Z）
   - ⚠️ **x 不能小于 13**：放在 x=9 时它的碰撞盒（约 7.8 m 长）会横在
@@ -946,9 +992,10 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 - 碰撞：一个随 `visual_size` 自动算的 `BoxShape3D`（约 2.1 × 3.8 × 7.8 m，只盖身体不含尾巴）
 - 受击：即时闪白 + 渐退；`take_damage(amount, pos, dir)` 与 `Target` **同一套契约**，
   所以 `weapon.gd` 不用改一行就能打它
-- 血条：HUD 顶部居中（`hud.gd` 的 `bind_boss`）
+- 血条：HUD 顶部**一位 Boss 一条**（`hud.gd` 的 `bind_bosses`，按场景里 Boss 子节点的顺序排行；
+  旧的单条 `bind_boss` 保留着）。加第二位 Boss 时就是把单条改成了一组
 
-自检 `scripts/_verify_boss.gd`（16 项，含「从玩家位置打射线必须命中 Boss 本体」）：
+自检 `scripts/_verify_boss.gd`（19 项，含「从玩家位置打射线必须命中 Boss 本体」）：
 
 ```powershell
 & $g --path $p --script res://scripts/_verify_boss.gd -- --splat=off
@@ -963,13 +1010,184 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 
 ## 7.5 下一步（行为）
 
-现在没有骨骼动画（模型本身没动作），所以「活起来」只能靠位移 + 特效 + 骨骼程序化微动。
+现在没有骨骼动画（两个模型本身都没动作），所以「活起来」只能靠位移 + 特效 + 程序化微动：
+
+- **霸王龙**：73 根骨还在，所以「张嘴 + 摆尾 + 点头」这类程序化动作是有戏的
+- **飞猪**：没有骨，只能在节点层级上做（上下漂浮 / 滚过来撞人 / 光环自转）
+
 本喵给过的三个方向：冲撞型 / 远程吐息型 / 站桩强化型 —— 你当时选了先看木桩，
-要继续的话说一声即可。73 根骨还在，所以「张嘴 + 摆尾 + 点头」这类程序化动作是有戏的。
+要继续的话说一声即可。
+
+## 7.6 第二位 Boss：飞猪优香（纯静态网格）
+
+来源：`飞猪优香 (2)_by_一个睿智_….zip`（作者：**一个睿智**）→ `猪猪优香.fbx` + `uv/` 6 张图。
+`uv/1.png` 与 `uv/2.png` 是**作者的成品渲染图**（1920×1080，FBX 并没引用它们），
+已挪到 `models/boss_pig/ref/author_render_1.png` 当作贴图分配的对照基准。
+
+**为什么它不用改玩法代码就能当第二个 Boss** —— 三条实测结论：
+
+1. **没有骨骼、没有动画。** 二进制里 `Deformer = 0`、`KeyTime = 0`；Godot 导入后是
+   4 个网格 / 1.27 万三角形 / 没有 `Skeleton3D` / 没有 `AnimationPlayer`。
+   所以尺寸只能靠**网格包围盒**量 —— `boss.gd` 现在分两条路：
+   有 `Skeleton3D` 走 `_bone_box()`，没有走 `_mesh_box()`。
+   ⚠️ 两条路**别用混**：拿网格盒去量霸王龙会得到 8732 单位的荒唐大盒子（见 §7.2 ①）。
+2. **Godot 的 ufbx 其实已经把 4 个材质的贴图各自绑好了**（`uv\xxx.png` 这种相对路径也解析
+   成功了），但工程里仍然用 `texture_map` **显式再绑一次**，免得依赖 FBX 里的路径能不能解析：
+
+   | 网格 | 材质名 | 贴图 |
+   |---|---|---|
+   | `立方体`（身体） | `材质` | `tex/pig_untitled1.png`（原 `未标题-1.png`，5670×4251） |
+   | `立方体_001`（鼻子） | `材质.001` | `tex/pig_nose.png`（原 `鼻子.png`） |
+   | `贝塞尔曲线`（尾巴） | `材质.002` | `tex/pig_tail.png`（原 `尾巴.png`） |
+   | `Yuuka_Original_Halo_0`（光环） | `Yuuka_Original_Halo_0Mat` | `tex/pig_halo.png`（512×512） |
+
+   材质名的命名习惯（`材质` / `材质.001`）跟霸王龙**一模一样，含义却完全不同** ——
+   照抄霸王龙那张表会把猪贴成一团。这就是 `texture_map` 做成逐实例覆盖的原因。
+3. **本体朝 +Z**，与霸王龙同一套约定，不需要补 180°。判据是网格中心而不是肉眼：
+   鼻子 `立方体_001` 在 z = +2.17、尾巴 `贝塞尔曲线` 在 z = −1.95、光环在 y = 1.44。
+   所以节点绕 Y 转 +90° 就朝 +X（面向场地中心）。
+
+**位置为什么是 x = −13。** 霸王龙当初放在 x=9 时吃掉了「玩家(6,−4) → Target1(6,−10)」那条
+自检弹道（§7.3 里那条教训），所以这次先算再摆：猪长轴沿世界 X、占 x ∈ [−15.0, −11.0]、
+z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在**常驻**这条回归断言。
+
+归一化结果：**2.33 × 2.6 × 4.11 m**（目标身高 2.6 m 含光环，约 1.5 个 Arisu 高），
+碰撞盒 **1.98 × 2.08 × 3.08 m** —— `collision_factors = (0.85, 0.8, 0.75)`，
+比霸王龙那套（0.55/0.85/0.62）宽：猪的身体占自身包围盒的比例大得多（没有长尾巴和长脖子）。
+
+自检 `scripts/_verify_boss_pig.gd`（33 项，含贴图逐条核对、朝向、双血条互不串台）：
+
+```powershell
+& $g --path $p --script res://scripts/_verify_boss_pig.gd -- --splat=off
+```
+
+⚠️ 写这个自检时踩的一个坑：**别靠遍历顺序认血条。**
+`_all()` 是拿栈做的深度遍历，弹出来是**倒序**，所以 `bars[0]` 其实是 `BossBar1`。
+本喵先试了 `bars.sort_custom(func(a, b): return a.name < b.name)`，**实测没生效**（顺序照旧），
+于是连着两轮把「打霸王龙掉的是飞猪那条」误判成游戏的 bug —— 其实 `hud.gd` 一直是对的
+（日志里写着「打霸王龙 300 后：第 1 条 1.000，第 2 条 0.900」，掉血的是霸王龙那条）。
+最后改成 `hud.get_node("BossBar0")` **按名字取**，既明确又顺便验了命名约定。
+
+对照图：`_arisu_captures/_boss/94_pig_front.png`（正面）、`95_pig_three_quarter.png`
+（3/4，与作者的 `author_render_1.png` 同角度）、`93_pig_from_spawn.png`（出生点视角，两位 Boss 同框）。
 
 ---
 
-# 八、下一步
+# 八、同伴（跟随 NPC）：未花 / 优香 / 诺亚
+
+三名同伴**只跟随、不开火**（你选的「纯观赏」）。模型用 `tools\Find-BlueArchiveModel.cmd`
+从 BlueArchiveModels 里取的**普通形态**：`Mika.glb` / `Yuuka.glb` / `Noa.glb`
+（不带 `(Swimsuit)` / `(Battle)` / `(Cut-in)` / `(Maid)` 那些变体）。
+
+| 同伴 | 骨架 | 动画数 | 站位（玩家局部坐标） |
+|---|---|---|---|
+| 未花 Mika | 145 骨 | 33 | `(−2.0, 0, +0.9)` 左后 |
+| 优香 Yuuka | 108 骨 | 38 | `(+2.0, 0, +0.9)` 右后 |
+| 诺亚 Noa | 135 骨 | 31 | `(−3.0, 0, −3.2)` 左前（更远，与未花错开屏幕位置） |
+
+三只都自带 `Normal_Idle` / `Cafe_Walk` / `Move_Ing` / `Move_Jump`，
+所以直接复用了主角那套 `AnimDriver`。
+
+`Find-BlueArchiveModel.cmd` 的匹配规则是 `^Mika(?:\s|$)` 这种前缀，
+所以 `未花` 会同时命中 `Mika.glb`、`Mika (Swimsuit).glb`、`Mika (Cut-in).glb` ——
+`-CopyTo` 会把三个都复制过去，只要普通形态的话得自己挑（本喵这次只拷了 `Mika.glb`）。
+
+## 8.1 ⚠️ 同伴必须待在单独的「朋友层」（`collision_layer = 2`）
+
+这是加同伴最容易踩的地方，两个理由：
+
+1. **子弹要穿透同伴。** `weapon.gd` 的射线是 `PhysicsRayQueryParameters3D.create(origin, end)`，
+   它的 `collision_mask` 默认是**全部层**。同伴贴着玩家走，不屏蔽的话玩家会一直打在
+   自己人背上（表现是「明明瞄着靶子，却一发都打不中」）。所以：
+   ```gdscript
+   q.collision_mask = 0xFFFFFFFF & ~Companion.LAYER   # 除朋友层之外全都要
+   ```
+   自检里有一条**反向对照**：不屏蔽时射线确实命中同伴 —— 证明这条屏蔽不是多余的。
+2. **玩家和相机不该被同伴顶住。** 玩家的 `collision_mask` 是默认的 1，相机的
+   `SpringArm3D.collision_mask` 也是 1，都碰不到第 2 层。于是同伴只跟世界层
+   （地板 / 墙 / 护栏 / 靶子 / Boss）碰撞，彼此之间也不挤。
+
+## 8.2 ⚠️ 站位不能落在「相机 ↔ 玩家」之间
+
+相机挂在玩家背后 3.4~4.2 m，`fov = 62°`（垂直；16:9 换算成水平半视角约 47°）。
+本喵第一版把第三名同伴放在**正后方 2.4 m** —— 它距相机只剩 1.8 m，一块 1.6 m 高的人形
+在画面里能占掉近一半高度，视野直接被自己人糊住。
+
+所以三名都在**侧后方**：横向 2.0~3.0 m、纵向 −0.9~+0.9 m。
+`_verify_companion.gd` 第六节守这条约束，量的是三件事：
+
+- **离相机 > 2.5 m**（不许糊脸）
+- **屏幕高度 < 视口高的 60%**
+- **不在画面正中央 20% 宽度内**
+
+> **还有一条是加完之后才发现的**：站位是跟着**相机绕角**转的，所以两个人的
+> 「侧向 ÷ 纵深」比例只要相同，在屏幕上就会**永远重叠** —— 相机怎么转都分不开。
+> 诺亚原来在 `(−2.9, +0.9)`，与未花的 `(−2.0, +0.9)` 几乎同一条视线，
+> 屏幕 x 分别是 451 / 463（白加一个人）。
+>
+> 站位别手算三角函数 —— 本喵算了两次都错（相机实际在玩家背后 **4.20 m**、
+> 横向 **−0.42 m**、高 **1.79 m**，FOV 的换算也不是「垂直 62° 直接除」）。
+> 用 `scripts/_probe_slot.gd` **扫一遍候选**最省事，它把每个 slot 投到屏幕上打印：
+
+| slot (x, z) | 屏幕 x | 偏离中心 | 离相机 | 离玩家 |
+|---|---|---|---|---|
+| `(−2.0, +0.9)` 未花 | 442 | 358 ✓ | 4.07 m | 2.19 m |
+| `(+2.0, +0.9)` 优香 | 1348 | 548 ✓ | 4.46 m | 2.19 m |
+| `(−1.7, −2.4)` ❌ 挡准星 | 655 | 145 ✗ | 6.95 m | 2.94 m |
+| `(−2.8, −2.0)` ❌ 与未花太贴 | 513 | 287 ✓ | 6.87 m | 3.44 m |
+| **`(−3.0, −3.2)` 诺亚（采用）** | **539** | **261 ✓** | 8.04 m | 4.39 m |
+| `(−4.0, −1.5)` | 330 | 470 ✓ | 6.96 m | 4.27 m |
+
+> 判据：**偏离画面中心 > 160 px**（不挡准星）、**两两间距 > 60 px**（都看得见）、
+> **离玩家 ≤ 5 m**（还像同伴）。后两条现在都写进 `_verify_companion.gd` 第六节了。
+
+> 判据为什么不是「不许进画面中心 50% 区域」：水平 FOV 有 94°，中心 50% 宽对应 ±28°，
+> 而侧后方站位本来就在 20~25°，用固定矩形会把**正常站位**判红 —— 本喵第一版就这么
+> 假红了三条。
+
+## 8.3 跟随逻辑（`scripts/companion.gd`）
+
+- 目标点 = 玩家位置 + `slot` 按**玩家相机绕角**旋转。用相机绕角而不是角色朝向，
+  是为了甩视角时同伴绕到新的侧后方，而不是绕进画面正中央
+- `walk_speed = 2.2`、`run_speed = 6.4`
+  - ⚠️ `walk_speed` 刻意压在 **2.4 以下**：`AnimDriver` 在 2.4 m/s 才切到 `Move_Ing`，
+    高过它的话「站位差 1 m」这种微调也会播跑步动画，看起来像在打滑
+- 站住不动时**跟玩家看同一个方向**（像一队人），走动时朝行进方向
+- 两条保险：离站位 > 26 m、或掉到 y < −60（跟 `game.gd` 的 `FALL_LIMIT` 同源）→ 直接拉回
+- 动画驱动：`player.tscn` 里 `AnimDriver` 是写死 NodePath 的，但三只 GLB 的内部节点名
+  互不相同。所以给它加了兜底：**两个 NodePath 都留空时，先在自己所在的模型子树里找**
+  `AnimationPlayer` / `Skeleton3D`（见 `anim_driver.gd::_ready`）
+
+## 8.4 自检
+
+```powershell
+& $g --path $p --script res://scripts/_verify_companion.gd -- --splat=off
+```
+
+39 项：模型/骨架/动画绑定、朋友层、子弹穿透（含反向对照）、跟随（玩家瞬移 14 m 后
+三名都跟到位）、站定回 Idle、掉出平台被拉回、不挡镜头（离相机远近 / 屏占比 / 偏离中心 /
+两两屏幕间距）、两张渲图
+（`_arisu_captures/_companion/80_spawn_with_companions.png` / `81_companions_group.png`）。
+
+⚠️ 写这类「移动类」断言时的两个坑（都踩过）：
+
+1. **瞬移完玩家必须等同伴走回来再量。** 第一版量到的是还在 14 m 外往回赶的三个小点，
+   屏幕坐标全挤在画面中心，白红三条。
+2. **等物理要用 `await physics_frame`，不要用 `await process_frame` 数帧。**
+   渲染帧率一高，「等 200 帧」可能只过了几十毫秒；补间动画同理，要按**真实时间**等
+   （`_verify_boss_pig.gd` 里等重生那段就是按 `Time.get_ticks_msec()` 等的）。
+
+## 8.5 想再加一名同伴
+
+1. 把 glb 放进 `models/companions/`（已在 `.gitignore` 里，不会进仓库）
+2. 在 `game.tscn` 里复制一个 `CompanionMika` 节点，改 `display_name` / `model_path` / `slot`
+3. 跑一次 `--import` 刷新类缓存（新 `class_name` 必须先导入才认），再跑 `_verify_companion.gd`
+
+`game.gd` 是**按类型**收同伴与 Boss 的（不遍历写死的节点名），所以加人不用改代码。
+
+---
+
+# 九、下一步
 
 1. ~~**重做 `Move_Ing`** —— 跑动前倾偏大（见 §1.10），走 Blender 管线改躯干角度~~
    **已完成并启用**：`Move_Ing` 胸腔前倾 Blender 侧 +13.5° → +5.2°、
@@ -981,13 +1199,13 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 4. **写 toon 着色器** —— 18 个材质换 `ShaderMaterial`，加描边和硬边明暗
 5. **动画分层** —— 现在开火会整体覆盖跑动；想「边跑边射」需要 upper/lower body 分层
 6. **清掉泼溅的 floaters** —— 见 §6.5 已知瑕疵，用 `splat-transform` 重新过滤数据
-7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第九节）
+7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第十节）
 
 ---
 
-# 九、开源与许可
+# 十、开源与许可
 
-## 9.1 结论
+## 10.1 结论
 
 **除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。**
 逐项清单见 [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -997,28 +1215,36 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 | 本项目作者编写的全部代码与文档（`scripts/`、`scenes/`、`project.godot`、README…） | **MIT** | ✅ |
 | `addons/gdgs/`（GDGS 3.3.0，ReconWorldLab） | MIT（作者原许可保留在 `addons/gdgs/LICENSE`） | ✅ |
 | `models/Arisu*.glb` + 解包贴图 | © NEXON Games / Yostar，**专有** | ❌ 被 `.gitignore` 排除 |
+| `models/companions/*.glb`（未花 / 优香 / 诺亚） | 同上，**专有** | ❌ 被 `.gitignore` 排除 |
+| `models/boss/优香霸王龙.fbx` + 贴图 | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
+| `models/boss_pig/`（飞猪优香 FBX + 贴图，作者：一个睿智） | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
 | `icon.png` | 待仓库作者确认 | ✅（如非原创请替换） |
 
-## 9.2 克隆者怎么跑起来
+## 10.2 克隆者怎么跑起来
 
 ```powershell
 git clone <你的仓库>
 cd <仓库目录>
 # ① 放入你自己合法获得的角色模型（必需）
 #    models/Arisu_ext.glb     见 models/README.md
-# ② 可选：放入校园泼溅（没有就用 --splat=off）
+# ② 可选：三名同伴（没有就删掉 game.tscn 里的三个 Companion 节点）
+#    models/companions/{Mika,Yuuka,Noa}.glb
+# ③ 可选：两位 Boss（没有就删掉 Boss / BossPig 节点）
+#    models/boss/优香霸王龙.fbx + 贴图、models/boss_pig/猪猪优香.fbx + 贴图
+# ④ 可选：放入校园泼溅（没有就用 --splat=off）
 #    splatdata/school_playable.sogdata   见 splatdata/README.md
 
 & <godot 4.7 mono 版> --path .              # 有泼溅数据
 & <godot 4.7 mono 版> --path . -- --splat=off   # 没有泼溅数据
 ```
 
-第一次打开时 Godot 会自动导入 glb 并解包贴图，然后就能 F5。
+第一次打开时 Godot 会自动导入 glb / fbx 并解包贴图，然后就能 F5。
 
-## 9.3 发布自己的版本前的检查表
+## 10.3 发布自己的版本前的检查表
 
-- [ ] `models/` 换成**你有权分发**的模型（或明确许可允许再分发的模型）
+- [ ] `models/` 换成**你有权分发**的模型（或明确许可允许再分发的模型），
+      含 `models/companions/` 与 `models/boss_pig/` 这两处新加进来的
 - [ ] `splatdata/` 换成你有权分发的场景数据，或删掉该目录并只用 `--splat=off`
 - [ ] 确认 `models/README.md` 里那三个换模型注意点（骨名 / 动作名 / 朝向约定）都过了
 - [ ] `LICENSE` 里的版权行改成你的名字与年份
@@ -1027,7 +1253,7 @@ cd <仓库目录>
 - [ ] 检查 `.gitignore`：`git status` 里**不该**出现任何 `.glb` / `.sogdata` / 大体积贴图
 - [ ] 顺手确认没把 `..\_blender_arisu\`（专有模型的派生数据）一起推上去
 
-## 9.4 关于截图
+## 10.4 关于截图
 
 `_arisu_captures/` 里的截图是在本机渲染的、含专有角色形象，
 **不建议**放进公开仓库的 README（截图是模型形象的派生作品）。

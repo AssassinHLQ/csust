@@ -8,6 +8,17 @@
 | `Arisu.glb` | 可选 | 原始版（24 条动作）。切换它只需把 `player.tscn` 第 4 行的 `Arisu_ext.glb` 改回 `Arisu.glb` |
 | `school.collision.glb` | 可选 | 校园碰撞网格。默认不挂载（`SplatScene.build_collision = false`） |
 | `Arisu*_*.png` | 自动生成 | 贴图会由 Godot 在首次导入 glb 时自动解包，不用手动放 |
+| `companions/Mika.glb` | 可选 | 同伴「未花」。145 骨、33 动作（README 第八节） |
+| `companions/Yuuka.glb` | 可选 | 同伴「优香」。108 骨、38 动作 |
+| `companions/Noa.glb` | 可选 | 同伴「诺亚」。135 骨、31 动作 |
+| `boss/优香霸王龙.fbx` | 可选 | 第一位 Boss（README 第七节）。73 骨、无动画、约 31 万三角形 |
+| `boss_pig/猪猪优香.fbx` | 可选 | 第二位 Boss（README §7.6）。**纯静态网格**，4 网格 / 1.27 万三角形、无骨无动画 |
+
+同伴与 Boss 都是**可选**的：没有就把 `scenes/game.tscn` 里对应的
+`CompanionMika` / `CompanionYuuka` / `CompanionNoa` / `Boss` / `BossPig` 节点删掉。
+
+`companions/` 与 `boss*/` 内部的文件名（ASCII 化后的 `tex/*.png`、`ref/*.png`）见 README 第七、八节。
+`models/companions/**`、`models/boss/**`、`models/boss_pig/**` 都已被 `.gitignore` 排除。
 
 ## ⚠️ 版权
 
