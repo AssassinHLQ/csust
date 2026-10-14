@@ -27,5 +27,5 @@ SOFTWARE.
 以下内容不属于本协议覆盖范围，且**不在本仓库中分发**，详见 THIRD_PARTY.md：
 
   * Blue Archive 角色模型与贴图（© NEXON Games / Yostar）—— 仅供本地学习
-  * 校园高斯泼溅扫描数据及其碰撞网格 —— 由使用者提供，权利状态未核实
+  * 高斯泼溅扫描数据（校园 / 画室609）及其碰撞网格 —— 由使用者提供，权利状态未核实
   * 第三方插件 GDGS（其自身以 MIT 授权，见 addons/gdgs/LICENSE）
