@@ -17,6 +17,12 @@ var _dead := false
 
 
 func _ready() -> void:
+	# 加进 `targets` 组：同伴的枪（`companion_gun.gd`）靠这个组找靶子。
+	# ⚠️ 以前这个组**根本没人进** —— game.tscn 里 5 个 Target 节点都没写 groups，
+	#    代码里也没有 add_to_group。于是 game.gd 那句「按 targets 组连 died」一直是
+	#    空转，全靠它下面那段「没进组也接一下」的兜底在干活（计分因此一直是对的，
+	#    所以没人发现）。现在由**脚本自己**声明身份：以后新加的靶子不用再手动配组。
+	add_to_group("targets")
 	health = max_health
 
 

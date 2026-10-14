@@ -132,7 +132,14 @@ func _run() -> void:
 		first_frame, str(saw_turning), int(probe["count"])])
 	print("  ★ 开火瞬间：align_error = %.1f 度（容差 22）   脸·准星方向 = %+.3f" % [
 		float(probe["err"]), float(probe["face_dot_fwd"])])
-	_check(first_frame > 2, "不是点下去同帧就开枪（先转身）")
+	# ⚠️ 这一条**不能拿帧数当判据**。原来写的是 `first_frame > 2`，隐含假设
+	#    「转身至少要用掉好几个渲染帧」；但 headless 的帧率跟着场景负载走 ——
+	#    7 名同伴加上枪和枪线之后，2 帧就可能超过 0.15 s，够把 121° 转完，
+	#    于是那条会**假红**（实测：点后第 2 帧开火，可 align_error 只有 12.5°、
+	#    脸·准星 +0.976 —— 恰好证明转身确实发生了）。
+	#    改用与帧率无关的判据：过程里出现过「转向中」，且**开火那一刻**已经进了
+	#    容差（就是下面两条）。`first_frame` 只留作打印。
+	_check(saw_turning, "点下后先进入「转向中」（不是直接开火）")
 	_check(float(probe["err"]) >= 0.0 and float(probe["err"]) <= 22.0,
 		"开火瞬间旋转误差在容差内（%.1f 度）" % float(probe["err"]))
 	# cos(22°) = 0.927 —— 「朝向准星」最直接的判据

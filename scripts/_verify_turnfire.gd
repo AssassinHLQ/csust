@@ -108,6 +108,14 @@ func _run() -> void:
 
 	print("\n========== 4. 眼睛骨定性核对（不参与判定）==========")
 	await _wait(120)
+	# ⚠️ 先让角色**真的转到准星方向**再量。
+	#    原来少了这一步，量到的是上一节开火结束时**残留的姿态** —— 判据于是依赖
+	#    「模型刚好停在哪」，而不是「模型能不能对准」。7 名同伴加上枪之后帧率一变，
+	#    残留姿态从「恰好同侧」变成「停在 -X」，这条就稳定红了（实测 84.5°，
+	#    脸 (-1,0,-0.1) vs 准星 (0,0,-1)）—— 那是**断言的漏洞**，不是朝向坏了。
+	#    这里直接按 `aim_dir` 的同一个 yaw 摆正，剩下的夹角就只剩眼骨固有偏差。
+	player.model_root.rotation.y = player._yaw + PI
+	await _wait(2)
 	var aim_dir := _flat(Vector3(sin(player._yaw + PI), 0.0, cos(player._yaw + PI))).normalized()
 	var bf := _face()
 	print("  对准后：脸(眼骨量) %s   准星方向 %s   夹角 %.1f 度" % [

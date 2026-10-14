@@ -195,7 +195,44 @@ func _run() -> void:
 	_check(bar1.value < 0.999 and n1.text.contains("1620"),
 		"第 2 行同步到 1620/1800（血条 %.3f）" % bar1.value)
 
-	print("\n========== 6. 渲图 ==========")
+	print("\n========== 6. 飞猪现在也会攻击 ==========")
+	# 飞猪原来只是木桩（boss.gd），这一轮换成了 pig_boss.gd（骚扰型）。
+	# 机制和霸王龙共用 boss_attacker.gd，但**参数必须明显不同** ——
+	# 否则「重击型 / 骚扰型」就只是说法上的区别了。
+	_check(pig.has_method("_attack"), "飞猪挂了攻击脚本（不再是纯木桩）")
+	var p_radius := float(pig.get("attack_radius"))
+	var t_radius := float(trex.get("attack_radius"))
+	var p_cd := float(pig.get("attack_interval"))
+	var t_cd := float(trex.get("attack_interval"))
+	var p_dmg := float(pig.get("attack_damage"))
+	var t_dmg := float(trex.get("attack_damage"))
+	print("  飞猪：  圈 %.1f m  冷却 %.1f s  伤害 %.0f" % [p_radius, p_cd, p_dmg])
+	print("  霸王龙：圈 %.1f m  冷却 %.1f s  伤害 %.0f" % [t_radius, t_cd, t_dmg])
+	_check(p_radius < t_radius, "飞猪的圈更小（%.1f < %.1f）" % [p_radius, t_radius])
+	_check(p_cd < t_cd, "飞猪的冷却更短（%.1f < %.1f）" % [p_cd, t_cd])
+	_check(p_dmg < t_dmg, "飞猪单次伤害更低（%.0f < %.0f）" % [p_dmg, t_dmg])
+
+	# 实打实打一下：把玩家放进飞猪的预警圈，看掉不掉血、飞不飞。
+	# 顺带把 facing() 打出来 —— 攻击是朝这个方向放的，它朝哪直接决定能不能打到你。
+	print("  飞猪位置 %s   facing() = %s" % [
+		str(pig.global_position.snappedf(0.1)), str(pig.facing().snappedf(0.01))])
+	(trex as Node).set_process(false)     # 别让霸王龙同时插一脚
+	player.set_physics_process(false)     # 冻住摩擦，击退才量得准
+	(pig as Node).set_process(false)      # 手动驱动，避免 _process 抢跑
+	pig.set("windup_time", 0.12)
+	var reach := float(pig.get("attack_reach"))
+	player.global_position = pig.global_position + pig.facing() * reach
+	player.health = player.max_health
+	player.velocity = Vector3.ZERO
+	pig.call("_attack", player)
+	_check((pig.get_node("AttackTelegraph") as MeshInstance3D).visible, "飞猪起手时露出预警圈")
+	await _wait_seconds(0.4)
+	print("  玩家 HP 100 → %.0f" % player.health)
+	_check(player.health < player.max_health, "站在飞猪预警圈里会掉血")
+	_check(player.velocity.length() > 0.1, "飞猪命中也会击退")
+	_check(not (pig.get_node("AttackTelegraph") as MeshInstance3D).visible, "结算后收起预警圈")
+
+	print("\n========== 7. 渲图 ==========")
 	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join("_boss")
 	DirAccess.make_dir_recursive_absolute(out)

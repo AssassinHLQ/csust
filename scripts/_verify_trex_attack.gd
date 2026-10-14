@@ -15,7 +15,10 @@ func _run() -> void:
 	var player := game.get_node("Player") as Player
 	var boss := game.get_node("Boss") as Node
 	_check(boss.has_method("_attack"), "霸王龙节点使用主动攻击脚本")
-	_check(not (game.get_node("BossPig") as Boss).has_method("_attack"), "飞猪仍保持木桩行为")
+	# 飞猪这一轮也换成会攻击的了（pig_boss.gd）。这里只确认两只走的是**同一套基类**；
+	# 它们的参数差异（圈/冷却/伤害都不一样）在 _verify_boss_pig.gd §6 里验。
+	_check((game.get_node("BossPig") as Boss) is BossAttacker,
+		"飞猪也走 BossAttacker 基类（不再是纯木桩）")
 	_check(player.max_health == 100.0 and player.health == player.max_health, "玩家初始化为100点生命")
 
 	# 关掉自动攻击：本套件手动 call _attack()，否则 _process 会自己插一脚，

@@ -86,8 +86,11 @@ scripts/companion.gd      同伴跟随：站位 / 走近跑近 / 朋友层（第
 scripts/anim_driver.gd    动画驱动（直接用 AnimationPlayer）
 scripts/weapon.gd         射线命中、弹药、换弹、弹丸、开火门控、特效
 scripts/target.gd         可击毁靶子（掉血 → 闪白 → 塌下 → 4 秒重生）
-scripts/boss.gd           Boss 木桩基类（霸王龙 + 飞猪共用，第七节）
-scripts/trex_boss.gd      霸王龙优香的攻击：地面预警圈 + 圈内扣血 + 击退（§7.5）
+scripts/boss.gd           Boss 基类（建模 / 碰撞 / 贴图 / 血量 / 受击闪白 / 倒地重生）
+scripts/boss_attacker.gd  Boss 攻击机制：预警圈 = 伤害区、冷却、击退（§7.5）
+scripts/trex_boss.gd      霸王龙优香（重击型）：参数 + 蓄力低头（§7.5）
+scripts/pig_boss.gd       飞猪优香（骚扰型）：参数 + 蓄力上蹦（§7.5）
+scripts/companion_gun.gd  同伴的枪：自己选目标开火，不误伤 / 不隔墙（§8.7）
 scripts/hud.gd            准星、弹药、状态、速度、换弹条、Boss 血条组
 scripts/game.gd           玩法总控（按类型收 Boss / 同伴）
 scripts/main.gd           动画查看器主控
@@ -433,16 +436,17 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_mag.gd        # 16 项：开局视角/弹匣/自动换弹/连续射击/光弹几何
 & $g --path $p --script res://scripts/_verify_turnfire.gd   # 8 项：开火前强制转身（连子弹都必须朝准星飞）
 & $g --path $p --script res://scripts/_verify_spawnview.gd  # 12 项：初始视角 + 甩镜头点左键的真实鼠标时序
-& $g --path $p --script res://scripts/_verify_boss.gd       # 19 项：霸王龙木桩（第七节）
-& $g --path $p --script res://scripts/_verify_boss_pig.gd   # 32 项：飞猪木桩 + HUD 双血条（§7.6）
-& $g --path $p --script res://scripts/_verify_trex_attack.gd # 9 项：霸王龙攻击预警圈/伤害/击退/躲避（§7.5）
+& $g --path $p --script res://scripts/_verify_boss.gd       # 19 项：霸王龙模型/碰撞/受击/倒地重生（第七节）
+& $g --path $p --script res://scripts/_verify_boss_pig.gd   # 40 项：飞猪模型 + HUD 双血条 + 它也会攻击（§7.5 / §7.6）
+& $g --path $p --script res://scripts/_verify_trex_attack.gd   # 9 项：Boss 攻击预警圈 / 伤害 / 击退 / 躲避（§7.5）
+& $g --path $p --script res://scripts/_verify_companion_attack.gd # 10 项：同伴开火 + 不误伤 / 不隔墙 / 背后停火（§8.7）
 & $g --path $p --script res://scripts/_verify_companion.gd  # 100 项：七名同伴跟随 + 不挡镜头 + 朝向/接地（第八节）
 & $g --path $p --script res://scripts/_verify_splat.gd      # 24 项：泼溅摆放 / 悬浮平台 / 走出边缘会掉（第六节）
 & $g --path $p --script res://scripts/_verify_room.gd       # 54 项：画室609 摆放/轴对齐/裁剪/墙碰撞/门洞 + 玩家朝向（§6.8）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **305 项**（本轮全量实测 305 PASS / 0 FAIL）。
+合计 **323 项**（本轮全量实测 323 PASS / 0 FAIL）。
 
 除 `_verify_splat` 外建议都加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例
 慢很多（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
@@ -610,8 +614,11 @@ _arisu_learn/
 │  ├─ companion.gd          同伴跟随：站位 / 走近跑近 / 朋友层（第八节）
 │  ├─ anim_driver.gd        动画驱动（直接 AnimationPlayer）
 │  ├─ weapon.gd             开火 / 弹药 / 换弹 / 弹丸 / 特效 / 子弹穿透朋友层
-│  ├─ boss.gd               Boss 木桩基类：骨架盒 or 网格盒定尺寸、贴图表、血条信号（第七节）
-│  ├─ trex_boss.gd          霸王龙优香的攻击：地面预警圈 + 圈内扣血 + 击退（§7.5）
+│  ├─ boss.gd               Boss 基类：骨架盒 or 网格盒定尺寸、贴图表、血条信号（第七节）
+│  ├─ boss_attacker.gd      Boss 攻击机制：预警圈 = 伤害区 + 冷却 + 击退（§7.5）
+│  ├─ trex_boss.gd          霸王龙优香（重击型）的参数与表现（§7.5）
+│  ├─ pig_boss.gd           飞猪优香（骚扰型）的参数与表现（§7.5）
+│  ├─ companion_gun.gd      同伴的枪：自己选目标开火，不误伤 / 不隔墙（§8.7）
 │  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放 + 锚点摆放 + 裁剪（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd
@@ -1119,10 +1126,13 @@ GPU 缓冲照样占着。要省显存就得真的按 `--venue` 只加载一份�
 
 ---
 
-# 七、Boss（木桩阶段）：霸王龙优香 + 飞猪优香
+# 七、Boss：霸王龙优香 + 飞猪优香
 
-两位 Boss 都是「木桩」：站在平台上、吃得下子弹、受击闪白、打光后扑倒并在数秒后站起来；
-AI / 冲撞 / 吐息留待后续。两者**共用 `scripts/boss.gd`**，但在「怎么量尺寸」上是两条路（见 §7.6）。
+两位 Boss **现在都会主动攻击玩家了**（§7.5）：站在平台上、吃得下子弹、受击闪白、
+打光后扑倒并在数秒后站起来，同时会在地面画预警圈打人 ——
+霸王龙是「**重击型**」（圈大、伤害高、击退远），飞猪是「**骚扰型**」（圈小、冷却短）。
+两者在「怎么量尺寸」上是两条路（见 §7.6），但在「怎么攻击」上**共用
+`scripts/boss_attacker.gd`**，各自只配一套参数。
 
 |  | 霸王龙优香 | 飞猪优香 |
 |---|---|---|
@@ -1221,43 +1231,54 @@ AI / 冲撞 / 吐息留待后续。两者**共用 `scripts/boss.gd`**，但在�
 - **位置/朝向**：改 Boss 节点的 `transform`。模型脸朝 +Z，所以绕 Y −90° 就是朝 −X
 - **血量**：`max_health`；血条会自动跟着变（低于 25% 变红）
 
-## 7.5 霸王龙优香的攻击（`scripts/trex_boss.gd`）
+## 7.5 Boss 的攻击（**两只都会打人了**）
 
-这一节原来写的是「下一步想做行为」，现在**霸王龙那一半已经做了**：它不再是纯木桩，
-会主动攻击；飞猪仍走 `boss.gd` 基类，保持木桩行为不变（自检里有一条专门验这个）。
+这一节原来写的是「下一步想做行为」。现在两只 Boss 都会主动攻击：
 
-| 参数 | 值 | 说明 |
-|---|---|---|
-| `attack_interval` | 4.5 s | 两次攻击的间隔 |
-| `windup_time` | 0.9 s | 预警圈从 55% 涨到 100% 的蓄力时间 |
-| `attack_range` | 18 m | **发现**玩家并起手的距离 |
-| `attack_half_angle_degrees` | 32° | 只在正面这个半角内起手 |
-| `attack_reach` | 5.0 m | 预警圈圆心离霸王龙的水平距离 |
-| `attack_radius` | 4.8 m | 预警圈半径，**同时就是伤害半径** |
-| `attack_damage` | 24 | 玩家满血 100，约 4 下倒 |
-| `knockback_force` | 8.0 | 命中时的水平击退 |
+- **霸王龙优香**（`trex_boss.gd`）—— **重击型**：圈大、伤害高、击退远
+- **飞猪优香**（`pig_boss.gd`）—— **骚扰型**：圈小、冷却短、伤害低，但逼你一直挪位置
+
+机制**完全共用** `boss_attacker.gd`（`class_name BossAttacker extends Boss`）：
+两个子类只改参数 + 两个钩子（`_on_windup_start` / `_on_resolved`，用来做模型表现 ——
+霸王龙蓄力时低头、飞猪整只向上一蹦）。想再加一位会攻击的 Boss，就
+`extends BossAttacker` 然后配一套参数，不用碰机制。
+
+| 参数 | 霸王龙（重击） | 飞猪（骚扰） | 说明 |
+|---|---|---|---|
+| `attack_interval` | 4.5 s | **3.0 s** | 两次攻击的间隔 |
+| `attack_start_delay` | 2.0 s | 3.5 s | 进场后多久开始 |
+| `windup_time` | 0.9 s | 0.7 s | 预警圈从 55% 涨到 100% 的蓄力时间 |
+| `attack_range` | 18 m | 14 m | **发现**玩家的距离（⚠️ 不是伤害半径） |
+| `attack_half_angle_degrees` | 32° | **45°** | 只在正面这个半角内起手 |
+| `attack_reach` | 5.0 m | 3.6 m | 预警圈圆心离本体的水平距离 |
+| `attack_radius` | **4.8 m** | **3.4 m** | 预警圈半径，**同时就是伤害半径** |
+| `attack_damage` | 24 | 14 | 玩家满血 100 |
+| `knockback_force` | 8.0 | 5.0 | 命中时的水平击退 |
+| `telegraph_color` | 红 | **紫** | 场上有两只时，一眼看出是谁要打你 |
 
 ⚠️ **`attack_radius` 必须同时是「预警圈半径」和「伤害半径」** —— 这是写这一版时踩的坑：
-一开始判定沿用了 `attack_range`（18 m），于是玩家站在**看得见的圈外面**照样被扣血，
+第一版判定沿用了 `attack_range`（18 m），于是玩家站在**看得见的圈外面**照样被扣血，
 预警圈等于在骗人。现在判定就是「玩家到圈心的水平距离 ≤ `attack_radius`」，
 和画出来的那个圈一一对应，站在圈外一定安全。
 
 流程：`_process` 里冷却到点 → 检查玩家在 `attack_range` 内**且在正面半角内** →
-起手 → 地面画出红色预警圈并涨大 → `windup_time` 后结算 → 圈内扣血 + 击退 → 收圈。
+起手 → 地面画出预警圈并涨大 → `windup_time` 后结算 → 圈内扣血 + 击退 → 收圈。
 
 玩家侧配套（`player.gd`）：`max_health = 100`、`take_damage()` / `heal()`，
 HUD 状态行显示 `HP xx/100`；血被打空不做死亡画面，1 秒后原地回满（教学沙盒）。
 Player 加入了 `"player"` 组，Boss 靠它找人。
 
-自检：`_verify_trex_attack.gd`（9 项）—— 覆盖「预警圈可见」「圈内必中」「有击退」
-「收圈」「**圈外（但在 18 m 发现范围内）不掉血**」「背后不掉血」。
-后两条就是专门锁住上面那个坑的回归点。
+自检：
+- `_verify_trex_attack.gd`（9 项）—— 预警圈可见 / 圈内必中 / 有击退 / 收圈 /
+  **圈外（但在 18 m 内）不掉血** / 背后不掉血
+- `_verify_boss_pig.gd` §6（8 项）—— 飞猪确实挂了攻击脚本、**三组参数都与霸王龙不同**
+  （专门防止「两只被做成一模一样」）、圈内扣血 + 击退 + 收圈
 
 ### 还没做的
 
-- **飞猪**：没有骨，只能在节点层级上做（上下漂浮 / 滚过来撞人 / 光环自转）
-- **霸王龙的程序化动作**：73 根骨还在，「张嘴 + 摆尾 + 点头」是有戏的
-  —— 现在攻击只有预警圈和扣血，还没有骨骼动作配合
+- **骨骼动作**：霸王龙那 73 根骨还在，「张嘴 + 摆尾」是有戏的 ——
+  现在蓄力只有「低头」这一点点程序化动作，还没有真正的骨骼动画
+- **飞猪的冲撞 / 滚动**：它没有骨，只能在节点层级上做（现在是「向上一蹦」）
 
 ## 7.6 第二位 Boss：飞猪优香（纯静态网格）
 
@@ -1316,7 +1337,8 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 
 # 八、同伴（跟随 NPC）：未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊
 
-**七名同伴****只跟随、不开火**（你选的「纯观赏」）。模型用 `tools\Find-BlueArchiveModel.cmd`
+**七名同伴会跟着玩家走位，并自己选目标开火帮忙**（打靶子 / Boss，见 §8.7）。
+不需要玩家下指令，也不会误伤玩家和自己人。模型用 `tools\Find-BlueArchiveModel.cmd`
 从 BlueArchiveModels 里取的**初始形态**（不带 `(Swimsuit)` / `(Battle)` / `(Cut-in)` /
 `(Maid)` / `(Pajama)` / `(Prototype)` 那些变体）：
 
@@ -1497,6 +1519,50 @@ var d := xf * skel.get_bone_global_pose(toe).origin - xf * skel.get_bone_global_
 3. 跑一次 `--import` 刷新类缓存（新 `class_name` 必须先导入才认），再跑 `_verify_companion.gd`
 
 `game.gd` 是**按类型**收同伴与 Boss 的（不遍历写死的节点名），所以加人不用改代码。
+
+## 8.7 同伴会开火（`scripts/companion_gun.gd`）
+
+同伴原来是「只跟随、不开火」。现在**自己选目标开火帮玩家打**（靶子 / Boss），
+不需要玩家下指令。它挂在 `companion.tscn` 的 `Gun` 节点上，所以 7 名同伴**各有一把**。
+
+三条硬约束（都写在脚本文件头）：
+
+1. **不打自己人。** 射线 mask 去掉朋友层（`Companion.LAYER` = 2），再把玩家 RID
+   加进 `exclude` —— ⚠️ 玩家在**层 1**，光靠 mask 屏蔽不掉。§8.1 解决的是
+   「同伴**挨打**」，这里是反过来的那一侧，要单独处理。
+2. **不隔墙打。** 扣血以**射线真正命中的那个目标**为准，不是「预测命中」：
+   预测和开火之间隔了一帧、目标还会动，靠预测就会出现「隔着墙掉血」。
+3. **不为开火而乱转身。** 只有目标已经在同伴**正前方 ±25°** 内才开火。
+   否则同伴会为了瞄准而东倒西歪，把 §8.3 那套「一队人朝同一个方向」的观感毁掉。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `attack_interval` | 1.8 s | 每名同伴的射击间隔（7 把枪各自独立） |
+| `attack_range` | 24 m | 超过就不打 |
+| `attack_damage` | 12 | 7 人齐射约 47 dps |
+| `aim_half_angle_degrees` | 25° | 见约束 3 |
+| `enabled` | `true` | 关掉就完全不开火（自检里用得到） |
+
+目标来源：靶子看 `targets` 组，Boss 看 `bosses` 组。
+
+⚠️ 为此修了一个**一直存在、但谁都没发现**的问题：`targets` 组**以前根本是空的** ——
+`game.tscn` 里 5 个 `Target` 节点都没写 `groups=`，代码里也没有 `add_to_group`。
+于是 `game.gd` 那句「按 `targets` 组连 `died`」一直在空转，全靠它下面那段
+「没进组也接一下」的兜底在干活 —— **计分一直是对的，所以没人察觉**。
+现在由 `target.gd` 的 `_ready()` 自己 `add_to_group("targets")`，以后新加的靶子
+不用再手动配组。Boss 那边特意用**另一个**组名（`bosses`）：`game.gd` 对 `targets` 组
+和 Boss 是**分别**连 `died` 的，Boss 若也进 `targets` 会被连两次、一次击杀加两分。
+
+自检 `_verify_companion_attack.gd`（10 项）：
+
+```powershell
+& $g --path $p --script res://scripts/_verify_companion_attack.gd -- --splat=off
+```
+
+⚠️ 这个套件每条都会**先把同伴排队 + 冻住跟随**（`set_physics_process(false)`）再测：
+同伴平时一直在走位和转身，不冻住的话「有没有开火」就混进了「有没有走到位 /
+转过身」，断言会变成看运气。它覆盖：挂了枪 / 默认开启 / 面朝靶子会开火且打掉血 /
+**玩家不被误伤** / **背后停火** / **隔墙停火** / 会打霸王龙 / 关掉 `enabled` 停火。
 
 ---
 

@@ -74,6 +74,10 @@ var _collision_shape: BoxShape3D
 
 
 func _ready() -> void:
+	# 加进 `bosses` 组：同伴的枪（companion_gun.gd）靠这个组找 Boss 当目标。
+	# ⚠️ 特意**不用** `targets` 组 —— game.gd 对 `targets` 组和 Boss 是分别连接
+	#    `died` 的，Boss 若也进 targets 组会被连两次，一次击杀加两分。
+	add_to_group("bosses")
 	health = max_health
 	_build_model()
 	_build_collision()

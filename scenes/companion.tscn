@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/companion.gd" id="1_companion"]
+[ext_resource type="Script" path="res://scripts/companion_gun.gd" id="2_gun"]
 
 [sub_resource type="CapsuleShape3D" id="Cap_companion"]
 radius = 0.3
@@ -19,3 +20,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
 shape = SubResource("Cap_companion")
 
 [node name="Rig" type="Node3D" parent="."]
+
+; 同伴的枪：自己选目标（靶子 / Boss）开火帮玩家打，不需要玩家下指令。
+; 三条硬约束（不打自己人 / 不隔墙打 / 不为开火乱转身）见 scripts/companion_gun.gd。
+[node name="Gun" type="Node3D" parent="."]
+script = ExtResource("2_gun")

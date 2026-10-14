@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/boss.gd" id="6_boss"]
 [ext_resource type="PackedScene" path="res://scenes/companion.tscn" id="7_companion"]
 [ext_resource type="Script" path="res://scripts/trex_boss.gd" id="8_trex"]
+[ext_resource type="Script" path="res://scripts/pig_boss.gd" id="9_pig"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -161,16 +162,18 @@ box_door_side = "z-"
 box_door_width = 1.6
 box_door_center = 0
 
-; 霸王龙优香「木桩」：站在平台右侧、朝 -X 正对场地中心。
+; 霸王龙优香：站在平台右侧、朝 -X 正对场地中心。
 ; 模型自身脸朝 +Z，所以绕 Y 转 -90° 就变成朝 -X。
 ; ⚠️ x 不能小于 13：x=9 时它的碰撞盒（约 7.8 m 长）会横在
 ;    「玩家(6,-4) → Target1(6,-10)」的弹道上，把每一发都吃掉。
 ; 默认身高 4.5 m（约 2.6 个 Arisu）、3000 血、受击闪白、倒下 6 秒后重生。
+; ⚠️ 它**不再是木桩**：挂 trex_boss.gd（重击型），会画红色预警圈打人 ——
+;    圈大 4.8 m、冷却 4.5 s、一下 24 血 + 击退 8。机制见 scripts/boss_attacker.gd。
 [node name="Boss" type="StaticBody3D" parent="."]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)
 script = ExtResource("8_trex")
 
-; 飞猪优香「木桩」（作者：一个睿智）——第二个 Boss，与霸王龙同场。
+; 飞猪优香（作者：一个睿智）——第二个 Boss，与霸王龙同场。
 ; 与霸王龙的三点不同：
 ;   1. **纯静态网格**（无骨骼、无动画），所以 boss.gd 走 _mesh_box() 而不是 _bone_box()
 ;   2. 本体**朝 +Z**（实测鼻子 z=+2.17、尾巴 z=−1.95），不需要补 180°；
@@ -179,9 +182,12 @@ script = ExtResource("8_trex")
 ; 位置 x=−13 是为了**不挡**「玩家(6,−4) → Target1(6,−10)」那条自检弹道：
 ; 它长轴沿世界 X，占 x ∈ [−15.0, −11.0]、z ∈ [−9.2, −6.8]，离 x=6 很远。
 ; 默认身高 2.6 m（含光环）、1800 血、倒下 6 秒后重生。
+; ⚠️ 它**也不再是木桩**：挂 pig_boss.gd（骚扰型），会画**紫色**预警圈打人 ——
+;    圈小 3.4 m、冷却只有 3.0 s、一下 14 血 + 击退 5。和霸王龙共用
+;    scripts/boss_attacker.gd 那套机制，只有参数不同（紫色是为了和霸王龙区分开）。
 [node name="BossPig" type="StaticBody3D" parent="."]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -13, 0, -8)
-script = ExtResource("6_boss")
+script = ExtResource("9_pig")
 display_name = "飞猪优香"
 model_path = "res://models/boss_pig/猪猪优香.fbx"
 height = 2.6
