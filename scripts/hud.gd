@@ -312,7 +312,7 @@ func _process(_delta: float) -> void:
 		moving_state = "换弹中"
 	elif _weapon and _weapon.is_turning():
 		moving_state = "转向中"
-	state.text = moving_state
+	state.text = "%s　HP %d/%d" % [moving_state, int(ceil(_player.health)), int(_player.max_health)]
 	speed.text = "%.1f m/s" % moving
 
 	if _weapon:

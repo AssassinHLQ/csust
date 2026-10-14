@@ -20,6 +20,10 @@ extends CharacterBody3D
 ##    左键的「按下 / 松开」用 poll 的按键状态做边沿判断，不依赖事件里的 pressed 字段。
 
 signal aim_changed(aiming: bool)
+signal health_changed(current: float, maximum: float)
+
+@export var max_health := 100.0
+var health := 100.0
 
 # --- 移动手感（米 / 秒）---
 const SPEED_WALK := 2.0
@@ -107,6 +111,7 @@ var _zoom_distance := 0.0
 
 
 func _ready() -> void:
+	add_to_group("player")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	# 出生朝向：相机绕角 0 → 相机在角色背后（+Z 侧）往场地深处（-Z）看，
 	# 靶区（z = -3 … -16）正好在画面正前方，角色背对镜头面朝靶区。
@@ -116,7 +121,9 @@ func _ready() -> void:
 	model_root.rotation.y = _facing_yaw
 	rig.rotation.y = _yaw
 	_zoom_distance = hip_distance
+	health = max_health
 	_apply_camera(1.0)
+	health_changed.emit(health, max_health)
 
 
 func _input(event: InputEvent) -> void:
@@ -281,6 +288,32 @@ func _apply_camera(delta: float) -> void:
 	spring.rotation.x = _pitch + _recoil_pitch
 	spring.rotation.y = _recoil_yaw
 	rig.rotation.y = _yaw
+
+
+func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> void:
+	if amount <= 0.0 or health <= 0.0:
+		return
+	health = maxf(health - amount, 0.0)
+	if knockback > 0.0:
+		var away := global_position - hit_from
+		away.y = 0.0
+		if away.length_squared() > 0.001:
+			velocity += away.normalized() * knockback
+	health_changed.emit(health, max_health)
+	if health <= 0.0:
+		# 教学沙盒不做死亡画面：1 秒后**原地**回满血（只清速度 + 回血，不搬位置）。
+		await get_tree().create_timer(1.0).timeout
+		if is_instance_valid(self):
+			velocity = Vector3.ZERO
+			health = max_health
+			health_changed.emit(health, max_health)
+
+
+func heal(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	health = minf(health + amount, max_health)
+	health_changed.emit(health, max_health)
 
 
 func add_recoil(pitch: float, yaw: float) -> void:

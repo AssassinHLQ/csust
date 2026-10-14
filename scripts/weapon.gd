@@ -40,8 +40,8 @@ signal hit_confirmed(collider: Object, position: Vector3)
 ## 实测离弹道 **1.3 m**、高度只有 0.25 m。直接拿枪口当起点，光弹会从角色身侧
 ## 斜着飞出去，看起来就是「子弹不是从枪口出来的」。投影到弹道上之后，
 ## 光弹沿着准星方向从角色身体里飞出去，观感才对。
-@export var fx_on_aim_line := true
-## 投影之后再沿弹道往前推多少米（正数 = 更靠前）
+@export var fx_on_aim_line := false
+## 视觉起点沿射线最多向前偏移多少米；默认保持在枪口附近
 @export var fx_forward := 0.0
 
 # --- 弹丸视觉 ---
@@ -205,11 +205,14 @@ func _fire_raycast() -> void:
 			str(origin.snappedf(0.01)), str(dir.snappedf(0.01)), str(hit != null), str(collider)])
 
 	var muzzle_pos := muzzle.global_position
-	# 视觉起点（见 fx_on_aim_line 的注释）
+	# 视觉起点默认就在**真实枪口**（fx_on_aim_line = false）。
+	# 打开时把枪口挪到瞄准射线上：沿射向投影，且最多落在射线起点之后 0.25 m。
+	# ⚠️ 老版本是「投影到相机前方、再往前推」，表现就是「子弹从角色前面冒出来」
+	#    —— 用户报的「位置太靠前」正是这个，所以默认改成了 false。
 	var fx_from := muzzle_pos
 	if fx_on_aim_line:
-		var along := clampf((muzzle_pos - origin).dot(dir), 0.2, range_meters)
-		fx_from = origin + dir * (along + fx_forward)
+		fx_from = origin + dir * clampf((muzzle_pos - origin).dot(dir), 0.0, 0.25) \
+			+ dir * fx_forward
 	_spawn_tracer(fx_from, impact)
 
 	if collider and collider.has_method("take_damage"):
@@ -364,28 +367,29 @@ func _muzzle_flash(at: Vector3) -> void:
 	_fx_root.add_child(light)
 	light.global_position = at
 
-	var quad := MeshInstance3D.new()
-	var qm := QuadMesh.new()
-	qm.size = Vector2(0.22, 0.22)
-	quad.mesh = qm
+	var flash := MeshInstance3D.new()
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.065
+	flash_mesh.height = 0.13
+	flash_mesh.radial_segments = 8
+	flash_mesh.rings = 4
+	flash.mesh = flash_mesh
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.albedo_color = Color(1.0, 0.9, 0.6, 0.95)
 	mat.emission_enabled = true
 	mat.emission = Color(1.0, 0.8, 0.4)
 	mat.emission_energy_multiplier = 1.6
-	qm.material = mat
-	quad.rotation.z = randf() * TAU
-	_fx_root.add_child(quad)
-	quad.global_position = at
+	flash.material_override = mat
+	_fx_root.add_child(flash)
+	flash.global_position = at
 
-	var tw := quad.create_tween()
+	var tw := flash.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(light, "light_energy", 0.0, 0.05)
 	tw.tween_property(mat, "albedo_color:a", 0.0, 0.05)
-	tw.chain().tween_callback(quad.queue_free)
+	tw.chain().tween_callback(flash.queue_free)
 	tw.chain().tween_callback(light.queue_free)
 
 

@@ -23,7 +23,10 @@ func _run() -> void:
 	var player: Player = game.get_node("Player")
 	var boss: Boss = game.get_node("Boss")
 	print("========== 1. 模型修复与贴图分配 ==========")
-	var meshes := _all(boss, "MeshInstance3D")
+	# ⚠️ 只统计**模型**里的网格，不要从 boss 节点往下扫：
+	#    霸王龙现在挂着攻击预警圈（AttackTelegraph，平时 visible = false），
+	#    从 boss 往下扫会把它当成「被隐藏的挂件」，白红一条。
+	var meshes := _all(boss.model, "MeshInstance3D")
 	var visible := 0
 	var hidden := 0
 	var textured := 0

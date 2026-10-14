@@ -222,8 +222,7 @@ func _run() -> void:
 	_check(checked > 0, "确实抓到了刚生成的光弹")
 	_check(behind == 0, "没有任何光弹伸到起点之后（%d 个）" % behind)
 
-	# 光弹起点应该在弹道那条线上（枪口骨离弹道实测 1.3 m，直接用它会让弹
-	# 从角色身侧斜着飞出去 —— fx_on_aim_line 就是干这个的）
+	# 光弹从真实枪口附近出发；它不再被强制投影到相机前方，避免视觉上突然出现在角色前面。
 	var cam3 := player.cam
 	var ray_o := cam3.global_position + cam3.global_transform.basis * weapon.muzzle_offset
 	var ray_d := player.camera_forward()
@@ -232,9 +231,9 @@ func _run() -> void:
 		var from2: Vector3 = item[6]
 		var v := from2 - ray_o
 		off_axis = minf(off_axis, (v - ray_d * v.dot(ray_d)).length())
-	print("  光弹起点离弹道 %.3f m（fx_on_aim_line = %s）" % [off_axis, str(weapon.fx_on_aim_line)])
-	if weapon.fx_on_aim_line:
-		_check(off_axis < 0.05, "光弹起点落在弹道上（偏离 %.3f m）" % off_axis)
+	print("  光弹起点离射线 %.3f m（fx_on_aim_line = %s）" % [off_axis, str(weapon.fx_on_aim_line)])
+	_check(off_axis < 2.0, "光弹起点仍在角色枪口附近（偏离 %.3f m）" % off_axis)
+	_check(not weapon.fx_on_aim_line, "默认不把视觉起点推到射线前方")
 
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)

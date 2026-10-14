@@ -16,7 +16,7 @@ const ROOM_NAME := "Room609"
 const CAMPUS_NAME := "SplatScene"
 ## 量出来的期望值（splatdata/README.md 里同步记着），对不上就是有人改了场景
 const EXPECT_POINTS := 2769851
-const EXPECT_SCALE := 5.0
+const EXPECT_SCALE := 4.25
 const EXPECT_YAW := 248.6
 const FLOOR_Y := 0.03
 
@@ -102,8 +102,17 @@ func _run() -> void:
 	var span_lo := maxf(aabb.size.x, aabb.size.z)
 	var span_hi := minf(aabb.size.x, aabb.size.z)
 	print("  XZ 占地 %.1f × %.1f m（平台 40 × 40）" % [aabb.size.x, aabb.size.z])
-	_check(span_lo > 26.0 and span_lo < 36.0, "长边 %.1f m（×5 的「神秘力量放大版」）" % span_lo)
-	_check(span_hi > 24.0 and span_hi < 32.0, "短边 %.1f m" % span_hi)
+	# 长宽 = 源尺寸 × world_scale（源 5.63 × 6.41，见 game.tscn 里 Room609 的注释）。
+	# ⚠️ 写成**跟着 EXPECT_SCALE 走的式子**，别再写死米数：
+	#    之前这里写的是「长边 26~36、短边 24~32」，是按 ×5 量的；
+	#    缩放改成 4.25 后短边实测 23.9 m，只差 0.1 m 就假红了一条。
+	#    现在换成「源尺寸 × 缩放」，以后再调缩放这里自动跟着变。
+	var want_long := 6.41 * EXPECT_SCALE     # 长边 ≈ 27.2 m
+	var want_short := 5.63 * EXPECT_SCALE    # 短边 ≈ 23.9 m
+	_check(absf(span_lo - want_long) < 1.5,
+		"长边 %.1f m（期望 %.1f = 源 6.41 × %.2f）" % [span_lo, want_long, EXPECT_SCALE])
+	_check(absf(span_hi - want_short) < 1.5,
+		"短边 %.1f m（期望 %.1f = 源 5.63 × %.2f）" % [span_hi, want_short, EXPECT_SCALE])
 	_check(aabb.size.y > 7.0 and aabb.size.y < 13.0,
 		"包围盒高 %.1f m（含地板下方的重建噪声）" % aabb.size.y)
 

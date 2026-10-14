@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/splat_scene.gd" id="5_splat"]
 [ext_resource type="Script" path="res://scripts/boss.gd" id="6_boss"]
 [ext_resource type="PackedScene" path="res://scenes/companion.tscn" id="7_companion"]
+[ext_resource type="Script" path="res://scripts/trex_boss.gd" id="8_trex"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -113,7 +114,7 @@ surface_material_override/0 = SubResource("Mat_floor")
 ; 高斯泼溅「画室609」：平台上的室内场地，**有墙碰撞 + 一个门洞**。
 ; 参数全部是量出来的（scripts/_probe_room_layout.gd / _probe_room_on_platform.gd /
 ; _verify_room.gd §3），不要凭感觉改：
-;   world_scale = 5.0   内容源尺寸 5.63 × 1.95 × 6.41 → 世界 28.0 × 9.8 × 32.0 m
+;   world_scale = 4.25   内容源尺寸 5.63 × 1.95 × 6.41 → 世界 28.0 × 9.8 × 32.0 m
 ;                       （包围盒；室内净高约 6.3 m）。这是用户定的「就当是房间被
 ;                       神秘力量放大了」：桌椅也是 2.5 倍，比 Arisu 1.4 m 大一圈。
 ;                       想要真人比例就改 1.5~2 —— 但**别再往下调到 1.8 以下**：
@@ -145,7 +146,7 @@ script = ExtResource("5_splat")
 sog_path = "res://splatdata/room609.sogdata"
 display_name = "画室609"
 venue = "room"
-world_scale = 5.0
+world_scale = 4.25
 yaw_degrees = 248.6
 auto_place = false
 use_anchor = true
@@ -167,7 +168,7 @@ box_door_center = 0
 ; 默认身高 4.5 m（约 2.6 个 Arisu）、3000 血、受击闪白、倒下 6 秒后重生。
 [node name="Boss" type="StaticBody3D" parent="."]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)
-script = ExtResource("6_boss")
+script = ExtResource("8_trex")
 
 ; 飞猪优香「木桩」（作者：一个睿智）——第二个 Boss，与霸王龙同场。
 ; 与霸王龙的三点不同：
