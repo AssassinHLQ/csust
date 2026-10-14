@@ -84,6 +84,10 @@ const CAMERA_FORWARD_OFFSET := PI
 @export var aim_shoulder := 0.58
 @export var hip_fov := 62.0
 @export var aim_fov := 34.0
+## 开镜 FOV 相对腰射 FOV 的比例。设置界面只暴露**一个**「视野 FOV」，
+## 开镜按这个比例跟着走（默认 34 / 62 ≈ 0.548），否则调 FOV 会把
+## 「腰射 / 开镜」的观感关系搞乱。
+const AIM_FOV_RATIO := 0.55
 @export var cam_lerp := 12.0
 
 var aiming := false
@@ -124,6 +128,9 @@ func _ready() -> void:
 	health = max_health
 	_apply_camera(1.0)
 	health_changed.emit(health, max_health)
+	# 设置（Esc 菜单）：先读一次初值，之后跟着变
+	GameSettings.listen(_on_setting_changed)
+	_apply_settings()
 
 
 func _input(event: InputEvent) -> void:
@@ -150,10 +157,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and (event as InputEventKey).pressed \
 		and not (event as InputEventKey).echo:
 		var key := (event as InputEventKey).keycode
-		if key == KEY_ESCAPE:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE \
-				if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
-			return
+		# ⚠️ Esc **不在这里处理**：它归设置界面（scripts/settings_menu.gd）。
+		#    菜单打开时游戏是暂停的、player 收不到输入，也就没法负责「关掉菜单」——
+		#    由菜单自己监听（PROCESS_MODE_ALWAYS）才能一开一关都稳。
 		if key == KEY_R and weapon:
 			weapon.try_reload()
 			return
@@ -319,6 +325,24 @@ func heal(amount: float) -> void:
 func add_recoil(pitch: float, yaw: float) -> void:
 	_recoil_pitch += pitch
 	_recoil_yaw += yaw
+
+
+# --- 设置（Esc 菜单 / scripts/game_settings.gd）---
+
+## 把设置页管得着的那几项应用到本节点。
+## ⚠️ 只碰 `mouse_sensitivity` / `hip_fov` / `aim_fov` —— 相机高度、转身平滑、
+##    移速这些仍然由场景与脚本说了算，不属于「设置界面」的范围。
+func _apply_settings() -> void:
+	mouse_sensitivity = float(GameSettings.value("mouse_sensitivity"))
+	var fov := float(GameSettings.value("fov"))
+	hip_fov = fov
+	aim_fov = fov * AIM_FOV_RATIO
+	_apply_camera(1.0)
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == "mouse_sensitivity" or key == "fov":
+		_apply_settings()
 
 
 ## 当前「应该朝」的方向（弧度）。

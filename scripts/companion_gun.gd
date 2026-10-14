@@ -38,6 +38,8 @@ var _targets: Array[Node3D] = []
 var _targets_collected := false
 var _fx_root: Node3D
 var _shots := 0
+## 设置页里的「同伴开火」开关。与 `enabled` 分开存，理由见 `_is_active()`
+var _settings_enabled := true
 
 
 func _ready() -> void:
@@ -46,6 +48,9 @@ func _ready() -> void:
 		push_warning("[CompanionGun] 父节点不是 Companion，这把枪不会工作")
 		return
 	_cooldown = attack_start_delay
+	# 设置（Esc 菜单）：同伴到底开不开火，由玩家说了算
+	GameSettings.listen(_on_setting_changed)
+	_apply_settings()
 
 
 ## 特效挂到**场景根**下（与同伴平级、自身没有变换）：
@@ -67,7 +72,7 @@ func _ensure_fx_root() -> void:
 
 
 func _process(delta: float) -> void:
-	if not enabled or _companion == null:
+	if not _is_active() or _companion == null:
 		return
 	_ensure_fx_root()
 	if not _targets_collected:
@@ -242,3 +247,21 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 ## 开过几枪 —— 自检用
 func shot_count() -> int:
 	return _shots
+
+
+# --- 设置（Esc 菜单 / scripts/game_settings.gd）---
+
+## 这把枪到底开不开火：`enabled`（场景与自检用的开关）**且**设置页没关掉。
+## ⚠️ 两个来源分开存是故意的：自检会把 `enabled = false` 来测「停火」，
+##    那条路径不该被设置页的状态影响，反过来也一样。
+func _is_active() -> bool:
+	return enabled and _settings_enabled
+
+
+func _apply_settings() -> void:
+	_settings_enabled = bool(GameSettings.value("companion_fire"))
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == "companion_fire":
+		_apply_settings()

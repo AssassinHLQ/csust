@@ -41,6 +41,8 @@ extends Boss
 var _attack_cooldown := 0.0
 var _attacking := false
 var _telegraph: MeshInstance3D
+## 设置页里的「Boss 攻击」开关：关掉后两位 Boss 都只挨打、不还手
+var _settings_enabled := true
 
 
 func _ready() -> void:
@@ -64,10 +66,13 @@ func _ready() -> void:
 	_telegraph.material_override = mat
 	_telegraph.visible = false
 	add_child(_telegraph)
+	# 设置（Esc 菜单）：Boss 是否主动攻击
+	GameSettings.listen(_on_setting_changed)
+	_apply_settings()
 
 
 func _process(delta: float) -> void:
-	if _dead or _attacking:
+	if not _settings_enabled or _dead or _attacking:
 		return
 	_attack_cooldown -= delta
 	if _attack_cooldown > 0.0:
@@ -124,6 +129,17 @@ func _on_windup_start(_center: Vector3) -> void:
 ## 结算结束的钩子：子类在这里把模型复位
 func _on_resolved() -> void:
 	pass
+
+
+# --- 设置（Esc 菜单 / scripts/game_settings.gd）---
+
+func _apply_settings() -> void:
+	_settings_enabled = bool(GameSettings.value("boss_attack"))
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == "boss_attack":
+		_apply_settings()
 
 
 func _find_player() -> Player:

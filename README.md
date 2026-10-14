@@ -47,7 +47,8 @@
 | 鼠标右键（按住） | **开镜**：相机拉近过肩、FOV 62→34、散布收窄、移速降到 1.6 m/s |
 | **鼠标左键（按住）** | **开火**：约 13 发/秒，**60 发弹匣**。打空自动换弹，**换完不用再点一次，按住就继续射**。**背对准星时不会开枪，会先转身** |
 | `R` | 手动换弹（1.05 s）。手动换弹同样不打断「按住」状态 |
-| 鼠标移动 | 视角；`Esc` 释放/捕获鼠标 |
+| 鼠标移动 | 视角 |
+| `Esc` | **打开 / 关闭设置界面**（打开时暂停游戏并释放鼠标，便于用鼠标拖滑块；再按一次回到游戏）。见 §1.12 |
 | 滚轮 | 拉近拉远 |
 
 HUD 右下角：弹药 / 当前状态（腰射 / 瞄准 / 跑动 / 蹲行 / 换弹中 / **转向中**）/ 实际速度 / 换弹进度条。
@@ -92,6 +93,8 @@ scripts/trex_boss.gd      霸王龙优香（重击型）：参数 + 蓄力低头
 scripts/pig_boss.gd       飞猪优香（骚扰型）：参数 + 蓄力上蹦（§7.5）
 scripts/companion_gun.gd  同伴的枪：自己选目标开火，不误伤 / 不隔墙（§8.7）
 scripts/hud.gd            准星、弹药、状态、速度、换弹条、Boss 血条组
+scripts/game_settings.gd  全局设置：存值 / 落盘 / 广播（**静态类**，§1.12）
+scripts/settings_menu.gd  Esc 设置界面：代码构建 UI + 暂停 + 像素皮肤（§1.12）
 scripts/game.gd           玩法总控（按类型收 Boss / 同伴）
 scripts/main.gd           动画查看器主控
 ```
@@ -436,6 +439,7 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_mag.gd        # 16 项：开局视角/弹匣/自动换弹/连续射击/光弹几何
 & $g --path $p --script res://scripts/_verify_turnfire.gd   # 8 项：开火前强制转身（连子弹都必须朝准星飞）
 & $g --path $p --script res://scripts/_verify_spawnview.gd  # 12 项：初始视角 + 甩镜头点左键的真实鼠标时序
+& $g --path $p --script res://scripts/_verify_settings.gd   # 29 项：Esc 设置界面（开关 / 各项真的生效 / 落盘 / 恢复默认 + 渲图，§1.12）
 & $g --path $p --script res://scripts/_verify_boss.gd       # 19 项：霸王龙模型/碰撞/受击/倒地重生（第七节）
 & $g --path $p --script res://scripts/_verify_boss_pig.gd   # 40 项：飞猪模型 + HUD 双血条 + 它也会攻击（§7.5 / §7.6）
 & $g --path $p --script res://scripts/_verify_trex_attack.gd   # 9 项：Boss 攻击预警圈 / 伤害 / 击退 / 躲避（§7.5）
@@ -446,7 +450,7 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **323 项**（本轮全量实测 323 PASS / 0 FAIL）。
+合计 **352 项**（本轮全量实测 352 PASS / 0 FAIL）。
 
 除 `_verify_splat` 外建议都加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例
 慢很多（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
@@ -481,6 +485,70 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
 & $g --path $p --script res://scripts/_probe_fps.gd                 # 泼溅吃多少 fps
 & $g --path $p --script res://scripts/_probe_splat_render.gd -- --scale=25 --cache=auto
 ```
+
+## 1.12 设置界面（`Esc`）
+
+按 `Esc` 呼出，**打开时暂停游戏并释放鼠标**（不然拖不动滑块），再按一次回到游戏。
+
+| 设置项 | 作用对象 | 说明 |
+|---|---|---|
+| 鼠标灵敏度 | `player.mouse_sensitivity` | 0.0005 ~ 0.0060 |
+| 视野 FOV | `player.hip_fov` / `aim_fov` | 开镜按固定比例跟着走（`AIM_FOV_RATIO = 0.55`） |
+| 主音量 | `AudioServer` 的 **Master** 总线 | 拉到 0 走 `set_bus_mute`，**不是** `-inf dB` |
+| 同伴开火 | 7 把 `CompanionGun` | 关掉后同伴只跟随、不开枪（§8.7） |
+| Boss 攻击 | 两位 `BossAttacker` | 关掉后 Boss 只挨打、不还手（§7.5） |
+
+改完即时生效，并存到 `user://settings.cfg`（`ConfigFile` 纯文本，坏档直接删掉重启即可）。
+「恢复默认」就是把 `DEFAULTS` 整张表重铺一遍。
+
+### ⚠️ 为什么设置类是**静态类**，而不是 autoload
+
+`game_settings.gd` 是 `class_name GameSettings extends RefCounted` + **全静态成员**。
+原因只有一个，但很硬：
+
+> 自检是用 `godot --script res://scripts/_verify_xxx.gd` 跑的，而**在这个模式下
+> autoload 的名字不是编译期可见的全局标识符**。第一版写成了 autoload，结果产品脚本里的
+> `GameSettings.value(...)` 直接报
+> `Compile Error: Identifier not found: GameSettings` → `player.gd` 整份编译失败 →
+> Player 退化成裸 `CharacterBody3D` → **所有自检一起崩**。
+> 而 `--script` 以外的启动方式一切正常，所以**只有自检中招**，非常难查
+> （从现象看像是「自检卡死」，其实是编译期就废了）。
+
+代价：静态类**不能声明 `signal`**，所以变更广播改成了一个静态回调表
+（`GameSettings.listen(callable)`，回调签名 `func(key, value) -> void`）。
+
+### ⚠️ 为什么 `Esc` 的监听在菜单里，而不是留在 player
+
+菜单一打开就把游戏 `paused = true`，而 **`player.gd` 在暂停时收不到输入** ——
+它没法负责「关掉菜单」。所以由 `settings_menu.gd` 自己用 `PROCESS_MODE_ALWAYS` 监听
+`Esc`（暂停也收得到）；原来 `player.gd` 里那段「`Esc` 来回切鼠标捕获」已经删掉了。
+
+### UI 与皮肤
+
+UI 全部**代码构建**（和 `hud.gd` 里 Boss 血条同一套做法），皮肤集中在 `assets/ui/`：
+
+| 文件 | 来源 | 用途 |
+|---|---|---|
+| `tile_panel.png` | Kenney UI Pack - Pixel Adventure（CC0）九宫格 | 面板 |
+| `tile_button*.png` | 同上 | 按钮的 normal / hover / pressed |
+| `font_pixel.ttf` | Fusion Pixel Font（OFL）12px **中文** | 全部文字 |
+
+**想整体换风格，替换这几张图和字体就够了**（比如换成 Sprout Lands 的素材）——
+尺寸约定见 `settings_menu.gd` 顶部的常量（`NINE_MARGIN = 8`，素材是 32×32 的像素块）。
+滑块**刻意不用**九宫格：槽只有约 8 px 高，边距一拉伸就错位，改用同色系的平色块
++ 代码生成的方块 grabber。
+
+⚠️ 两个坑：
+
+1. **面板切片原本是「中空边框」**（中心 `alpha = 0`）——直接当面板用，背后的游戏画面会
+   透上来压着文字（第一版就是，截图里能看清后面的同伴）。已把 `tile_panel.png` 与
+   `tile_button_hover.png` 的中心填成白色，颜色完全交给 `modulate_color` 决定。
+2. **不要在运行时改 `FontFile` 的 `antialiasing` / `hinting` 那几项**：会触发字形缓存
+   重建，这个中文字体 7 MB 字形很多，很慢。直接用字体原生的 12px 设计即可
+   （`FONT_SIZE = 16` 实测清晰）；真要关抗锯齿，请去**导入设置**里配。
+
+自检 `_verify_settings.gd`（29 项），会顺带渲一张
+`_arisu_captures/_ui/96_settings_menu.png` 供人眼核对皮肤。
 
 ---
 
@@ -582,6 +650,8 @@ _arisu_learn/
 ├─ .gitignore               排除私有素材（模型 / 泼溅数据）与 Godot 缓存
 ├─ addons/
 │  └─ gdgs/                 GDGS 3.3.0 高斯泼溅插件（**纯 GDScript，无 DLL**，MIT，第六节）
+├─ assets/
+│  └─ ui/                   设置界面的像素皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
 ├─ models/
 │  ├─ README.md             说明：要放什么模型、版权与换模型的三个注意点
 │  ├─ Arisu.glb             原模型（24 条动作）※不随仓库分发
@@ -619,6 +689,8 @@ _arisu_learn/
 │  ├─ trex_boss.gd          霸王龙优香（重击型）的参数与表现（§7.5）
 │  ├─ pig_boss.gd           飞猪优香（骚扰型）的参数与表现（§7.5）
 │  ├─ companion_gun.gd      同伴的枪：自己选目标开火，不误伤 / 不隔墙（§8.7）
+│  ├─ game_settings.gd      全局设置：存值 / 落盘 / 广播（**静态类**，§1.12）
+│  ├─ settings_menu.gd      Esc 设置界面：代码构建 UI + 暂停 + 像素皮肤（§1.12）
 │  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放 + 锚点摆放 + 裁剪（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd

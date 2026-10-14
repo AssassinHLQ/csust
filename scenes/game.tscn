@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=22 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://scenes/companion.tscn" id="7_companion"]
 [ext_resource type="Script" path="res://scripts/trex_boss.gd" id="8_trex"]
 [ext_resource type="Script" path="res://scripts/pig_boss.gd" id="9_pig"]
+[ext_resource type="Script" path="res://scripts/settings_menu.gd" id="10_settings"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -444,5 +445,11 @@ offset_top = -34.0
 offset_right = 1480.0
 offset_bottom = -14.0
 grow_vertical = 0
-text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 释放鼠标　｜　7 名同伴跟着你走（未花・优香・诺亚・小桃・小绿・柚子・凯伊）　｜　屋内是画室609，平台下是校园"
+text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 设置　｜　7 名同伴会帮你打（未花・优香・诺亚・小桃・小绿・柚子・凯伊）　｜　屋内是画室609，平台下是校园"
+
+; Esc 设置界面（scripts/settings_menu.gd）。**它接管了 Esc**：原来 Esc 只是切鼠标捕获，
+; 现在打开时一并暂停游戏 + 释放鼠标，再按一次关掉并恢复。UI 全部代码构建，
+; 皮肤在 assets/ui/（Kenney 九宫格 CC0 + FusionPixel 字体 OFL）。
+[node name="SettingsMenu" type="CanvasLayer" parent="."]
+script = ExtResource("10_settings")
 theme_override_font_sizes/font_size = 13
