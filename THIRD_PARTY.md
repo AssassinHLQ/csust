@@ -12,6 +12,7 @@
 | [Godot Engine](https://godotengine.org) 4.7.1 | MIT | ❌ 不包含 | 需要自行安装（本工程用 mono 版验证，不含 C# 代码） |
 | [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | MIT | ✅ 包含于 `addons/gdgs/` | 高斯泼溅渲染插件，作者 ReconWorldLab；原许可文件保留在 `addons/gdgs/LICENSE` |
 | Blue Archive 「Arisu」角色模型与贴图 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `models/Arisu.glb`、`models/Arisu_ext.glb` 与自动解包的 `Arisu*.png`。**仅用于本地学习研究，不得再分发、不得商用、不得用于任何发布产物** |
+| 「霸王龙优香」Boss 模型（FBX） | **专有版权**（同上，玩家二创） | ❌ 不包含 | `models/boss/**`（`优香霸王龙.fbx` + 贴图 + ASCII 副本）。同样仅供本地学习 |
 | 校园高斯泼溅扫描数据 | **权利状态未核实** | ❌ 不包含 | `splatdata/*.sogdata`。由使用者提供，其拍摄权、场地权、肖像权与再分发权均未由本项目核实 |
 | 校园碰撞网格 | 派生自上一项 | ❌ 不包含 | `models/school.collision.glb` |
 | 项目图标 `icon.png` | 待确认 | ✅ 包含 | 来源需仓库作者确认；若不是原创请替换为自有图标 |

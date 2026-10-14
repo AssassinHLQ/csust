@@ -16,6 +16,8 @@
 /splatdata/*.sog
 /models/school*.glb
 /models/school*.glb.import
+# Boss 模型（霸王龙优香，同样派生自 Blue Archive）
+/models/boss/**
 
 # 但保留两个目录下的说明文件，克隆者要靠它们知道该放什么
 !/models/README.md
