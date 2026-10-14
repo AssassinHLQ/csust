@@ -76,6 +76,40 @@ func _run() -> void:
 	_check(p.z < 19.25, "护栏挡住了（z = %.2f < 19.25）" % p.z)
 	_check(p.y > -1.0, "角色仍站在平台上（y = %.2f）" % p.y)
 
+	# 助跑起跳应该能翻出去（护栏只有 0.7 m，跳跃顶点 0.87 m）
+	print("\n--- 助跑起跳能翻出去（能下去看校园）---")
+	player.global_position = Vector3(0, 0.05, 15)
+	player.velocity = Vector3.ZERO
+	await _wait(10)
+	Input.action_press("move_back")
+	Input.action_press("sprint")
+	await _wait(300)
+	Input.action_press("jump")
+	await _wait(6)
+	Input.action_release("jump")
+	var left := false
+	var g := 0
+	while g < 1500:
+		await process_frame
+		g += 1
+		if player.global_position.y < -2.0:
+			left = true
+			break
+	Input.action_release("sprint")
+	Input.action_release("move_back")
+	print("  %d 帧后位置 = %s（y < -2 说明已掉出平台）" % [
+		g, str(player.global_position.snappedf(0.01))])
+	_check(left, "助跑起跳能翻过 0.7 m 护栏掉下去")
+	# 掉下去之后应该被下面的保险接住（y < -60 时回出生点）
+	var guard2 := 0
+	while guard2 < 4000 and player.global_position.y > -60.0:
+		await process_frame
+		guard2 += 1
+	await _wait(60)
+	print("  继续下落到 y = %.1f 后，位置 = %s（应回到出生点附近）" % [
+		player.global_position.y, str(player.global_position.snappedf(0.1))])
+	_check(player.global_position.z > 0.0, "掉太深会被保险送回出生点")
+
 	print("\n========== 4. 渲图 ==========")
 	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join("_splat")

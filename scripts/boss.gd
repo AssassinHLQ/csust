@@ -8,20 +8,35 @@ extends StaticBody3D
 ##      把 skin 置空 → 网格会散成一片「刀刃」；
 ##      按网格包围盒取景 → 会误判成「模型只有一个像素点」。
 ##      所以归一化用 **骨架的世界包围盒**。
-##   2. 材质里没有 albedo 贴图 → 必须手工绑，否则整只白模。
-##   3. 光环/胸牌/球/方块这 5 个挂件的缩放与身体差 1~2 个数量级 → 隐藏。
+##   2. 材质里没有 albedo 贴图 → 必须手工绑，而且要**按材质分别绑**（见下面的 TEXTURES）。
+##   3. 挂件（光环/胸牌/球/方块）别再隐藏了：按真实渲染尺度它们是合理的
+##      （光环 1.31×0.64×1.36 m 飘在头顶 y=5.59 处，胸牌 0.13 m 在胸前）。
+##      之前判成「缩放差 1~2 个数量级」是拿蒙皮前的 8732 当参照，错的。
 ##   4. 模型自身脸朝 +Z（rotation.y = 0 时），与 Arisu 同一套朝向约定。
 
 signal died(by_damage: float)
 signal health_changed(current: float, maximum: float)
 
+## 材质名 → 贴图。**这张表是本喵排了 3! = 6 种组合渲图后定的**（工具
+## `_probe_boss_texperm.gd`，对照图 `_arisu_captures/_boss/90_texperm_sheet.png`）。
+## 判定依据是「贴图内容 ↔ 材质名」：
+##   材质       身体  ← boss_body.png         紫身展开图（UV 岛形状就是一条龙）
+##   2501_other 胸牌  ← boss_props_atlas.png  MILLENNIUM 校徽 + 工牌条码图集
+##   材质.001    嘴/球 ← boss_mouth.png        淡紫底 + 锯齿牙齿
+## ❌ 曾经把 props_atlas 贴到身体上：结果整只变成一件"校服"，是错的。
+const TEXTURES := {
+	"材质": "res://models/boss/tex/boss_body.png",
+	"2501_other": "res://models/boss/tex/boss_props_atlas.png",
+	"材质.001": "res://models/boss/tex/boss_mouth.png",
+}
+
 @export_file("*.fbx") var model_path := "res://models/boss/优香霸王龙.fbx"
-@export_file("*.png") var texture_path := "res://models/boss/tex/body_basecolor.png"
 ## 目标身高（m）。Arisu 约 1.7、靶子柱 1.15；木桩默认 4.5（约 2.6 个 Arisu）
 @export var height := 4.5
 @export var max_health := 3000.0
 @export var respawn_time := 6.0
-@export var hide_accessories := true
+## 想只留身体（隐藏光环/胸牌/球/方块）就打开
+@export var hide_accessories := false
 ## 贴图之上的着色（白 = 用贴图原色）
 @export var tint := Color.WHITE
 ## 受击闪白的颜色
@@ -76,16 +91,17 @@ func _build_model() -> void:
 	model = packed.instantiate()
 	add_child(model)
 
-	# 1. 隐藏挂件（缩放与身体差 1~2 个数量级）
+	# 1. 可选：隐藏挂件（**默认不隐藏**——它们是合理的，见文件头注释）
 	var hidden := 0
-	for mi in _all(model, "MeshInstance3D"):
-		if not (mi as MeshInstance3D).name.begins_with("Tyrannosaurus"):
-			(mi as MeshInstance3D).visible = false
-			hidden += 1
+	if hide_accessories:
+		for mi in _all(model, "MeshInstance3D"):
+			if not (mi as MeshInstance3D).name.begins_with("Tyrannosaurus"):
+				(mi as MeshInstance3D).visible = false
+				hidden += 1
 
-	# 2. 绑贴图（材质是共享的，4 个部件同一份，绑一次就够）
-	var tex: Texture2D = load(texture_path) if texture_path != "" else null
-	var surfaces := 0
+	# 2. 按材质名分别绑贴图（TEXTURES 表；同一份材质会被多个网格共用）
+	var bound := 0
+	var missing: Array[String] = []
 	for mi in _all(model, "MeshInstance3D"):
 		var m := mi as MeshInstance3D
 		if not m.visible or m.mesh == null:
@@ -95,14 +111,23 @@ func _build_model() -> void:
 			var mat := am.surface_get_material(s)
 			if mat is StandardMaterial3D:
 				var sm := mat as StandardMaterial3D
-				if sm.albedo_texture == null and tex != null:
-					sm.albedo_texture = tex
+				var key := sm.resource_name
+				if TEXTURES.has(key):
+					var tex: Texture2D = load(TEXTURES[key])
+					if tex != null:
+						sm.albedo_texture = tex
+					else:
+						push_warning("[Boss] 贴图加载失败：%s" % TEXTURES[key])
+				elif not missing.has(key):
+					missing.append(key)
 				sm.albedo_color = tint
 				if not _materials.has(sm):
 					_materials.append(sm)
-				surfaces += 1
+				bound += 1
 			elif mat != null:
 				push_warning("[Boss] 材质不是 StandardMaterial3D，受击闪白会失效：%s" % mat.get_class())
+	print("[Boss] 贴图槽位 %d 个已绑；表里没覆盖的材质：%s" % [
+		bound, str(missing) if not missing.is_empty() else "（无）"])
 
 	# 3. 按【骨架】包围盒归一化。
 	#
@@ -131,7 +156,7 @@ func _build_model() -> void:
 		-box.get_center().x * s, -box.position.y * s, -box.get_center().z * s)
 	visual_size = box.size * s
 	print("[Boss] 模型就位：%d 骨，隐藏挂件 %d 个，贴图表面 %d 个，尺寸 %s（目标身高 %.2f m）" % [
-		bone_count, hidden, surfaces, str(visual_size.snappedf(0.01)), height])
+		bone_count, hidden, bound, str(visual_size.snappedf(0.01)), height])
 
 
 ## 骨架包围盒，量在 **Boss 节点（model 的父节点）的局部空间**：

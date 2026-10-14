@@ -606,14 +606,36 @@ $env:LOCALAPPDATA = "C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local"
 
 ## 4.2 ⚠️ 绝对不要用 PowerShell 改本工程里的文本文件
 
-本喵在这上面栽了**四次**。`Get-Content`（含 `-Raw`）会把 UTF-8 中文按 ANSI 解码，
+本喵在这上面栽了**五次**。`Get-Content`（含 `-Raw`）会把 UTF-8 中文按 ANSI 解码，
 再用 `Set-Content` 写回去就全是乱码：
 
 - GDScript 文件 → Godot 报 `invalid unicode (UTF-8)` 拒绝加载，整个类都解析不了
 - Markdown 文档 → 163 行注释变乱码，只能整份重写
 
+**第五次是 BOM**：用 `Set-Content -Encoding UTF8` 写回 `scenes/game.tscn` 之后，
+文件头多了 `EF BB BF`，于是编辑器扫描时报
+
+```
+ERROR: res://scenes/game.tscn:1 - Parse Error: Expected '['.
+```
+
+（`.tscn` 解析器不跳 BOM，第 1 行就不是 `[gd_scene` 了。运行时加载反而能过，
+所以自检全绿、只有编辑器报错 —— 更阴。）
+
 **改脚本/文档一律用编辑器工具**（读全文 → 写全文），不要用 PowerShell 的
 文本替换或 `Set-Content`。
+
+万一已经中招，查/清 BOM 用纯字节操作（不解码就不会二次损坏）：
+
+```powershell
+$f="…\game.tscn"
+$b=[System.IO.File]::ReadAllBytes($f)
+if($b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF){
+  [System.IO.File]::WriteAllBytes($f, $b[3..($b.Length-1)])   # 剥掉 3 字节 BOM
+}
+```
+
+全工程扫一遍（排除 `.godot`）：凡是 `.tscn/.gd/.md` 首三字节是 `EF BB BF` 的都要剥。
 
 ---
 
@@ -786,7 +808,10 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 ```
 
 - `game.tscn` 的 `Floor` 从 80×80 缩到 40×40 —— 靶子/柱子坐标全在 ±20 内，**一个都没动**
-- 新增 `WallPX / WallNX / WallPZ / WallNZ`：只有 CollisionShape3D、没有网格的 StaticBody3D（隐形护栏，高 4 m）
+- 新增 `WallPX / WallNX / WallPZ / WallNZ`：只有 CollisionShape3D、没有网格的 StaticBody3D（隐形护栏，**高 0.7 m**）
+  - 高度是刻意压低的：跳跃顶点 0.87 m，所以**助跑起跳能翻出去**（下去看校园），
+    但站着走路撞上仍然掉不下去。早先做成 4 m 高，结果「怎么跳都出不去」——
+    自检 `_verify_splat.gd` 现在两条都验：走路被挡住 + 起跳能翻越
 - 新增 `SplatScene` 节点：`world_scale = 25`、`auto_place = true`、`top_gap = 12`、`cache_mode = "auto"`
 - 相机与跑打手感**一点没改**
 - `game.gd` 加了保险：掉到 y < −60 就送回出生点
@@ -874,11 +899,28 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 - 反过来把 `skin = null` 想当刚性网格用 → 形状散成一片「刀刃」（顶点靠蒙皮才成型）
 - **正确做法**：用 **骨架的世界包围盒**（`get_bone_global_pose`）归一化
 
-**② 材质里没有 albedo 贴图 → 整只白模。** 得手工把
-`models/boss/tex/body_basecolor.png` 绑到那 4 个身体部件共用的材质上。
+**② 材质里没有 albedo 贴图 → 整只白模，而且必须「按材质分别绑」。**
 
-另外那 5 个挂件（光环/胸牌/球/方块）的节点缩放与身体差 1~2 个数量级
-（980 vs 7.9 / 45 / 100 / 203），留着会变成诡异的小碎块 → **隐藏**。
+3 张贴图跟 3 个材质名是一一对应的（认名字 + 看内容都能对上）：
+
+| 材质 | 贴图 | 内容 |
+|---|---|---|
+| `材质`（4 个身体部件共用） | `tex/boss_body.png`（原 `身1.png`，71 KB） | 紫皮躯体展开图（UV 岛形状就是一条龙），带优香的白衬衫/黑马甲/蓝领带 |
+| `2501_other`（胸牌） | `tex/boss_props_atlas.png`（原 `other_BaseColor.png`，1.9 MB） | MILLENNIUM 校徽 + 工牌条码 + 皮带扣图集 |
+| `材质.001`（球/嘴） | `tex/boss_mouth.png`（原 `材质.001 Base Color.png`，53 KB） | 淡紫底 + 锯齿牙齿 |
+
+❌ 本喵第一版把 1.9 MB 的 `props_atlas` 糊到**身体**上 → 整只变成"一件校服"。
+排 3! = 6 种组合渲图对比后（`scripts/_probe_boss_texperm.gd`，
+对照图 `_arisu_captures/_boss/90_texperm_sheet.png`），正确的就是**组合 5**：
+身体=`身1`、胸牌=`other`、球=`材质.001`。
+
+**③ 挂件不用隐藏（本喵之前判断错了）。** 光环/胸牌/球/方块按**真实渲染尺度**都是合理的：
+
+- 光环 1.31 × 0.64 × 1.36 m，飘在头顶 `y = 5.59`（身体高 4.5）
+- 胸牌 0.13 m 在胸前，球 0.68 m 在头侧，方块 0.6~0.8 m
+
+之前判成「缩放差 1~2 个数量级」是拿**蒙皮前的 8732** 当参照算的，参照系就是错的。
+`boss.gd` 的 `hide_accessories` 现在默认 `false`（想只留身体再打开）。
 
 还有一个更隐蔽的坑：归一化的偏移量必须在 **Boss 节点自己的局部空间**里算。
 `game.tscn` 里 Boss 绕 Y 转了 −90°，本喵第一版在世界空间量框、却当局部坐标用，
@@ -891,11 +933,11 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `model_path` | `res://models/boss/优香霸王龙.fbx` | |
-| `texture_path` | `res://models/boss/tex/body_basecolor.png` | 材质缺贴图时自动补 |
+| `TEXTURES`（常量表） | 见 §7.2 ② | 材质名 → 贴图路径，改这里就能换分配 |
 | `height` | **4.5 m** | 目标身高，脚本按骨架包围盒自动缩放（约 2.6 个 Arisu） |
 | `max_health` | 3000 | 顶部血条显示 |
 | `respawn_time` | 6.0 s | 扑倒后多久站起来 |
-| `hide_accessories` | true | 隐藏那 5 个挂件 |
+| `hide_accessories` | **false** | 想只留身体（隐藏光环/胸牌/球/方块）就打开 |
 
 - 位置：`game.tscn` 里 `(13, 0, -8)`，绕 Y −90° 朝 **−X**（正对场地中心；模型自身脸朝 +Z）
   - ⚠️ **x 不能小于 13**：放在 x=9 时它的碰撞盒（约 7.8 m 长）会横在

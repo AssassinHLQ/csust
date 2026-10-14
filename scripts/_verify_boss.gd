@@ -22,12 +22,13 @@ func _run() -> void:
 
 	var player: Player = game.get_node("Player")
 	var boss: Boss = game.get_node("Boss")
-	print("========== 1. 模型修复 ==========")
+	print("========== 1. 模型修复与贴图分配 ==========")
 	var meshes := _all(boss, "MeshInstance3D")
 	var visible := 0
 	var hidden := 0
 	var textured := 0
 	var surface_total := 0
+	var mapping := {}
 	for m in meshes:
 		var mi := m as MeshInstance3D
 		if mi.visible:
@@ -36,18 +37,31 @@ func _run() -> void:
 			for s in am.get_surface_count():
 				surface_total += 1
 				var mat := am.surface_get_material(s)
-				if mat is StandardMaterial3D and (mat as StandardMaterial3D).albedo_texture != null:
-					textured += 1
+				if mat is StandardMaterial3D:
+					var sm := mat as StandardMaterial3D
+					if sm.albedo_texture != null:
+						textured += 1
+						mapping[sm.resource_name] = sm.albedo_texture.resource_path.get_file()
 		else:
 			hidden += 1
 	print("  可见网格 %d / 隐藏 %d   表面 %d（其中已绑贴图 %d）" % [
 		visible, hidden, surface_total, textured])
+	print("  贴图分配表（材质 → 贴图）：")
+	for k in mapping.keys():
+		print("      %-14s → %s" % [k, mapping[k]])
 	print("  骨骼数 = %d   归一化尺寸 = %s   目标身高 %.2f m" % [
 		boss.bone_count, str(boss.visual_size.snappedf(0.01)), boss.height])
-	_check(visible == 4, "保留了 4 个身体部件")
-	_check(hidden == 5, "隐藏了 5 个挂件")
-	_check(textured == surface_total and surface_total > 0, "所有表面都绑了贴图")
+	_check(visible == 9, "9 个网格全部显示（含光环/胸牌/球/方块）")
+	_check(hidden == 0, "没有隐藏任何挂件（旧版误判成缩放异常，已修正）")
 	_check(boss.bone_count == 73, "骨架 73 根骨还在（保留蒙皮）")
+	# 逐材质核对贴图分配（这是这一轮修的核心）
+	_check(mapping.get("材质", "") == "boss_body.png",
+		"身体「材质」→ boss_body.png（实测 %s）" % mapping.get("材质", "（无）"))
+	_check(mapping.get("2501_other", "") == "boss_props_atlas.png",
+		"胸牌「2501_other」→ boss_props_atlas.png（实测 %s）" % mapping.get("2501_other", "（无）"))
+	_check(mapping.get("材质.001", "") == "boss_mouth.png",
+		"嘴/球「材质.001」→ boss_mouth.png（实测 %s）" % mapping.get("材质.001", "（无）"))
+	_check(textured == 6, "3 个材质槽共 6 个表面绑上贴图（实测 %d）" % textured)
 	_check(absf(boss.visual_size.y - boss.height) < 0.05,
 		"身高归一化到 %.2f m（实测 %.2f）" % [boss.height, boss.visual_size.y])
 	# 脚底与水平居中

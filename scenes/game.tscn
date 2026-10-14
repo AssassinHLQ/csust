@@ -41,12 +41,14 @@ size = Vector3(40, 1, 40)
 [sub_resource type="BoxMesh" id="Mesh_floor"]
 size = Vector3(40, 1, 40)
 
-; 悬浮平台四周的隐形护栏：防止角色跑出平台掉进下方的校园
+; 悬浮平台四周的隐形护栏。
+; ⚠️ 高度刻意只留 0.7 m：跳跃顶点 0.87 m，所以**助跑起跳能翻出去**（去下面看校园），
+;    但站着走路撞上仍然掉不下去。早先是 4 m 高 —— 那就完全跳不出去了。
 [sub_resource type="BoxShape3D" id="Shape_wall_x"]
-size = Vector3(1, 4, 42)
+size = Vector3(1, 0.7, 42)
 
 [sub_resource type="BoxShape3D" id="Shape_wall_z"]
-size = Vector3(42, 4, 1)
+size = Vector3(42, 0.7, 1)
 
 [sub_resource type="StandardMaterial3D" id="Mat_floor"]
 albedo_color = Color(0.21, 0.23, 0.27, 1)
@@ -102,25 +104,25 @@ mesh = SubResource("Mesh_floor")
 surface_material_override/0 = SubResource("Mat_floor")
 
 [node name="WallPX" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 2, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.35, 0)
 
 [node name="Collision" type="CollisionShape3D" parent="WallPX"]
 shape = SubResource("Shape_wall_x")
 
 [node name="WallNX" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 2, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0.35, 0)
 
 [node name="Collision" type="CollisionShape3D" parent="WallNX"]
 shape = SubResource("Shape_wall_x")
 
 [node name="WallPZ" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 20)
 
 [node name="Collision" type="CollisionShape3D" parent="WallPZ"]
 shape = SubResource("Shape_wall_z")
 
 [node name="WallNZ" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, -20)
 
 [node name="Collision" type="CollisionShape3D" parent="WallNZ"]
 shape = SubResource("Shape_wall_z")
