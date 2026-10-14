@@ -1,4 +1,7 @@
-# Arisu 学习沙盒（Godot 4.7）
+# 长沙理工：2067（Godot 4.7 学习沙盒）
+
+> 工程与窗口标题：`长沙理工：2067`（`project.godot` 的 `config/name`）。
+> 下面是这个学习沙盒里做过的事。
 
 > **A third-person shooter sandbox in Godot 4.7** — over-the-shoulder camera, turn-to-aim
 > firing gate, 60-round magazine with auto-reload, a hand-rolled animation driver, and a

@@ -1,5 +1,5 @@
 extends Node3D
-## Arisu 动画学习沙盒 —— 主控脚本
+## 长沙理工：2067 —— 动画学习沙盒主控脚本（scenes/main.tscn）
 ##
 ## 验证要点（导入后实测）：
 ##   - glb 里 3 个 skin 被 Godot 合并成 1 个 Skeleton3D（170 骨）

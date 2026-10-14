@@ -78,7 +78,7 @@ theme_override_constants/margin_bottom = 10
 theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="HUD/Panel/Margin/VBox"]
-text = "Arisu 动画学习沙盒"
+text = "长沙理工：2067　动画学习沙盒"
 theme_override_font_sizes/font_size = 18
 
 [node name="Info" type="Label" parent="HUD/Panel/Margin/VBox"]
