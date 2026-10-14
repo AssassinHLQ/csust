@@ -1,5 +1,10 @@
 # Arisu 学习沙盒（Godot 4.7）
 
+> **A third-person shooter sandbox in Godot 4.7** — over-the-shoulder camera, turn-to-aim
+> firing gate, 60-round magazine with auto-reload, a hand-rolled animation driver, and a
+> **3D Gaussian Splatting campus** (floating platform above a sunken scan).
+> Code and docs are **MIT**; the character model and the splat data are *not* included.
+
 一个用 Godot 4.7 手搓的**第三人称射击原型**：越肩相机、开火转身门控、60 发弹匣连发、
 动画驱动、以及**高斯泼溅（3DGS）校园场景**（悬浮记忆平台 + 下沉校园）。
 
