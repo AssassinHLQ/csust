@@ -16,7 +16,7 @@ const ROOM_NAME := "Room609"
 const CAMPUS_NAME := "SplatScene"
 ## 量出来的期望值（splatdata/README.md 里同步记着），对不上就是有人改了场景
 const EXPECT_POINTS := 2769851
-const EXPECT_SCALE := 1.8
+const EXPECT_SCALE := 2.0
 const EXPECT_YAW := 248.6
 const FLOOR_Y := 0.03
 
@@ -104,11 +104,32 @@ func _run() -> void:
 	print("  XZ 占地 %.1f × %.1f m（平台 40 × 40）" % [aabb.size.x, aabb.size.z])
 	_check(span_lo > 9.0 and span_lo < 14.0, "长边 %.1f m：真人尺度的教室" % span_lo)
 	_check(span_hi > 7.0 and span_hi < 12.0, "短边 %.1f m" % span_hi)
-	_check(aabb.size.y > 2.4 and aabb.size.y < 4.5, "层高 %.1f m（真人尺度）" % aabb.size.y)
+	_check(aabb.size.y > 2.0 and aabb.size.y < 8.0,
+		"包围盒高 %.1f m（含地板下方的重建噪声）" % aabb.size.y)
+
+	# ⚠️ 真人尺度下最容易翻车的一条：**相机到天花板的余量**。
+	#    这份扫描的「高 ÷ 进深」只有约 0.20（真实教室约 0.36），也就是房间偏扁；
+	#    玩家相机在 1.8 m 左右，缩到真人尺度天花板就只有 2 m 出头 —— 相机几乎贴着
+	#    顶面，上半屏会糊成一片灰。这条数字直接决定 world_scale 该取多少。
+	var cam_y := 0.0
+	if player != null:
+		# ⚠️ 必须等相机架（SpringArm3D）伸展开再量：刚进场景时它还在从 0 长度往外长，
+		#    这时读到的是 0.57 m 这种假值 —— 本喵就被它骗过，差点以为余量很充裕。
+		await _wait(90)
+		cam_y = player.cam.global_position.y
+	_check(cam_y > 1.0, "相机高度量到的是合理值（%.2f m，不是还没伸展的假值）" % cam_y)
+	var clearance := room.content_top_y() - cam_y
+	print("  相机 y = %.2f，房间顶面 y = %.2f → 头顶余量 %.2f m" % [
+		cam_y, room.content_top_y(), clearance])
+	_check(clearance > 0.6,
+		"相机到天花板有 %.2f m 余量（> 0.6 m 才不会糊满上半屏）" % clearance)
 
 	# 地板平面：竖向直方图峰值（**不能**用 content_min.y 代替 —— 裁剪盒外扩过，
 	# 最低点可以比地板还低）
 	var floor := _floor_plane(pts)
+	_check(room.content_top_y() - float(floor["y"]) > 1.8
+			and room.content_top_y() - float(floor["y"]) < 5.0,
+		"室内净高 %.2f m（地板面到顶面）" % (room.content_top_y() - float(floor["y"])))
 	print("  地板平面 y = %.3f（直方图峰值，样本 %d 点）  地板质心 = (%.2f, %.2f)" % [
 		floor["y"], floor["count"], floor["cx"], floor["cz"]])
 	_check(absf(floor["y"] - FLOOR_Y) < 0.2,
@@ -367,37 +388,42 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 
 	if player != null:
+		# ⚠️ 机位一律用**房间中心**（= 锚点）加偏移来算，别写死 z = −2 那种坐标：
+		#    房间从平台正中挪到「罩住出生点」以后，原来的 −2 已经在**门外的平台**上了，
+		#    渲出来是靶场和 Boss（本喵就这么渲错过一张）。
+		var cz := room.anchor_world.z
 		# ① 出生点默认视角（应看到黑板那一面 + 同伴后背）
-		_pose(player, Vector3(0, 0.05, 6), 0.0, -0.04)
+		_pose(player, Vector3(0, 0.05, cz), 0.0, -0.04)
 		await _wait(40)
 		await _shot(out.path_join("70_spawn.png"))
 
-		# ② 房间中央平视
-		_pose(player, Vector3(0, 0.05, -2), 0.0, -0.10)
+		# ② 房间里段平视
+		#    ⚠️ 站位就固定在 cz − 4 这一处：房间只有 12.8 m 深、相机又在背后 3.5 m，
+		#    换个 z 就很容易把镜头塞进桌椅/天花板附近的高斯面里（糊成一片白，
+		#    本喵在 cz − 2 和贴着墙的位置各糊过一次）。想加机位先在图上确认位置。
+		_pose(player, Vector3(0, 0.05, cz - 4.0), 0.0, -0.10)
 		await _wait(40)
 		await _shot(out.path_join("71_inside.png"))
 
-		# ③ 在中央低头看地板（验地板真的在脚下、纹理方向正）
-		_pose(player, Vector3(0, 0.05, -2), 0.0, -0.75)
+		# ③ 低头看地板（验地板真的在脚下、纹理方向正）
+		_pose(player, Vector3(0, 0.05, cz - 4.0), 0.0, -0.75)
 		await _wait(40)
 		await _shot(out.path_join("72_lookdown.png"))
 
-		# ④ 横着看整间房（**验轴对齐最直观的一张**：对面墙、天花板灯带、墙脚线
-		#    都该是水平的）。⚠️ 站位只能在**中轴过道**上 —— 玩家相机在背后 3.5 m，
-		#    站到靠墙的位置会把镜头塞进桌子里（本喵试过 −15 和 +16，糊成一片）。
-		_pose(player, Vector3(0, 0.05, -2), -PI * 0.5, -0.05)
+		# ④ 从**门外**看那个门洞：站在房间里朝门口看会被近处的高斯面糊住
+		#    （横看整间房那张连续糊了两版），改成退到门外回头拍，顺便验门真的开了。
+		_pose(player, Vector3(0, 0.05, cz - 9.0), PI, -0.05)
 		await _wait(40)
-		await _shot(out.path_join("73_along_wall.png"))
+		await _shot(out.path_join("73_door_from_outside.png"))
 
-		# ⑤ 沿中轴从房间一端往另一端看（房间只有 11 m 深，站位不能太靠后，
-		#    否则背后的相机会穿到墙里去）
-		_pose(player, Vector3(0, 0.05, 1), 0.0, -0.04)
+		# ⑤ 沿中轴朝门看（门在 z− 那一面）
+		_pose(player, Vector3(0, 0.05, cz - 4.0), 0.0, -0.04)
 		await _wait(40)
 		await _shot(out.path_join("74_down_the_room.png"))
 
 		# ⑥ 正面看 Arisu：玩家相机永远在背后，所以临时插一台相机到她**正前方**。
 		#    这张和 ①（背后）是一对 —— 一张看到后脑，一张看到脸，朝向对不对一眼就知。
-		_pose(player, Vector3(0, 0.05, 0), 0.0, -0.10)
+		_pose(player, Vector3(0, 0.05, cz), 0.0, -0.10)
 		await _wait(30)
 		await _shot_player_front(player, out.path_join("75_face_from_front.png"))
 
