@@ -17,6 +17,8 @@ var _weapon: Weapon
 var _spread := 8.0
 var _splat_label: Label
 var _splat_done := false
+var _boss_name: Label
+var _boss_bar: ProgressBar
 
 ## SogRuntime 的进度阶段 → 给人看的文案
 const SPLAT_PHASE := {
@@ -40,6 +42,71 @@ func _ready() -> void:
 	_splat_label.add_theme_constant_override("shadow_offset_y", 1)
 	_splat_label.visible = false
 	add_child(_splat_label)
+
+	_build_boss_bar()
+
+
+## 顶部居中的 Boss 血条（木桩阶段就有，方便看伤害）
+func _build_boss_bar() -> void:
+	_boss_name = Label.new()
+	_boss_name.name = "BossName"
+	_boss_name.text = "霸王龙优香"
+	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_name.add_theme_font_size_override("font_size", 15)
+	_boss_name.add_theme_color_override("font_color", Color(1.0, 0.88, 0.75, 0.95))
+	_boss_name.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	_boss_name.add_theme_constant_override("shadow_offset_x", 1)
+	_boss_name.add_theme_constant_override("shadow_offset_y", 1)
+	_boss_name.anchor_left = 0.5
+	_boss_name.anchor_right = 0.5
+	_boss_name.offset_left = -220.0
+	_boss_name.offset_right = 220.0
+	_boss_name.offset_top = 18.0
+	_boss_name.offset_bottom = 38.0
+	_boss_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_boss_name)
+
+	_boss_bar = ProgressBar.new()
+	_boss_bar.name = "BossBar"
+	_boss_bar.min_value = 0.0
+	_boss_bar.max_value = 1.0
+	_boss_bar.value = 1.0
+	_boss_bar.show_percentage = false
+	_boss_bar.anchor_left = 0.5
+	_boss_bar.anchor_right = 0.5
+	_boss_bar.offset_left = -220.0
+	_boss_bar.offset_right = 220.0
+	_boss_bar.offset_top = 40.0
+	_boss_bar.offset_bottom = 54.0
+	_boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.92, 0.42, 0.34)
+	fill.set_corner_radius_all(3)
+	_boss_bar.add_theme_stylebox_override("fill", fill)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.12, 0.13, 0.16, 0.85)
+	bg.set_corner_radius_all(3)
+	_boss_bar.add_theme_stylebox_override("background", bg)
+	add_child(_boss_bar)
+
+
+func bind_boss(boss: Boss) -> void:
+	if boss == null:
+		return
+	boss.health_changed.connect(_on_boss_health)
+	_on_boss_health(boss.health, boss.max_health)
+
+
+func _on_boss_health(current: float, maximum: float) -> void:
+	if _boss_bar == null:
+		return
+	var ratio := 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
+	_boss_bar.value = ratio
+	_boss_name.text = "霸王龙优香　%d / %d" % [int(ceil(current)), int(maximum)]
+	# 血量见底时闪红
+	var fill := _boss_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill:
+		fill.bg_color = Color(1.0, 0.25, 0.2) if ratio < 0.25 else Color(0.92, 0.42, 0.34)
 
 
 func bind_splat(splat: SplatScene) -> void:

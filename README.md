@@ -1,4 +1,4 @@
-# Arisu 学习沙盒（Godot 4.7）
+﻿# Arisu 学习沙盒（Godot 4.7）
 
 > **A third-person shooter sandbox in Godot 4.7** — over-the-shoulder camera, turn-to-aim
 > firing gate, 60-round magazine with auto-reload, a hand-rolled animation driver, and a
@@ -849,7 +849,82 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 
 ---
 
-# 七、下一步
+# 七、Boss：霸王龙优香（木桩阶段）
+
+模型来源：`压缩文件_by_一个睿智_….rar` → `优香霸王龙.fbx`。**目前是「木桩」**：
+站在平台上、吃得下子弹、受击闪白、打光后扑倒并在 6 秒后站起来；AI / 冲撞 / 吐息留待后续。
+
+## 7.1 这个 FBX 里有什么
+
+| 你可能会问 | 答案 |
+|---|---|
+| 有 glb 吗 | ❌ 没有，是 **FBX**（版本 7400，12.1 MB）+ 3 张 PNG 贴图 |
+| 有动画吗 | ❌ **没有**。Godot 导入后连 `AnimationPlayer` 都没有；二进制里 `AnimStack = 1` 但 `KeyTime`/`KeyValueFloat` **全是 0**，也没有 `AnimCurveNode`/`AnimLayer` —— 是 Blender 导出时留下的**空动画栈** |
+| 有什么 | 73 根骨骼（名字全是 `Bone`/`Bone.001`… 未命名）、9 个网格、约 **31 万三角形**、5 个材质、4 个 `BoneAttachment3D` 挂件 |
+
+诊断工具：`scripts/_probe_boss.gd`（节点树/骨骼/动画/材质）、
+`..\_godot\probe_fbx.py`（不导入直接扫二进制）。
+
+## 7.2 ⚠️ 两个坑（都踩过，改参数前务必看）
+
+**① 网格顶点在「绑定空间」，跨度是骨架的约 298 倍 —— 必须保留蒙皮。**
+
+- 网格顶点算出来的世界包围盒是 **8732** 单位，而**蒙皮后**的模型只有 **29.3 高 / 82 长**
+- 本喵按 8732 取景 → 渲出来是「一个像素点」，一度以为模型塌了
+- 反过来把 `skin = null` 想当刚性网格用 → 形状散成一片「刀刃」（顶点靠蒙皮才成型）
+- **正确做法**：用 **骨架的世界包围盒**（`get_bone_global_pose`）归一化
+
+**② 材质里没有 albedo 贴图 → 整只白模。** 得手工把
+`models/boss/tex/body_basecolor.png` 绑到那 4 个身体部件共用的材质上。
+
+另外那 5 个挂件（光环/胸牌/球/方块）的节点缩放与身体差 1~2 个数量级
+（980 vs 7.9 / 45 / 100 / 203），留着会变成诡异的小碎块 → **隐藏**。
+
+还有一个更隐蔽的坑：归一化的偏移量必须在 **Boss 节点自己的局部空间**里算。
+`game.tscn` 里 Boss 绕 Y 转了 −90°，本喵第一版在世界空间量框、却当局部坐标用，
+结果水平居中歪 1.8 m、长短轴被转错（12.6 m 长轴记到 x 上）、碰撞盒跟着变形。
+
+## 7.3 现在的接法
+
+`scripts/boss.gd`（`class_name Boss`，`extends StaticBody3D`）：
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `model_path` | `res://models/boss/优香霸王龙.fbx` | |
+| `texture_path` | `res://models/boss/tex/body_basecolor.png` | 材质缺贴图时自动补 |
+| `height` | **4.5 m** | 目标身高，脚本按骨架包围盒自动缩放（约 2.6 个 Arisu） |
+| `max_health` | 3000 | 顶部血条显示 |
+| `respawn_time` | 6.0 s | 扑倒后多久站起来 |
+| `hide_accessories` | true | 隐藏那 5 个挂件 |
+
+- 位置：`game.tscn` 里 `(9, 0, -8)`，绕 Y −90° 朝 **−X**（正对场地中心；模型自身脸朝 +Z）
+- 碰撞：一个随 `visual_size` 自动算的 `BoxShape3D`（约 2.1 × 3.8 × 7.8 m，只盖身体不含尾巴）
+- 受击：即时闪白 + 渐退；`take_damage(amount, pos, dir)` 与 `Target` **同一套契约**，
+  所以 `weapon.gd` 不用改一行就能打它
+- 血条：HUD 顶部居中（`hud.gd` 的 `bind_boss`）
+
+自检 `scripts/_verify_boss.gd`（16 项，含「从玩家位置打射线必须命中 Boss 本体」）：
+
+```powershell
+& $g --path $p --script res://scripts/_verify_boss.gd -- --splat=off
+```
+
+## 7.4 想调大小 / 位置
+
+- **大小**：改 `game.tscn` 里 Boss 节点的 `height`（2.5 就差不多一辆车那么大，
+  6.0 会把平台压得很满；实测 4.5 时占 3.85 × 4.5 × 12.6 m）
+- **位置/朝向**：改 Boss 节点的 `transform`。模型脸朝 +Z，所以绕 Y −90° 就是朝 −X
+- **血量**：`max_health`；血条会自动跟着变（低于 25% 变红）
+
+## 7.5 下一步（行为）
+
+现在没有骨骼动画（模型本身没动作），所以「活起来」只能靠位移 + 特效 + 骨骼程序化微动。
+本喵给过的三个方向：冲撞型 / 远程吐息型 / 站桩强化型 —— 你当时选了先看木桩，
+要继续的话说一声即可。73 根骨还在，所以「张嘴 + 摆尾 + 点头」这类程序化动作是有戏的。
+
+---
+
+# 八、下一步
 
 1. ~~**重做 `Move_Ing`** —— 跑动前倾偏大（见 §1.10），走 Blender 管线改躯干角度~~
    **已完成并启用**：`Move_Ing` 胸腔前倾 Blender 侧 +13.5° → +5.2°、
@@ -861,13 +936,13 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 4. **写 toon 着色器** —— 18 个材质换 `ShaderMaterial`，加描边和硬边明暗
 5. **动画分层** —— 现在开火会整体覆盖跑动；想「边跑边射」需要 upper/lower body 分层
 6. **清掉泼溅的 floaters** —— 见 §6.5 已知瑕疵，用 `splat-transform` 重新过滤数据
-7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第八节）
+7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第九节）
 
 ---
 
-# 八、开源与许可
+# 九、开源与许可
 
-## 8.1 结论
+## 9.1 结论
 
 **除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。**
 逐项清单见 [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -880,7 +955,7 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
 | `icon.png` | 待仓库作者确认 | ✅（如非原创请替换） |
 
-## 8.2 克隆者怎么跑起来
+## 9.2 克隆者怎么跑起来
 
 ```powershell
 git clone <你的仓库>
@@ -896,7 +971,7 @@ cd <仓库目录>
 
 第一次打开时 Godot 会自动导入 glb 并解包贴图，然后就能 F5。
 
-## 8.3 发布自己的版本前的检查表
+## 9.3 发布自己的版本前的检查表
 
 - [ ] `models/` 换成**你有权分发**的模型（或明确许可允许再分发的模型）
 - [ ] `splatdata/` 换成你有权分发的场景数据，或删掉该目录并只用 `--splat=off`
@@ -907,7 +982,7 @@ cd <仓库目录>
 - [ ] 检查 `.gitignore`：`git status` 里**不该**出现任何 `.glb` / `.sogdata` / 大体积贴图
 - [ ] 顺手确认没把 `..\_blender_arisu\`（专有模型的派生数据）一起推上去
 
-## 8.4 关于截图
+## 9.4 关于截图
 
 `_arisu_captures/` 里的截图是在本机渲染的、含专有角色形象，
 **不建议**放进公开仓库的 README（截图是模型形象的派生作品）。

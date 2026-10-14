@@ -8,6 +8,7 @@ var _player: Player
 var _weapon: Weapon
 var _hud: CanvasLayer
 var _splat: SplatScene
+var _boss: Boss
 var _spawn := Vector3.ZERO
 var _score := 0
 var _shots := 0
@@ -19,11 +20,15 @@ func _ready() -> void:
 	_weapon = $Player/Weapon
 	_hud = $HUD
 	_splat = get_node_or_null("SplatScene") as SplatScene
+	_boss = get_node_or_null("Boss") as Boss
 	_spawn = _player.global_position
 
 	_hud.bind(_player, _weapon)
 	if _splat and _hud.has_method("bind_splat"):
 		_hud.bind_splat(_splat)
+	if _boss and _hud.has_method("bind_boss"):
+		_hud.bind_boss(_boss)
+		_boss.died.connect(_on_target_died)
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
 
 	for target in get_tree().get_nodes_in_group("targets"):

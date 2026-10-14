@@ -1,10 +1,11 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="Script" path="res://scripts/target.gd" id="3_target"]
 [ext_resource type="Script" path="res://scripts/game.gd" id="4_game"]
 [ext_resource type="Script" path="res://scripts/splat_scene.gd" id="5_splat"]
+[ext_resource type="Script" path="res://scripts/boss.gd" id="6_boss"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -131,6 +132,13 @@ script = ExtResource("5_splat")
 world_scale = 25.0
 auto_place = true
 top_gap = 12.0
+
+; 霸王龙优香「木桩」：站在平台右侧、朝 -X 正对场地中心。
+; 模型自身脸朝 +Z，所以绕 Y 转 -90° 就变成朝 -X。
+; 默认身高 4.5 m（约 2.6 个 Arisu）、3000 血、受击闪白、倒下 6 秒后重生。
+[node name="Boss" type="StaticBody3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9, 0, -8)
+script = ExtResource("6_boss")
 
 [node name="Pillar1" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.4, -10)
