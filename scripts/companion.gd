@@ -10,10 +10,20 @@ extends CharacterBody3D
 ##      相机 SpringArm 的 mask 也是 1，所以同伴也不会把镜头顶出去。
 ##   于是同伴只跟「世界层 1」（地板/墙/护栏/靶子/Boss）碰撞，彼此之间也不挤。
 ##
-## 朝向约定：三只 GLB 的本体都朝 −Z（跟 Arisu 同一套导出），Rig 上补 180° 之后
-## 「节点 +Z = 脸朝的方向」，于是 rotation.y = atan2(dir.x, dir.z) 就是脸朝 dir。
-## 依据不是眼睛看出来的，是 Toe−Foot 骨向量实测（见 _probe_companion.gd）：
-##   Mika/Yuuka/Noa 的 (Toe − Foot) 全在 −Z 半轴；而飞猪优香那个 FBX 是 +Z。
+## 朝向约定（**2026-10-14 修正，此前判反了**）：
+##   这批 GLB（blue-archive model_viewer 导出）的**模型空间里本体朝 +Z**，
+##   所以「节点 +Z = 脸朝的方向」，`rotation.y = atan2(dir.x, dir.z)` 就是脸朝 dir，
+##   **不需要**再给 Rig 补 180°。
+##
+##   ⚠️ 上一轮判成「本体朝 −Z」是因为 _probe_companion.gd 量 Toe−Foot 时漏了
+##      `skeleton.global_transform`：这批 GLB 的 Skeleton3D 节点自带 180°，
+##      骨骼空间与模型空间正好差一个符号，于是结论整个反了，Rig 被多翻了 180°，
+##      表现就是**同伴倒着走**（脸朝移动方向的反面）。
+##   两条独立判据都指向同一结论（见 _probe_companion_row.gd）：
+##     ① 世界坐标下「两眼中点 − 头骨」与「节点 +Z」的点积，七只全是负的（−0.35…−0.96）
+##     ② 同一排人：相机在 +Z 侧看到的是后脑勺，在 −Z 侧才看到正脸
+##   玩家 Arisu 没这个问题：player.gd 每帧直接写 model_root.rotation.y，
+##   player.tscn 里那个历史遗留的 180° 会被覆盖掉。
 
 ## 朋友层的位掩码值。weapon.gd 拿它做射线反选屏蔽。
 const LAYER := 2
@@ -81,8 +91,8 @@ func _build_model() -> void:
 	model = (load(model_path) as PackedScene).instantiate() as Node3D
 	model.position.y = model_y_offset
 	rig.add_child(model)
-	# GLB 本体朝 −Z → 补 180°，让「节点 +Z」成为脸朝的方向
-	rig.rotation.y = PI
+	# 本体朝 +Z（见文件头的朝向约定），Rig 保持不动 —— 这里**不要**再补 180°
+	rig.rotation.y = 0.0
 
 	# 动画驱动：两个 NodePath 故意留空，让它自己在**模型子树**里找
 	# AnimationPlayer / Skeleton3D（三只 GLB 的内部节点名各不相同，写死会互相冲突）

@@ -11,11 +11,18 @@
 | `companions/Mika.glb` | 可选 | 同伴「未花」。145 骨、33 动作（README 第八节） |
 | `companions/Yuuka.glb` | 可选 | 同伴「优香」。108 骨、38 动作 |
 | `companions/Noa.glb` | 可选 | 同伴「诺亚」。135 骨、31 动作 |
+| `companions/Momoi.glb` | 可选 | 同伴「小桃」。105 骨、37 动作 |
+| `companions/Midori.glb` | 可选 | 同伴「小绿」。105 骨、31 动作 |
+| `companions/Yuzu.glb` | 可选 | 同伴「柚子」。122 骨、30 动作 |
+| `companions/Kei.glb` | 可选 | 同伴「凯伊」。主骨架 166 骨、32 动作（另有 21/6/1 骨的附属 skin） |
 | `boss/优香霸王龙.fbx` | 可选 | 第一位 Boss（README 第七节）。73 骨、无动画、约 31 万三角形 |
 | `boss_pig/猪猪优香.fbx` | 可选 | 第二位 Boss（README §7.6）。**纯静态网格**，4 网格 / 1.27 万三角形、无骨无动画 |
 
 同伴与 Boss 都是**可选**的：没有就把 `scenes/game.tscn` 里对应的
-`CompanionMika` / `CompanionYuuka` / `CompanionNoa` / `Boss` / `BossPig` 节点删掉。
+`CompanionMika` / `CompanionYuuka` / `CompanionNoa` / `CompanionMomoi` /
+`CompanionMidori` / `CompanionYuzu` / `CompanionKei` / `Boss` / `BossPig` 节点删掉。
+
+同伴这七份 GLB 的**贴图是内嵌的**（image 走 bufferView），所以只要拷 `.glb` 本体。
 
 `companions/` 与 `boss*/` 内部的文件名（ASCII 化后的 `tex/*.png`、`ref/*.png`）见 README 第七、八节。
 `models/companions/**`、`models/boss/**`、`models/boss_pig/**` 都已被 `.gitignore` 排除。

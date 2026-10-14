@@ -1,16 +1,20 @@
 extends SceneTree
-## 验三名同伴（未花 / 优香 / 诺亚）：
+## 验七名同伴（未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊）：
 ##   1. 都在场、模型建好、骨架/动画绑定、都在「朋友层」
 ##   2. 子弹**穿透**同伴（不会挡自己的输出）—— 并做反向对照，证明屏蔽是必要的
 ##   3. 跟随：玩家跑开 14 m，同伴追上来并把站位收回来
 ##   4. 动画状态：走动时不是 Idle，站住后回到 Idle
 ##   5. 保险：被扔出平台会立刻拉回
-##   6. 不挡镜头（不在画面中心区域，且在相机前方）
-##   7. 渲图
+##   6. 不挡镜头（不在画面中心区域，且两两在屏幕上分开）
+##   7. **朝向**：脸朝「节点 +Z」（用世界坐标下的眼骨算）+ **接地**（脚骨世界 y）
+##   8. 渲图
 ##
 ## 用法（要真渲染）：godot --path <工程> --script res://scripts/_verify_companion.gd -- --splat=off
 
-const COMPANIONS := ["CompanionMika", "CompanionYuuka", "CompanionNoa"]
+const COMPANIONS := [
+	"CompanionMika", "CompanionYuuka", "CompanionNoa",
+	"CompanionMomoi", "CompanionMidori", "CompanionYuzu", "CompanionKei",
+]
 
 var _fail := 0
 
@@ -30,8 +34,8 @@ func _run() -> void:
 	for n in COMPANIONS:
 		list.append(game.get_node(n) as Companion)
 
-	print("========== 1. 三名同伴就位 ==========")
-	_check(list.size() == 3, "场景里有 3 名同伴")
+	print("========== 1. 七名同伴就位 ==========")
+	_check(list.size() == 7, "场景里有 7 名同伴")
 	for c in list:
 		var skel := _best_skeleton(c)
 		var ap := _first(c, "AnimationPlayer") as AnimationPlayer
@@ -99,7 +103,11 @@ func _run() -> void:
 	print("  玩家瞬移到 (0, −8) 后等 200 物理帧：")
 	for i in list.size():
 		print("     %-4s 与站位差 %.2f m" % [list[i].display_name, dists[i]])
-	_check(dists[0] < 2.5 and dists[1] < 2.5 and dists[2] < 2.5, "三名同伴都跟上了（差 < 2.5 m）")
+	var all_close := true
+	for d in dists:
+		if d >= 2.5:
+			all_close = false
+	_check(all_close, "七名同伴都跟上了（与各自站位差 < 2.5 m）")
 	print("  追赶途中采样到的动作：%s" % ("（只采到 Idle）" if moving_clip.is_empty() else moving_clip))
 	_check(not moving_clip.is_empty(), "追赶途中播的是移动动作，不是原地滑步")
 
@@ -132,7 +140,7 @@ func _run() -> void:
 	for c in list:
 		if c.slot_distance() > 1.0:
 			back = false
-	_check(back, "三名同伴都走回站位（差 < 1 m）")
+	_check(back, "七名同伴都走回站位（差 < 1 m）")
 
 	# “挡镜头”真正要防的是两件事：**贴脸**（离相机太近）和**占屏太大**。
 	# 一开始本喵用的是「不许进画面中心 50% 区域」——太糙了：
@@ -168,17 +176,49 @@ func _run() -> void:
 	for x in xs:
 		xs_txt.append("%.0f" % x)
 	print("  三人屏幕 x = [%s]   两两最小间距 %.0f px" % [", ".join(xs_txt), min_gap])
-	_check(min_gap > 60.0, "三人屏幕位置互相分开（最小间距 %.0f px > 60）" % min_gap)
+	_check(min_gap > 60.0, "七人屏幕位置互相分开（最小间距 %.0f px > 60）" % min_gap)
 
-	print("\n========== 7. 渲图 ==========")
+	print("\n========== 7. 朝向 + 接地（2026-10-14 那个 bug 的回归锁）==========")
+	# 背景：companion.gd 原来给 Rig 补了 180°，理由是「GLB 本体朝 −Z」。
+	# 那条结论是量 Toe−Foot 时**漏乘 skeleton.global_transform**得出的（骨骼空间 ≠ 模型空间），
+	# 于是七只同伴的脸全朝「节点 −Z」；而 _physics_process 又把节点 +Z 设成移动方向，
+	# 结果它们**倒着走**（画面证据：scripts/_probe_companion_row.gd 的 row_front/row_back）。
+	# 现在 Rig 不动，脸必须朝 +Z。
+	#
+	# ⚠️ 阈值只取 0.2（判「在哪半边」），不取 0.5：这些骨骼判据有**固有残差**
+	#    —— 眼骨在头局部带横向偏移、腿部/肩部的绑定姿态也不是标准 T-pose，
+	#    实测同一批模型在 0.35~1.00 之间浮动。但判反的那一版是 −0.35~−1.00，
+	#    符号完全分开，0.2 这条线抓得住，而且不会被姿态噪声弄红。
+	for c in list:
+		var skel := _best_skeleton(c)
+		var fwd := _rest_torso_forward(skel)
+		var face := _rest_face(skel)
+		var node_z := c.global_transform.basis.z
+		node_z.y = 0.0
+		node_z = node_z.normalized()
+		var dot := fwd.dot(node_z)
+		var dot_face := face.dot(node_z)
+		var foot_y := _lowest_foot_y(skel)
+		var pair := _rest_lr_pair(skel, ["thigh", "upleg"])
+		var used := "%s / %s" % [pair.get("lname", "?"), pair.get("rname", "?")] if not pair.is_empty() else "（没找到腿骨）"
+		print("  %-4s 躯干朝向·节点+Z = %+.2f（行进方向）  眼骨参考 %+.2f  脚骨世界 y = %+.3f  用骨：%s" % [
+			c.display_name, dot, dot_face, foot_y, used])
+		_check(dot > 0.2, "%s：躯干朝向朝行进方向（点积 %+.2f > 0.2，不是倒着走）" % [
+			c.display_name, dot])
+		_check(dot_face > 0.2, "%s：眼骨方向也在前半轴（参考判据 %+.2f > 0.2）" % [
+			c.display_name, dot_face])
+		_check(absf(foot_y) < 0.15, "%s：脚踩在地上（脚骨世界 y %+.3f）" % [
+			c.display_name, foot_y])
+
+	print("\n========== 8. 渲图 ==========")
 	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join("_companion")
 	DirAccess.make_dir_recursive_absolute(out)
 	await _shot(out.path_join("80_spawn_with_companions.png"))
 
-	# 把镜头拉远，让三名同伴同框（相机在玩家背后 7 m）
-	player.spring.spring_length = 7.0
-	player._pitch = -0.09
+	# 把镜头拉远抬高，让七名同伴同框（相机在玩家背后 9 m、俯角 20°）
+	player.spring.spring_length = 9.0
+	player._pitch = -0.35
 	await _steps(40)
 	await _shot(out.path_join("81_companions_group.png"))
 
@@ -188,6 +228,103 @@ func _run() -> void:
 
 
 # --- 工具 ---
+
+## 躯干朝向（世界坐标、绑定姿态）：**两腿连线 × 上方向**。
+##
+## 为什么用腿而不用肩或眼：
+##   * 眼骨在头局部带横向偏移，实测与身体正前方差到 ~70°；
+##   * 肩（UpperArm/Clavicle）受绑定姿态影响 —— 这批模型不是标准 T-pose，
+##     手臂在绑定姿态里就带着角度，实测未花/诺亚用肩量只能得到 +0.35（≈69° 偏差）；
+##   * **腿在绑定姿态里是并拢竖直的**，左右大腿连线几乎正好是横向量，量出来最干净。
+##
+## 约定：Godot 是右手系（+X 右、+Y 上），本项目里「模型本体朝 +Z」。
+## 面朝 +Z 的人，**右手在 −X 侧**（右手系里 右 × 上 = −前），所以：
+##   右向量 = 右腿位置 − 左腿位置 = −X
+##   前 = 上 × 右 = Y × (−X) = +Z ✓
+## ⚠️ 别写成 `右 × 上` —— 那样得到的是 −前，七只同伴会集体判成「反了」（本喵就这么错过一次）。
+func _rest_torso_forward(skel: Skeleton3D) -> Vector3:
+	if skel == null:
+		return Vector3.ZERO
+	var pair := _rest_lr_pair(skel, ["thigh", "upleg"])
+	if pair.is_empty():
+		pair = _rest_lr_pair(skel, ["upperarm", "clavicle", "shoulder"])
+	if pair.is_empty():
+		return Vector3.ZERO
+	var right: Vector3 = pair["r"] - pair["l"]
+	right.y = 0.0
+	if right.length() < 0.0001:
+		return Vector3.ZERO
+	return Vector3.UP.cross(right.normalized()).normalized()
+
+
+## 在绑定姿态下找一组「左 / 右」同名骨，返回它们的世界坐标
+func _rest_lr_pair(skel: Skeleton3D, keys: Array) -> Dictionary:
+	var l := -1
+	var r := -1
+	for i in skel.get_bone_count():
+		var low := skel.get_bone_name(i).to_lower()
+		var hit := false
+		for k in keys:
+			if low.contains(String(k)):
+				hit = true
+				break
+		if not hit:
+			continue
+		if low.contains(" l ") or low.contains("left") or low.begins_with("l_"):
+			if l < 0:
+				l = i
+		elif low.contains(" r ") or low.contains("right") or low.begins_with("r_"):
+			if r < 0:
+				r = i
+	if l < 0 or r < 0:
+		return {}
+	var xf := skel.global_transform
+	return {"l": xf * skel.get_bone_global_rest(l).origin,
+			"r": xf * skel.get_bone_global_rest(r).origin,
+			"lname": skel.get_bone_name(l), "rname": skel.get_bone_name(r)}
+
+
+## 脸在**绑定姿态**下、世界坐标里的方向：两眼中点 − 头骨。**只当参考**，不做断言：
+## 眼骨横向偏移可达 70°，但符号仍然能区分「正 / 反」。
+##
+## ⚠️ 必须乘 skeleton 的 global_transform —— 只算骨骼空间会因为 Skeleton3D 自带的
+##    180° 得到**反的符号**（2026-10-14 的倒着走 bug 就是这么判出来的）。
+func _rest_face(skel: Skeleton3D) -> Vector3:
+	if skel == null:
+		return Vector3.ZERO
+	var eyes: Array[int] = []
+	var head := -1
+	for i in skel.get_bone_count():
+		var low := skel.get_bone_name(i).to_lower()
+		if low.contains("eye"):
+			eyes.append(i)
+		if head < 0 and low.contains("head"):
+			head = i
+	if eyes.size() < 2 or head < 0:
+		return Vector3.ZERO
+	var xf := skel.global_transform
+	var mid := Vector3.ZERO
+	for e in eyes:
+		mid += xf * skel.get_bone_global_rest(e).origin
+	mid /= float(eyes.size())
+	var h: Vector3 = xf * skel.get_bone_global_rest(head).origin
+	var d := mid - h
+	d.y = 0.0
+	return d.normalized() if d.length() > 0.0001 else Vector3.ZERO
+
+
+## 最低的脚骨（Toe/Foot）在世界坐标下的 y —— 判断有没有浮空/埋地
+func _lowest_foot_y(skel: Skeleton3D) -> float:
+	if skel == null:
+		return 0.0
+	var xf := skel.global_transform
+	var best := INF
+	for i in skel.get_bone_count():
+		var low := skel.get_bone_name(i).to_lower()
+		if low.contains("toe") or low.contains("foot") or low.contains("ankle"):
+			best = minf(best, (xf * skel.get_bone_global_pose(i).origin).y)
+	return 0.0 if best == INF else best
+
 
 func _clip(c: Companion) -> String:
 	if c.anim == null or not c.anim.has_method("current_clip"):

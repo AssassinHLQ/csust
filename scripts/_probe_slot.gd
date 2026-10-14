@@ -8,19 +8,42 @@ extends SceneTree
 ## 用法：godot --path <工程> --script res://scripts/_probe_slot.gd -- --splat=off
 
 ## 候选站位（玩家局部坐标；+X 右、+Z 是玩家背后/镜头那一侧）
+##
+## 前三行是**已经在场**的三人（未花 / 优香 / 诺亚），后面是给第 4~7 名同伴
+## （小桃 / 小绿 / 柚子 / 凯伊）挑位置用的候选。判据见文件末尾：
+## 不挡准星、不糊脸、互相在屏幕上分开。
+const EXISTING: Array[Vector3] = [
+	Vector3(-2.0, 0, 0.9),   # 未花
+	Vector3(2.0, 0, 0.9),    # 优香
+	Vector3(-3.0, 0, -3.2),  # 诺亚
+]
+
 const CANDIDATES: Array[Vector3] = [
-	Vector3(-2.0, 0, 0.9),
-	Vector3(2.0, 0, 0.9),
-	Vector3(-1.7, 0, -2.4),
-	Vector3(-2.8, 0, -2.0),
-	Vector3(-2.9, 0, -1.6),
-	Vector3(-3.2, 0, -2.6),
-	Vector3(-3.6, 0, -2.0),
-	Vector3(-3.0, 0, -3.2),
-	Vector3(-4.0, 0, -1.5),
-	Vector3(-2.5, 0, -3.5),
-	Vector3(-4.2, 0, -2.6),
-	Vector3(-4.6, 0, -1.8),
+	Vector3(3.0, 0, -3.2),
+	Vector3(3.0, 0, -1.4),
+	Vector3(-4.4, 0, -3.0),
+	Vector3(4.4, 0, -3.0),
+	Vector3(-2.4, 0, -4.6),
+	Vector3(2.4, 0, -4.6),
+	Vector3(-4.6, 0, 0.4),
+	Vector3(4.6, 0, 0.4),
+	Vector3(-3.4, 0, 1.9),
+	Vector3(3.4, 0, 1.9),
+	Vector3(-5.2, 0, -1.4),
+	Vector3(5.2, 0, -1.4),
+	Vector3(-1.4, 0, -4.6),
+	Vector3(1.4, 0, -4.6),
+	Vector3(0.0, 0, -5.2),
+	Vector3(-5.2, 0, -3.6),
+	Vector3(5.2, 0, -3.6),
+	Vector3(-3.8, 0, -4.6),
+	Vector3(3.8, 0, -4.6),
+	Vector3(-1.2, 0, -2.6),
+	Vector3(1.2, 0, -2.6),
+	Vector3(-5.6, 0, -0.6),
+	Vector3(5.6, 0, -0.6),
+	Vector3(-2.2, 0, 2.4),
+	Vector3(2.2, 0, 2.4),
 ]
 
 
@@ -53,9 +76,20 @@ func _run() -> void:
 		cam.global_position.x - player.global_position.x,
 		cam.global_position.y - player.global_position.y])
 	print("")
-	print("%-18s %-24s %8s %9s %9s %9s" % [
-		"slot(x, z)", "世界坐标", "屏幕x", "离相机m", "离玩家m", "屏高px"])
-	print("-".repeat(84))
+
+	# 已经在场的三人：它们的屏幕 x 是「新同伴不许撞上去」的基准
+	var existing_x: Array[float] = []
+	for slot in EXISTING:
+		var p := player.global_position + Vector3(slot.x, 0.0, slot.z)
+		existing_x.append(cam.unproject_position(p + Vector3.UP * 1.5).x)
+	var txt: Array[String] = []
+	for x in existing_x:
+		txt.append("%.0f" % x)
+	print("已在场的三人屏幕 x = [%s]" % ", ".join(txt))
+	print("")
+	print("%-18s %-24s %8s %8s %9s %9s %9s" % [
+		"slot(x, z)", "世界坐标", "屏幕x", "离已有", "离相机m", "离玩家m", "屏高px"])
+	print("-".repeat(90))
 
 	for slot in CANDIDATES:
 		var p := player.global_position + Vector3(slot.x, 0.0, slot.z)
@@ -65,19 +99,22 @@ func _run() -> void:
 		var px := absf(cam.unproject_position(head).y - cam.unproject_position(feet).y)
 		var d_cam := cam.global_position.distance_to(p)
 		var d_player := player.global_position.distance_to(p)
+		var gap := 1.0e9
+		for x in existing_x:
+			gap = minf(gap, absf(sp.x - x))
 		var flags := ""
 		if absf(sp.x - vp.x * 0.5) < vp.x * 0.1:
 			flags += " 挡准星?"
 		if d_cam < 2.5:
 			flags += " 糊脸!"
-		if not cam.is_position_behind(p):
-			pass
-		else:
+		if cam.is_position_behind(p):
 			flags += " 在相机后!"
-		print("%-18s %-24s %8.0f %9.2f %9.2f %9.0f%s" % [
+		if gap < 60.0:
+			flags += " 撞已有!"
+		print("%-18s %-24s %8.0f %8.0f %9.2f %9.2f %9.0f%s" % [
 			"(%+.1f, %+.1f)" % [slot.x, slot.z],
-			str(p.snappedf(0.1)), sp.x, d_cam, d_player, px, flags])
+			str(p.snappedf(0.1)), sp.x, gap, d_cam, d_player, px, flags])
 
 	print("\n判据：屏幕x 偏离中心 > 160 px（=1600 的 10%%，不挡准星）、离相机 > 2.5 m、")
-	print("      离玩家不要太远（≤ 5 m 看着才像同伴）")
+	print("      与已在场三人的屏幕间距 > 60 px、离玩家 ≤ 5 m（看着才像同伴）")
 	quit(0)

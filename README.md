@@ -577,19 +577,24 @@ _arisu_learn/
 │  ├─ Arisu_ext.glb         **实际使用**的模型（27 条动作，见第五节）※不随仓库分发
 │  ├─ school.collision.glb  校园碰撞网格（默认不挂，见 §6.5）※不随仓库分发
 │  ├─ Arisu*_*.png          自动解包的贴图 ※不随仓库分发
-│  ├─ companions/           三名同伴（第八节）※不随仓库分发
+│  ├─ companions/           七名同伴（第八节）※不随仓库分发
 │  │  ├─ Mika.glb           未花（145 骨、33 动作）
 │  │  ├─ Yuuka.glb          优香（108 骨、38 动作）
-│  │  └─ Noa.glb            诺亚（135 骨、31 动作）
+│  │  ├─ Noa.glb            诺亚（135 骨、31 动作）
+│  │  ├─ Momoi.glb          小桃（105 骨、37 动作）
+│  │  ├─ Midori.glb         小绿（105 骨、31 动作）
+│  │  ├─ Yuzu.glb           柚子（122 骨、30 动作）
+│  │  └─ Kei.glb            凯伊（166 骨、32 动作，另有 3 个附属 skin）
 │  ├─ boss/                 霸王龙优香 FBX + 贴图（第七节）※不随仓库分发
 │  └─ boss_pig/             飞猪优香 FBX + 贴图 + 作者的对照渲染图（§7.6）※不随仓库分发
 ├─ splatdata/
 │  ├─ README.md             说明：泼溅数据要求与摆放参数
 │  ├─ school_playable.sogdata  **实际加载**的校园泼溅（清理版，86.6 MB）※不随仓库分发
-│  └─ school_raw.sogdata       原始未清理扫描（仅存档）※不随仓库分发
+│  ├─ school_raw.sogdata       原始未清理扫描（仅存档）※不随仓库分发
+│  └─ room609.sogdata          「画室 609」扫描（40.7 MB / 2,774,116 点）※不随仓库分发
 ├─ scenes/
 │  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 四面隐形护栏 + 下沉校园
-│  │                        + 2 位 Boss + 3 名同伴）
+│  │                        + 2 位 Boss + 7 名同伴）
 │  ├─ player.tscn           玩家（模型 + 动画 + 武器 + 相机）
 │  ├─ companion.tscn        同伴（模型由 companion.gd 按 model_path 运行时实例化）
 │  └─ main.tscn             动画查看器
@@ -607,8 +612,12 @@ _arisu_learn/
 │  ├─ _pose_shots.gd        [工具] 多机位姿势检查
 │  ├─ _play_shots.gd        [工具] 玩法全流程截图
 │  ├─ _probe_ext_glb.gd     [工具] 两个 glb 的动作/时长/前倾对比
-│  ├─ _probe_companion.gd   [工具] 三只同伴的骨架/动画/**朝向**（Toe−Foot 向量判定）
+│  ├─ _probe_companion.gd   [工具] 七名同伴的骨架/动画/**朝向**（含「骨骼空间 vs 模型空间」的对照）
+│  ├─ _probe_companion_row.gd [工具] 七人合影：一次看清朝向 + 接地 + 动画是否真在动
+│  ├─ _probe_slot.gd        [工具] 扫同伴站位候选（投影到屏幕，含与已在场者的间距）
 │  ├─ _probe_boss_pig.gd    [工具] 飞猪 FBX 导入后拿到了什么（材质/贴图/尺寸）
+│  ├─ _probe_room_layout.gd [工具] 把任意 .sog 当点云渲结构（地面/主轴/高度图/离群点）
+│  ├─ _probe_room_on_platform.gd [工具] 在真实游戏相机下扫泼溅场景的缩放与朝向
 │  ├─ _probe_lean_side.gd   [工具] 跑动侧视渲图（做前倾对照）
 │  ├─ _probe_platform.gd    [工具] 扫缩放×下沉量（泼溅摆放调参）
 │  ├─ _probe_splat.gd       [工具] 探测引擎有没有原生 3DGS
@@ -1076,24 +1085,36 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 
 ---
 
-# 八、同伴（跟随 NPC）：未花 / 优香 / 诺亚
+# 八、同伴（跟随 NPC）：未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊
 
-三名同伴**只跟随、不开火**（你选的「纯观赏」）。模型用 `tools\Find-BlueArchiveModel.cmd`
-从 BlueArchiveModels 里取的**普通形态**：`Mika.glb` / `Yuuka.glb` / `Noa.glb`
-（不带 `(Swimsuit)` / `(Battle)` / `(Cut-in)` / `(Maid)` 那些变体）。
+**七名同伴****只跟随、不开火**（你选的「纯观赏」）。模型用 `tools\Find-BlueArchiveModel.cmd`
+从 BlueArchiveModels 里取的**初始形态**（不带 `(Swimsuit)` / `(Battle)` / `(Cut-in)` /
+`(Maid)` / `(Pajama)` / `(Prototype)` 那些变体）：
 
-| 同伴 | 骨架 | 动画数 | 站位（玩家局部坐标） |
-|---|---|---|---|
-| 未花 Mika | 145 骨 | 33 | `(−2.0, 0, +0.9)` 左后 |
-| 优香 Yuuka | 108 骨 | 38 | `(+2.0, 0, +0.9)` 右后 |
-| 诺亚 Noa | 135 骨 | 31 | `(−3.0, 0, −3.2)` 左前（更远，与未花错开屏幕位置） |
+| 同伴 | 模型 | 骨架 | 动画数 | 站位（玩家局部坐标） |
+|---|---|---|---|---|
+| 未花 Mika | `Mika.glb` | 145 骨 | 33 | `(−2.0, 0, +0.9)` 左后 |
+| 优香 Yuuka | `Yuuka.glb` | 108 骨 | 38 | `(+2.0, 0, +0.9)` 右后 |
+| 诺亚 Noa | `Noa.glb` | 135 骨 | 31 | `(−3.0, 0, −3.2)` 左前 |
+| 小桃 Momoi | `Momoi.glb` | 105 骨 | 37 | `(+3.0, 0, −3.2)` 右前 |
+| 小绿 Midori | `Midori.glb` | 105 骨 | 31 | `(+2.4, 0, −4.6)` 右侧更远 |
+| 柚子 Yuzu | `Yuzu.glb` | 122 骨 | 30 | `(−2.4, 0, −4.6)` 左侧更远 |
+| 凯伊 Kei | `Kei.glb` | 166 骨 | 32 | `(−5.2, 0, −1.4)` 最左 |
 
-三只都自带 `Normal_Idle` / `Cafe_Walk` / `Move_Ing` / `Move_Jump`，
-所以直接复用了主角那套 `AnimDriver`。
+七只都自带 `Normal_Idle` / `Cafe_Walk` / `Move_Ing`，所以直接复用了主角那套 `AnimDriver`。
+（`Move_Jump` 只有前四只有，但跟随逻辑没用到它。）
+
+> 这批 GLB 的**贴图是内嵌的**（`glb_info.py` 实测：Momoi 13 张、Kei 22 张 image 全部走
+> bufferView），所以只要拷 `.glb`，不用像早期那样连 PNG 一起搬。
 
 `Find-BlueArchiveModel.cmd` 的匹配规则是 `^Mika(?:\s|$)` 这种前缀，
 所以 `未花` 会同时命中 `Mika.glb`、`Mika (Swimsuit).glb`、`Mika (Cut-in).glb` ——
-`-CopyTo` 会把三个都复制过去，只要普通形态的话得自己挑（本喵这次只拷了 `Mika.glb`）。
+`-CopyTo` 会把三个都复制过去，只要初始形态的话得自己挑（两次都是这么挑的：
+`Mika.glb` / `Momoi.glb` / `Midori.glb` / `Yuzu.glb` / `Kei.glb`）。
+
+> 凯伊有 **4 个 skin / 2 个 Skeleton3D**（`Kei.glb`：166 + 21 + 6 + 1 骨）。
+> `AnimDriver` 找的是「树里第一个」而不是「骨头最多的那个」，所以别只看骨头数 ——
+> 用 `_probe_companion_row.gd` 量**骨骼姿态随时间的变化**（实测 166 骨那个在动，30.2°）。
 
 ## 8.1 ⚠️ 同伴必须待在单独的「朋友层」（`collision_layer = 2`）
 
@@ -1116,33 +1137,41 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 本喵第一版把第三名同伴放在**正后方 2.4 m** —— 它距相机只剩 1.8 m，一块 1.6 m 高的人形
 在画面里能占掉近一半高度，视野直接被自己人糊住。
 
-所以三名都在**侧后方**：横向 2.0~3.0 m、纵向 −0.9~+0.9 m。
-`_verify_companion.gd` 第六节守这条约束，量的是三件事：
+所以七只都在**侧前方/侧后方**：横向 2.0~5.2 m、纵向 −4.6~+0.9 m。
+`_verify_companion.gd` 第六节守这条约束，量的是四件事：
 
 - **离相机 > 2.5 m**（不许糊脸）
 - **屏幕高度 < 视口高的 60%**
-- **不在画面正中央 20% 宽度内**
+- **不在画面正中央 20% 宽度内**（不挡准星）
+- **两两屏幕间距 > 60 px**（七个人互相不重叠）
 
 > **还有一条是加完之后才发现的**：站位是跟着**相机绕角**转的，所以两个人的
 > 「侧向 ÷ 纵深」比例只要相同，在屏幕上就会**永远重叠** —— 相机怎么转都分不开。
 > 诺亚原来在 `(−2.9, +0.9)`，与未花的 `(−2.0, +0.9)` 几乎同一条视线，
-> 屏幕 x 分别是 451 / 463（白加一个人）。
+> 屏幕 x 分别是 451 / 463（白加一个人）；加到七个人时更要小心，因为可用的
+> 屏幕宽度要分给七条视线。
 >
 > 站位别手算三角函数 —— 本喵算了两次都错（相机实际在玩家背后 **4.20 m**、
 > 横向 **−0.42 m**、高 **1.79 m**，FOV 的换算也不是「垂直 62° 直接除」）。
-> 用 `scripts/_probe_slot.gd` **扫一遍候选**最省事，它把每个 slot 投到屏幕上打印：
+> 用 `scripts/_probe_slot.gd` **扫一遍候选**最省事，它把每个 slot 投到屏幕上，
+> 并给出「与**已在场那几位**的最小屏幕间距」这一列：
 
-| slot (x, z) | 屏幕 x | 偏离中心 | 离相机 | 离玩家 |
+| slot (x, z) | 屏幕 x | 与已有最小间距 | 离相机 | 离玩家 |
 |---|---|---|---|---|
-| `(−2.0, +0.9)` 未花 | 442 | 358 ✓ | 4.07 m | 2.19 m |
-| `(+2.0, +0.9)` 优香 | 1348 | 548 ✓ | 4.46 m | 2.19 m |
-| `(−1.7, −2.4)` ❌ 挡准星 | 655 | 145 ✗ | 6.95 m | 2.94 m |
-| `(−2.8, −2.0)` ❌ 与未花太贴 | 513 | 287 ✓ | 6.87 m | 3.44 m |
-| **`(−3.0, −3.2)` 诺亚（采用）** | **539** | **261 ✓** | 8.04 m | 4.39 m |
-| `(−4.0, −1.5)` | 330 | 470 ✓ | 6.96 m | 4.27 m |
+| `(−2.0, +0.9)` 未花（已有） | 442 | — | 4.23 m | 2.19 m |
+| `(+2.0, +0.9)` 优香（已有） | 1348 | — | 4.62 m | 2.19 m |
+| `(−3.0, −3.2)` 诺亚（已有） | 539 | — | 8.24 m | 4.39 m |
+| **`(−5.2, −1.4)` 凯伊（采用）** | **161** | **281 ✓** | 7.57 m | 5.39 m |
+| **`(−2.4, −4.6)` 柚子（采用）** | **632** | **93 ✓** | 9.19 m | 5.19 m |
+| **`(+2.4, −4.6)` 小绿（采用）** | **1040** | **308 ✓** | 9.41 m | 5.19 m |
+| **`(+3.0, −3.2)` 小桃（采用）** | **1146** | **202 ✓** | 8.34 m | 4.39 m |
+| `(+5.2, −1.4)` ❌ 太靠边 | 1551 | 203 ✓ | 8.13 m | 5.39 m（离右边缘只剩 49 px） |
+| `(−4.4, −3.0)` ❌ 撞诺亚 | 386 | 56 ✗ | 8.42 m | 5.33 m |
+| `(−1.4, −4.6)` ❌ 挡准星 | 717 | 178 ✓ | 9.03 m | 4.81 m（偏离中心只有 83 px） |
 
 > 判据：**偏离画面中心 > 160 px**（不挡准星）、**两两间距 > 60 px**（都看得见）、
-> **离玩家 ≤ 5 m**（还像同伴）。后两条现在都写进 `_verify_companion.gd` 第六节了。
+> **离相机 > 2.5 m**。这三条现在都写进 `_verify_companion.gd` 第六节了。
+> 最终七人的屏幕 x = **[161, 442, 539, 632, 1040, 1146, 1348]**，两两最小间距 **93 px**。
 
 > 判据为什么不是「不许进画面中心 50% 区域」：水平 FOV 有 94°，中心 50% 宽对应 ±28°，
 > 而侧后方站位本来就在 20~25°，用固定矩形会把**正常站位**判红 —— 本喵第一版就这么
@@ -1167,9 +1196,9 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 & $g --path $p --script res://scripts/_verify_companion.gd -- --splat=off
 ```
 
-39 项：模型/骨架/动画绑定、朋友层、子弹穿透（含反向对照）、跟随（玩家瞬移 14 m 后
-三名都跟到位）、站定回 Idle、掉出平台被拉回、不挡镜头（离相机远近 / 屏占比 / 偏离中心 /
-两两屏幕间距）、两张渲图
+**100 项**：模型/骨架/动画绑定、朋友层、子弹穿透（含反向对照）、跟随（玩家瞬移 14 m 后
+七名都跟到位）、站定回 Idle、掉出平台被拉回、不挡镜头（离相机远近 / 屏占比 / 偏离中心 /
+两两屏幕间距）、**朝向 + 接地**（见 §8.5）、两张渲图
 （`_arisu_captures/_companion/80_spawn_with_companions.png` / `81_companions_group.png`）。
 
 ⚠️ 写这类「移动类」断言时的两个坑（都踩过）：
@@ -1180,7 +1209,59 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
    渲染帧率一高，「等 200 帧」可能只过了几十毫秒；补间动画同理，要按**真实时间**等
    （`_verify_boss_pig.gd` 里等重生那段就是按 `Time.get_ticks_msec()` 等的）。
 
-## 8.5 想再加一名同伴
+## 8.5 ⚠️ 同伴曾经「倒着走」——判朝向时漏了一层坐标变换
+
+**现象**：七只同伴跟着你走的时候，是**背朝行进方向**的（脸看着镜头往前走）。
+
+**根因**：`companion.gd` 给 `Rig` 补了 180°，依据是上一轮 `_probe_companion.gd`
+量出来的「这批 GLB 本体朝 −Z」。而那条结论是**错的**，错在量 `(Toe − Foot)` 时
+只用了骨骼空间：
+
+```gdscript
+# ❌ 错的：bone_global_pose 是**骨骼空间**的
+var d := skel.get_bone_global_pose(toe).origin - skel.get_bone_global_pose(foot).origin
+# ✅ 对的：要乘 skeleton 的 global_transform 才是模型/世界方向
+var xf := skel.global_transform
+var d := xf * skel.get_bone_global_pose(toe).origin - xf * skel.get_bone_global_pose(foot).origin
+```
+
+这批 GLB 的 **`Skeleton3D` 节点自带 180°**，所以骨骼空间与模型空间正好差一个符号 ——
+量出来是 −Z，实际是 **+Z**。于是 Rig 被多翻了 180°，而 `_physics_process` 又把
+「节点 +Z」设成移动方向 → 脸朝的就是移动方向的**反面**。
+
+**三条独立判据都指向 +Z**（改的时候一条就够，但三条一起才敢下结论）：
+
+1. **单独实例化 GLB**（不套 `companion.tscn`、Rig 不参与）：世界坐标下
+   「两眼中点 − 头骨」= `(0, 0, 0.056)`，**正好 +Z 且几乎没有横向偏移** —— 七只全一样
+   （`_probe_companion.gd` 的「眼骨判据」行）
+2. **躯干朝向**：绑定姿态下「右腿 − 左腿」× 上方向（`_verify_companion.gd::_rest_torso_forward`）
+3. **渲图**：同一排人，相机在 **+Z** 侧看到的是**正脸**、在 −Z 侧是后脑勺
+   （`scripts/_probe_companion_row.gd` 的 `row_front.png` / `row_back.png`，
+   一次渲七个，一眼就能比出来）
+
+**修法**：`rig.rotation.y = PI` → `0.0`（`companion.gd::_build_model`）。
+玩家 Arisu 不受影响：`player.gd` 每帧直接写 `model_root.rotation.y`，
+`player.tscn` 里那个历史遗留的 180° 会被覆盖掉，`_verify_facing.gd`（世界坐标、眼骨）
+也一直是过的。
+
+### 判朝向的量法：三个坑
+
+| 坑 | 症状 | 正确做法 |
+|---|---|---|
+| 漏乘 `skeleton.global_transform` | 符号整个反（就是上面这个 bug） | 一律换成世界坐标再比 |
+| 用**当前姿态**量 | 动画把脑袋转过去，点积被带偏 60°（未花/诺亚量到 +0.49/+0.38） | 用绑定姿态 `get_bone_global_rest`，或至少只判半轴 |
+| **叉乘写反** | `右 × 上 = −前`，七只集体判成「反了」 | 面朝 +Z 的人右手在 −X 侧 → **前 = 上 × 右** |
+
+**回归锁**：`_verify_companion.gd` 第七节，每只同伴断言
+「躯干朝向 · 节点+Z > 0.2」+「眼骨方向 > 0.2」+「脚骨世界 y 在 ±0.15 内」。
+阈值取 0.2 而不是 0.5：这批骨骼判据有固有残差（眼骨横向偏移、绑定姿态不是 T-pose），
+实测在 **+0.35 ~ +1.00** 之间浮动；而判反的那一版是 **−0.35 ~ −1.00**，
+符号完全分开，0.2 这条线抓得住。
+
+> 顺便修正了一个**旧文档结论**：`companion.gd` 文件头和 README §8.1 原来都写着
+> 「三只 GLB 的本体都朝 −Z（跟 Arisu 同一套导出）」—— 现在是「本体朝 +Z，Rig 不要动」。
+
+## 8.6 想再加一名同伴
 
 1. 把 glb 放进 `models/companions/`（已在 `.gitignore` 里，不会进仓库）
 2. 在 `game.tscn` 里复制一个 `CompanionMika` 节点，改 `display_name` / `model_path` / `slot`
@@ -1218,7 +1299,7 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 | 本项目作者编写的全部代码与文档（`scripts/`、`scenes/`、`project.godot`、README…） | **MIT** | ✅ |
 | `addons/gdgs/`（GDGS 3.3.0，ReconWorldLab） | MIT（作者原许可保留在 `addons/gdgs/LICENSE`） | ✅ |
 | `models/Arisu*.glb` + 解包贴图 | © NEXON Games / Yostar，**专有** | ❌ 被 `.gitignore` 排除 |
-| `models/companions/*.glb`（未花 / 优香 / 诺亚） | 同上，**专有** | ❌ 被 `.gitignore` 排除 |
+| `models/companions/*.glb`（未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | 同上，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/boss/优香霸王龙.fbx` + 贴图 | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/boss_pig/`（飞猪优香 FBX + 贴图，作者：一个睿智） | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
@@ -1231,12 +1312,12 @@ git clone <你的仓库>
 cd <仓库目录>
 # ① 放入你自己合法获得的角色模型（必需）
 #    models/Arisu_ext.glb     见 models/README.md
-# ② 可选：三名同伴（没有就删掉 game.tscn 里的三个 Companion 节点）
-#    models/companions/{Mika,Yuuka,Noa}.glb
+# ② 可选：七名同伴（没有就删掉 game.tscn 里那七个 Companion 节点）
+#    models/companions/{Mika,Yuuka,Noa,Momoi,Midori,Yuzu,Kei}.glb
 # ③ 可选：两位 Boss（没有就删掉 Boss / BossPig 节点）
 #    models/boss/优香霸王龙.fbx + 贴图、models/boss_pig/猪猪优香.fbx + 贴图
-# ④ 可选：放入校园泼溅（没有就用 --splat=off）
-#    splatdata/school_playable.sogdata   见 splatdata/README.md
+# ④ 可选：放入泼溅数据（没有就用 --splat=off）
+#    splatdata/school_playable.sogdata、splatdata/room609.sogdata   见 splatdata/README.md
 
 & <godot 4.7 mono 版> --path .              # 有泼溅数据
 & <godot 4.7 mono 版> --path . -- --splat=off   # 没有泼溅数据

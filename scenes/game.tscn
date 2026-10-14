@@ -289,6 +289,35 @@ display_name = "诺亚"
 model_path = "res://models/companions/Noa.glb"
 slot = Vector3(-3, 0, -3.2)
 
+; 第二批同伴（2026-10-14 加）：小桃 / 小绿 / 柚子 / 凯伊，都取**初始形态**
+; （不带 (Battle)/(Maid)/(Pajama) 等变体）。四份 GLB 的贴图是**内嵌**的，不需要另拷 PNG。
+; 站位还是 scripts/_probe_slot.gd 在真实相机下扫出来的，判据同上；实测屏幕 x：
+;   凯伊 161 ｜ 未花 442 ｜ 诺亚 539 ｜ 小绿 632 ｜ 柚子 1040 ｜ 小桃 1146 ｜ 优香 1348
+; 两两最小间距 93 px（> 60）、离相机都 > 7 m、都离画面中心 > 160 px。
+[node name="CompanionMomoi" parent="." instance=ExtResource("7_companion")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3, 0.05, 2.8)
+display_name = "小桃"
+model_path = "res://models/companions/Momoi.glb"
+slot = Vector3(3, 0, -3.2)
+
+[node name="CompanionMidori" parent="." instance=ExtResource("7_companion")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.4, 0.05, 1.4)
+display_name = "小绿"
+model_path = "res://models/companions/Midori.glb"
+slot = Vector3(2.4, 0, -4.6)
+
+[node name="CompanionYuzu" parent="." instance=ExtResource("7_companion")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2.4, 0.05, 1.4)
+display_name = "柚子"
+model_path = "res://models/companions/Yuzu.glb"
+slot = Vector3(-2.4, 0, -4.6)
+
+[node name="CompanionKei" parent="." instance=ExtResource("7_companion")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -5.2, 0.05, 4.6)
+display_name = "凯伊"
+model_path = "res://models/companions/Kei.glb"
+slot = Vector3(-5.2, 0, -1.4)
+
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("1_hud")
 
@@ -384,5 +413,5 @@ offset_top = -34.0
 offset_right = 1480.0
 offset_bottom = -14.0
 grow_vertical = 0
-text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 释放鼠标　｜　未花・优香・诺亚会跟着你走　｜　走到平台边缘低头看脚下的校园"
+text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 释放鼠标　｜　7 名同伴跟着你走（未花・优香・诺亚・小桃・小绿・柚子・凯伊）　｜　走到平台边缘低头看脚下的校园"
 theme_override_font_sizes/font_size = 13
