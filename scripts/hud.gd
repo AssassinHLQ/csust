@@ -15,8 +15,8 @@ extends CanvasLayer
 var _player: Player
 var _weapon: Weapon
 var _spread := 8.0
-var _splat_label: Label
-var _splat_done := false
+## 左上角泼溅状态行：**一份场地一行**，每行 {label: Label, title: String, done: bool}
+var _splat_rows: Array[Dictionary] = []
 ## 顶部 Boss 血条组：一个 Boss 一行，每行 {name: Label, bar: ProgressBar, title: String}
 var _boss_rows: Array[Dictionary] = []
 
@@ -31,19 +31,11 @@ const SPLAT_PHASE := {
 
 
 func _ready() -> void:
-	# 校园泼溅要解码 615 万点（首次约 50 s），给个左上角状态行，别让玩家以为卡死了
-	_splat_label = Label.new()
-	_splat_label.name = "SplatStatus"
-	_splat_label.position = Vector2(18, 16)
-	_splat_label.add_theme_font_size_override("font_size", 14)
-	_splat_label.add_theme_color_override("font_color", Color(0.86, 0.91, 1.0, 0.92))
-	_splat_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
-	_splat_label.add_theme_constant_override("shadow_offset_x", 1)
-	_splat_label.add_theme_constant_override("shadow_offset_y", 1)
-	_splat_label.visible = false
-	add_child(_splat_label)
-
-	# Boss 血条不在这里建：见 bind_bosses()，要按场上实际有几位来排行数。
+	# 泼溅状态行不在这里建：见 bind_splats()，要按场上实际有几份场地来排行数。
+	# （校园 615 万点首次要解码约 50 s，不给状态行玩家会以为卡死了。）
+	# Boss 血条同理：见 bind_bosses()，要按场上实际有几位来排行数。
+	# ⚠️ 这里不能只有注释 —— GDScript 要求每个函数体至少有一条语句。
+	pass
 
 
 ## 顶部居中的 Boss 血条组。**一个 Boss 一行**，自上而下按索引排。
@@ -135,38 +127,123 @@ func _on_boss_health(current: float, maximum: float, index: int) -> void:
 func bind_splat(splat: SplatScene) -> void:
 	if splat == null:
 		return
-	_splat_label.visible = true
-	_splat_label.text = "校园泼溅：准备中…"
-	splat.progress.connect(_on_splat_progress)
-	splat.loaded.connect(_on_splat_loaded)
-	splat.failed.connect(_on_splat_failed)
+	bind_splats([splat])
 
 
-func _on_splat_progress(phase: String, done: int, total: int) -> void:
-	if _splat_done:
+## 顶部左上的泼溅状态组。**一份场地一行**，自上而下按传入顺序排。
+## 加「画室609」那一轮场上变成两份泼溅（校园 615 万 + 画室 277 万），所以从
+## 单行改成一组 —— 两份同时解码时能分清是哪一份在等、哪一份已经就绪。
+const SPLAT_ROW_HEIGHT := 20.0
+
+
+func bind_splats(splats: Array) -> void:
+	# 先把上一次的标签和连线都撤掉。
+	# ⚠️ 不撤会报 "Signal 'progress' is already connected to given callable"：
+	#    `.bind(0)` 两次得到的 Callable 是**相等**的，Godot 认为是同一个回调。
+	#    （自检里先绑一份、再绑两份就会撞上；玩家侧虽然只绑一次，但接口得能重入。）
+	for row in _splat_rows:
+		var old: Label = row["label"]
+		if is_instance_valid(old):
+			old.queue_free()
+		# ⚠️ 这里必须用 Variant 接：场地已经被 free 掉时，`var x: SplatScene = row["splat"]`
+		#    这句本身就会报 "Trying to assign invalid previously freed instance"。
+		var old_splat: Variant = row["splat"]
+		if is_instance_valid(old_splat):
+			_unbind_splat(old_splat as SplatScene, int(row["index"]))
+	_splat_rows.clear()
+	var index := 0
+	for item in splats:
+		var splat := item as SplatScene
+		if splat == null:
+			continue
+		var label := Label.new()
+		label.name = "SplatStatus%d" % index
+		label.position = Vector2(18, 16 + index * SPLAT_ROW_HEIGHT)
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", Color(0.86, 0.91, 1.0, 0.92))
+		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+		label.add_theme_constant_override("shadow_offset_x", 1)
+		label.add_theme_constant_override("shadow_offset_y", 1)
+		label.visible = false
+		add_child(label)
+		_splat_rows.append({
+			"label": label,
+			"splat": splat,
+			"index": index,
+			"title": "%s泼溅" % splat.display_name,
+			"done": false,
+		})
+		# ⚠️ 信号参数是 (phase, done, total) / (info) / (message)，bind 是**追加**
+		#    在最后，所以下面三个 handler 的**行号参数写在形参表末尾**。
+		splat.progress.connect(_on_splat_progress.bind(index))
+		splat.loaded.connect(_on_splat_loaded.bind(index))
+		splat.failed.connect(_on_splat_failed.bind(index))
+		index += 1
+
+
+func _unbind_splat(splat: SplatScene, index: int) -> void:
+	var pairs := [
+		[splat.progress, _on_splat_progress.bind(index)],
+		[splat.loaded, _on_splat_loaded.bind(index)],
+		[splat.failed, _on_splat_failed.bind(index)],
+	]
+	for pair in pairs:
+		var sig: Signal = pair[0]
+		if sig.is_connected(pair[1]):
+			sig.disconnect(pair[1])
+
+
+## 取第 index 行；越界（场地被 --venue 跳过时信号不会来，但保险）返回空字典
+func _splat_row(index: int) -> Dictionary:
+	if index < 0 or index >= _splat_rows.size():
+		return {}
+	return _splat_rows[index]
+
+
+func _on_splat_progress(phase: String, done: int, total: int, index: int) -> void:
+	var row := _splat_row(index)
+	if row.is_empty() or bool(row["done"]):
 		return
+	var label: Label = row["label"]
+	if not is_instance_valid(label):
+		return
+	label.visible = true
 	var ratio := 0.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
-	_splat_label.text = "校园泼溅：%s… %d%%（%s / %s 点）" % [
-		SPLAT_PHASE.get(phase, phase), int(ratio * 100.0),
+	label.text = "%s：%s… %d%%（%s / %s 点）" % [
+		row["title"], SPLAT_PHASE.get(phase, phase), int(ratio * 100.0),
 		_fmt_int(done), _fmt_int(total)]
 
 
-func _on_splat_loaded(info: Dictionary) -> void:
-	_splat_done = true
-	_splat_label.text = "校园泼溅：就绪　%s 点　%.1f s（缓存 %s）" % [
+func _on_splat_loaded(info: Dictionary, index: int) -> void:
+	var row := _splat_row(index)
+	if row.is_empty():
+		return
+	row["done"] = true
+	var label: Label = row["label"]
+	if not is_instance_valid(label):
+		return
+	label.visible = true
+	label.text = "%s：就绪　%s 点　%.1f s（缓存 %s）" % [
+		row["title"],
 		_fmt_int(int(info.get("point_count", 0))),
 		float(info.get("elapsed", 0.0)),
 		"命中" if bool(info.get("from_cache", false)) else "首次解码"]
 	get_tree().create_timer(8.0).timeout.connect(func() -> void:
-		if is_instance_valid(_splat_label):
-			_splat_label.visible = false)
+		if is_instance_valid(label):
+			label.visible = false)
 
 
-func _on_splat_failed(message: String) -> void:
-	_splat_done = true
-	_splat_label.visible = true
-	_splat_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.45))
-	_splat_label.text = "校园泼溅：失败　%s" % message
+func _on_splat_failed(message: String, index: int) -> void:
+	var row := _splat_row(index)
+	if row.is_empty():
+		return
+	row["done"] = true
+	var label: Label = row["label"]
+	if not is_instance_valid(label):
+		return
+	label.visible = true
+	label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.45))
+	label.text = "%s：失败　%s" % [row["title"], message]
 
 
 static func _fmt_int(value: int) -> String:

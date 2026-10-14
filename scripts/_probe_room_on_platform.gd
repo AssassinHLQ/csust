@@ -50,6 +50,12 @@ func _run() -> void:
 
 	root.size = Vector2i(1600, 900)
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	# 本探针自己挂房间节点（下面那段），所以把场景里自带的泼溅**全部**摘掉再入树，
+	# 否则会变成「校园 + 场景画室 + 探针画室」三份一起解码。
+	for node_name in ["SplatScene", "Room609"]:
+		var builtin := game.get_node_or_null(node_name)
+		if builtin != null:
+			builtin.free()
 	root.add_child(game)
 	await _frames(10)
 

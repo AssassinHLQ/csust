@@ -11,6 +11,11 @@ func _initialize() -> void:
 func _run() -> void:
 	root.size = Vector2i(1600, 900)
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	# 本探针量的是**校园那一份**的 fps：入树前把画室609 摘掉（见 _verify_splat.gd 的注释）。
+	# 想量「两份一起」就把这两行删掉 —— 那正是 8 GB 显存最吃紧的情形。
+	var room := game.get_node_or_null("Room609")
+	if room != null:
+		room.free()
 	root.add_child(game)
 	await process_frame
 	await process_frame

@@ -7,7 +7,8 @@ const FALL_LIMIT := -60.0
 var _player: Player
 var _weapon: Weapon
 var _hud: CanvasLayer
-var _splat: SplatScene
+## 场上所有泼溅场地（现在是校园 + 画室609 两份；按类型收，不写死节点名）
+var _splats: Array[SplatScene] = []
 ## 场上所有 Boss「木桩」（现在是霸王龙优香 + 飞猪优香两位）
 var _bosses: Array[Boss] = []
 var _companions: Array[Companion] = []
@@ -21,12 +22,20 @@ func _ready() -> void:
 	_player = $Player
 	_weapon = $Player/Weapon
 	_hud = $HUD
-	_splat = get_node_or_null("SplatScene") as SplatScene
 	_spawn = _player.global_position
 
 	_hud.bind(_player, _weapon)
-	if _splat and _hud.has_method("bind_splat"):
-		_hud.bind_splat(_splat)
+
+	# 泼溅场地也是一场一行：两份（校园 / 画室609）同时解码时，玩家得分清
+	# 是哪一份在等。HUD 侧 bind_splats() 按传入顺序从上往下排。
+	for child in get_children():
+		if child is SplatScene:
+			_splats.append(child as SplatScene)
+	if not _splats.is_empty():
+		if _hud.has_method("bind_splats"):
+			_hud.bind_splats(_splats)
+		elif _hud.has_method("bind_splat"):
+			_hud.bind_splat(_splats[0])
 
 	# Boss 与同伴都是场景里的直接子节点，按类型收一遍（不写死节点名，
 	# 以后再加一位 Boss / 一名同伴只要往场景里摆就行）

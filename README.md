@@ -432,10 +432,13 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_spawnview.gd  # 12 项：初始视角 + 甩镜头点左键的真实鼠标时序
 & $g --path $p --script res://scripts/_verify_boss.gd       # 19 项：霸王龙木桩（第七节）
 & $g --path $p --script res://scripts/_verify_boss_pig.gd   # 32 项：飞猪木桩 + HUD 双血条（§7.6）
-& $g --path $p --script res://scripts/_verify_companion.gd  # 39 项：三名同伴跟随 + 不挡镜头（第八节）
+& $g --path $p --script res://scripts/_verify_companion.gd  # 100 项：七名同伴跟随 + 不挡镜头 + 朝向/接地（第八节）
 & $g --path $p --script res://scripts/_verify_splat.gd      # 17 项：泼溅摆放 / 悬浮平台 / 隐形护栏（第六节）
+& $g --path $p --script res://scripts/_verify_room.gd       # 43 项：画室609 摆放/轴对齐/裁剪 + 玩家朝向（§6.8）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
+
+合计 **269 项**（2026-10-14 实测 269 PASS / 0 FAIL）。
 
 除 `_verify_splat` 外建议都加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例
 慢很多（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
@@ -591,10 +594,10 @@ _arisu_learn/
 │  ├─ README.md             说明：泼溅数据要求与摆放参数
 │  ├─ school_playable.sogdata  **实际加载**的校园泼溅（清理版，86.6 MB）※不随仓库分发
 │  ├─ school_raw.sogdata       原始未清理扫描（仅存档）※不随仓库分发
-│  └─ room609.sogdata          「画室 609」扫描（40.7 MB / 2,774,116 点）※不随仓库分发
+│  └─ room609.sogdata          「画室 609」扫描（40.7 MB / 2,774,116 点，裁后 2,769,851）※不随仓库分发
 ├─ scenes/
 │  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 四面隐形护栏 + 下沉校园
-│  │                        + 2 位 Boss + 7 名同伴）
+│  │                        + **平台上的画室609**（§6.8）+ 2 位 Boss + 7 名同伴）
 │  ├─ player.tscn           玩家（模型 + 动画 + 武器 + 相机）
 │  ├─ companion.tscn        同伴（模型由 companion.gd 按 model_path 运行时实例化）
 │  └─ main.tscn             动画查看器
@@ -604,10 +607,11 @@ _arisu_learn/
 │  ├─ anim_driver.gd        动画驱动（直接 AnimationPlayer）
 │  ├─ weapon.gd             开火 / 弹药 / 换弹 / 弹丸 / 特效 / 子弹穿透朋友层
 │  ├─ boss.gd               Boss 木桩基类：骨架盒 or 网格盒定尺寸、贴图表、血条信号（第七节）
-│  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放（第六节）
+│  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放 + 锚点摆放 + 裁剪（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd
-│  ├─ _verify_*.gd          [工具] 自检（见 §1.11、§7.6、§8.4）
+│  │                        （hud.gd 的泼溅状态、Boss 血条都是**一份场地/一位 Boss 一行**）
+│  ├─ _verify_*.gd          [工具] 自检（见 §1.11、§7.6、§8.4、§6.8）
 │  ├─ _capture.gd           [工具] 24 条动作取样帧
 │  ├─ _pose_shots.gd        [工具] 多机位姿势检查
 │  ├─ _play_shots.gd        [工具] 玩法全流程截图
@@ -896,8 +900,9 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 & $g --path $p --script res://scripts/_verify_final.gd -- --splat=off
 ```
 
-`SplatScene` 支持两个命令行覆盖：`-- --splat=off`（完全不加载）与
-`-- --splat-cache=auto|off|refresh`（展开缓存策略）。
+`SplatScene` 支持三个命令行覆盖：`-- --splat=off`（完全不加载）、
+`-- --splat-cache=auto|off|refresh`（展开缓存策略）、
+`-- --venue=room|campus|all`（只加载指定场地，见 §6.8）。
 
 ## 6.7 运行
 
@@ -915,6 +920,127 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 数据里 >99.9‰ 的 floaters 被 ×25 放大后高到 y ≈ +24 m，在平台上方表现为
 几团白色光斑（像云）。想根治需要用 `splat-transform` 重新过滤数据；
 把下沉量拉到 37 m 以上也能压住，但那样校园就看不见了。
+
+## 6.8 「画室609」：平台上的第二块场地
+
+第二份扫描 `splatdata/room609.sogdata` 是**教室内部**（不是航拍），所以它跟校园那份
+的接法完全不同：校园只能从上方俯瞰，画室是**站在里面**玩的。它被摆在悬浮平台
+**中央**、放大到接近铺满。
+
+| 项 | 值 |
+|---|---|
+| 数据 | `splatdata/room609.sogdata`：2,774,116 点 / 40.7 MB（SOG v2） |
+| 裁后点数 | **2,769,851**（丢 4,265，其中椭球过大的 4 个） |
+| 首次解码 / 缓存命中 | ≈ 21 s / ≈ 1.5 s |
+| `world_scale` | **6.4** → 世界 36.0 × 12.5 × 41.0 m（平台 40 × 40 m） |
+| `yaw_degrees` | **248.6**（把房间矩形转成轴对齐，见下） |
+| 摆放 | `auto_place = false` + `use_anchor = true`，把源坐标的地板中心 (0.022, −0.333, −0.121) 对到平台地面 (0, 0.03, 0) |
+| 地板平面（实测） | y = **0.068**，质心 (−0.62, −1.42) —— 贴在平台地面上 |
+| 顶面 | y = 8.16 m（离群 floaters 裁掉前会到 ≈ 97 m） |
+| 帧率 | ⚠️ 与校园**同时**加载时点数相加，见下面的显存一节 |
+
+### 摆放为什么要用「锚点」而不是自动摆放
+
+校园是航拍薄饼，适合「水平居中 + 顶面沉到 −top_gap」；画室是**有地板的房间**，
+地板必须**正好落在平台地面上**，既不能沉下去也不能飘起来。所以
+`splat_scene.gd` 加了第三种摆放：`use_anchor` —— 把源坐标里的一个已知点
+（这里就是量出来的地板中心）对到节点局部空间的 `anchor_world`：
+
+```
+offset = anchor_world − 局部基 × anchor_source
+```
+
+源数据里「地板平面 y = −0.333」和「地板矩形中心」都是 `_probe_room_layout.gd`
+量出来的常量，比手算 offset 稳，也不受 `content_bounds()` 分位数抖动影响。
+`anchor_world.y` 用 0.03 而不是 0，是留 3 cm 防止和平台面 z-fighting。
+
+### ⚠️ 裁剪：这份数据的 floaters 必须裁，不能靠下沉
+
+俯拍重建里总有少量又大又远的离群椭球（本份实测 0.2% 的点，单个椭球尺度可达
+15.13 源单位）。校园那份靠 `top_gap = 12` 把它们顶到平台上方就看不见了，
+但**摆在平台上的房间没有这个余量**，放大 6.4 倍后它们就是糊满屏的大白团。
+
+所以 `splat_scene.gd` 加了 `crop_enabled / crop_margin / crop_max_scale`：
+按内容 1‰~99.9‰ 分位盒外扩 0.5 源单位、再丢掉椭球标准差 > 0.5 的点。
+实现按**连续段**整段复制（`slice` + `append_array`），277 万点只花约 0.3 s。
+
+### ⚠️ 轴对齐：上一版把 288.1 当成对齐角，其实歪了 39.5°
+
+这是本项目第二个「量法本身错了」的坑，值得单独记：
+
+`_probe_room_layout.gd` 打印的「主轴偏角 −18.10°」是 XZ 协方差主轴 **相对 +X**
+的角度，却被当成「相对 +Z」用了；而且地板只有 4.87 × 5.40 源单位，**接近正方形**，
+主轴本身就不稳定。结果上一版挑的四个候选角（18.1 / 108.1 / 198.1 / 288.1）
+**全都歪了 39.5°** —— 房间里所有桌椅都是斜的，出生点还正好卡在一张桌子里面。
+
+换的量法：**墙直方图的峰值集中度** `Σn²/N²`。把点云绕 Y 转一个角度后按 x（和 z）
+打 0.25 m 直方图，轴对齐时两面墙会叠进同一格形成尖峰，歪了峰就摊平。
+实测：
+
+```
+墙直方图集中度（x 峰 + z 峰）
+  转 0°（288.1）: 0.0188      转 −39.5°（248.6）: 0.0307
+  x 轴 0.00994 → 0.02106      z 轴 0.00889 → 0.00967
+```
+
+矫正后角谱在 **mod 90° 上严格重复**（矩形特征），峰正落在 0°。
+
+这个判据自带一个**合成自检**：把点云人为转 +23°，扫描必须正好少给 23°
+（实测差 0.00°），这样才不会又把符号搞反 —— 本喵在同伴朝向那轮已经栽过一次。
+自检在 `_verify_room.gd` §3，换数据或换角度后重跑它，**别凭眼睛调 yaw**。
+
+### ⚠️ 显存：两份泼溅同时加载是按「点数之和」算的
+
+GDGS 把场上所有 `GaussianSplatNode` 的点**合并成一个 GPU 缓冲**
+（`addons/gdgs/runtime/render/compute/gaussian_scene_registry.gd` 的
+`merged_point_data`），而且 Compute 后端还会按总点数分配裁剪 / 排序 / 实例索引
+缓冲。也就是说：
+
+```
+校园 6,150,154 + 画室 2,769,851 ≈ 892 万点
+点数据        892 万 × 240 B ≈ 2.04 GiB
+裁剪缓冲      892 万 × 64 B  ≈ 0.53 GiB
+排序键 + 值   892 万 × 10 × 4 × 2 × 2 ≈ 1.36 GiB
+                        ─────────────────
+                        合计 ≈ 4 GiB（还没算渲染贴图与驱动开销）
+```
+
+本机是 RTX 4060 Laptop（8 GB），这个量级要小心。所以 `SplatScene` 加了
+**场地标签** `venue` 和命令行开关：
+
+```powershell
+& $g --path $p                                            # 两份都加载（默认）
+& $g --path $p -- --venue=room                            # 只加载画室609
+& $g --path $p -- --venue=campus                          # 只加载校园
+& $g --path $p -- --venue=all                             # 等同默认
+```
+
+⚠️ `visible = false` **不等于**释放显存：节点还在场、还在注册表里，
+GPU 缓冲照样占着。要省显存就得真的按 `--venue` 只加载一份。
+
+### 已知取舍
+
+- **房间没有碰撞**：墙可以穿过去。平台那圈 0.7 m 的隐形护栏还在，所以走路掉不下去，
+  助跑起跳仍然能翻出去看校园
+- **×6.4 是「巨人画室」**：桌子和画架有 2~4 m，Arisu 只有 1.4 m。这是为了
+  「铺满 40 × 40 平台」刻意放大的；想要真人比例把 `world_scale` 改成 **1.5~2** 就行
+  （就是一个数字，摆放用的是锚点，改缩放不用重算 offset）
+- **出生点附近家具很密**：出生点 (0, 0.05, 6) 落在房间中段，正前方是过道；
+  想换个开场位置就改 `game.tscn` 里 Player 的 transform —— 但那会影响
+  §1.11 里几条射击自检的弹道，改之前先看 §1.4 和 §7.2 的注释
+- HUD 左上角现在是**一场一行**（`hud.gd` 的 `bind_splats()`），两份同时解码时
+  能分清是哪一份在等
+
+### 自检
+
+```powershell
+& $g --path $p --script res://scripts/_verify_room.gd      # 43 项
+```
+
+它会在**入树前**把校园那份摘掉（`_ready()` 是 `add_child` 时才跑的，此刻摘掉就不会
+开始解码），然后验：场景结构 / 点数与裁剪统计 / 地板 y 与质心 / 世界尺寸 /
+轴对齐（含合成自检）/ floaters 是否真裁干净 / HUD 多行是否按行号路由 /
+Arisu 的朝向 / 7 张渲图。
 
 ---
 
@@ -1316,7 +1442,7 @@ cd <仓库目录>
 #    models/companions/{Mika,Yuuka,Noa,Momoi,Midori,Yuzu,Kei}.glb
 # ③ 可选：两位 Boss（没有就删掉 Boss / BossPig 节点）
 #    models/boss/优香霸王龙.fbx + 贴图、models/boss_pig/猪猪优香.fbx + 贴图
-# ④ 可选：放入泼溅数据（没有就用 --splat=off）
+# ④ 可选：放入泼溅数据（没有就用 --splat=off；只想留一份就用 --venue=，见 §6.8）
 #    splatdata/school_playable.sogdata、splatdata/room609.sogdata   见 splatdata/README.md
 
 & <godot 4.7 mono 版> --path .              # 有泼溅数据

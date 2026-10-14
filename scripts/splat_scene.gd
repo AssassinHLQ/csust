@@ -37,8 +37,14 @@ const STRUCT_SIZE := 60          # 每点 60 个 float
 const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 
 @export_file("*.sogdata", "*.sog") var sog_path := "res://splatdata/school_playable.sogdata"
-## HUD 状态行上显示的名字
+## HUD 状态行上显示的名字（一场一行，前缀就是它）
 @export var display_name := "泼溅场景"
+## 场地标签：启动参数 `--venue=<标签>` 时**只加载标签相同的那几份**，空 = 永远加载。
+## 为什么需要：两份泼溅同时常驻时，GDGS 是把所有节点的点合并成一个 GPU 缓冲的
+## （见 gaussian_scene_registry.gd 的 merged_point_data），显存按**点数之和**涨。
+## 校园 615 万 + 画室 277 万 ≈ 893 万点，光点数据就 2.04 GiB，加排序/裁剪缓冲
+## 约 4 GiB —— 8 GB 显卡上必须能按场地拆开跑，这就是那个开关。
+@export var venue := ""
 ## "off" 发行用；"auto" 开发期第二次启动秒进；"refresh" 强制重建缓存
 @export_enum("off", "auto", "refresh") var cache_mode := "auto"
 ## 扫描是「模型尺度」，需要放大。×25 时内容约 211 × 160 m（真实校园尺度）
@@ -90,10 +96,16 @@ func _ready() -> void:
 	# 命令行覆盖：
 	#   godot ... -- --splat-cache=off    不走展开缓存
 	#   godot ... -- --splat=off          完全不加载泼溅
+	#   godot ... -- --venue=room         只加载 venue 标签是 room 的那份（all = 全都要）
 	# 加 --splat=off 是给玩法自检用的：615 万点的光栅化会拖慢每一条渲染相关的用例。
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--splat-cache="):
 			cache_mode = a.substr(14)
+		elif a.begins_with("--venue="):
+			var want := a.substr(8)
+			if want != "" and want != "all" and venue != "" and venue != want:
+				print("[SplatScene] %s 不在 --venue=%s 里，跳过" % [display_name, want])
+				return
 		elif a == "--splat=off" or a == "--no-splat":
 			print("[SplatScene] 命令行要求跳过泼溅加载")
 			return

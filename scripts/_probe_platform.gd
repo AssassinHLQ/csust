@@ -22,6 +22,10 @@ func _initialize() -> void:
 func _run() -> void:
 	root.size = Vector2i(1600, 900)
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	# 本探针只关心校园那份的下沉量：入树前摘掉画室609（见 _verify_splat.gd 的注释）
+	var room := game.get_node_or_null("Room609")
+	if room != null:
+		room.free()
 	root.add_child(game)
 	await process_frame
 	await process_frame

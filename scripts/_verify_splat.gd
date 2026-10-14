@@ -19,6 +19,12 @@ func _initialize() -> void:
 func _run() -> void:
 	root.size = Vector2i(1600, 900)
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	# 本套件只验校园那一份：把画室609 摘掉再入树。
+	# ⚠️ 必须在 add_child **之前**摘：节点是入树时才跑 _ready()，那时候才开始解码；
+	#    入树后再 queue_free 的话 277 万点已经开始解了，白等 20 s。
+	var room := game.get_node_or_null("Room609")
+	if room != null:
+		room.free()
 	root.add_child(game)
 	await _wait(20)
 
