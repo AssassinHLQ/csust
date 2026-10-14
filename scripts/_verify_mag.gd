@@ -187,6 +187,55 @@ func _run() -> void:
 	print("\n  靶子过程最低血量 %.0f（开场 %.0f）  出现过击毁 = %s" % [
 		min_hp, hp_before, str(saw_dead)])
 	_check(min_hp < hp_before, "连发期间弹道正确命中靶子（血量掉到 %.0f）" % min_hp)
+
+	print("\n========== 4. 光弹不能伸到**身后**，且起点在弹道上 ==========")
+	# 用户报「子弹发送位置太靠后」。查下来是两个叠加的几何 bug：
+	#   ① 光柱是**以节点为原点居中**的圆柱，老版本把节点放在枪口 →
+	#      最长 4.4 m 的光柱有一半伸到身后（身后 2.2 m）；
+	#   ② look_at + rotate_object_local 那一对把轴向转到了**反方向**。
+	# 现在改成「弹头在 travel、尾巴在 travel − len0」的一段，永远不会到身后。
+	weapon.current_ammo = weapon.magazine_size
+	weapon._cooldown = 0.0
+	weapon.trigger_up()
+	await _wait(3)
+	weapon.shoot()      # 同步生成光弹，不等帧才对得上
+	var behind := 0
+	var checked := 0
+	var min_along := INF
+	for item in weapon._in_flight:
+		var mi: MeshInstance3D = item[0]
+		if not is_instance_valid(mi):
+			continue
+		var dir: Vector3 = item[5]
+		var from: Vector3 = item[6]
+		var half := mi.scale.y * 0.55 * 0.5      # 圆柱基准高度 TRACER_LEN = 0.55
+		var a := mi.global_position - dir * half
+		var b := mi.global_position + dir * half
+		var ta := (a - from).dot(dir)
+		var tb := (b - from).dot(dir)
+		min_along = minf(min_along, minf(ta, tb))
+		if ta < -0.02:
+			behind += 1
+		checked += 1
+	print("  在飞的光弹 %d 个，最靠后的端点 = %+.3f m（0 = 起点；负数就是伸到身后了）" % [
+		checked, min_along if min_along < INF else 0.0])
+	_check(checked > 0, "确实抓到了刚生成的光弹")
+	_check(behind == 0, "没有任何光弹伸到起点之后（%d 个）" % behind)
+
+	# 光弹起点应该在弹道那条线上（枪口骨离弹道实测 1.3 m，直接用它会让弹
+	# 从角色身侧斜着飞出去 —— fx_on_aim_line 就是干这个的）
+	var cam3 := player.cam
+	var ray_o := cam3.global_position + cam3.global_transform.basis * weapon.muzzle_offset
+	var ray_d := player.camera_forward()
+	var off_axis := INF
+	for item in weapon._in_flight:
+		var from2: Vector3 = item[6]
+		var v := from2 - ray_o
+		off_axis = minf(off_axis, (v - ray_d * v.dot(ray_d)).length())
+	print("  光弹起点离弹道 %.3f m（fx_on_aim_line = %s）" % [off_axis, str(weapon.fx_on_aim_line)])
+	if weapon.fx_on_aim_line:
+		_check(off_axis < 0.05, "光弹起点落在弹道上（偏离 %.3f m）" % off_axis)
+
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)
 	quit(1 if _fail > 0 else 0)

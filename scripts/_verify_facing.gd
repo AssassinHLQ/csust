@@ -127,6 +127,58 @@ func _run() -> void:
 		print("  [FAIL] 开镜时正对镜头（点积 %+.2f）" % f_aim.dot(to_move)); fail += 1
 	player._set_aiming(false)
 
+	print("\n========== 6. 滚轮拉近 / 拉远 ==========")
+	# 这一条是补的：README §1.1 和 HUD 提示里一直写着「滚轮 拉近拉远」，
+	# 但代码里**从来没实现过**（用户报「滚轮的摄像头远近没有生效」）。
+	# 现在 player.gd 的 _input 处理滚轮，改的是 _zoom_distance（腰射距离），
+	# 开镜时仍然走 aim_distance。
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if player.aiming:
+		player._set_aiming(false)
+	var base := player.spring.spring_length
+	var wheel_down := InputEventMouseButton.new()
+	wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel_down.pressed = true
+	player._input(wheel_down)
+	await _wait(60)
+	print("  下滚一格：_zoom_distance = %.2f  spring_length = %.2f（原 %.2f）" % [
+		player._zoom_distance, player.spring.spring_length, base])
+	if player._zoom_distance > player.hip_distance:
+		print("  [PASS] 下滚把距离推远了（%.2f > 默认 %.2f）" % [player._zoom_distance, player.hip_distance])
+	else:
+		print("  [FAIL] 下滚没有改变距离（%.2f）" % player._zoom_distance); fail += 1
+	if player.spring.spring_length > base + 0.1:
+		print("  [PASS] 相机真的被推远了（%.2f → %.2f）" % [base, player.spring.spring_length])
+	else:
+		print("  [FAIL] 相机长度没变（%.2f → %.2f）" % [base, player.spring.spring_length]); fail += 1
+
+	for _i in 60:
+		player._input(wheel_down)
+	await _wait(80)
+	print("  连滚到底：_zoom_distance = %.2f（zoom_max = %.2f）" % [
+		player._zoom_distance, player.zoom_max])
+	if is_equal_approx(player._zoom_distance, player.zoom_max):
+		print("  [PASS] 到底被 zoom_max 卡住")
+	else:
+		print("  [FAIL] 没被 zoom_max 卡住（%.2f）" % player._zoom_distance); fail += 1
+
+	var wheel_up := InputEventMouseButton.new()
+	wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel_up.pressed = true
+	for _i in 120:
+		player._input(wheel_up)
+	await _wait(120)
+	print("  连滚到顶：_zoom_distance = %.2f（zoom_min = %.2f）  spring_length = %.2f" % [
+		player._zoom_distance, player.zoom_min, player.spring.spring_length])
+	if is_equal_approx(player._zoom_distance, player.zoom_min):
+		print("  [PASS] 到顶被 zoom_min 卡住")
+	else:
+		print("  [FAIL] 没被 zoom_min 卡住（%.2f）" % player._zoom_distance); fail += 1
+	if player.spring.spring_length < base:
+		print("  [PASS] 拉近后相机确实更近了（%.2f < %.2f）" % [player.spring.spring_length, base])
+	else:
+		print("  [FAIL] 拉近没生效（%.2f）" % player.spring.spring_length); fail += 1
+
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % fail)
 	quit(1 if fail > 0 else 0)

@@ -35,6 +35,14 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var skeleton_path: NodePath
 ## 弹道起点相对相机的偏移，保证起点落在准星线上
 @export var muzzle_offset := Vector3(0.24, -0.1, -0.35)
+## 光弹 / 枪口火光的**视觉**起点：true = 把枪口骨投影到弹道那条线上（推荐）。
+## 为什么需要：这个模型的枪**不在手上**（README §1.9），枪口骨在腰侧，
+## 实测离弹道 **1.3 m**、高度只有 0.25 m。直接拿枪口当起点，光弹会从角色身侧
+## 斜着飞出去，看起来就是「子弹不是从枪口出来的」。投影到弹道上之后，
+## 光弹沿着准星方向从角色身体里飞出去，观感才对。
+@export var fx_on_aim_line := true
+## 投影之后再沿弹道往前推多少米（正数 = 更靠前）
+@export var fx_forward := 0.0
 
 # --- 弹丸视觉 ---
 @export var tracer_speed := 260.0       # 弹丸飞行速度（米/秒）
@@ -197,7 +205,12 @@ func _fire_raycast() -> void:
 			str(origin.snappedf(0.01)), str(dir.snappedf(0.01)), str(hit != null), str(collider)])
 
 	var muzzle_pos := muzzle.global_position
-	_spawn_tracer(muzzle_pos, impact)
+	# 视觉起点（见 fx_on_aim_line 的注释）
+	var fx_from := muzzle_pos
+	if fx_on_aim_line:
+		var along := clampf((muzzle_pos - origin).dot(dir), 0.2, range_meters)
+		fx_from = origin + dir * (along + fx_forward)
+	_spawn_tracer(fx_from, impact)
 
 	if collider and collider.has_method("take_damage"):
 		collider.take_damage(damage, impact, -dir)
@@ -206,8 +219,8 @@ func _fire_raycast() -> void:
 		collider.get_parent().take_damage(damage, impact, -dir)
 		hit_confirmed.emit(collider.get_parent(), impact)
 
-	_muzzle_flash()
-	_schedule_impact(impact, normal, muzzle_pos.distance_to(impact) / maxf(tracer_speed, 1.0))
+	_muzzle_flash(fx_from)
+	_schedule_impact(impact, normal, fx_from.distance_to(impact) / maxf(tracer_speed, 1.0))
 
 
 func _apply_spread(dir: Vector3, amount: float) -> Vector3:
@@ -271,18 +284,33 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	var total := from.distance_to(to)
 	if total < 0.05:
 		return
+	var dir := (to - from).normalized()
+	# 光弹长度：目标越远越长（封顶 3 倍），但不超过整条弹道
+	var len0 := minf(TRACER_LEN * clampf(total / TRACER_LEN, 1.0, 3.0), total)
 	var mi := MeshInstance3D.new()
 	mi.mesh = _tracer_mesh
 	mi.material_override = _tracer_mat
 	_fx_root.add_child(mi)
-	mi.global_position = from
-	var dir := (to - from).normalized()
-	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
-	mi.look_at(to, up)
-	mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)
-	var visual_scale := clampf(total / TRACER_LEN, 1.0, 8.0)
-	mi.scale = Vector3(1.0, visual_scale, 1.0)
-	_in_flight.append([mi, total, to, 0.0, visual_scale])
+	_orient_tracer(mi, dir)
+	mi.scale = Vector3(1.0, maxf(len0, 0.02) / TRACER_LEN, 1.0)
+	# ⚠️ 光柱是**以节点为原点居中**的圆柱，所以节点要放在这一段的**中间**。
+	#    老版本把节点放在枪口，于是圆柱有一半伸到**身后**去（最长 4.4 m 时
+	#    身后 2.2 m），玩家看到的就是「子弹从背后飞出来」—— 用户报的就是这个。
+	mi.global_position = from + dir * (len0 * 0.5)
+	_in_flight.append([mi, total, to, 0.0, len0, dir, from])
+
+
+## 让圆柱的**轴向（局部 +Y）**对准飞行方向。
+## ⚠️ 别用 `look_at()` + `rotate_object_local(RIGHT, PI/2)` 那一对：
+##    它们合起来会把轴向转到**反方向**去（老版本的另一半 bug）。
+func _orient_tracer(mi: MeshInstance3D, dir: Vector3) -> void:
+	var ref := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var x := ref.cross(dir)
+	if x.length() < 0.001:
+		x = Vector3.RIGHT
+	x = x.normalized()
+	var z := x.cross(dir).normalized()
+	mi.basis = Basis(x, dir, z)
 
 
 func _advance_tracers(delta: float) -> void:
@@ -296,18 +324,22 @@ func _advance_tracers(delta: float) -> void:
 		if not is_instance_valid(mi):
 			done.append(i)
 			continue
-		item[3] = float(item[3]) + step
 		var total: float = item[1]
-		var travel: float = item[3]
+		var travel: float = float(item[3]) + step
+		item[3] = travel
+		var len0: float = item[4]
+		var dir: Vector3 = item[5]
+		var from: Vector3 = item[6]
 		if travel >= total:
 			mi.queue_free()
 			done.append(i)
 			continue
-		# 光弹沿弹道往前滑，尾部跟着收，看起来就是一颗在飞的弹
-		var frac := clampf(travel / total, 0.0, 1.0)
-		var tail := maxf(1.0 - frac, 0.05)
-		mi.scale.y = maxf(float(item[4]) * tail, 0.05)
-		mi.global_position = mi.global_position.lerp(item[2], clampf(step / maxf(total - travel + step, 0.001), 0.0, 1.0))
+		# 光弹 = 跟在弹头后面的一段短光柱：弹头在 travel，尾巴在 travel − len0。
+		# 起段从起点往外长，长到 len0 之后就整体往前滑 —— **永远不会伸到身后**。
+		var tail := maxf(travel - len0, 0.0)
+		var seg := maxf(travel - tail, 0.02)
+		mi.scale.y = seg / TRACER_LEN
+		mi.global_position = from + dir * ((travel + tail) * 0.5)
 	done.reverse()
 	for i in done:
 		_in_flight.remove_at(i)
@@ -324,12 +356,13 @@ func _schedule_impact(pos: Vector3, normal: Vector3, delay: float) -> void:
 
 # --- 特效 ---
 
-func _muzzle_flash() -> void:
+func _muzzle_flash(at: Vector3) -> void:
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.86, 0.55)
 	light.light_energy = 3.5
 	light.omni_range = 3.0
-	muzzle.add_child(light)
+	_fx_root.add_child(light)
+	light.global_position = at
 
 	var quad := MeshInstance3D.new()
 	var qm := QuadMesh.new()
@@ -346,7 +379,7 @@ func _muzzle_flash() -> void:
 	qm.material = mat
 	quad.rotation.z = randf() * TAU
 	_fx_root.add_child(quad)
-	quad.global_position = muzzle.global_position
+	quad.global_position = at
 
 	var tw := quad.create_tween()
 	tw.set_parallel(true)

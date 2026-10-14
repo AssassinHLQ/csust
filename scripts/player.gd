@@ -65,6 +65,12 @@ const CAMERA_FORWARD_OFFSET := PI
 @export var pitch_min := -1.15
 @export var pitch_max := 1.15
 @export var hip_distance := 4.2
+## 滚轮能拉到的最近 / 最远距离（米）。**这一条以前只在 README 和 HUD 提示里写着，
+## 代码里根本没实现** —— 用户报「滚轮的摄像头远近没有生效」就是这个。
+@export var zoom_min := 1.8
+@export var zoom_max := 9.0
+## 滚轮每格改变多少米
+@export var zoom_step := 0.35
 ## 平视高度。跑动动画本身前倾偏大，相机压低一点（且俯角小）能明显减轻
 ## 「人像在往前栽」的观感 —— 这是目前最有效的调节项。
 @export var hip_height := 1.62
@@ -89,6 +95,8 @@ var _recoil_pitch := 0.0
 var _recoil_yaw := 0.0
 var _fire_held := false
 var _aim_held := false
+## 滚轮调出来的「腰射距离」，独立于 hip_distance（开镜时仍然走 aim_distance）
+var _zoom_distance := 0.0
 
 @onready var rig: Node3D = $CameraRig
 @onready var spring: SpringArm3D = $CameraRig/SpringArm3D
@@ -107,6 +115,7 @@ func _ready() -> void:
 	_facing_yaw = _yaw + CAMERA_FORWARD_OFFSET
 	model_root.rotation.y = _facing_yaw
 	rig.rotation.y = _yaw
+	_zoom_distance = hip_distance
 	_apply_camera(1.0)
 
 
@@ -117,6 +126,18 @@ func _input(event: InputEvent) -> void:
 		_yaw -= mm.relative.x * mouse_sensitivity
 		_pitch = clampf(_pitch - mm.relative.y * mouse_sensitivity, pitch_min, pitch_max)
 		return
+
+	# --- 鼠标滚轮：拉近 / 拉远 ---
+	# 只在鼠标被捕获（真正在玩）时响应；按 Esc 释放鼠标后滚动页面不该动相机。
+	if event is InputEventMouseButton and event.pressed \
+		and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_distance = clampf(_zoom_distance - zoom_step, zoom_min, zoom_max)
+			return
+		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_distance = clampf(_zoom_distance + zoom_step, zoom_min, zoom_max)
+			return
 
 	# --- 键盘 ---
 	if event is InputEventKey and (event as InputEventKey).pressed \
@@ -249,7 +270,7 @@ func _physics_process(delta: float) -> void:
 ## 相机平滑：开镜时拉近、抬高、右肩偏移、缩 FOV
 func _apply_camera(delta: float) -> void:
 	var t := clampf(cam_lerp * delta, 0.0, 1.0)
-	spring.spring_length = lerpf(spring.spring_length, aim_distance if aiming else hip_distance, t)
+	spring.spring_length = lerpf(spring.spring_length, aim_distance if aiming else _zoom_distance, t)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else hip_shoulder), t)
 	rig.position.y = lerpf(rig.position.y, aim_height if aiming else hip_height, t)
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)

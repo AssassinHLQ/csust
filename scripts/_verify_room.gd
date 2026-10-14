@@ -16,7 +16,7 @@ const ROOM_NAME := "Room609"
 const CAMPUS_NAME := "SplatScene"
 ## 量出来的期望值（splatdata/README.md 里同步记着），对不上就是有人改了场景
 const EXPECT_POINTS := 2769851
-const EXPECT_SCALE := 2.0
+const EXPECT_SCALE := 5.0
 const EXPECT_YAW := 248.6
 const FLOOR_Y := 0.03
 
@@ -29,18 +29,16 @@ func _run() -> void:
 	root.size = Vector2i(1600, 900)
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
 
-	print("========== 1. 场景结构（两块场地的标签）==========")
+	print("========== 1. 场景结构 ==========")
 	var campus: SplatScene = game.get_node_or_null(CAMPUS_NAME) as SplatScene
 	var room: SplatScene = game.get_node_or_null(ROOM_NAME) as SplatScene
-	_check(campus != null, "场景里有校园 %s" % CAMPUS_NAME)
+	# 校园已经搬去 res://scenes/campus_venue.tscn（用户要求），本场景不该再有它
+	_check(campus == null, "游戏场景里已经没有校园 %s（已搬到 campus_venue.tscn）" % CAMPUS_NAME)
 	_check(room != null, "场景里有画室609 %s" % ROOM_NAME)
 	if room == null:
 		print("\n画室609 节点不存在，后面没法验")
 		_quit()
 		return
-	if campus != null:
-		_check(campus.venue == "campus", "校园 venue = campus（实测 %s）" % campus.venue)
-		_check(campus.display_name == "校园", "校园 display_name = 校园")
 	_check(room.venue == "room", "画室609 venue = room（实测 %s）" % room.venue)
 	_check(room.display_name == "画室609", "画室609 display_name = 画室609")
 	_check(room.sog_path.ends_with("room609.sogdata"),
@@ -54,7 +52,9 @@ func _run() -> void:
 	_check(room.crop_enabled, "crop_enabled 打开（裁离群 floaters）")
 	_check(is_equal_approx(room.crop_max_scale, 0.5), "crop_max_scale = 0.5")
 
-	# 入树前摘掉校园：_ready() 是 add_child 时才跑的，此刻摘掉就不会开始解码
+	# 入树前摘掉校园（现在场景里已经没有它了，这段只是**保险**：万一以后有人把
+	# res://scenes/campus_venue.tscn 又实例化回 game.tscn，本套件不该被拖慢）。
+	# 为什么要在入树前摘：_ready() 是 add_child 时才跑的，那时才开始解码。
 	if campus != null:
 		campus.free()
 	root.add_child(game)
@@ -102,9 +102,9 @@ func _run() -> void:
 	var span_lo := maxf(aabb.size.x, aabb.size.z)
 	var span_hi := minf(aabb.size.x, aabb.size.z)
 	print("  XZ 占地 %.1f × %.1f m（平台 40 × 40）" % [aabb.size.x, aabb.size.z])
-	_check(span_lo > 9.0 and span_lo < 14.0, "长边 %.1f m：真人尺度的教室" % span_lo)
-	_check(span_hi > 7.0 and span_hi < 12.0, "短边 %.1f m" % span_hi)
-	_check(aabb.size.y > 2.0 and aabb.size.y < 8.0,
+	_check(span_lo > 26.0 and span_lo < 36.0, "长边 %.1f m（×5 的「神秘力量放大版」）" % span_lo)
+	_check(span_hi > 24.0 and span_hi < 32.0, "短边 %.1f m" % span_hi)
+	_check(aabb.size.y > 7.0 and aabb.size.y < 13.0,
 		"包围盒高 %.1f m（含地板下方的重建噪声）" % aabb.size.y)
 
 	# ⚠️ 真人尺度下最容易翻车的一条：**相机到天花板的余量**。
@@ -127,8 +127,8 @@ func _run() -> void:
 	# 地板平面：竖向直方图峰值（**不能**用 content_min.y 代替 —— 裁剪盒外扩过，
 	# 最低点可以比地板还低）
 	var floor := _floor_plane(pts)
-	_check(room.content_top_y() - float(floor["y"]) > 1.8
-			and room.content_top_y() - float(floor["y"]) < 5.0,
+	_check(room.content_top_y() - float(floor["y"]) > 4.5
+			and room.content_top_y() - float(floor["y"]) < 9.0,
 		"室内净高 %.2f m（地板面到顶面）" % (room.content_top_y() - float(floor["y"])))
 	print("  地板平面 y = %.3f（直方图峰值，样本 %d 点）  地板质心 = (%.2f, %.2f)" % [
 		floor["y"], floor["count"], floor["cx"], floor["cz"]])
@@ -276,21 +276,27 @@ func _run() -> void:
 	#    3 s 只走 6 m，正好停在门口，会被误判成「门被堵住了」（本喵踩过）。
 	player.set_process_input(false)
 	var wall_inner := rhi.x - room.box_wall_thickness
-	_pose(player, Vector3(0, 0.05, 6), 0.0, -0.04)
+	_pose(player, Vector3(0, 0.05, room.anchor_world.z), 0.0, -0.04)
 	await _wait(20)
 	Input.action_press("move_right")
 	Input.action_press("sprint")
-	await _wait_ms(3000)
+	# ⚠️ 跑到顶住为止，别用固定时长：房间尺寸随 world_scale 变，
+	#    ×5 时墙在 13 m 外，写死 3 秒会跑不到（然后被误判成「穿墙了」）。
+	var wall_goal := wall_inner - 0.45
+	var t_reach := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_reach < 8000 and player.global_position.x < wall_goal:
+		await process_frame
 	Input.action_release("sprint")
 	Input.action_release("move_right")
 	await _wait(10)
 	var px := player.global_position.x
-	print("  朝 +X 冲刺 3 s 后 x = %.2f（墙内面 x = %.2f，胶囊半径 0.3）" % [px, wall_inner])
+	print("  朝 +X 冲刺到顶墙用了 %d ms，x = %.2f（墙内面 x = %.2f，胶囊半径 0.3）" % [
+		Time.get_ticks_msec() - t_reach, px, wall_inner])
 	_check(px > wall_inner - 0.45, "确实顶到了墙（x = %.2f）" % px)
 	_check(px < wall_inner + 0.05, "被 x+ 墙挡住，没穿过去（x = %.2f）" % px)
 	_check(player.global_position.y > -1.0, "人还站在地板上（y = %.2f）" % player.global_position.y)
 
-	_pose(player, Vector3(0, 0.05, 6), 0.0, -0.04)
+	_pose(player, Vector3(0, 0.05, room.anchor_world.z), 0.0, -0.04)
 	await _wait(20)
 	Input.action_press("move_forward")
 	Input.action_press("sprint")
@@ -376,11 +382,20 @@ func _run() -> void:
 			#    所以 `_verify_companion.gd` 的骨骼判据可以照用，这里不行。
 			#    改用**几何事实**：嘴那几块网格（README §2.1：Mouth_401…Mouth_705）
 			#    相对骨盆的水平方向，就是脸朝哪边。
-			var mouth := _mouth_forward(player.model_root, skel)
-			print("  嘴网格相对骨盆的方向 = %s" % str(mouth.snappedf(0.01)))
-			_check(mouth != Vector3.ZERO, "找到嘴网格并量出方向")
-			_check(mouth.dot(real_fwd) > 0.5,
-				"嘴朝向 = 相机视线（点积 %.3f > 0.5，反了会是负数）" % mouth.dot(real_fwd))
+			# ⚠️ 单帧的嘴方向**不能**当判据：待机里带头部转动，实测同一套参数在
+			#    不同帧上给出过 0.995 / 0.811 / 0.448 / 0.274 —— 全靠运气。
+			#    所以取 60 帧里的**最大 / 最小**点积：反了的话两个值都会是负的。
+			var best_dot := -2.0
+			var worst_dot := 2.0
+			for _j in 60:
+				await process_frame
+				var d := _mouth_forward(player.model_root, skel).dot(real_fwd)
+				best_dot = maxf(best_dot, d)
+				worst_dot = minf(worst_dot, d)
+			print("  嘴朝向在 60 帧里的点积范围 %+.3f ~ %+.3f（转头会摆，所以看范围）" % [
+				worst_dot, best_dot])
+			_check(best_dot > 0.5,
+				"嘴朝着相机方向（最好 %.3f > 0.5；反了的话最坏会是 −0.9 那种）" % best_dot)
 
 	print("\n========== 8. 渲图 ==========")
 	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
