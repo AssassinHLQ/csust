@@ -1,0 +1,33 @@
+# ---- Godot 引擎缓存与产物（官方模板）----
+.godot/
+/android/
+*.translation
+
+# ---- 私有素材：版权不属于本项目，不随仓库分发 ----
+# 理由见 THIRD_PARTY.md
+#
+# 角色模型与自动解包的贴图（Blue Archive © NEXON Games / Yostar）
+/models/*.glb
+/models/*.glb.import
+/models/Arisu*.png
+/models/Arisu*.png.import
+# 校园高斯泼溅扫描与派生碰撞网格（权利状态未核实）
+/splatdata/*.sogdata
+/splatdata/*.sog
+/models/school*.glb
+/models/school*.glb.import
+
+# 但保留两个目录下的说明文件，克隆者要靠它们知道该放什么
+!/models/README.md
+!/splatdata/README.md
+
+# ---- 本地产物 ----
+*.log
+*.tmp
+_export_out*.log
+_import_out*.log
+_selftest_out*.log
+_probe_out*.log
+
+# ---- 如果你自己加了原创模型/场景，想让它进仓库，
+#      就把上面 /models/*.glb 那几行改成显式排除 ----

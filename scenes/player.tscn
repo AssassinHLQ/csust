@@ -1,0 +1,47 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://models/Arisu_ext.glb" id="2_arisu"]
+[ext_resource type="Script" path="res://scripts/anim_driver.gd" id="3_anim"]
+[ext_resource type="Script" path="res://scripts/weapon.gd" id="4_weapon"]
+
+[sub_resource type="CapsuleShape3D" id="Cap_player"]
+radius = 0.3
+height = 1.5
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("Cap_player")
+
+[node name="Arisu" type="Node3D" parent="."]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, -0.035, 0)
+
+[node name="Model" parent="Arisu" instance=ExtResource("2_arisu")]
+
+[node name="AnimDriver" type="Node" parent="Arisu/Model"]
+script = ExtResource("3_anim")
+skeleton_path = NodePath("../Aris_Original_Mesh/bone_root/Bip001/Skeleton3D")
+animation_player_path = NodePath("AnimationPlayer")
+
+[node name="Weapon" type="Node3D" parent="."]
+script = ExtResource("4_weapon")
+skeleton_path = NodePath("../Arisu/Model/Aris_Original_Mesh/bone_root/Bip001/Skeleton3D")
+
+[node name="Muzzle" type="Marker3D" parent="Weapon"]
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -0.45, 0, 0)
+spring_length = 3.4
+margin = 0.12
+collision_mask = 1
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
+fov = 62.0
+near = 0.05
+far = 500.0

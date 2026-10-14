@@ -1,0 +1,319 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/target.gd" id="3_target"]
+[ext_resource type="Script" path="res://scripts/game.gd" id="4_game"]
+[ext_resource type="Script" path="res://scripts/splat_scene.gd" id="5_splat"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
+sky_top_color = Color(0.22, 0.28, 0.42, 1)
+sky_horizon_color = Color(0.52, 0.56, 0.64, 1)
+ground_bottom_color = Color(0.12, 0.13, 0.16, 1)
+ground_horizon_color = Color(0.34, 0.36, 0.42, 1)
+sun_angle_max = 12.0
+
+[sub_resource type="Sky" id="Sky_arena"]
+sky_material = SubResource("SkyMat_arena")
+process_mode = 2
+
+[sub_resource type="Environment" id="Env_arena"]
+background_mode = 2
+sky = SubResource("Sky_arena")
+ambient_light_source = 3
+ambient_light_color = Color(0.55, 0.62, 0.78, 1)
+ambient_light_energy = 0.5
+fog_enabled = true
+fog_light_color = Color(0.32, 0.36, 0.46, 1)
+fog_density = 0.006
+tonemap_mode = 3
+ssao_enabled = true
+ssao_intensity = 1.2
+glow_enabled = true
+glow_intensity = 0.25
+adjustment_enabled = true
+adjustment_saturation = 1.06
+
+[sub_resource type="BoxShape3D" id="Shape_floor"]
+size = Vector3(40, 1, 40)
+
+[sub_resource type="BoxMesh" id="Mesh_floor"]
+size = Vector3(40, 1, 40)
+
+; 悬浮平台四周的隐形护栏：防止角色跑出平台掉进下方的校园
+[sub_resource type="BoxShape3D" id="Shape_wall_x"]
+size = Vector3(1, 4, 42)
+
+[sub_resource type="BoxShape3D" id="Shape_wall_z"]
+size = Vector3(42, 4, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.21, 0.23, 0.27, 1)
+roughness = 0.9
+metallic = 0.05
+
+[sub_resource type="BoxShape3D" id="Shape_pillar"]
+size = Vector3(1.6, 0.8, 1.6)
+
+[sub_resource type="BoxMesh" id="Mesh_pillar"]
+size = Vector3(1.6, 0.8, 1.6)
+
+[sub_resource type="StandardMaterial3D" id="Mat_pillar"]
+albedo_color = Color(0.36, 0.39, 0.45, 1)
+roughness = 0.75
+
+[sub_resource type="BoxShape3D" id="Shape_target"]
+size = Vector3(0.55, 1.15, 0.55)
+
+[sub_resource type="BoxMesh" id="Mesh_target"]
+size = Vector3(0.55, 1.15, 0.55)
+
+[sub_resource type="StandardMaterial3D" id="Mat_target"]
+albedo_color = Color(0.85, 0.32, 0.3, 1)
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="Mat_target_b"]
+albedo_color = Color(0.35, 0.62, 0.88, 1)
+roughness = 0.55
+
+[node name="Game" type="Node3D"]
+script = ExtResource("4_game")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_arena")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.798636, -0.382683, 0.462554, 0, 0.770513, 0.637424, -0.601815, -0.509041, 0.615661, 12, 18, 8)
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 1.25
+shadow_enabled = true
+directional_shadow_max_distance = 60.0
+
+[node name="Floor" type="StaticBody3D" parent="."]
+
+[node name="Collision" type="CollisionShape3D" parent="Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("Shape_floor")
+
+[node name="Mesh" type="MeshInstance3D" parent="Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+mesh = SubResource("Mesh_floor")
+surface_material_override/0 = SubResource("Mat_floor")
+
+[node name="WallPX" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 2, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="WallPX"]
+shape = SubResource("Shape_wall_x")
+
+[node name="WallNX" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 2, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="WallNX"]
+shape = SubResource("Shape_wall_x")
+
+[node name="WallPZ" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 20)
+
+[node name="Collision" type="CollisionShape3D" parent="WallPZ"]
+shape = SubResource("Shape_wall_z")
+
+[node name="WallNZ" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -20)
+
+[node name="Collision" type="CollisionShape3D" parent="WallNZ"]
+shape = SubResource("Shape_wall_z")
+
+; 高斯泼溅校园：×25 放大（内容约 211 × 160 m），自动水平居中、顶面沉到平台下方 12 m。
+; 数据是「俯拍航拍」，只有从上方看才干净 —— 所以做成悬浮平台 + 下沉校园。
+[node name="SplatScene" type="Node3D" parent="."]
+script = ExtResource("5_splat")
+world_scale = 25.0
+auto_place = true
+top_gap = 12.0
+
+[node name="Pillar1" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.4, -10)
+
+[node name="Collision" type="CollisionShape3D" parent="Pillar1"]
+shape = SubResource("Shape_pillar")
+
+[node name="Mesh" type="MeshInstance3D" parent="Pillar1"]
+mesh = SubResource("Mesh_pillar")
+surface_material_override/0 = SubResource("Mat_pillar")
+
+[node name="Pillar2" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0.4, -11)
+
+[node name="Collision" type="CollisionShape3D" parent="Pillar2"]
+shape = SubResource("Shape_pillar")
+
+[node name="Mesh" type="MeshInstance3D" parent="Pillar2"]
+mesh = SubResource("Mesh_pillar")
+surface_material_override/0 = SubResource("Mat_pillar")
+
+[node name="Pillar3" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -16)
+
+[node name="Collision" type="CollisionShape3D" parent="Pillar3"]
+shape = SubResource("Shape_pillar")
+
+[node name="Mesh" type="MeshInstance3D" parent="Pillar3"]
+mesh = SubResource("Mesh_pillar")
+surface_material_override/0 = SubResource("Mat_pillar")
+
+[node name="Target1" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.375, -10)
+script = ExtResource("3_target")
+
+[node name="Collision" type="CollisionShape3D" parent="Target1"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target1"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="Target2" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 1.375, -11)
+script = ExtResource("3_target")
+
+[node name="Collision" type="CollisionShape3D" parent="Target2"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target2"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target_b")
+
+[node name="Target3" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.375, -16)
+script = ExtResource("3_target")
+
+[node name="Collision" type="CollisionShape3D" parent="Target3"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target3"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="Target4" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 0.6, -4)
+script = ExtResource("3_target")
+
+[node name="Collision" type="CollisionShape3D" parent="Target4"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target4"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target_b")
+
+[node name="Target5" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0.6, -3)
+script = ExtResource("3_target")
+
+[node name="Collision" type="CollisionShape3D" parent="Target5"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target5"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("1_hud")
+
+[node name="Crosshair" type="Control" parent="HUD"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+mouse_filter = 2
+
+[node name="Dot" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = -1.5
+offset_top = -1.5
+offset_right = 1.5
+offset_bottom = 1.5
+color = Color(1, 1, 1, 0.9)
+
+[node name="T" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = -1.0
+offset_top = -13.0
+offset_right = 1.0
+offset_bottom = -5.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="B" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = -1.0
+offset_top = 5.0
+offset_right = 1.0
+offset_bottom = 13.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="L" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = -13.0
+offset_top = -1.0
+offset_right = -5.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="R" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = 5.0
+offset_top = -1.0
+offset_right = 13.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="Panel" type="PanelContainer" parent="HUD"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -280.0
+offset_top = -108.0
+offset_right = -18.0
+offset_bottom = -18.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="Margin" type="MarginContainer" parent="HUD/Panel"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="HUD/Panel/Margin"]
+theme_override_constants/separation = 2
+
+[node name="Ammo" type="Label" parent="HUD/Panel/Margin/VBox"]
+text = "15 / 15"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 30
+
+[node name="State" type="Label" parent="HUD/Panel/Margin/VBox"]
+text = "腰射"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 13
+
+[node name="Speed" type="Label" parent="HUD/Panel/Margin/VBox"]
+text = "0.0 m/s"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="Reload" type="ProgressBar" parent="HUD/Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 6)
+max_value = 1.0
+value = 0.0
+show_percentage = false
+
+[node name="Hint" type="Label" parent="HUD"]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = -34.0
+offset_right = 1100.0
+offset_bottom = -14.0
+grow_vertical = 0
+text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 释放鼠标　｜　走到平台边缘低头看脚下的校园"
+theme_override_font_sizes/font_size = 13

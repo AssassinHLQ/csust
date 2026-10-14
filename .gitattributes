@@ -1,0 +1,27 @@
+# 统一行尾：仓库里存 LF，检出时按平台转换
+* text=auto eol=lf
+
+# 明确按二进制处理，避免任何转换
+*.png binary
+*.jpg binary
+*.webp binary
+*.ogg binary
+*.wav binary
+*.ttf binary
+*.glb binary
+*.sogdata binary
+*.sog binary
+*.res binary
+*.pck binary
+
+# Godot 文本资源
+*.gd text
+*.tscn text
+*.tres text
+*.godot text
+*.cfg text
+*.gdshader text
+*.glsl text
+
+# 避免 GitHub 把插件当第三方代码统计
+addons/gdgs/** linguist-vendored
