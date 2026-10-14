@@ -267,14 +267,15 @@ func _run() -> void:
 		await _wait(40)
 		await _shot(out.path_join("72_lookdown.png"))
 
-		# ④ 贴着一侧墙、横着看整间房（**验轴对齐最直观的一张**：对面墙和天花板
-		#    的灯带应该是水平的、墙脚线是直的）
-		_pose(player, Vector3(-15, 0.05, -2), -PI * 0.5, -0.06)
+		# ④ 横着看整间房（**验轴对齐最直观的一张**：对面墙、天花板灯带、墙脚线
+		#    都该是水平的）。⚠️ 站位只能在**中轴过道**上 —— 玩家相机在背后 3.5 m，
+		#    站到靠墙的位置会把镜头塞进桌子里（本喵试过 −15 和 +16，糊成一片）。
+		_pose(player, Vector3(0, 0.05, -2), -PI * 0.5, -0.05)
 		await _wait(40)
 		await _shot(out.path_join("73_along_wall.png"))
 
-		# ⑤ 从房间一端沿长边看进去
-		_pose(player, Vector3(0, 0.05, 16), 0.0, -0.05)
+		# ⑤ 沿中轴从房间一端往另一端看
+		_pose(player, Vector3(0, 0.05, 9), 0.0, -0.04)
 		await _wait(40)
 		await _shot(out.path_join("74_down_the_room.png"))
 
