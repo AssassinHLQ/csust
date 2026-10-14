@@ -58,57 +58,40 @@ func _run() -> void:
 	print("  世界尺寸 = %s（X/Z 应为真实校园尺度）" % str(aabb.size.snappedf(0.1)))
 	_check(aabb.size.x > 150.0 and aabb.size.z > 100.0, "校园是世界尺度（>150 × >100 m）")
 
-	print("\n========== 3. 悬浮平台 + 隐形护栏 ==========")
+	print("\n========== 3. 悬浮平台（⚠️ 护栏已按用户要求删除）==========")
 	var floor_mesh: MeshInstance3D = game.get_node("Floor/Mesh")
 	var box := floor_mesh.mesh as BoxMesh
 	print("  地面尺寸 = %s" % str(box.size))
 	_check(absf(box.size.x - 40.0) < 0.01 and absf(box.size.z - 40.0) < 0.01,
 		"竞技场缩成 40 × 40 悬浮平台")
+	# 这一版把四面隐形护栏删了：平台不再有边界，唯一还能挡人的是画室609 的墙
 	for w in ["WallPX", "WallNX", "WallPZ", "WallNZ"]:
-		_check(game.has_node(w), "护栏 %s 存在" % w)
+		_check(not game.has_node(w), "护栏 %s 已删除" % w)
 
-	# 从离边缘还有 8 m 的地方起跑外推，确认「真的被挡住」而不是「出生点本来就在墙上」
+	# 从离边缘还有 8 m 的地方起跑外推：没有护栏，应该直接跑出平台掉下去
+	player.set_process_input(false)
 	player.global_position = Vector3(0, 0.05, 12)
 	player.velocity = Vector3.ZERO
 	await _wait(10)
 	Input.action_press("move_back")
 	Input.action_press("sprint")
-	await _wait(1200)
-	Input.action_release("sprint")
-	Input.action_release("move_back")
-	var p := player.global_position
-	print("  从 z=12 起跑外推后位置 = %s（护栏内面 z=19.5，胶囊半径 0.3）" % str(p.snappedf(0.01)))
-	_check(p.z > 17.0, "确实跑到了边缘附近（z = %.2f > 17）" % p.z)
-	_check(p.z < 19.25, "护栏挡住了（z = %.2f < 19.25）" % p.z)
-	_check(p.y > -1.0, "角色仍站在平台上（y = %.2f）" % p.y)
-
-	# 助跑起跳应该能翻出去（护栏只有 0.7 m，跳跃顶点 0.87 m）
-	print("\n--- 助跑起跳能翻出去（能下去看校园）---")
-	player.global_position = Vector3(0, 0.05, 15)
-	player.velocity = Vector3.ZERO
-	await _wait(10)
-	Input.action_press("move_back")
-	Input.action_press("sprint")
-	await _wait(300)
-	Input.action_press("jump")
-	await _wait(6)
-	Input.action_release("jump")
-	var left := false
+	var fell := false
 	var g := 0
-	while g < 1500:
+	while g < 3000:
 		await process_frame
 		g += 1
-		if player.global_position.y < -2.0:
-			left = true
+		if player.global_position.y < -3.0:
+			fell = true
 			break
 	Input.action_release("sprint")
 	Input.action_release("move_back")
-	print("  %d 帧后位置 = %s（y < -2 说明已掉出平台）" % [
+	print("  %d 帧后位置 = %s（平台边 z=20，跑出去了就该往下掉）" % [
 		g, str(player.global_position.snappedf(0.01))])
-	_check(left, "助跑起跳能翻过 0.7 m 护栏掉下去")
+	_check(fell, "没有护栏：走出平台边缘就掉下去（y = %.2f）" % player.global_position.y)
+
 	# 掉下去之后应该被下面的保险接住（y < -60 时回出生点）
 	var guard2 := 0
-	while guard2 < 4000 and player.global_position.y > -60.0:
+	while guard2 < 9000 and player.global_position.y > -60.0:
 		await process_frame
 		guard2 += 1
 	await _wait(60)

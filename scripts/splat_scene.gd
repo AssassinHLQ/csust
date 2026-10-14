@@ -72,6 +72,18 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 ## 是否挂上碰撞 GLB 的三角网格（本扫描的碰撞 GLB 与实际范围不符，默认关）
 @export var build_collision := false
 @export var collision_glb := "res://models/school.collision.glb"
+## 按**房间矩形**生成盒碰撞（不需要碰撞 GLB）：四面墙。
+## 适合「方方正正、已经轴对齐的房间」这类扫描 —— 墙厚向**内**长，所以外表面
+## 正好落在内容包围盒上，站在房间外面贴着墙走不会被推出去。
+@export var build_box_collision := false
+## 墙的厚度（世界单位），从包围盒面往房间里长
+@export var box_wall_thickness := 0.3
+## 门留哪一面："none" = 四面封死；否则 `box_door_side` 那一面会在
+## `box_door_center` 处开一个 `box_door_width` 宽的洞（沿该面方向的坐标）。
+## ⚠️ 枚举里不能放空串（`@export_enum` 会报 "Argument 1 is empty"），所以用 "none"。
+@export_enum("none", "x-", "x+", "z-", "z+") var box_door_side := "none"
+@export var box_door_width := 1.6
+@export var box_door_center := 0.0
 @export var auto_start := true
 
 var splat_node: Node3D = null
@@ -233,6 +245,8 @@ func _finish(result: Dictionary) -> void:
 	apply_transform()
 	if build_collision:
 		_build_collision()
+	if build_box_collision:
+		_build_box_collision()
 
 	var info := {
 		"point_count": point_count,
@@ -393,6 +407,78 @@ static func content_bounds(res: Resource, samples := 20000) -> Dictionary:
 		"min": Vector3(xs[lo], ys[lo], zs[lo]),
 		"max": Vector3(xs[hi], ys[hi], zs[hi]),
 	}
+
+
+## 房间碰撞：按内容包围盒做四面墙（可留一个门洞）。
+##
+## 为什么不用 GDGS 的碰撞管线从点云生成三角网：那条路要给 277 万点建体素索引
+## 再 marching cubes，慢且结果不可控；这间房**已经轴对齐**、形状就是个矩形，
+## 四面盒子又稳又快，而且哪面是门可以明确指定。
+##
+## 坐标：包围盒是世界空间，但碰撞体挂在**本节点**下，所以先用
+## global_transform 的逆变换回本节点局部空间（本工程里节点是单位变换，等价）。
+func _build_box_collision() -> void:
+	var box := content_world_aabb()
+	if box.size.length() <= 0.001:
+		push_warning("[SplatScene] 内容包围盒是空的，不能生成房间碰撞")
+		return
+	var local_box: AABB = global_transform.affine_inverse() * box
+	var body := StaticBody3D.new()
+	body.name = "RoomCollision"
+	add_child(body)
+	var t := maxf(box_wall_thickness, 0.05)
+	var lo := local_box.position
+	var hi := local_box.position + local_box.size
+	var made := 0
+	made += _add_room_wall(body, local_box, 0, lo.x, lo.x + t, "x-")
+	made += _add_room_wall(body, local_box, 0, hi.x - t, hi.x, "x+")
+	made += _add_room_wall(body, local_box, 2, lo.z, lo.z + t, "z-")
+	made += _add_room_wall(body, local_box, 2, hi.z - t, hi.z, "z+")
+	var door := "（四面封死）" if (box_door_side == "none" or box_door_side == "") else \
+		"门在 %s 面，宽 %.2f m，中心 %.2f" % [box_door_side, box_door_width, box_door_center]
+	print("[SplatScene] 房间碰撞：%d 个盒，墙厚 %.2f m，%s" % [made, t, door])
+	print("[SplatScene] 房间矩形（本节点局部）pos %s size %s" % [
+		str(lo.snappedf(0.01)), str((hi - lo).snappedf(0.01))])
+
+
+## 加一面墙：法线沿 `normal_axis`（0=x / 2=z），厚度占 [n_lo, n_hi]。
+## 如果这面正是门那一面，就按 `box_door_center ± box_door_width/2` 切成两段。
+## 返回实际加进去的盒子数。
+func _add_room_wall(body: StaticBody3D, box: AABB, normal_axis: int,
+		n_lo: float, n_hi: float, side_name: String) -> int:
+	var along_axis := 2 if normal_axis == 0 else 0
+	var lo := box.position
+	var hi := box.position + box.size
+	var a_lo: float = lo.x if along_axis == 0 else lo.z
+	var a_hi: float = hi.x if along_axis == 0 else hi.z
+	var segs: Array[Vector2] = []
+	if box_door_side == side_name and box_door_width > 0.05:
+		segs.append(Vector2(a_lo, clampf(box_door_center - box_door_width * 0.5, a_lo, a_hi)))
+		segs.append(Vector2(clampf(box_door_center + box_door_width * 0.5, a_lo, a_hi), a_hi))
+	else:
+		segs.append(Vector2(a_lo, a_hi))
+	var made := 0
+	for s in segs:
+		var length := s.y - s.x
+		if length <= 0.05:
+			continue
+		var size := Vector3.ZERO
+		var pos := Vector3.ZERO
+		if normal_axis == 0:
+			size = Vector3(n_hi - n_lo, hi.y - lo.y, length)
+			pos = Vector3(n_lo, lo.y, s.x)
+		else:
+			size = Vector3(length, hi.y - lo.y, n_hi - n_lo)
+			pos = Vector3(s.x, lo.y, n_lo)
+		var shape := BoxShape3D.new()
+		shape.size = size
+		var cs := CollisionShape3D.new()
+		cs.name = "Wall%d" % made
+		cs.shape = shape
+		cs.position = pos + size * 0.5     # CollisionShape3D 的位置是盒中心
+		body.add_child(cs)
+		made += 1
+	return made
 
 
 ## 把碰撞 GLB 包成三角网格碰撞体。GLB 在「源坐标系」，渲染是「减去中心」的，

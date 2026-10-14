@@ -228,9 +228,16 @@ func _on_splat_loaded(info: Dictionary, index: int) -> void:
 		_fmt_int(int(info.get("point_count", 0))),
 		float(info.get("elapsed", 0.0)),
 		"命中" if bool(info.get("from_cache", false)) else "首次解码"]
+	# ⚠️ 闭包只捕获**行号**，不要捕获 Label 节点：重绑时旧标签会被 queue_free，
+	#    8 秒后定时器触发会报 "Lambda capture at index 0 was freed"。
+	#    （正常玩只绑一次，但自检会重绑，日志要干净。）
 	get_tree().create_timer(8.0).timeout.connect(func() -> void:
-		if is_instance_valid(label):
-			label.visible = false)
+		var row2 := _splat_row(index)
+		if row2.is_empty():
+			return
+		var l: Label = row2["label"]
+		if is_instance_valid(l):
+			l.visible = false)
 
 
 func _on_splat_failed(message: String, index: int) -> void:

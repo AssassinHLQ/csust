@@ -16,7 +16,7 @@ const ROOM_NAME := "Room609"
 const CAMPUS_NAME := "SplatScene"
 ## 量出来的期望值（splatdata/README.md 里同步记着），对不上就是有人改了场景
 const EXPECT_POINTS := 2769851
-const EXPECT_SCALE := 6.4
+const EXPECT_SCALE := 1.8
 const EXPECT_YAW := 248.6
 const FLOOR_Y := 0.03
 
@@ -97,15 +97,14 @@ func _run() -> void:
 	print("  内容世界包围盒 pos %s size %s" % [
 		str(aabb.position.snappedf(0.1)), str(aabb.size.snappedf(0.1))])
 	print("  顶面 y = %.2f   平台 40 × 40 m" % room.content_top_y())
-	# ⚠️ 别写死哪个轴更长：yaw 248.6 把源数据的墙对转到和世界轴平行，
-	#    量出来是 36.0（X）× 41.0（Z）—— 和上一版（歪 39.5° 时的 34.6 × 40.3）
-	#    是同一个房间在不同朝向下的外接盒，别按记下来的数字硬判。
+	# ⚠️ 别写死哪个轴更长，也别写死尺寸：`world_scale` 一改它们全变。
+	#    yaw 248.6 是把源数据的墙对转到和世界轴平行（见 §3 后面那段的量法）。
 	var span_lo := maxf(aabb.size.x, aabb.size.z)
 	var span_hi := minf(aabb.size.x, aabb.size.z)
 	print("  XZ 占地 %.1f × %.1f m（平台 40 × 40）" % [aabb.size.x, aabb.size.z])
-	_check(span_lo > 36.0 and span_lo < 44.0, "长边 %.1f m：铺满平台" % span_lo)
-	_check(span_hi > 30.0, "短边 %.1f m：也接近满场" % span_hi)
-	_check(aabb.size.y > 9.0 and aabb.size.y < 16.0, "世界高 %.1f m" % aabb.size.y)
+	_check(span_lo > 9.0 and span_lo < 14.0, "长边 %.1f m：真人尺度的教室" % span_lo)
+	_check(span_hi > 7.0 and span_hi < 12.0, "短边 %.1f m" % span_hi)
+	_check(aabb.size.y > 2.4 and aabb.size.y < 4.5, "层高 %.1f m（真人尺度）" % aabb.size.y)
 
 	# 地板平面：竖向直方图峰值（**不能**用 content_min.y 代替 —— 裁剪盒外扩过，
 	# 最低点可以比地板还低）
@@ -114,17 +113,54 @@ func _run() -> void:
 		floor["y"], floor["count"], floor["cx"], floor["cz"]])
 	_check(absf(floor["y"] - FLOOR_Y) < 0.2,
 		"地板贴在平台地面 y ≈ %.2f（实测 %.3f）" % [FLOOR_Y, floor["y"]])
-	_check(absf(floor["cx"]) < 2.0 and absf(float(floor["cz"])) < 2.0,
-		"地板质心落在平台中央（%.2f, %.2f）" % [floor["cx"], floor["cz"]])
-	# 地板以下几米是重建噪声（扫地机扫到楼板底面那种），反正被平台实体挡住看不见。
+	# 地板质心应该落在锚点（也就是出生点）上：房间是「罩着出生点」摆的
+	_check(absf(floor["cx"] - room.anchor_world.x) < 2.0
+			and absf(float(floor["cz"]) - room.anchor_world.z) < 2.0,
+		"地板质心落在锚点上（%.2f, %.2f vs 锚点 %.2f, %.2f）" % [
+			floor["cx"], floor["cz"], room.anchor_world.x, room.anchor_world.z])
+	# 出生点必须在房间里 —— 否则第三人称相机（玩家背后 3.5 m）会跑到墙外面去，
+	# 开局看到的会是房间的**外墙**（这份扫描只扫了室内，外墙是糊的）
+	var spawn_pt := Vector3(0, 0, 6)
+	var inside := spawn_pt.x > aabb.position.x and spawn_pt.x < aabb.position.x + aabb.size.x \
+		and spawn_pt.z > aabb.position.z and spawn_pt.z < aabb.position.z + aabb.size.z
+	print("  出生点 (%.1f, %.1f) 在房间里 = %s（房间 x %.2f~%.2f  z %.2f~%.2f）" % [
+		spawn_pt.x, spawn_pt.z, str(inside),
+		aabb.position.x, aabb.position.x + aabb.size.x,
+		aabb.position.z, aabb.position.z + aabb.size.z])
+	_check(inside, "出生点在房间内部（相机不会跑到墙外）")
+
+	# 门开在哪一面：在「地板面 ~ +1.2 m」这条带里看沿墙占用。
+	# 窗子在腰高之上，所以这条带里的空缺只会是门（或被桌椅挡掉的墙面）。
+	# ⚠️ **不能**拿包围盒的面当墙：包围盒是 1‰~99.9‰ 分位盒，两端那 0.1% 的离群点
+	#    会把面推到墙外面（实测 x− 面附近 0.35 m 内一个点都没有）。
+	#    所以先用地板带的直方图**找出墙**（两端最外的强峰），再在墙之间找空缺。
+	var scan := _wall_scan(pts, float(floor["y"]), aabb)
+	print("  ---- 地板带（地板面 ~ +1.2 m）XZ 占用图：墙是一圈环、门是环上的缺口 ----")
+	print(_occupancy_map(pts, float(floor["y"]), aabb, 0.4, 2))
+	print("  ---- 沿轴占用（每格 0.2 m，'.'=空）----")
+	print("    x 轴（%.2f ~ %.2f）" % [scan["x"]["lo"], scan["x"]["hi"]])
+	print("      %s" % scan["x"]["line"])
+	print("    z 轴（%.2f ~ %.2f）" % [scan["z"]["lo"], scan["z"]["hi"]])
+	print("      %s" % scan["z"]["line"])
+	# 地板以下几米是重建噪声（扫到楼板底面那种），反正被平台实体挡住看不见。
 	# 要防的是「整块内容沉下去」，所以按**比例**判，不按最低点判。
+	# 阈值跟着缩放走，别写死：×1.8 时地板以下只探到十几厘米。
+	var below_limit := float(floor["y"]) - 0.5
 	var below := 0
 	for p in pts:
-		if p.y < -1.0:
+		if p.y < below_limit:
 			below += 1
 	var below_pct := 100.0 * float(below) / float(maxi(pts.size(), 1))
-	print("  平台地面以下的点 = %d / %d（%.2f%%）" % [below, pts.size(), below_pct])
+	print("  低于地板 0.5 m（y < %.2f）的点 = %d / %d（%.2f%%）" % [
+		below_limit, below, pts.size(), below_pct])
 	_check(below_pct < 3.0, "地面以下只有零散重建噪声（%.2f%% < 3%%）" % below_pct)
+
+	# 房间的**真实轮廓**（给碰撞用）：包围盒两端那 0.1% 离群点把面推出了 2 m，
+	# 直接拿它做墙碰撞会离可视墙面很远。地板层和天花板层才是房间的轮廓。
+	var fslab := _slab(pts, float(floor["y"]), 0.15)
+	var cslab := _slab(pts, room.content_top_y() - 0.35, 0.25)
+	print("  地板层 %.2f m 带内 %d 点：%s" % [0.30, fslab.size(), _bounds_text(fslab)])
+	print("  天花板层（顶面下 0.35 m）%d 点：%s" % [cslab.size(), _bounds_text(cslab)])
 
 	# 房间矩形轴对齐。⚠️ 三种「看起来合理」的量法在这间房上全都定不出角度：
 	#   ① XZ 协方差主轴 —— 地板 4.87 × 5.40 源单位，**接近正方形**，两个方向的方差
@@ -172,7 +208,86 @@ func _run() -> void:
 	print("  采样点最高 y = %.2f m（裁之前 floaters 会到约 97 m）" % highest)
 	_check(highest < 15.0, "最高的点只到 %.2f m，没有飘在天上的白团" % highest)
 
-	print("\n========== 5. HUD 一场一行 ==========")
+	print("\n========== 5. 房间碰撞（盒 + 门洞）==========")
+	var col: StaticBody3D = room.get_node_or_null("RoomCollision") as StaticBody3D
+	_check(col != null, "画室609 下有 RoomCollision")
+	if col == null or player == null:
+		_quit()
+		return
+	var boxes: Array[AABB] = []
+	for ch in col.get_children():
+		var cs := ch as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var bs := cs.shape as BoxShape3D
+		boxes.append(cs.global_transform * AABB(-bs.size * 0.5, bs.size))
+	print("  碰撞盒 %d 个（x± 各 1、z+ 1、z− 被门切成 2 → 共 5）" % boxes.size())
+	_check(boxes.size() == 5, "5 个盒")
+	var rlo := aabb.position
+	var rhi := aabb.position + aabb.size
+	# z− 那一面（朝靶场、开了门）的两个盒子。
+	# ⚠️ 判据不能只看 position.z —— x± 两面墙的 z 范围也是整个房间深度，
+	# 它们的 position.z 同样等于 rlo.z，只看位置会数出 4 个。要看**厚度方向**。
+	var t_wall := room.box_wall_thickness
+	var segs: Array[AABB] = []
+	for b in boxes:
+		if absf(b.position.z - rlo.z) < 0.05 and absf(b.size.z - t_wall) < 0.05:
+			segs.append(b)
+	_check(segs.size() == 2, "门那一面（z−）被切成 2 段（实测 %d）" % segs.size())
+	if segs.size() == 2:
+		var s0 := segs[0]
+		var s1 := segs[1]
+		if s0.position.x > s1.position.x:
+			var tmp := s0
+			s0 = s1
+			s1 = tmp
+		var gap_lo := s0.position.x + s0.size.x
+		var gap_hi := s1.position.x
+		print("  门洞 x %.2f ~ %.2f（宽 %.2f m，中心 %.2f）" % [
+			gap_lo, gap_hi, gap_hi - gap_lo, (gap_lo + gap_hi) * 0.5])
+		_check(absf((gap_hi - gap_lo) - room.box_door_width) < 0.06,
+			"门洞宽 %.2f m（配的是 %.2f）" % [gap_hi - gap_lo, room.box_door_width])
+		_check(absf((gap_lo + gap_hi) * 0.5 - room.box_door_center) < 0.06,
+			"门洞中心在 %.2f" % ((gap_lo + gap_hi) * 0.5))
+
+	# 物理验证：① 朝 x+ 的墙跑，应该被挡在墙内面；② 朝 z− 的门跑，应该走出去
+	# ⚠️ 都带 sprint 并且**跑到条件满足为止**，不要靠固定时长 —— 走路速度下
+	#    3 s 只走 6 m，正好停在门口，会被误判成「门被堵住了」（本喵踩过）。
+	player.set_process_input(false)
+	var wall_inner := rhi.x - room.box_wall_thickness
+	_pose(player, Vector3(0, 0.05, 6), 0.0, -0.04)
+	await _wait(20)
+	Input.action_press("move_right")
+	Input.action_press("sprint")
+	await _wait_ms(3000)
+	Input.action_release("sprint")
+	Input.action_release("move_right")
+	await _wait(10)
+	var px := player.global_position.x
+	print("  朝 +X 冲刺 3 s 后 x = %.2f（墙内面 x = %.2f，胶囊半径 0.3）" % [px, wall_inner])
+	_check(px > wall_inner - 0.45, "确实顶到了墙（x = %.2f）" % px)
+	_check(px < wall_inner + 0.05, "被 x+ 墙挡住，没穿过去（x = %.2f）" % px)
+	_check(player.global_position.y > -1.0, "人还站在地板上（y = %.2f）" % player.global_position.y)
+
+	_pose(player, Vector3(0, 0.05, 6), 0.0, -0.04)
+	await _wait(20)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	var door_goal := rlo.z - 0.5
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 6000 and player.global_position.z >= door_goal:
+		await process_frame
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	await _wait(10)
+	var pz := player.global_position.z
+	print("  朝 −Z 跑到 z = %.2f（用了 %d ms；门在 z = %.2f，目标 < %.2f）" % [
+		pz, Time.get_ticks_msec() - t0, rlo.z, door_goal])
+	_check(pz < door_goal, "从门洞走出了房间（z = %.2f）" % pz)
+	_check(player.global_position.y > -1.0 and absf(player.global_position.y) < 3.0,
+		"走出去时还在地面高度（y = %.2f）" % player.global_position.y)
+
+	print("\n========== 6. HUD 一场一行 ==========")
 	var row0: Label = hud.get_node_or_null("SplatStatus0") as Label
 	_check(row0 != null, "HUD 有第 0 行泼溅状态")
 	if row0 != null:
@@ -197,7 +312,7 @@ func _run() -> void:
 	hud.call("bind_splats", [room])
 	dummy.free()
 
-	print("\n========== 6. 玩家 Arisu 的朝向（用户报告的问题）==========")
+	print("\n========== 7. 玩家 Arisu 的朝向（用户报告的问题）==========")
 	_check(player != null, "场景里有 Player")
 	if player != null:
 		await _wait(30)
@@ -246,7 +361,7 @@ func _run() -> void:
 			_check(mouth.dot(real_fwd) > 0.5,
 				"嘴朝向 = 相机视线（点积 %.3f > 0.5，反了会是负数）" % mouth.dot(real_fwd))
 
-	print("\n========== 7. 渲图 ==========")
+	print("\n========== 8. 渲图 ==========")
 	var out := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join("_room609")
 	DirAccess.make_dir_recursive_absolute(out)
@@ -274,8 +389,9 @@ func _run() -> void:
 		await _wait(40)
 		await _shot(out.path_join("73_along_wall.png"))
 
-		# ⑤ 沿中轴从房间一端往另一端看
-		_pose(player, Vector3(0, 0.05, 9), 0.0, -0.04)
+		# ⑤ 沿中轴从房间一端往另一端看（房间只有 11 m 深，站位不能太靠后，
+		#    否则背后的相机会穿到墙里去）
+		_pose(player, Vector3(0, 0.05, 1), 0.0, -0.04)
 		await _wait(40)
 		await _shot(out.path_join("74_down_the_room.png"))
 
@@ -348,6 +464,126 @@ func _slab(pts: PackedVector3Array, y0: float, half: float) -> PackedVector3Arra
 	for p in pts:
 		if absf(p.y - y0) < half:
 			out.append(p)
+	return out
+
+
+## 点云的 x/z 范围，打成一行
+func _bounds_text(pts: PackedVector3Array) -> String:
+	if pts.is_empty():
+		return "（空）"
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	return "x %.2f..%.2f（宽 %.2f）  z %.2f..%.2f（深 %.2f）  y %.2f..%.2f" % [
+		lo.x, hi.x, hi.x - lo.x, lo.z, hi.z, hi.z - lo.z, lo.y, hi.y]
+
+
+## 地板带的 XZ 占用图（ASCII）：墙会是一圈环，门是环上的缺口，桌椅是中间的团。
+## `cell` 是格边长（米），`min_pts` 是「算占用」的最少点数。
+## 打出来比任何直方图都直观 —— 之前用「离包围盒面 0.35 m 内的点」判门，
+## 结果是包围盒两端那 0.1% 离群点把面推到了墙外面，白绕两轮。
+func _occupancy_map(pts: PackedVector3Array, floor_y: float, box: AABB,
+		cell: float, min_pts: int) -> String:
+	var y_lo := floor_y + 0.05
+	var y_hi := floor_y + 1.2
+	var nx := maxi(4, int(box.size.x / cell) + 1)
+	var nz := maxi(4, int(box.size.z / cell) + 1)
+	var grid := PackedInt32Array()
+	grid.resize(nx * nz)
+	for p in pts:
+		if p.y < y_lo or p.y > y_hi:
+			continue
+		var ix := clampi(int((p.x - box.position.x) / cell), 0, nx - 1)
+		var iz := clampi(int((p.z - box.position.z) / cell), 0, nz - 1)
+		grid[iz * nx + ix] += 1
+	var out := "      x → %.2f..%.2f（%d 格，每格 %.2f m）   z ↓ %.2f..%.2f\n" % [
+		box.position.x, box.position.x + box.size.x, nx, cell,
+		box.position.z, box.position.z + box.size.z]
+	for iz in nz:
+		var row := "      "
+		for ix in nx:
+			var n := grid[iz * nx + ix]
+			if n < min_pts:
+				row += "."
+			elif n < min_pts * 4:
+				row += ":"
+			elif n < min_pts * 12:
+				row += "+"
+			else:
+				row += "#"
+		out += row + "\n"
+	return out
+
+
+## 从地板带的直方图里找**墙**和**门**。
+## 返回 {"x": {...}, "z": {...}}，每项：
+##   lo/hi/bin 直方图范围与格宽；line 占用图（'.'=空）；wall_lo/wall_hi 检出墙的位置；
+##   gap_lo/gap_hi/gap_w 两墙之间最长的空段（门洞）。
+## 找墙的办法：先从两端往里扫，第一个「计数 ≥ 峰值 15%」的格子就是这面的墙。
+func _wall_scan(pts: PackedVector3Array, floor_y: float, box: AABB) -> Dictionary:
+	var y_lo := floor_y + 0.05
+	var y_hi := floor_y + 1.2
+	var band := PackedVector3Array()
+	for p in pts:
+		if p.y >= y_lo and p.y <= y_hi:
+			band.append(p)
+	var out := {}
+	for axis in [0, 1]:
+		var lo: float = box.position.x if axis == 0 else box.position.z
+		var hi: float = lo + (box.size.x if axis == 0 else box.size.z)
+		var bin := 0.2
+		var nb := maxi(8, int((hi - lo) / bin) + 1)
+		var hist := PackedInt32Array()
+		hist.resize(nb)
+		var scale := float(nb) / maxf(hi - lo, 0.001)
+		for p in band:
+			var v: float = p.x if axis == 0 else p.z
+			hist[clampi(int((v - lo) * scale), 0, nb - 1)] += 1
+		var peak := 0
+		for c in hist:
+			peak = maxi(peak, c)
+		var cut := maxi(2, int(float(peak) * 0.15))
+		# 两端的墙
+		var w_lo := lo
+		var w_hi := hi
+		for k in nb:
+			if hist[k] >= cut:
+				w_lo = lo + float(k) / scale
+				break
+		for k in range(nb - 1, -1, -1):
+			if hist[k] >= cut:
+				w_hi = lo + float(k + 1) / scale
+				break
+		# 两墙之间最长的空段 = 门洞
+		var a := clampi(int((w_lo - lo) * scale), 0, nb - 1)
+		var b := clampi(int((w_hi - lo) * scale), 0, nb - 1)
+		var best_len := 0
+		var best_start := a
+		var run := 0
+		var start := a
+		for k in range(a, b + 1):
+			if hist[k] == 0:
+				if run == 0:
+					start = k
+				run += 1
+				if run > best_len:
+					best_len = run
+					best_start = start
+			else:
+				run = 0
+		var line := ""
+		for k in nb:
+			line += "." if hist[k] == 0 else ("%d" % mini(hist[k], 9))
+		out["x" if axis == 0 else "z"] = {
+			"lo": lo, "hi": hi, "bin": bin, "line": line,
+			"wall_lo": w_lo, "wall_hi": w_hi,
+			"gap_lo": lo + float(best_start) / scale,
+			"gap_hi": lo + float(best_start + best_len) / scale,
+			"gap_w": float(best_len) / scale,
+			"band": band.size(),
+		}
 	return out
 
 
@@ -650,6 +886,13 @@ func _check(cond: bool, label: String) -> void:
 
 func _wait(n: int) -> void:
 	for _i in maxi(n, 1):
+		await process_frame
+
+
+## 等**真实时长**，不按帧数 —— 帧率在两个方向上都坑过本喵（见 README §1.11）
+func _wait_ms(ms: int) -> void:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
 		await process_frame
 
 

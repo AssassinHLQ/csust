@@ -9,10 +9,11 @@
 |---|---|---|
 | 场景类型 | 俯拍航拍（只能从上方看） | 教室内部（站在里面玩） |
 | 点数 | 6,150,154 | 2,774,116（裁后 2,769,851） |
-| `world_scale` | 25（世界 211 × 160 m） | 6.4（世界 36.0 × 12.5 × 41.0 m） |
-| 摆放 | `auto_place` + `top_gap = 12`（沉到平台下方） | `use_anchor`（地板对到平台地面 y = 0.03） |
+| `world_scale` | 25（世界 211 × 160 m） | 1.8（世界 10.1 × 3.5 × 11.5 m，真人尺度） |
+| 摆放 | `auto_place` + `top_gap = 12`（沉到平台下方） | `use_anchor`（地板中心对到 **(0, 0.03, 6)**，也就是出生点） |
 | `yaw_degrees` | 0 | 248.6（轴对齐，见 §6.8 里「歪了 39.5°」那段） |
 | 裁剪 | 关（靠下沉量把 floaters 顶到平台上方） | **开**（`margin 0.5` / `max_scale 0.5`） |
+| 碰撞 | 无 | 四面墙（厚 0.3 m）+ 朝靶场那面开 1.6 m 门洞 |
 | 首次解码 | ≈ 50 s | ≈ 21 s |
 
 ## 校园那份：放什么
@@ -71,9 +72,15 @@ Godot 会通过 GDGS 插件的 `EditorImportPlugin` 把 `.sog` 展开成 Gaussia
 - 校园 `SplatScene`：`world_scale = 25`（放大后约 211 × 160 m）、
   `top_gap = 12`（顶面沉到平台下方 12 m）、`auto_place = true`
   （水平自动居中，参数由 `SplatScene.content_bounds()` 抽样算分位数包围盒得到）
-- 画室609 `Room609`：`world_scale = 6.4`、`yaw_degrees = 248.6`、
-  `auto_place = false` + `use_anchor = true`（把源坐标的地板中心对到平台地面）、
-  `crop_enabled = true`（裁掉离群 floaters）
+- 画室609 `Room609`：`world_scale = 1.8`（真人尺度）、`yaw_degrees = 248.6`、
+  `auto_place = false` + `use_anchor = true`（把源坐标的地板中心对到 **(0, 0.03, 6)** ——
+  罩住出生点，否则第三人称相机会落到房间外面）、`crop_enabled = true`（裁掉离群 floaters）、
+  `build_box_collision = true`（四面墙碰撞 + 朝靶场那面 1.6 m 门洞）
+
+⚠️ 换缩放时注意：`crop_margin` / `crop_max_scale` 是**源坐标单位**，与 `world_scale`
+无关，改缩放不用重调；但 `anchor_world` 和 `box_wall_thickness` / `box_door_width`
+是**世界单位**，缩放变小以后要重新看它们合不合适（例如墙厚 0.3 m 在 ×6.4 下几乎看不见，
+在 ×1.8 下才是一堵正常的墙）。
 
 换一份扫描后的两条路：
 
@@ -83,7 +90,7 @@ Godot 会通过 GDGS 插件的 `EditorImportPlugin` 把 `.sog` 展开成 Gaussia
 
 # ② 再在真实游戏相机下扫缩放 / 朝向，渲出玩家真正会看到的画面
 & $godot --path . --script res://scripts/_probe_room_on_platform.gd -- `
-      --sog=<你的文件> --scale=6.4 --yaw=0 --margin=0.5 --maxscale=0.5
+      --sog=<你的文件> --scale=1.8 --yaw=0 --margin=0.5 --maxscale=0.5
 
 # ③ 定完参数写进 game.tscn，最后跑自检把「轴对齐」等判据验一遍
 & $godot --path . --script res://scripts/_verify_room.gd
