@@ -1,4 +1,4 @@
-﻿# Arisu 学习沙盒（Godot 4.7）
+# Arisu 学习沙盒（Godot 4.7）
 
 > **A third-person shooter sandbox in Godot 4.7** — over-the-shoulder camera, turn-to-aim
 > firing gate, 60-round magazine with auto-reload, a hand-rolled animation driver, and a
@@ -897,7 +897,10 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
 | `respawn_time` | 6.0 s | 扑倒后多久站起来 |
 | `hide_accessories` | true | 隐藏那 5 个挂件 |
 
-- 位置：`game.tscn` 里 `(9, 0, -8)`，绕 Y −90° 朝 **−X**（正对场地中心；模型自身脸朝 +Z）
+- 位置：`game.tscn` 里 `(13, 0, -8)`，绕 Y −90° 朝 **−X**（正对场地中心；模型自身脸朝 +Z）
+  - ⚠️ **x 不能小于 13**：放在 x=9 时它的碰撞盒（约 7.8 m 长）会横在
+    「玩家 (6,−4) → Target1 (6,−10)」的弹道上，把每一发都吃掉。
+    本喵就是这么踩的 —— 加完 Boss 后 3 套自检同时红，弹道日志里每发都写着「命中 Boss」
 - 碰撞：一个随 `visual_size` 自动算的 `BoxShape3D`（约 2.1 × 3.8 × 7.8 m，只盖身体不含尾巴）
 - 受击：即时闪白 + 渐退；`take_damage(amount, pos, dir)` 与 `Target` **同一套契约**，
   所以 `weapon.gd` 不用改一行就能打它

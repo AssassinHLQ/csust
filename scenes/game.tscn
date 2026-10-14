@@ -135,9 +135,11 @@ top_gap = 12.0
 
 ; 霸王龙优香「木桩」：站在平台右侧、朝 -X 正对场地中心。
 ; 模型自身脸朝 +Z，所以绕 Y 转 -90° 就变成朝 -X。
+; ⚠️ x 不能小于 13：x=9 时它的碰撞盒（约 7.8 m 长）会横在
+;    「玩家(6,-4) → Target1(6,-10)」的弹道上，把每一发都吃掉。
 ; 默认身高 4.5 m（约 2.6 个 Arisu）、3000 血、受击闪白、倒下 6 秒后重生。
 [node name="Boss" type="StaticBody3D" parent="."]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9, 0, -8)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)
 script = ExtResource("6_boss")
 
 [node name="Pillar1" type="StaticBody3D" parent="."]
