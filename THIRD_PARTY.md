@@ -27,11 +27,13 @@ _arisu_learn/
 │  ├─ companions/       ← 可选：七名同伴的 glb
 │  ├─ boss/             ← 可选：霸王龙优香 FBX + 贴图
 │  └─ boss_pig/         ← 可选：飞猪优香 FBX + 贴图
-└─ splatdata/           ← 可选：放入校园 .sogdata（见 splatdata/README.md）
+└─ splatdata/           ← 可选：放入校园 / 画室609 的 .sogdata（见 splatdata/README.md）
+                          两份都没有也能跑：`-- --splat=off`
 ```
 
 角色模型与泼溅数据**都是可选的第二块**：没有泼溅数据时，用
-`-- --splat=off` 运行即可只玩射击部分；没有同伴 / Boss 素材时，
+`-- --splat=off` 运行即可只玩射击部分（只想留一份泼溅用 `-- --venue=room|campus`，
+两份同时在 8 GB 显卡上显存偏紧，见 README §6.8）；没有同伴 / Boss 素材时，
 把 `game.tscn` 里对应的 `Companion*` / `Boss` / `BossPig` 节点删掉即可；
 没有主角模型时工程无法运行（`scenes/player.tscn` 直接引用该模型）。
 
