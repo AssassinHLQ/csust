@@ -32,6 +32,10 @@ var _outside := false
 ## 自由相机（世界坐标）。两个都给才生效 —— 用来看平台上到底哪里破了洞。
 var _eye := Vector3.INF
 var _look := Vector3.INF
+## 拍一张 Esc 设置界面（验证画质档位那一行画得对不对）。
+var _menu := false
+## 把五个画质档位依次切一遍，读回**真实生效**的缩放/限帧/后处理。
+var _quality_sweep := false
 
 
 func _initialize() -> void:
@@ -46,6 +50,10 @@ func _initialize() -> void:
 			_look = _parse_vec3(a.substr(7))
 		elif a == "--outside":
 			_outside = true
+		elif a == "--menu":
+			_menu = true
+		elif a == "--quality-sweep":
+			_quality_sweep = true
 	_run.call_deferred()
 
 
@@ -157,13 +165,26 @@ func _run() -> void:
 				print("[shot]   └─ 世界内容盒 %s" % str(c.call("content_world_aabb")))
 				_report_floor_coverage(c)
 
+	if _menu:
+		var menu: Node = game.get_node_or_null("SettingsMenu")
+		if menu == null:
+			push_warning("[shot] 场景里没有 SettingsMenu")
+		else:
+			menu.call("open")
+			print("[shot] 已打开 Esc 设置界面（画质档位 = %s）" % str(
+				GameSettings.value("render_quality")))
+			for i in 10:
+				await process_frame
+
+	if _quality_sweep:
+		await _sweep_quality(game)
+
 	await RenderingServer.frame_post_draw
 	var img: Image = root.get_texture().get_image()
 	var path := out.path_join("%s.png" % _tag)
 	img.save_png(path)
 	print("[shot] 出图 %s" % path)
 	quit(0)
-
 
 ## 量「扫描出来的地面在 x/z 上铺到哪」，再和挖洞用的 content 盒比。
 ##
@@ -206,3 +227,25 @@ func _report_floor_coverage(room: Node) -> void:
 	print("[shot]   每边差（正数 = 那一圈是真空）世界米：x- %.2f  x+ %.2f  z- %.2f  z+ %.2f" % [
 		(lo.x - cmin.x) * wscale, (cmax.x - hi.x) * wscale,
 		(lo.z - cmin.z) * wscale, (cmax.z - hi.z) * wscale])
+
+
+## 把画质档位依次切一遍，读回**真实生效**的值（不是读设置表，是读渲染器）。
+## 判据：`scaling_3d_scale` = 自动上限 × 档位系数，`Engine.max_fps` 与 SSAO/辉光开关一致。
+func _sweep_quality(game: Node) -> void:
+	var vp := root
+	var we: WorldEnvironment = game.get_node_or_null("WorldEnvironment")
+	var before := str(GameSettings.value("render_quality"))
+	print("[shot] ── 画质档位扫描（切换后读回真实值）──")
+	for tier in GameSettings.QUALITY_ORDER:
+		GameSettings.set_value("render_quality", tier)
+		# 让 game.gd 的 _apply_quality 走完（它同步生效，这里只是留一帧）
+		await process_frame
+		var env_ok := we != null and we.environment != null
+		print("[shot]   %-6s → 3D 缩放 %.3f  限帧 %-4s  SSAO %-2s  辉光 %-2s" % [
+			tier, vp.scaling_3d_scale,
+			"不限" if Engine.max_fps <= 0 else str(Engine.max_fps),
+			("开" if we.environment.ssao_enabled else "关") if env_ok else "?",
+			("开" if we.environment.glow_enabled else "关") if env_ok else "?"])
+	GameSettings.set_value("render_quality", before)
+	await process_frame
+	print("[shot]   已还原为 %s" % before)

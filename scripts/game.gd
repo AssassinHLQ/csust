@@ -49,6 +49,10 @@ const CARVE_FALLBACK_FLOOR := true
 var _floor_carved := false
 ## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
 var _room_scene: SplatScene = null
+## `_fit_render_scale` 算出来的**自动上限**（只看窗口尺寸，默认 1.0）
+var _auto_scale := 1.0
+## 当前画质档位的参数表（`GameSettings.QUALITY` 的一项）。见 `_apply_quality()`。
+var _quality: Dictionary = {}
 
 var _player: Player
 var _weapon: Weapon
@@ -190,17 +194,53 @@ func _fit_render_scale() -> void:
 	var s := 1.0
 	if ratio < RENDER_SCALE_AREA_RATIO_MIN:
 		s = clampf(sqrt(ratio), 0.5, 1.0)
-	print("[Game] _fit_render_scale：渲染尺寸 %s → 目标缩放 %.3f（当前 %.3f）" % [
-		str(size), s, vp.scaling_3d_scale])
-	if is_equal_approx(vp.scaling_3d_scale, s):
-		return
-	vp.scaling_3d_scale = s
+	# 这里算出来的只是**上限**（窗口别太大）；真正的档位由设置里的「画质」决定，
+	# 两者在 _apply_quality() 里相乘。
+	_auto_scale = s
+	print("[Game] _fit_render_scale：渲染尺寸 %s → 自动上限 %.3f" % [str(size), s])
+	_apply_quality()
+
+
+## 画质档位 → 实际渲染参数。设置界面一改就立刻生效（走 `GameSettings.listen`）。
+##
+## 为什么把「省电」做成档位而不是写死：GPU 占用几乎只由**每帧画多少像素**决定。
+## 实测 2560×1440 + 原生 + Compute 后端时 GPU 恒在 100%（每帧 16.2 ms / 预算
+## 16.67 ms，刚好追得上 60 fps），所以降一档能直接换回一大截功耗。旋钮见
+## `GameSettings.QUALITY`。
+func _apply_quality() -> void:
+	var q := GameSettings.quality_spec()
+	_quality = q
+	var vp := get_viewport()
+	# ⚠️ 只**乘**、不放大过 1.0：窗口极大时 _auto_scale 会小于 1，两者取小
+	var target := clampf(_auto_scale * float(q["scale"]), 0.25, 1.0)
+	if not is_equal_approx(vp.scaling_3d_scale, target):
+		vp.scaling_3d_scale = target
+	Engine.max_fps = int(q["fps"])
+	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if we != null and we.environment != null:
+		we.environment.ssao_enabled = bool(q["ssao"])
+		we.environment.glow_enabled = bool(q["glow"])
+	# 打一行：GPU 占用直接跟这个数走，排查「怎么突然很烫」时先看它
+	print("[Game] 画质 = %s：3D 缩放 %.2f（自动上限 %.2f × 档位 %.2f）  SSAO %s  辉光 %s  限帧 %s" % [
+		GameSettings.choice_label("render_quality", GameSettings.value("render_quality")),
+		target, _auto_scale, float(q["scale"]),
+		"开" if q["ssao"] else "关", "开" if q["glow"] else "关",
+		"垂直同步" if int(q["fps"]) <= 0 else "%d fps" % int(q["fps"])])
+
+
+## 设置变了：只有画质需要在这里落地（其余设置由各自的系统自己 listen）。
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == "render_quality":
+		_apply_quality()
 
 
 func _ready() -> void:
 	var vp := get_viewport()
 	if not vp.size_changed.is_connected(_fit_render_scale):
 		vp.size_changed.connect(_fit_render_scale)
+	# 画质档位（设置界面里可调）：先注册监听，再走一次 _fit_render_scale ——
+	# 它会算出自动上限并顺带调 _apply_quality()，两条路径共用同一处落地逻辑。
+	GameSettings.listen(_on_setting_changed)
 	_fit_render_scale()
 	_watch_input()
 	_player = $Player

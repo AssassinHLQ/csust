@@ -122,6 +122,9 @@ func _run() -> void:
 func _apply(cfg: Dictionary) -> void:
 	_vp.scaling_3d_scale = float(cfg["scale"])
 	_vp.msaa_3d = int(cfg["msaa"])
+	# ⚠️ `game.gd::_apply_quality()` 会按画质档位写 `Engine.max_fps`（默认 60），
+	#    这里必须清掉 —— 否则所有超过 60 的档位都会被截到 60，对照表就废了。
+	Engine.max_fps = 0
 	if _env == null:
 		return
 	var full := String(cfg["env"]) == "full"

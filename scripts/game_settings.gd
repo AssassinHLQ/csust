@@ -26,6 +26,7 @@ const DEFAULTS := {
 	"master_volume": 1.0,
 	"companion_fire": true,
 	"boss_attack": true,
+	"render_quality": "high",
 }
 
 ## 数值型设置的 [最小值, 最大值, 步长]
@@ -35,6 +36,37 @@ const RANGES := {
 	"master_volume": [0.0, 1.0, 0.05],
 }
 
+## ── 画质档位 ──
+##
+## 为什么要有这个：GPU 占用完全由「每帧要画多少像素」决定，而那个旋钮
+## （`Viewport.scaling_3d_scale`）以前是代码里写死的。实测：2560×1440 + 原生 +
+## Compute 后端下 GPU 恒在 100%（每帧 16.2 ms / 预算 16.67 ms，刚好追得上 60 fps），
+## 所以「降一档」能直接换回一半的功耗。
+##
+## 字段含义：
+##   scale  乘到 `scaling_3d_scale` 上（1.0 = 原生；只乘，不会被放大过 1.0）
+##   ssao   屏幕空间环境光遮蔽（全屏 pass）
+##   glow   辉光
+##   fps    `Engine.max_fps`；0 = 不限帧（交给垂直同步）
+##
+## ⚠️ `ultra`/`high` 就是本工程验证过的画面（README §6.6 / §6.11 的对照图）；
+##    `medium` 以下只是为省电，画质会明显下降。
+const QUALITY := {
+	"ultra": {"label": "极致", "scale": 1.00, "ssao": true, "glow": true, "fps": 0},
+	"high": {"label": "高", "scale": 1.00, "ssao": true, "glow": true, "fps": 60},
+	"medium": {"label": "中", "scale": 0.85, "ssao": false, "glow": true, "fps": 60},
+	"low": {"label": "低", "scale": 0.70, "ssao": false, "glow": false, "fps": 60},
+	"saver": {"label": "省电", "scale": 0.60, "ssao": false, "glow": false, "fps": 30},
+}
+## 界面上的先后顺序（也是默认档 `high` 的位置：第二档）
+const QUALITY_ORDER := ["ultra", "high", "medium", "low", "saver"]
+
+## 离散型设置：值只能取列表里的那些。设置界面据此画**分段按钮**而不是滑块/开关。
+## ⚠️ 顺序有讲究：`QUALITY_ORDER` 必须先于它声明。
+const CHOICES := {
+	"render_quality": QUALITY_ORDER,
+}
+
 ## 设置界面里显示的名字
 const LABELS := {
 	"mouse_sensitivity": "鼠标灵敏度",
@@ -42,6 +74,7 @@ const LABELS := {
 	"master_volume": "主音量",
 	"companion_fire": "同伴开火",
 	"boss_attack": "Boss 攻击",
+	"render_quality": "画质",
 }
 
 static var _values := {}
@@ -74,6 +107,9 @@ static func set_value(key: String, v: Variant) -> void:
 	if not DEFAULTS.has(key):
 		push_warning("[GameSettings] 未知设置项：%s" % key)
 		return
+	if CHOICES.has(key) and not (v in CHOICES[key]):
+		push_warning("[GameSettings] %s 不接受「%s」，可选：%s" % [key, str(v), str(CHOICES[key])])
+		return
 	if _values.get(key) == v:
 		return
 	_values[key] = v
@@ -96,6 +132,30 @@ static func spec(key: String) -> Array:
 
 static func is_numeric(key: String) -> bool:
 	return RANGES.has(key)
+
+
+## 离散型（画质档位这类）—— 取值必须来自 `choices(key)`
+static func is_choice(key: String) -> bool:
+	return CHOICES.has(key)
+
+
+static func choices(key: String) -> Array:
+	return CHOICES.get(key, [])
+
+
+## 离散型的显示名（画质档位 -> 「极致 / 高 / 中 / 低 / 省电」）
+static func choice_label(key: String, v: Variant) -> String:
+	if key == "render_quality":
+		return String((QUALITY.get(str(v), {}) as Dictionary).get("label", str(v)))
+	return str(v)
+
+
+## 当前画质档位的参数表。值非法（比如手改过 settings.cfg）就退回默认档。
+static func quality_spec() -> Dictionary:
+	var key := str(value("render_quality"))
+	if not QUALITY.has(key):
+		key = str(DEFAULTS["render_quality"])
+	return QUALITY[key]
 
 
 static func label(key: String) -> String:

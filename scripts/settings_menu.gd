@@ -186,9 +186,12 @@ func _build() -> void:
 	vbox.add_child(title)
 	vbox.add_child(HSeparator.new())
 
-	# 数值型给滑块、布尔型给开关 —— 判据就是 GameSettings 里有没有 RANGES
+	# 三种控件：离散型给分段按钮、数值型给滑块、其余给开关 ——
+	# 判据全在 GameSettings 里（CHOICES / RANGES）
 	for key in GameSettings.keys():
-		if GameSettings.is_numeric(key):
+		if GameSettings.is_choice(key):
+			_add_choice(vbox, key)
+		elif GameSettings.is_numeric(key):
 			_add_slider(vbox, key)
 		else:
 			_add_check(vbox, key)
@@ -276,6 +279,71 @@ func _add_check(parent: Node, key: String) -> void:
 	_rows[key] = {"control": check, "value": value_label}
 
 
+## 离散型（画质档位）：一排**分段按钮**，选中的那个用 `pressed` 皮肤。
+##
+## 为什么不用 OptionButton：那是个下拉弹窗，弹出来的列表不受本皮肤控制，
+## 在像素风面板上会很突兀；分段按钮直接复用已有的按钮三态皮肤，两套皮肤都不用改。
+##
+## ⚠️ 用 `ButtonGroup`（`allow_unpress = false`）而不是自己管高亮：这样「同时只有一个
+##    按下」由 Godot 保证，切换时也自动重画皮肤。
+## ⚠️ 回调必须用 `bind(key, choice)` 而不是在循环里写 lambda —— GDScript 的 lambda
+##    捕获的是变量本身，循环变量会被后续迭代改写，五个按钮会一起指向最后一个档位。
+func _add_choice(parent: Node, key: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	parent.add_child(row)
+
+	var name_label := Label.new()
+	name_label.text = GameSettings.label(key)
+	name_label.custom_minimum_size.x = LABEL_WIDTH
+	name_label.add_theme_color_override("font_color", _skin["text"])
+	row.add_child(name_label)
+
+	var group := ButtonGroup.new()
+	group.allow_unpress = false
+	var seg := HBoxContainer.new()
+	seg.add_theme_constant_override("separation", 4)
+	seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(seg)
+
+	var current := str(GameSettings.value(key))
+	var buttons := {}
+	for choice in GameSettings.choices(key):
+		var b := _make_button(GameSettings.choice_label(key, choice), Callable())
+		b.toggle_mode = true
+		b.button_group = group
+		b.button_pressed = (String(choice) == current)
+		# 五个档位挤一行，按钮比原来的对话框按钮小一圈
+		b.custom_minimum_size = Vector2(0.0, 32.0)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 14)
+		b.pressed.connect(_on_choice_pressed.bind(key, choice))
+		seg.add_child(b)
+		buttons[String(choice)] = b
+
+	var value_label := Label.new()
+	value_label.text = _choice_value_text(key)
+	value_label.custom_minimum_size.x = VALUE_WIDTH
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_color_override("font_color", _skin["text"])
+	row.add_child(value_label)
+
+	_rows[key] = {"control": seg, "value": value_label, "buttons": buttons}
+
+
+func _on_choice_pressed(key: String, choice: Variant) -> void:
+	GameSettings.set_value(key, choice)
+
+
+## 分段按钮右侧那列数值：画质档位显示成「1.00× · 60 fps」，比只重复一遍档位名有用
+func _choice_value_text(key: String) -> String:
+	if key == "render_quality":
+		var q := GameSettings.quality_spec()
+		var fps := int(q["fps"])
+		return "%.2f× · %s" % [float(q["scale"]), "vsync" if fps <= 0 else "%d fps" % fps]
+	return str(GameSettings.value(key))
+
+
 func _make_button(text: String, handler: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -289,7 +357,10 @@ func _make_button(text: String, handler: Callable) -> Button:
 	b.add_theme_color_override("font_color", _skin["text"])
 	b.add_theme_color_override("font_hover_color", _skin["text"])
 	b.add_theme_color_override("font_pressed_color", _skin["text"])
-	b.pressed.connect(handler)
+	# ⚠️ 空 Callable 不能 connect（会报 `at: connect`）——分段按钮自己接
+	#    `_on_choice_pressed`，所以这里允许传空。
+	if handler.is_valid():
+		b.pressed.connect(handler)
 	return b
 
 
@@ -415,6 +486,13 @@ func _on_setting_changed(key: String, _value: Variant) -> void:
 		var check := control as CheckButton
 		check.set_pressed_no_signal(bool(GameSettings.value(key)))
 		value_label.text = _on_off(check.button_pressed)
+	elif row.has("buttons"):
+		# ⚠️ 必须 `set_pressed_no_signal`：普通 setter 会再发一次 pressed → set_value → 回到这里
+		var buttons: Dictionary = row["buttons"]
+		var current := str(GameSettings.value(key))
+		for choice in buttons.keys():
+			(buttons[choice] as Button).set_pressed_no_signal(String(choice) == current)
+		value_label.text = _choice_value_text(key)
 
 
 func _on_reset() -> void:
