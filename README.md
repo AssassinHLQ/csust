@@ -477,6 +477,13 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 > 移动鼠标会直接改 `player._yaw`（`_verify_spawnview` 第 1 节量的就是出生朝向，会红）；
 > 按 `Esc` 更糟 —— 设置界面（§1.12）会**暂停游戏**，之后所有移动 / 动画 / 站位类断言
 > 会一起变红，看起来像大面积回归，其实只是被暂停了。
+>
+> ⚠️ **还有一条「刀刃式」断言**（不是环境问题，跑几次就会撞上）：
+> `_verify_companion` 的「同伴不在画面正中央 20% 宽度内」用
+> `|屏幕 x − 800| > 160`，而**柚子**的站位恰好压在 160 这条线上 ——
+> 隔离重跑实测 161 px（过），连跑 13 套时 151 px（红），**余量只有 1 像素**。
+> 撞上时先隔离重跑该套件确认；**根治要动站位**（`companion_slots`），
+> 不要放宽阈值 —— 那条断言表达的是「同伴不许挡住准星」，是真要求。
 
 其它工具（都靠环境变量触发，平时空转）：
 
@@ -489,6 +496,10 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
 & $g --path $p --script res://scripts/_probe_platform.gd            # 泼溅摆放调参：扫缩放/下沉量
 & $g --path $p --script res://scripts/_probe_fps.gd                 # 泼溅吃多少 fps
 & $g --path $p --script res://scripts/_probe_splat_render.gd -- --scale=25 --cache=auto
+& $g --path $p --script res://scripts/_probe_collapse.gd -- --sog=res://splatdata/collapse_test.sogdata `
+      --scale=2.5 --mode=staggered --stagger=0.6 --brown=0.02 --t=0,0,0.4,0.7,0.9,1.0   # 动态 3DGS（§6.9）
+& $g --path $p --script res://scripts/_probe_collapse.gd -- `
+      --rise=0.6 --risejitter=0.8 --risespan=1.5 --riseloop=0 --risestep=0.3 --t=0,0,0,0  # 粒子上升（§6.9）
 ```
 
 ## 1.12 设置界面（`Esc`）
@@ -728,6 +739,7 @@ _arisu_learn/
 │  ├─ _probe_lean_side.gd   [工具] 跑动侧视渲图（做前倾对照）
 │  ├─ _probe_platform.gd    [工具] 扫缩放×下沉量（泼溅摆放调参）
 │  ├─ _probe_splat.gd       [工具] 探测引擎有没有原生 3DGS
+│  ├─ _probe_collapse.gd    [工具] 动态 3DGS 三效果（坍缩/布朗/上升）验证 + 出图，§6.9
 │  └─ _probe_*.gd           [工具] 一次性探针（口型/枪口/时间线/泼溅渲染/FPS）
 └─ .godot/                  导入缓存（已被 .gitignore 排除）
 
@@ -1214,6 +1226,161 @@ GPU 缓冲照样占着。要省显存就得真的按 `--venue` 只加载一份�
 开始解码），然后验：场景结构 / 点数与裁剪统计 / 地板 y 与质心 / **出生点在房间里** /
 **相机到天花板的余量** / 世界尺寸 / 轴对齐（含合成自检）/ floaters 是否真裁干净 /
 **墙碰撞与门洞（真跑物理）** / HUD 多行是否按行号路由 / Arisu 的朝向 / 7 张渲图。
+
+---
+
+## 6.9 动态 3DGS：坍缩 / 布朗抖动 / 粒子上升
+
+给泼溅加了三个随时间运动的逐高斯效果。**两条实现路线**，选哪条取决于要不要
+「每个高斯各自行动」：
+
+| 路线 | 何时用 | 原理 | 后端 |
+|---|---|---|---|
+| 节点缩放 | `collapse_mode = "uniform"` | 把系数乘进 `_local_basis()` | Compute + Raster |
+| 着色器逐高斯 | `staggered` / 布朗 / 上升 | 在 `gaussian_raster.gdshader` 里按 `sidx` 逐高斯求值 | **仅 Raster** |
+
+### 路线一：节点缩放（`uniform`）
+
+白捡的一条路 —— 两套后端本来就共用了这两行：
+
+```glsl
+vec4 world_pos = MODEL_MATRIX * vec4(splat_pos, 1.0);              // 位置吃 basis
+mat3 world_cov = object_linear * cov3d * transpose(object_linear);  // 尺度吃 basis²
+```
+
+`MODEL_MATRIX` 就是 `GaussianSplatNode` 的变换：后端把 MultiMeshInstance3D 作为
+**INTERNAL 子节点**挂上去（`raster_render_backend.gd` 原注释写着 *"inherits the
+node's transform"*）。所以把系数乘进 `_local_basis()`，所有高斯会**同步**等比变小
+并向 `offset` 收敛，**插件一行都不用改**。
+
+`use_anchor` 时 `offset = anchor_world − basis·anchor_source`，basis→0 时
+`offset→anchor_world` —— 于是**坍缩点精确可控**。测试场景钉在原点，实测
+`坍缩点 = (0.000, 0.000, 0.000)`。
+
+判据：包围盒尺寸必须**精确**等于 `k × 原尺寸`。
+
+| t | 系数 k | 实测尺寸 | 判定 |
+|---|---|---|---|
+| 0.000 | 1.00000 | 16.89 | OK |
+| 0.500 | 0.87500 | 14.78 | OK |
+| 0.850 | 0.38587 | 6.52 | OK |
+| 1.000 | 0.00040 | 0.01 | OK |
+
+9 档 0 档不符，小数点后 4 位吻合。**不取 0**：全 0 的基矩阵是奇异的，Godot 会报错。
+
+### 路线二：着色器逐高斯（错峰 + 布朗 + 上升）
+
+节点缩放做不到「每个高斯各自行动」，所以另开一条：
+
+| 文件 | 职责 |
+|---|---|
+| `addons/gdgs/.../materials/gaussian_raster.gdshader` | 按 `sidx` 逐高斯求值 |
+| `addons/gdgs/.../raster/raster_render_backend.gd` | `_drive_collapse()` 每帧轮询节点属性 → 推入材质 |
+| `addons/gdgs/runtime/nodes/gaussian_splat_node.gd` | `Dynamic` 组导出，**只是数据，不含逻辑** |
+| `scripts/splat_scene.gd` | 对外参数 + 每帧刷新 |
+
+**每个高斯的随机数不占一点显存。** 光栅路径里 `sidx` 在 `use_order` 打开后就是
+**源索引**，直接拿它做哈希当种子：
+
+```glsl
+float r = anim_hash01(float(sidx) + float(anim_seed));
+```
+
+277 万点若各存一个随机数要十几 MB，哈希是零成本；而且**种子稳定** ⇒ 每个高斯的
+错峰时刻与漂移方向在整个动画里不会逐帧乱跳。
+
+#### 三个效果
+
+| 效果 | 主要参数 | 数学 |
+|---|---|---|
+| 错峰坍缩 | `collapse_stagger` | `lt = clamp((t − r·stagger)/(1−stagger), 0, 1)`；位置 `mix` 向 `anim_center`，协方差乘 `(1−e)²` |
+| 布朗抖动 | `brownian_amp` / `brownian_freq` | 两段八度正弦叠加，以**原位置为中心**，硬上界 `1.5 × amp` |
+| 粒子上升 | `rise_speed` / `rise_jitter` / `rise_span` / `rise_side` / `rise_loop` | 每高斯随机速度倍率 `[1−j, 1+j]`，`splat_pos.y += speed·sp·t` |
+
+⚠️ **错峰公式里的 `/(1−stagger)` 是必需的** —— 它同时做归一化，保证所有高斯仍在
+`t = 1` 处收齐，否则错峰越大尾巴拖越长。
+
+⚠️ **`rise_fade` 必须 > 0。** 循环模式靠 `fract(risen/span)` 把粒子送回底部，各高斯
+速度不同 ⇒ 回绕时刻也不同（所以不会整场同时跳一下）；但**单个**粒子的回绕仍会
+瞬移，必须靠两端淡出遮住。侧向偏移乘 `ph` 是同一个道理：从底部出发时偏移恰为 0，
+而那一刻正被淡出遮住。
+
+⚠️ **`min_pixel_size` 后端没设**（保持 shader 默认 `0.0`），所以次像素剔除是关的。
+收缩过程中高斯不会突然消失，会一路平滑缩到重叠、中心越来越亮 —— 这是「坍缩成
+奇点」该有的观感，不是 bug。
+
+#### 验证：三种判据，各有各的适用范围
+
+| 效果 | 判据 | 为什么必须换 |
+|---|---|---|
+| `uniform` | 包围盒 = `k × 原尺寸` | 节点缩放确实改变包围盒 |
+| `staggered` | **画面覆盖率** | 逐高斯坍缩**不缩放节点**，包围盒纹丝不动，原判据失效 |
+| 上升 | **亮度重心上移** | 对整体缩放免疫（等比放大会把所有像素一起放大，重心不动）⇒ 重心上移只可能来自粒子真的位移 |
+| 布朗 | **同一 t 连拍两帧做像素差** | 单帧看不出抖动；两帧的 `collapse_t` 与节点变换完全相同，**唯一变量是时间** |
+
+实测（`--mode=staggered --stagger=0.6 --brown=0.02 --rise=0.6`）：
+
+- 覆盖率 `0.2169 → 0.0000`
+- 同 t 两帧像素差：均值 `1.309` / 峰值 `164` / **4.88%** 像素明显变化
+- 上升：亮度重心 `0.5943 → 0.5523`（上移 **4.20%** 屏高）
+  手算校验：`0.6 源单位/秒 × 0.9 s × 2.5 = 1.35 m`，相机距原点 27.8 m、
+  fov 60° ⇒ 屏高 32.1 m ⇒ `1.35 / 32.1 = 4.2%` —— **实测与预测吻合到小数点后一位**
+
+⚠️ **上升与世界无关的判据要用「手动时钟」跑**（`dynamic_auto_time = false`），
+否则两次拍摄之间到底过了多少真实时间取决于渲染帧率，位移量会飘。本工程在帧率上
+栽过两轮（headless 约 6 fps / 真窗口实测约 2000 fps，见 §1.11）。
+
+⚠️ **改着色器时最容易犯的错是「声明了 uniform 却没在 `vertex()` 里用」。**
+本喵就这么栽过：uniform 与噪声函数都加好了，`vertex()` 里忘了调用，覆盖率五档
+纹丝不动（`0.2167`）才暴露出来 —— 着色器**不报错**，只是什么都不做。所以判据
+必须能测出「有没有真的生效」，不能只看有没有编译错误。
+
+### 探针
+
+```powershell
+# 逐高斯错峰 + 布朗：覆盖率 + 同 t 像素差
+& $g --path $p --script res://scripts/_probe_collapse.gd -- `
+      --sog=res://splatdata/collapse_test.sogdata --scale=2.5 `
+      --mode=staggered --stagger=0.6 --brown=0.02 --brownfreq=1.5 `
+      --t=0,0,0.4,0.7,0.9,1.0
+
+# 粒子上升：亮度重心上移（手动时钟，每档 +0.3 s）
+& $g --path $p --script res://scripts/_probe_collapse.gd -- `
+      --rise=0.6 --risejitter=0.8 --risespan=1.5 --riseloop=0 --risestep=0.3 `
+      --t=0,0,0,0
+```
+
+输出到 `..\_arisu_captures\_collapse\`（帧名带全局拍摄序号 `_iN`）。
+拼图与像素差用同目录的 `check.py`，**必须用自带的 Python** —— 系统那个没有 Pillow：
+
+```powershell
+& "C:\Users\WY157\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe" `
+      check.py C:\Users\WY157\Desktop\GODOT\_arisu_captures\_collapse
+```
+
+### 对外接口
+
+```gdscript
+$Room609.collapse_enabled = true
+$Room609.collapse_mode = "staggered"   # uniform = 节点缩放，两后端通用
+$Room609.collapse_stagger = 0.6
+$Room609.collapse_shader_fade = 1.0
+$Room609.brownian_amp = 0.02           # 源坐标单位；这份扫描 6.8 单位宽
+$Room609.brownian_freq = 1.5
+$Room609.rise_speed = 0.6              # 源坐标/秒
+$Room609.rise_loop = true
+$Room609.rise_span = 1.5
+$Room609.play_collapse()               # 或 set_collapse(0.5) 手动驱动
+```
+
+⚠️ **这三个效果只有 Raster 后端实现了**（`project.godot` 的
+`gdgs/rendering/backend` 必须是 `"Raster"`）。Compute 侧的 `gsplat_projection.glsl`
+有它自己的一套 `time_factor` 入场动画，但**没有**错峰坍缩、布朗漂移与上升，所以
+本项**不保持两后端 parity** —— 这与那两个文件顶部声明的「协方差 / 重光照 parity」
+是两码事，后者没动。
+
+⚠️ 三个效果**可以叠加**：它们是相互独立的偏移量。`_advance_dynamic` 只在
+「错峰模式 **或** 布朗 **或** 上升」任一开启时才每帧推参数，三者全关时零开销。
 
 ---
 
