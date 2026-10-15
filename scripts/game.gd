@@ -21,6 +21,43 @@ var _shots := 0
 var _hits := 0
 
 
+## 输入自检：把「窗口到底有没有拿到前台焦点」打出来，并尽力抢一次前台。
+##
+## ⚠️ 为什么必须由**游戏自己**报，而不是写个探针去测：
+## `Input.action_press()` 与 `Input.parse_input_event()` 都是**直接往 Godot 的
+## Input 单例里塞事件**，绕过「操作系统 → 窗口 → Godot」这一整段。所以完全可能
+## 「探针里 WASD 走得飞起、真人按下去毫无反应」—— 缺的正是这一段。
+## 本喵为此误判过两轮。
+##
+## 症状特征（用来和别的病因区分）：
+##   场上其它角色照常走动/播动画，**只有键鼠没反应**，鼠标也没被捕获
+##   ⇒ 游戏逻辑和帧率都正常，纯粹是窗口收不到操作系统的输入事件。
+##   对照：物理时间被稀释时（见 _fit_render_scale 的注释）是**所有东西一起变慢**。
+##
+## 自检运行（`--script`）时不抢前台、也不打印：13 套自检各自开一个窗口，
+## 抢前台会互相干扰，而且它们自己会注入事件、不需要焦点。
+func _watch_input() -> void:
+	if OS.get_cmdline_args().has("--script"):
+		return
+	# 尽力抢一次前台（Windows 的 SetForegroundWindow 有前台锁，不保证成功）
+	DisplayServer.window_move_to_foreground()
+	get_window().grab_focus()
+	_report_input.call_deferred()
+
+
+func _report_input() -> void:
+	for i in 8:
+		await get_tree().create_timer(1.0).timeout
+		var focus := DisplayServer.window_is_focused()
+		var line := "[Game] 输入自检 第 %d 秒：window_is_focused=%s  mouse_mode=%d  paused=%s" % [
+			i + 1, str(focus), Input.mouse_mode, str(get_tree().paused)]
+		if not focus:
+			line += "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
+		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused:
+			line += "   ← ⚠️ 有焦点但鼠标未被捕获（按 Esc 开着设置菜单？）"
+		print(line)
+
+
 ## 视口比设计分辨率大不少时，按比例**只缩小 3D 渲染**分辨率（UI 仍全分辨率）。
 ##
 ## ⚠️ 为什么必须有这个 —— 本喵在这里翻过一次车，症状极具误导性：
@@ -71,6 +108,7 @@ func _ready() -> void:
 	if not vp.size_changed.is_connected(_fit_render_scale):
 		vp.size_changed.connect(_fit_render_scale)
 	_fit_render_scale()
+	_watch_input()
 	_player = $Player
 	_weapon = $Player/Weapon
 	_hud = $HUD
