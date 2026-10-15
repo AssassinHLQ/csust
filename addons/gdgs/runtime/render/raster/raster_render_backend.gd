@@ -239,7 +239,13 @@ func _drive_collapse(entry: Entry) -> void:
 	m.set_shader_parameter("anim_seed", int(node.get("dynamic_seed")))
 	m.set_shader_parameter("anim_brown_amp", float(node.get("dynamic_brownian_amp")))
 	m.set_shader_parameter("anim_brown_freq", float(node.get("dynamic_brownian_freq")))
-	m.set_shader_parameter("anim_brown_time", float(node.get("dynamic_brownian_time")))
+	m.set_shader_parameter("anim_time", float(node.get("dynamic_time")))
+	m.set_shader_parameter("anim_rise_speed", float(node.get("dynamic_rise_speed")))
+	m.set_shader_parameter("anim_rise_jitter", float(node.get("dynamic_rise_jitter")))
+	m.set_shader_parameter("anim_rise_side", float(node.get("dynamic_rise_side")))
+	m.set_shader_parameter("anim_rise_loop", bool(node.get("dynamic_rise_loop")))
+	m.set_shader_parameter("anim_rise_span", float(node.get("dynamic_rise_span")))
+	m.set_shader_parameter("anim_rise_fade", float(node.get("dynamic_rise_fade")))
 
 
 func _drive_entry(entry: Entry) -> void:

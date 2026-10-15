@@ -78,8 +78,24 @@ const PROXY_SHADOW_CASTER_PATH := "res://addons/gdgs/runtime/lighting/proxy_shad
 @export_range(0.0, 5.0, 0.0001) var dynamic_brownian_amp := 0.0
 ## 漂移频率（Hz），越大抖得越快。
 @export_range(0.0, 20.0, 0.01) var dynamic_brownian_freq := 1.0
-## 漂移用的时间（秒），由外部驱动，便于暂停/变速/定格。
-@export var dynamic_brownian_time := 0.0
+## 动态效果的共享时钟（秒）：布朗漂移与向上漂移都用它，由外部驱动，
+## 便于暂停 / 变速 / 定格。
+@export var dynamic_time := 0.0
+
+## 第三个效果：所有粒子随机向上。
+## 每个高斯按自己的随机速度上升，所以不是齐步走。
+@export_range(0.0, 20.0, 0.001) var dynamic_rise_speed := 0.0
+## 速度随机幅度：0 = 全部同速，0.8 = 速度在 0.2 ~ 1.8 倍之间随机。
+@export_range(0.0, 0.95, 0.01) var dynamic_rise_jitter := 0.8
+## 侧向随机偏移幅度（源坐标），让上升不是一条直线。
+@export_range(0.0, 5.0, 0.0001) var dynamic_rise_side := 0.0
+## 循环：走完 dynamic_rise_span 后从底部重新升起，形成源源不断的上升流。
+## 关掉则是一次性升起（粒子会一直飞出画面）。
+@export var dynamic_rise_loop := false
+## 一个循环的上升距离（源坐标）。
+@export_range(0.001, 50.0, 0.001) var dynamic_rise_span := 1.0
+## 循环时两端各淡出多少（占一个循环的比例）。有它才能在回绕瞬间不"闪现"。
+@export_range(0.0, 0.5, 0.01) var dynamic_rise_fade := 0.15
 
 var _gaussian: GaussianResource
 var _lighting: GaussianLightingResource

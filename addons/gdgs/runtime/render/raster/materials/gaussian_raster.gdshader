@@ -65,7 +65,20 @@ uniform float anim_fade = 0.0;          // 0 = 不淡出，1 = 塌到底时透�
 uniform int anim_seed = 0;
 uniform float anim_brown_amp = 0.0;     // 局部空间振幅
 uniform float anim_brown_freq = 1.0;    // Hz
-uniform float anim_brown_time = 0.0;    // 秒
+uniform float anim_time = 0.0;          // 动态效果的共享时钟（秒），由外部驱动
+
+// 第三个效果：所有粒子随机向上。
+//
+// 每个高斯按**自己的随机速度**往上走，所以不是齐步上升；循环模式下走完
+// anim_rise_span 就从底部重新升起，两端各淡出 anim_rise_fade，回绕的瞬间
+// 因为已经完全透明而看不见。又因为速度各不相同，回绕时刻也被打散了 ——
+// 不会出现整场同时跳一下。
+uniform float anim_rise_speed = 0.0;    // 源坐标/秒；0 = 关闭
+uniform float anim_rise_jitter = 0.8;   // 速度随机幅度 0..0.95
+uniform float anim_rise_side = 0.0;     // 侧向随机偏移幅度（源坐标）
+uniform bool anim_rise_loop = false;
+uniform float anim_rise_span = 1.0;     // 一个循环的上升距离（源坐标）
+uniform float anim_rise_fade = 0.15;    // 两端淡出占一个循环的比例
 
 // --- relighting (see CLAUDE.md, phase R2) -----------------------------------
 // Baked per-splat surface record (RGBA8, 1 texel per splat): octahedral outward
@@ -354,7 +367,33 @@ void vertex() {
 		// --- 布朗漂移：以**原位置为中心**的小幅游走，硬上界 1.5×amp ---
 		if (anim_brown_amp > 0.0) {
 			splat_pos += anim_brownian(float(sidx) + float(anim_seed) * 3.0,
-				anim_brown_time, anim_brown_amp, anim_brown_freq);
+				anim_time, anim_brown_amp, anim_brown_freq);
+		}
+
+		// --- 随机向上：所有粒子各自按随机速度往上走 ---
+		if (anim_rise_speed > 0.0) {
+			// 每个高斯一个速度倍率，范围 [1-jitter, 1+jitter]。
+			// jitter = 0 就是整场齐步上升。
+			float sp = mix(1.0 - anim_rise_jitter, 1.0 + anim_rise_jitter,
+				anim_hash01(float(sidx) * 1.7 + float(anim_seed) + 11.0));
+			float risen = anim_rise_speed * sp * anim_time;
+			float ph = 1.0;
+			if (anim_rise_loop) {
+				// 各自按自己的速度循环 ⇒ 回绕时刻也被打散
+				ph = fract(risen / max(anim_rise_span, 1e-4));
+				risen = ph * anim_rise_span;
+				float fd = max(anim_rise_fade, 1e-4);
+				opacity *= smoothstep(0.0, fd, ph)
+					* (1.0 - smoothstep(1.0 - fd, 1.0, ph));
+			}
+			splat_pos.y += risen;
+			if (anim_rise_side > 0.0) {
+				// 侧向随机偏移，让上升不是一条直线。乘 ph 是为了从底部出发时
+				// 偏移为 0 —— 那一刻正好被淡出遮住，所以回绕不会"跳"。
+				vec3 sd = anim_hash31(float(sidx) * 2.3 + float(anim_seed) + 71.0) - 0.5;
+				splat_pos.x += sd.x * anim_rise_side * ph;
+				splat_pos.z += sd.z * anim_rise_side * ph;
+			}
 		}
 
 		vec4 world_pos = MODEL_MATRIX * vec4(splat_pos, 1.0);

@@ -136,10 +136,30 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export_range(0.0, 20.0, 0.01) var brownian_freq := 1.0
 ## 换一批随机相位/频率。错峰顺序与它共用种子，所以也会一起变。
 @export var brownian_seed := 0
-## 漂移时间自动走。关掉则用手动的 brownian_time，便于定格比对。
-@export var brownian_auto_time := true
-## 手动漂移时间（秒），brownian_auto_time = false 时生效。
-@export var brownian_time := 0.0
+
+@export_group("Rise")
+## 第三个效果：**所有粒子随机向上**。每个高斯按自己的随机速度上升，
+## 所以不是齐步走。0 = 关闭。单位是**源坐标/秒**。
+@export_range(0.0, 20.0, 0.001) var rise_speed := 0.0
+## 速度随机幅度：0 = 全部同速（齐步上升）；0.8 = 速度在 0.2 ~ 1.8 倍之间随机。
+@export_range(0.0, 0.95, 0.01) var rise_jitter := 0.8
+## 侧向随机偏移幅度（源坐标），让上升不是一条直线。
+@export_range(0.0, 5.0, 0.0001) var rise_side := 0.0
+## 循环：走完 rise_span 后从底部重新升起，形成源源不断的上升流。
+## 关掉则是一次性升起（粒子会一直飞出画面）。建议开——上升流才是常态。
+@export var rise_loop := false
+## 一个循环的上升距离（源坐标）。
+@export_range(0.001, 50.0, 0.001) var rise_span := 1.0
+## 循环时两端各淡出多少（占一个循环的比例）。**必须 > 0**，否则回绕那一刻
+## 粒子会从顶部"瞬移"回底部，看得见跳变。
+@export_range(0.0, 0.5, 0.01) var rise_fade := 0.15
+
+@export_group("Dynamic Clock")
+## 动态时钟自动走。关掉则用手动的 dynamic_time，便于定格逐帧比对。
+@export var dynamic_auto_time := true
+## 手动时钟（秒），dynamic_auto_time = false 时生效。
+## 布朗漂移与向上漂移**共用**这一个时钟。
+@export var dynamic_time := 0.0
 
 var splat_node: Node3D = null
 ## 坍缩进度：0 = 原始大小，1 = 完全坍缩。
@@ -150,7 +170,7 @@ var _collapse_dir := 1.0
 ## 内容中心（源坐标）。逐高斯坍缩的收敛点 —— 与 uniform 模式的锚点机制对齐：
 ## use_anchor 时内容中心被钉在 anchor_world 上，所以两种模式塌到同一个世界点。
 var _content_center := Vector3.ZERO
-var _brownian_clock := 0.0
+var _dynamic_clock := 0.0
 var splat_center := Vector3.ZERO
 var splat_aabb := AABB()
 ## 内容稳健包围盒（1‰~99.9‰ 分位，排除 floaters）
@@ -359,24 +379,29 @@ func _push_dynamic() -> void:
 	splat_node.set("dynamic_seed", brownian_seed)
 	splat_node.set("dynamic_brownian_amp", brownian_amp)
 	splat_node.set("dynamic_brownian_freq", brownian_freq)
-	splat_node.set("dynamic_brownian_time",
-		_brownian_clock if brownian_auto_time else brownian_time)
+	splat_node.set("dynamic_rise_speed", rise_speed)
+	splat_node.set("dynamic_rise_jitter", rise_jitter)
+	splat_node.set("dynamic_rise_side", rise_side)
+	splat_node.set("dynamic_rise_loop", rise_loop)
+	splat_node.set("dynamic_rise_span", rise_span)
+	splat_node.set("dynamic_rise_fade", rise_fade)
+	splat_node.set("dynamic_time", _dynamic_clock if dynamic_auto_time else dynamic_time)
 
 
-## 推进布朗漂移时钟，并把逐高斯参数刷新到节点上。
+## 推进动态时钟，并把逐高斯参数刷新到节点上。
 ##
-## 为什么必须每帧推：着色器是无状态的，每个高斯的漂移位置完全由
-## anim_brown_time 决定，而材质只能从节点属性里读到它 —— 所以得由这里持续刷。
-## 既没开错峰坍缩也没开布朗时直接返回，零开销。
+## 为什么必须每帧推：着色器是无状态的，每个高斯的漂移/上升位置完全由
+## anim_time 决定，而材质只能从节点属性里读到它 —— 所以得由这里持续刷。
+## 既没开错峰坍缩、也没开布朗、也没开上升时直接返回，零开销。
 func _advance_dynamic(delta: float) -> void:
 	if splat_node == null:
 		return
 	var staggered := collapse_enabled and collapse_mode == "staggered"
-	var jitter := brownian_amp > 0.0
-	if not staggered and not jitter:
+	var needs_clock := brownian_amp > 0.0 or rise_speed > 0.0
+	if not staggered and not needs_clock:
 		return
-	if jitter and brownian_auto_time:
-		_brownian_clock += delta
+	if needs_clock and dynamic_auto_time:
+		_dynamic_clock += delta
 	_push_dynamic()
 
 

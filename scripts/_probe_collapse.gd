@@ -31,6 +31,12 @@ var _stagger := 0.6
 var _brown := 0.0
 var _brown_freq := 1.0
 var _brown_seed := 0
+var _rise := 0.0
+var _rise_jitter := 0.8
+var _rise_span := 1.0
+var _rise_loop := false
+var _rise_side := 0.0
+var _rise_step := 0.25
 
 
 func _initialize() -> void:
@@ -63,6 +69,18 @@ func _run() -> void:
 			_brown_freq = float(a.substr(12))
 		elif a.begins_with("--brownseed="):
 			_brown_seed = int(a.substr(12))
+		elif a.begins_with("--risejitter="):
+			_rise_jitter = float(a.substr(13))
+		elif a.begins_with("--rise="):
+			_rise = float(a.substr(7))
+		elif a.begins_with("--risespan="):
+			_rise_span = float(a.substr(11))
+		elif a.begins_with("--riseloop="):
+			_rise_loop = a.substr(11) != "0"
+		elif a.begins_with("--riseside="):
+			_rise_side = float(a.substr(11))
+		elif a.begins_with("--risestep="):
+			_rise_step = float(a.substr(11))
 		elif a.begins_with("--tag="):
 			_tag = a.substr(6)
 		elif a.begins_with("--t="):
@@ -105,6 +123,16 @@ func _run() -> void:
 	scene.set("brownian_amp", _brown)
 	scene.set("brownian_freq", _brown_freq)
 	scene.set("brownian_seed", _brown_seed)
+	scene.set("rise_speed", _rise)
+	scene.set("rise_jitter", _rise_jitter)
+	scene.set("rise_span", _rise_span)
+	scene.set("rise_loop", _rise_loop)
+	scene.set("rise_side", _rise_side)
+	# 上升的判据要完全确定，不能被帧率影响：所以探针里改用手动时钟，
+	# 每档显式推进 _rise_step 秒。否则 --t=0,0,0 两次拍摄之间到底过了多少
+	# 真实时间取决于渲染帧率，重心位移量会飘。
+	scene.set("dynamic_auto_time", _rise <= 0.0)
+	scene.set("dynamic_time", 0.0)
 	root.add_child(scene)
 
 	var t0 := Time.get_ticks_msec()
@@ -158,21 +186,32 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 
 	var staggered := _mode == "staggered"
+	var rising := _rise > 0.0
 	var base_size := box0.size
 	var bad := 0
 	var cov0 := -1.0
 	var cov_last := -1.0
-	print("[collapse] 模式 %s%s%s" % [
+	var cy0 := -2.0
+	var cy_last := -2.0
+	print("[collapse] 模式 %s%s%s%s" % [
 		_mode,
 		("（错峰 %.2f）" % _stagger) if staggered else "",
 		("（布朗 amp=%.4f freq=%.1f seed=%d）" % [_brown, _brown_freq, _brown_seed])
-			if _brown > 0.0 else ""])
-	print("[collapse] 判据：%s" % (
-		"画面覆盖率（逐高斯坍缩不缩放节点，包围盒判据失效）" if staggered
-		else "包围盒尺寸必须 = k × 原尺寸"))
-	print("[collapse] t       系数k     覆盖率   期望尺寸        实测尺寸        k比值   判定")
+			if _brown > 0.0 else "",
+		("（上升 %.3f/秒 jitter=%.2f loop=%s span=%.2f side=%.3f）"
+			% [_rise, _rise_jitter, str(_rise_loop), _rise_span, _rise_side])
+			if rising else ""])
+	var criterion := "包围盒尺寸必须 = k × 原尺寸"
+	if staggered:
+		criterion = "画面覆盖率（逐高斯坍缩不缩放节点，包围盒判据失效）"
+	if rising:
+		criterion = "亮度重心必须上移（行号变小）"
+	print("[collapse] 判据：%s" % criterion)
+	print("[collapse] t       系数k     覆盖率   重心y    期望尺寸        实测尺寸        k比值  判定")
 	for si in _steps.size():
 		var t := _steps[si]
+		if rising:
+			scene.set("dynamic_time", float(si) * _rise_step)
 		scene.call("set_collapse", t)
 		await _frames(14)
 		var k := float(scene.call("collapse_factor"))
@@ -182,22 +221,33 @@ func _run() -> void:
 		var img: Image = root.get_texture().get_image()
 		img.save_png(out.path_join("%st%03d_i%d.png" % [_tag, int(round(t * 100.0)), si]))
 		var cov := _coverage(img)
+		var cy := _centroid_y(img)
 		if cov0 < 0.0:
 			cov0 = cov
+			cy0 = cy
 		cov_last = cov
+		cy_last = cy
 		var ok := true
-		if not staggered:
+		if not staggered and not rising:
 			# 尺寸随 k 等比，所以相对误差应当极小；用长度比做单一判据。
 			ok = absf(ratio - k) <= maxf(0.002, k * 0.02)
 			if not ok:
 				bad += 1
-		print("[collapse] %-7.3f %-9.5f %-8.4f %-15s %-15s %-7.4f %s" % [
-			t, k, cov,
+		print("[collapse] %-7.3f %-9.5f %-8.4f %-8.4f %-15s %-15s %-6.4f %s" % [
+			t, k, cov, cy,
 			str((base_size * k).snappedf(0.01)) if not staggered else "-",
 			str(box.size.snappedf(0.01)),
 			ratio, "OK" if ok else "**不符**"])
 
-	if staggered:
+	if rising:
+		# 上升判据对整体缩放免疫：等比放大会把所有像素一起放大，
+		# 亮度重心不动 —— 所以重心上移只可能来自粒子真的往上走。
+		var moved_up := cy_last >= 0.0 and cy0 >= 0.0 and cy_last < cy0 - 0.002
+		if not moved_up:
+			bad += 1
+		print("[collapse] 亮度重心 %.4f → %.4f（要变小 = 上移）：%s" % [
+			cy0, cy_last, "OK" if moved_up else "**不符**"])
+	elif staggered:
 		var shrunk := cov_last <= cov0 * 0.25
 		if not shrunk:
 			bad += 1
@@ -223,6 +273,28 @@ func _coverage(img: Image) -> float:
 			if maxf(c.r, maxf(c.g, c.b)) > 0.18:
 				hit += 1
 	return float(hit) / float(160 * 90)
+
+
+## 亮度加权重心所在行，归一化到 0（画面顶）~ 1（画面底）。
+##
+## 用来证明「粒子在往上走」：上升会让重心行号**变小**。
+## 这条判据对整体缩放免疫 —— 等比放大会把所有像素一起放大，重心不动 ——
+## 所以重心上移只可能来自粒子真的位移了。
+func _centroid_y(img: Image) -> float:
+	var small := Image.new()
+	small.copy_from(img)
+	small.resize(160, 90, Image.INTERPOLATE_BILINEAR)
+	var wsum := 0.0
+	var wysum := 0.0
+	for y in 90:
+		for x in 160:
+			var c := small.get_pixel(x, y)
+			var w := maxf(0.0, maxf(c.r, maxf(c.g, c.b)) - 0.18)
+			wsum += w
+			wysum += w * float(y)
+	if wsum <= 0.0:
+		return -1.0
+	return wysum / wsum / 90.0
 
 
 func _frames(n: int) -> void:
