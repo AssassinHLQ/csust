@@ -23,8 +23,21 @@ const DataTextures := preload("res://addons/gdgs/runtime/render/raster/raster_da
 const SplatMesh := preload("res://addons/gdgs/runtime/render/raster/raster_splat_mesh.gd")
 const SortJob := preload("res://addons/gdgs/runtime/render/raster/raster_sort_job.gd")
 const SortDriver := preload("res://addons/gdgs/runtime/render/raster/raster_sort_driver.gd")
+const Sorter := preload("res://addons/gdgs/runtime/render/raster/raster_sorter.gd")
 
 const SPLATS_PER_INSTANCE := 128
+
+## 排序分组宽度（着色器侧的 order_group）。见 raster_sorter.gd 的组顺序模式。
+##
+## 为什么默认 32 而不是 128：组内按源顺序连排，所以组内深度乱序的量级是
+## 组内空间离散度，实测按 √group 增长 —— 组宽 32 时约 0.023 源单位，与相邻
+## 高斯的平均间距（0.0221）同量级，也就是**乱序不到一个高斯间距**，看不出来。
+## 排序耗时与组数成正比：278 万点、room609 实测 组宽 128 → 7.8 ms，
+## 组宽 32 → 约 30 ms。两者都远低于双缓冲那个 810 ms 的陈旧窗口。
+const ORDER_GROUP := 32
+## 源顺序局部性判不过这个比值就退回逐高斯排序（组宽 1）。
+## 实测 room609 = 0.0102，合成随机数据 ≈ 1.0，阈值 0.25 留足两个数量级余量。
+const ORDER_GROUP_LOCALITY_MAX := 0.25
 
 ## 动态 3DGS 的缓动档位：与 gaussian_raster.gdshader 的 anim_ease_mode 一一对应。
 const EASE_MODE_IDS := {"linear": 0, "in_cubic": 1, "in_quad": 2, "smoothstep": 3}
@@ -63,6 +76,8 @@ var _driver: Node = null
 var _entries: Dictionary = {}   # node instance id -> Entry
 var _light_rig: RefCounted = null
 var _light_rig_checked := false
+## 「源顺序没有局部性」只提示一次，避免每个节点都刷一条。
+var _warned_locality := false
 
 func get_display_name() -> String:
 	return "Raster"
@@ -323,7 +338,15 @@ func _populate_entry(entry: Entry, node: Node) -> void:
 
 	# Order texture (starts zeroed with use_order off -> renders in resource order
 	# until the first background sort lands).
-	var order_dims: Vector2i = DataTextures.order_dimensions(count)
+	#
+	# ⚠️ 表项是**组**而不是高斯：着色器把「绘制序号」换算成
+	#    sidx = order_data[序号 / group] * group + (序号 % group)
+	# 所以表只有「组数」项。组顺序排序比逐高斯快 group 倍，这是本后端
+	# 「快速转身时画面糊 0.8 秒」的唯一成因，见 raster_sorter.gd 的组顺序模式。
+	var xyz: PackedVector3Array = gaussian.get("xyz")
+	var group := _choose_order_group(xyz, count)
+	var entries := int(ceil(float(count) / float(group)))
+	var order_dims: Vector2i = DataTextures.order_dimensions(entries)
 	var order_image: Image = DataTextures.make_order_image(order_dims)
 	var order_texture: ImageTexture = ImageTexture.create_from_image(order_image)
 
@@ -336,6 +359,7 @@ func _populate_entry(entry: Entry, node: Node) -> void:
 	material.set_shader_parameter("point_count", count)
 	material.set_shader_parameter("order_data", order_texture)
 	material.set_shader_parameter("order_width", order_dims.x)
+	material.set_shader_parameter("order_group", group)
 	material.set_shader_parameter("use_order", false)
 
 	var instances := int(ceil(float(count) / float(SPLATS_PER_INSTANCE)))
@@ -360,7 +384,8 @@ func _populate_entry(entry: Entry, node: Node) -> void:
 	mmi.transform = Transform3D.IDENTITY
 
 	var job := SortJob.new()
-	job.set_positions(gaussian.get("xyz"))
+	job.set_positions(xyz)
+	job.set_group_size(group)
 	job.set_texel_count(order_dims.x * order_dims.y)
 
 	entry.mmi = mmi
@@ -382,6 +407,24 @@ func _populate_entry(entry: Entry, node: Node) -> void:
 	entry.lighting_checked = false
 	entry.applied_knobs = []
 	entry.applied_rig_version = -1
+
+
+## 选排序分组宽度：源顺序有空间局部性就用 ORDER_GROUP，否则退回逐高斯（1）。
+##
+## 判据只看量级（0.01 还是 0.5），所以采样几千对就够，主线程上 1~3 ms。
+## 种子固定，所以同一个资源每次判出来的结果一样 —— 否则会出现「这次启动
+## 用了分组、下次没用」的随机行为，画面质量会飘。
+func _choose_order_group(xyz: PackedVector3Array, count: int) -> int:
+	if count < ORDER_GROUP * 8 or xyz.size() < count:
+		return 1
+	var ratio := Sorter.locality_ratio(xyz)
+	if ratio <= ORDER_GROUP_LOCALITY_MAX:
+		return ORDER_GROUP
+	if not _warned_locality:
+		_warned_locality = true
+		print("[gdgs] raster: 源顺序没有空间局部性（相邻/随机 = %.3f），退回逐高斯排序（慢 %d 倍）"
+			% [ratio, ORDER_GROUP])
+	return 1
 
 ## Resolve the camera whose pose drives the sort. In-game this is the node's
 ## viewport camera. In the editor it MUST be the Node3DEditor viewport's own

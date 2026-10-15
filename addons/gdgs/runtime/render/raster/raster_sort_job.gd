@@ -10,6 +10,9 @@ extends RefCounted
 ## The worker produces the finished R32F order-texture bytes, not just indices:
 ## the int→float conversion and the byte packing both happen here so the main
 ## thread's entire share of a completed sort is Image.set_data + texture update.
+##
+## 组顺序模式（_group > 1）下排序键是**组质心**而不是点本身，表项数因此是
+## 组数而不是点数。质心的 O(n) 累加也在工作线程里做一次（见 _run）。
 
 const Sorter := preload("res://addons/gdgs/runtime/render/raster/raster_sorter.gd")
 
@@ -20,9 +23,28 @@ var _byte_buffers := [PackedByteArray(), PackedByteArray()]
 var _front := 0
 var _task_id := -1
 var _pending_dir := Vector3.ZERO
+## 组顺序排序：排序键是每 _group 个点一组的质心，缓存起来只算一次。
+## _group = 1 时退化成逐高斯排序（源顺序没有空间局部性时后端会这么选）。
+var _group := 1
+var _keys: PackedVector3Array = PackedVector3Array()
 
 func set_positions(xyz: PackedVector3Array) -> void:
 	_xyz = xyz
+	_keys = PackedVector3Array()
+
+## 组宽。必须在第一次 kick() 之前设好。见 raster_sorter.gd 的组顺序模式。
+func set_group_size(group: int) -> void:
+	_group = maxi(group, 1)
+	_keys = PackedVector3Array()
+
+func get_group_size() -> int:
+	return _group
+
+## 排序键的数量 = 排序表的表项数（组顺序模式下是组数，不是点数）。
+func key_count() -> int:
+	if _group <= 1:
+		return _xyz.size()
+	return int(ceil(float(_xyz.size()) / float(_group)))
 
 ## Pad the sort output to the order texture's texel count so the packed bytes can
 ## go straight into Image.set_data without a resize on the main thread.
@@ -48,7 +70,11 @@ func kick(view_dir_local: Vector3) -> bool:
 
 func _run() -> void:
 	var back := 1 - _front
-	Sorter.sort_into(_xyz, _pending_dir, _order_buffers[back], _texel_count)
+	# 组质心只算一次，而且**放在工作线程**：278 万点的 O(n) 累加在主线程要
+	# 300 ms 上下，正好是加载完成那一帧的卡顿。
+	if _keys.is_empty():
+		_keys = Sorter.block_centroids(_xyz, _group)
+	Sorter.sort_into(_keys, _pending_dir, _order_buffers[back], _texel_count)
 	_byte_buffers[back] = _order_buffers[back].to_byte_array()
 
 ## Called each frame on the main thread. If the in-flight task has finished,

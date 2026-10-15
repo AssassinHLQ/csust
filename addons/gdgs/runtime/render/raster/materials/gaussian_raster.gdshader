@@ -29,6 +29,13 @@ uniform int point_count = 0;
 // (resource order), which is what the static Phase 2 path renders.
 uniform sampler2D order_data : filter_nearest, repeat_disable;
 uniform int order_width = 1;
+// 排序表的**分组宽度**：表里存的是「第几组」，不是逐高斯索引。
+//   高斯索引 = order_data[序号 / order_group] * order_group + (序号 % order_group)
+// 为什么分组：源顺序有很强的空间局部性（相邻高斯平均距离只有随机点对的
+// 1%，见 raster_sorter.gd::locality_ratio），所以组内直接按源顺序连排，
+// 组间按质心排序就够了。排序量因此少 order_group 倍 —— 278 万点的排序
+// 从 812 ms 掉到 30 ms 上下，快速转身时就不会再看到「陈旧排序表」糊屏。
+uniform int order_group = 32;
 uniform bool use_order = false;
 // Quad half-size in standard deviations; splats fade to ~exp(-0.5 k^2) at the edge.
 uniform float quad_extent = 3.0;
@@ -331,9 +338,11 @@ void vertex() {
 	if (sorted_pos < point_count) {
 		int sidx = sorted_pos;
 		if (use_order) {
-			int ox = sorted_pos % order_width;
-			int oy = sorted_pos / order_width;
-			sidx = int(texelFetch(order_data, ivec2(ox, oy), 0).r + 0.5);
+			int og = sorted_pos / order_group;
+			int ox = og % order_width;
+			int oy = og / order_width;
+			sidx = int(texelFetch(order_data, ivec2(ox, oy), 0).r + 0.5) * order_group
+				+ (sorted_pos % order_group);
 		}
 		int base = sidx * CORE_TEXELS_PER_SPLAT;
 		vec4 t0 = fetch_core(base + 0); // position.xyz, (pad)
