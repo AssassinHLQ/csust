@@ -7,6 +7,49 @@ const FALL_LIMIT := -60.0
 ## 设计分辨率（project.godot 的 window/size/viewport_*）。见 _fit_render_scale()。
 const DESIGN_VIEWPORT := Vector2(1600, 900)
 
+## ── 为什么要把兜底方盒地板挖掉房间那一块 ──
+##
+## `Floor/Mesh` 的顶面正好在 **y ≈ 0**，而画室609 扫描出来的地面在 **y ≈ 0.03**
+## —— 两者**共面**。Compute 后端靠 `depth_rejected = gsplat_depth >
+## scene_depth + depth_bias` 决定一个泼溅是不是"在场景不透明几何后面"，
+## 共面就意味着扫描地面会被判成"在后面"而**整片剔掉**，露出深色方盒：
+## 实测地板上是一片黑洞（`_arisu_captures/_backend_ab/compute.png`）。
+##
+## 试过并且**否掉**的五条路（前四条有实测图）：
+##   1. `depth_bias` 0.05 → 0.5：黑洞没了，但 0.5 m 以内的泼溅会盖住角色腿脚。
+##      偏置是**全局一个数**，地板要的和角色要的差一个数量级，调不拢。
+##   2. 关掉深度剔除：地板干净了，角色被泼溅整个盖住。
+##   3. `Floor/Mesh` 改 `DEPTH_DRAW_DISABLED`：**没用** —— Godot 的不透明深度
+##      **预通道**照样把它写进深度缓冲，`scene_depth` 里仍有它；彩色通道还糊住下半屏。
+##   4. 整块藏掉 `Floor/Mesh`：房间里的地面完美，**但房间外那片平台没影了**。
+##      碰撞体还在，于是玩家走出那扇门之后**站在看不见的地板上**，人又钻进扫描
+##      墙壁的背面，画面糊成一坨。这一版就是这样翻的车。
+##   5. 整体下压：要让 20 m 外的掠射角也不冲突得压到接近 1 m，门外就成了悬空平台。
+##
+## 所以只能**挖洞**：保留整块方盒地板，只把房间占位的那一块切掉。
+## 房间里靠扫描地面，房间外照旧是方盒平台，两边都不动位置、不悬空、不露馅。
+##
+## ⚠️ 洞必须跟着房间的**真实朝向**。第一版用房间的**世界轴对齐包围盒**挖，
+##    而房间是斜的（`yaw_degrees = 248.6`）：包围盒 23.9 × 27.2 m，房间实际
+##    只有 22.6 × 16.8 m —— 包围盒那四个角落在房间外面，既没扫描地面也没方盒
+##    地板，于是平台中间破出一大片**真空**（实测图：`_arisu_captures/_gameplay/`
+##    里那条"中间空了"的边界）。所以改用 **CSG 布尔减法**，洞是房间自己的
+##    那个旋转矩形，和扫描地面严丝合缝。
+##
+## 场景里的方盒地板（**只是没加载泼溅时的兜底**；碰撞体 Floor/Collision 另算）。
+const FLOOR_MESH_PATH := "Floor/Mesh"
+## 洞相对房间footprint 的外扩量（米）。**负数 = 洞略小于房间**，让平台和扫描
+## 地面重叠一点点：宁可重叠一条 15 cm 的窄边（在墙根，基本看不见），
+## 也不要留一条头发丝宽的缝 —— 缝下面就是几百米高的天空。
+const FLOOR_HOLE_MARGIN := -0.15
+## 想回到"一整块方盒地板"（例如排查别的问题）就把这里改成 false，
+## 或启动时加 `-- --solid-floor`。
+const CARVE_FALLBACK_FLOOR := true
+
+var _floor_carved := false
+## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
+var _room_scene: SplatScene = null
+
 var _player: Player
 var _weapon: Weapon
 var _hud: CanvasLayer
@@ -94,31 +137,46 @@ func _player_state() -> String:
 	return s
 
 
-## 视口比设计分辨率大不少时，按比例**只缩小 3D 渲染**分辨率（UI 仍全分辨率）。
+## 全屏帧率护栏：只有视口面积**远大于**设计分辨率时才缩小 3D 渲染分辨率。
 ##
-## ⚠️ 为什么必须有这个 —— 本喵在这里翻过一次车，症状极具误导性：
-## `project.godot` 打开全屏后，`canvas_items` 拉伸模式下 3D 视口 = 窗口尺寸，
-## 于是 2560×1440 的渲染面积是 1600×900 的 **2.56 倍**。在画室609（277 万高斯、
-## 重 overdraw）上实测：
-##     2560×1440 → 渲染 **2.0 fps**，物理 **16 帧/秒**，玩家 **0.11 m/s**
-##     1600×900 → 渲染  20.0 fps，物理  64 帧/秒，玩家  1.98 m/s ✅
-## 而 Godot 每帧最多跑 `max_physics_steps_per_frame`（默认 8）步物理 —— 渲染一慢，
-## **物理时间就被稀释**：2 fps × 8 步 = 16 步/秒，只有额定 60 的 1/3.75，
-## 玩家真实速度被打成 **1/18**。
+## ── 病根订正 ──
+## 最初把「全屏后掉到 2 fps → 物理时间被稀释 → WASD 按了不动」归咎于**分辨率**，
+## 于是加了「按面积开方缩小 3D 分辨率」这个补丁。后来用
+## scripts/_probe_splat_perf.gd（关垂直同步、每档预热 15 帧再连测 40 帧、
+## 三档交错重复 3 轮）重测，真凶是 **MSAA 4×**：
+##     2560×1334，scale 0.649 + MSAA 4× + 全套后处理 → 54.0 fps（中位）
+##     2560×1334，scale 1.000 + 无 MSAA  + 全套后处理 → 43.2 fps（中位）
+##     2560×1334，scale 1.000 + 无 MSAA  + 只留 ACES    → 44.0 fps（中位）
+## 关键读数：关掉 MSAA、后处理一套不动，锐度就已经和「全关后处理」持平
+## （同一视角裁黑板算拉普拉斯方差：363 vs 370，而降分辨率那一档只有 100）。
+## 原因是 MSAA 4× 即使在 0.649 下也要生成 1662×866×4 = 576 万采样，比原生
+## 无 MSAA 的 341 万还多 —— 分辨率一直是被 MSAA 挤掉的，不是它自己太贵；
+## 而 MSAA 对泼溅只在 quad 的几何边缘起作用（高斯的柔边来自 alpha 衰减），
+## 实测锐度贡献约 2%。
+## 所以 `project.godot` 已把 `msaa_3d` 关掉，这里相应放开原生分辨率：
+## 同一取景下黑板那块的高频能量涨 4.06 倍（右墙海报 2.14 倍），只付 −20% 帧率。
 ##
-## 症状是「WASD 按了几乎不动」，和「输入坏了」一模一样，本喵因此误判过一轮
-## （先用 `Input.action_press` 测出能走 1.93 m，就以为输入没问题 —— 可那次是
-## **窗口化**跑的，换成全屏才暴露出来）。诊断办法见
-## scripts/_probe_gameplay_input.gd：**位移必须和帧率、物理帧数一起报**。
+## ── 保留护栏的依据：物理时间稀释是真实机制 ──
+## Godot 每帧最多跑 `max_physics_steps_per_frame`（默认 8）步物理 —— 渲染一慢，
+## **物理时间就被稀释**：fps < 7.5 时物理步数掉到 60 以下，玩家真实速度同比例
+## 变慢，症状和「输入坏了」一模一样（本喵先用 `Input.action_press` 测出能走
+## 1.93 m 就误判过一轮 —— 可那次是**窗口化**跑的，换成全屏才暴露）。
+## 诊断办法见 scripts/_probe_gameplay_input.gd：**位移必须和帧率、物理帧数一起报**。
+## 实测 2560×1334（面积比 0.42）在无 MSAA 下有 43 fps，离 7.5 还差 5.7 倍余量，
+## 所以阈值放到 `RENDER_SCALE_AREA_RATIO_MIN`：只有 6 倍设计面积（≈4K 及以上）
+## 才会触发，避免在 8K 屏上重演那场事故。
 ##
-## 只在视口面积明显大于设计分辨率时才降 3D 分辨率；否则**显式设回 1.0**。
-##
-## ⚠️ 两个都踩过的坑：
+## ⚠️ 两个仍然适用的坑：
 ##   1. 不能只在 `_ready()` 里算一次 —— 那一刻窗口还没变成全屏尺寸（实测还没
 ##      2560×1440），算出来是「不用缩放」。所以挂在 `Viewport.size_changed` 上，
 ##      尺寸一变就重算。自检会事后 `root.size = 1600×900`，正好也走这条信号。
 ##   2. 尺寸回到设计分辨率时必须**显式设回 1.0**，不能「提前 return 什么都不做」——
-##      否则全屏时设下的 0.625 会一直留着，自检拿到的就是被降过分辨率的画面。
+##      否则触发过护栏的那次缩放会一直留着，自检拿到的就是被降过分辨率的画面。
+##
+## 视口面积 / 设计面积 低于这个比值（即窗口大于约 6 倍设计分辨率）才降分辨率。
+## 1600×900 × 6 ≈ 2938×1653。2560×1334 的比值是 0.42，远在阈值之上。
+const RENDER_SCALE_AREA_RATIO_MIN := 0.16
+
 func _fit_render_scale() -> void:
 	var vp := get_viewport()
 	# ⚠️ 必须用 `vp.size`（= Window.size，就是**渲染目标**的像素数），
@@ -130,7 +188,7 @@ func _fit_render_scale() -> void:
 		return
 	var ratio := (DESIGN_VIEWPORT.x * DESIGN_VIEWPORT.y) / (size.x * size.y)
 	var s := 1.0
-	if ratio < 0.8:
+	if ratio < RENDER_SCALE_AREA_RATIO_MIN:
 		s = clampf(sqrt(ratio), 0.5, 1.0)
 	print("[Game] _fit_render_scale：渲染尺寸 %s → 目标缩放 %.3f（当前 %.3f）" % [
 		str(size), s, vp.scaling_3d_scale])
@@ -156,7 +214,12 @@ func _ready() -> void:
 	# 是哪一份在等。HUD 侧 bind_splats() 按传入顺序从上往下排。
 	for child in get_children():
 		if child is SplatScene:
-			_splats.append(child as SplatScene)
+			var room := child as SplatScene
+			_splats.append(room)
+			# 房间泼溅一就位就把共面的方盒地板改成不写深度（见 FLOOR_MESH_PATH 的注释）。
+			room.loaded.connect(_on_splat_loaded.bind(room))
+			if room.is_ready():
+				_on_splat_loaded({}, room)
 	if not _splats.is_empty():
 		if _hud.has_method("bind_splats"):
 			_hud.bind_splats(_splats)
@@ -195,6 +258,81 @@ func _process(_delta: float) -> void:
 func _on_target_died(_by: float) -> void:
 	_score += 1
 	_hits += 1
+
+
+## 只有 `venue == "room"` 的场地才和方盒地板共面（校园那份在平台下方 12 m）。
+## `--splat=off` 时 SplatScene 会提前返回、绝不发 loaded，所以 11 套玩法自检不受影响。
+func _on_splat_loaded(_info: Dictionary, scene: SplatScene) -> void:
+	if scene == null or scene.venue != "room":
+		return
+	_room_scene = scene
+	_carve_fallback_floor()
+
+
+## 把 `Floor/Mesh` 这块方盒地板挖掉房间那一块：房间用扫描地面，四周照旧是平台。
+## 见 FLOOR_MESH_PATH 上方那段长注释。
+##
+## 为什么用 CSG 而不是手摆四块盒子：房间是**斜的**（`yaw_degrees = 248.6`），
+## 手摆的盒子只能轴对齐，洞会退化成世界包围盒（比房间大一圈，四角露真空）。
+## CSG 布尔减法吃任意朝向，洞就是房间自己的旋转矩形。
+func _carve_fallback_floor() -> void:
+	if _floor_carved:
+		return
+	_floor_carved = true
+	var mesh := get_node_or_null(FLOOR_MESH_PATH) as MeshInstance3D
+	if mesh == null:
+		return
+	if not CARVE_FALLBACK_FLOOR or OS.get_cmdline_user_args().has("--solid-floor"):
+		print("[Game] --solid-floor / CARVE_FALLBACK_FLOOR=false：方盒地板保持整块不动")
+		return
+	var box := mesh.mesh as BoxMesh
+	var splat_node := _room_scene.splat_node if _room_scene != null else null
+	if box == null or splat_node == null:
+		push_warning("[Game] 方盒地板不是 BoxMesh 或房间未就绪，跳过挖洞")
+		return
+
+	# 房间内容的世界变换（含 world_scale / yaw / 锚点偏移）—— 洞要跟着它走。
+	var xf := _room_scene.global_transform * splat_node.transform
+	var src_min := _room_scene.content_min
+	var src_max := _room_scene.content_max
+	var src_size := src_max - src_min
+	if src_size.x <= 0.0 or src_size.z <= 0.0:
+		push_warning("[Game] 房间内容盒是空的，跳过挖洞")
+		return
+	var world_scale := maxf(xf.basis.get_scale().y, 1e-4)
+	# 洞的尺寸按**源坐标**给，缩放由 xf 承担，所以外扩量要除掉 world_scale。
+	var margin_src := FLOOR_HOLE_MARGIN / world_scale
+	# 厚度给世界 4 m，足够穿透这块 1 m 厚的平台板。
+	var thickness_src := 4.0 / world_scale
+	# 洞的竖向中心必须落在**平台顶面那一层**（世界 y = 0），否则切不到板子。
+	var src_zero_y := (xf.affine_inverse() * Vector3.ZERO).y
+	var center_src := Vector3(
+		(src_min.x + src_max.x) * 0.5, src_zero_y, (src_min.z + src_max.z) * 0.5)
+
+	var mat := mesh.get_active_material(0)
+	var combiner := CSGCombiner3D.new()
+	combiner.name = "FloorCarved"
+	var slab := CSGBox3D.new()
+	slab.name = "Slab"
+	slab.size = box.size
+	slab.position = mesh.position
+	if mat != null:
+		slab.material = mat
+	combiner.add_child(slab)
+	var cutter := CSGBox3D.new()
+	cutter.name = "RoomHole"
+	cutter.operation = CSGShape3D.OPERATION_SUBTRACTION
+	cutter.size = Vector3(
+		src_size.x + margin_src * 2.0, thickness_src, src_size.z + margin_src * 2.0)
+	cutter.transform = xf * Transform3D(Basis.IDENTITY, center_src)
+	combiner.add_child(cutter)
+	mesh.get_parent().add_child(combiner)
+	mesh.visible = false
+	print("[Game] 房间泼溅就位：方盒地板挖掉房间那一块（CSG 减法，跟房间朝向对齐）；Floor/Collision 不动")
+	print("[Game]   洞 世界尺寸 %.2f × %.2f m，外扩 %.2f m；板子 %s" % [
+		(src_size.x + margin_src * 2.0) * world_scale,
+		(src_size.z + margin_src * 2.0) * world_scale,
+		FLOOR_HOLE_MARGIN, str(box.size)])
 
 
 func stats() -> Dictionary:

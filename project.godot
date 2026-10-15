@@ -21,19 +21,14 @@ config/icon="res://icon.png"
 CaptureTool="*res://scripts/_capture.gd"
 PoseShots="*res://scripts/_pose_shots.gd"
 PlayShots="*res://scripts/_play_shots.gd"
+SplatCompositor="*res://scripts/splat_compositor.gd"
 
 [display]
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
-; 2 = Maximized（有边框的最大化窗口，用户要求）。
-; 3 = Fullscreen 也支持，但实测「全屏的无边框窗口」在从编辑器 F5 起来时
-;     更难看出它到底有没有拿到前台焦点/输入，而且 2560×1440 的渲染面积
-;     是设计分辨率的 2.56 倍（见 game.gd::_fit_render_scale 的注释）。
 window/size/mode=2
 window/stretch/mode="canvas_items"
-; expand = 视口按窗口比例铺满，**不留黑边**。默认的 "keep" 在非 16:9 的屏幕上
-; 会上下或左右加黑边（全屏后尤其明显）。
 window/stretch/aspect="expand"
 
 [editor_plugins]
@@ -42,7 +37,7 @@ enabled=PackedStringArray("res://addons/gdgs/plugin.cfg")
 
 [gdgs]
 
-rendering/backend="Raster"
+rendering/backend="Compute"
 
 [input]
 
@@ -94,5 +89,4 @@ reload={
 [rendering]
 
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
-anti_aliasing/quality/msaa_3d=2
 environment/defaults/default_clear_color=Color(0.13, 0.15, 0.19, 1)

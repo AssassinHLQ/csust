@@ -63,26 +63,45 @@ func _run() -> void:
 			b["name"], p.x, p.y, p.z, s.x, s.y, s.z, w.x, w.y, w.z,
 			"  ← 被旋转了" if not (b["basis"] as Basis).is_equal_approx(Basis.IDENTITY) else ""])
 
-	# 门洞：找 z− 那面（世界 AABB 的 z 最小、且厚度在 z）的段，按 x 排序看缝
-	var z_lo := INF
-	for b in boxes:
-		z_lo = minf(z_lo, (b["aabb"] as AABB).position.z)
-	var segs: Array = []
+	# ── 按「薄的那一轴」分组，报每个方向的覆盖区间与开口 ──
+	#
+	# ⚠️ 不能再用「哪一段的 z 等于房间包围盒的 z 最小」那种判法：手摆的墙
+	#    **不一定贴在内容包围盒上**（画室609 的 1‰/99.9‰ 分位盒两端有离群点，
+	#    真实墙面在它里侧 2 m 左右）。这里改成纯几何判据：
+	#    厚度在 x 的盒 = 挡 x 方向（span 取它的 z 范围）；厚度在 z 的 = 挡 z 方向。
+	#    被旋转过的盒会被世界 AABB 正确还原，所以照样能归类。
+	var center: Vector3 = (room.call("content_world_aabb") as AABB).get_center()
+	var groups := {"x_neg": [], "x_pos": [], "z_neg": [], "z_pos": []}
 	for b in boxes:
 		var w: AABB = b["aabb"]
-		if absf(w.position.z - z_lo) < 0.05 and w.size.z < 1.0:
-			segs.append(w)
-	segs.sort_custom(func(a, c): return a.position.x < c.position.x)
-	print("[col] z− 面（世界 z 最小 %.3f）上厚度 < 1 m 的段：%d 个" % [z_lo, segs.size()])
-	if segs.size() == 2:
-		var gap_lo: float = segs[0].position.x + segs[0].size.x
-		var gap_hi: float = segs[1].position.x
-		print("[col] 门洞 x %.3f ~ %.3f → 宽 %.3f（期望 %.2f），中心 %.3f（期望 %.2f）" % [
-			gap_lo, gap_hi, gap_hi - gap_lo,
-			float(room.get("box_door_width")), (gap_lo + gap_hi) * 0.5,
-			float(room.get("box_door_center"))])
-		if gap_hi - gap_lo < 0.1:
-			print("[col] ⚠️ 两段之间没有缝 —— **门被堵死了**")
-	elif segs.size() == 1:
-		print("[col] ⚠️ 只有 1 段 —— 那一面是**整堵墙**（要么门没了，要么有一段被转了 90° 所以不算「厚度在 z」）")
+		var thin_x := w.size.x <= 0.6
+		var thin_z := w.size.z <= 0.6
+		if thin_x and not thin_z:
+			var gx := "x_neg" if w.get_center().x < center.x else "x_pos"
+			groups[gx].append(Vector2(w.position.z, w.position.z + w.size.z))
+		elif thin_z and not thin_x:
+			var gz := "z_neg" if w.get_center().z < center.z else "z_pos"
+			groups[gz].append(Vector2(w.position.x, w.position.x + w.size.x))
+		else:
+			print("[col]   ⚠️ %s 两轴都不薄（%.2f × %.2f），归不了类" % [
+				b["name"], w.size.x, w.size.z])
+	print("[col] 房间内容包围盒中心 x=%.2f z=%.2f（用来分「哪一侧」）" % [center.x, center.z])
+	print("[col] ── 四个方向的覆盖与开口（只报 > 0.5 m 的缺口）──")
+	for key in ["x_neg", "x_pos", "z_neg", "z_pos"]:
+		var spans: Array = groups[key]
+		spans.sort_custom(func(a, c): return a.x < c.x)
+		var merged: Array = []
+		for s in spans:
+			if not merged.is_empty() and s.x <= merged[-1].y + 0.01:
+				merged[-1] = Vector2(merged[-1].x, maxf(merged[-1].y, s.y))
+			else:
+				merged.append(s)
+		var txt := ""
+		for i in merged.size():
+			txt += "[%.2f, %.2f] " % [merged[i].x, merged[i].y]
+			if i + 1 < merged.size():
+				var gap: float = merged[i + 1].x - merged[i].y
+				if gap > 0.5:
+					txt += "← 开口 %.2f m → " % gap
+		print("[col]   %-6s 段 %d：%s" % [key, merged.size(), txt])
 	quit(0)
