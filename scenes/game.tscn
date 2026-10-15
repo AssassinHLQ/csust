@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://dgrtxafrb2nat" path="res://scripts/pig_boss.gd" id="9_pig"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
+[ext_resource type="PackedScene" path="res://scenes/mesh_hut.tscn" id="12_hut"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -149,6 +150,13 @@ shape = SubResource("Shape_room_zneg_b")
 [node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1495928316]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4993732, 1.2768, 13.710994)
 shape = SubResource("Shape_room_zpos")
+
+; ── 平台上的第三块场地：手工网格小屋（scenes/mesh_hut.tscn）──
+; 落点由 scripts/_probe_platform_free.gd 量出来：与最近障碍（霸王龙的碰撞盒，
+; z ∈ [−9.05, −6.93]）留 2.95 m，且躲开了 _verify_final 那条自检弹道
+; 「玩家(6,−4) → 靶1(6,−10)」。改了位置请重跑那个探针 + `_verify_mesh_hut`。
+[node name="MeshHut" parent="." instance=ExtResource("12_hut")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
 
 [node name="Boss" type="StaticBody3D" parent="." unique_id=2075354218]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)

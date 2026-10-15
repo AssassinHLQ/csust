@@ -1,0 +1,357 @@
+[gd_scene load_steps=16 format=3]
+
+; ── 网格小屋（MeshHut）──────────────────────────────────────────────────────
+; **手工用基元搭的小场景**，作为「记忆平台」上的第三块场地（前两块是平台本身
+; 和泼溅扫描的画室609）。搭它的理由：泼溅那两块是**扫描数据**，改不动、吃显存
+; （画室 277 万点、校园 615 万点），而这块是**一格一格摆出来的**，轻、可编辑、
+; 碰撞干净 —— 拿它当「不想再扫一份数据时怎么办」的对照。
+;
+; ── 怎么读这个文件 ──
+;   1. 整份场景只用**一个网格资源** `Box_unit`（1 × 1 × 1 的方块），
+;      每件东西靠节点的 `scale` 拉伸成需要的尺寸 —— 所以「尺寸」写在 scale 里。
+;      只有灯柱用了 CylinderMesh，因为它是圆的。
+;   2. **所有位置与尺寸都落在 0.05 m 网格上**（自检 `_verify_mesh_hut.gd`
+;      第 2 节会逐个核对）。想改尺寸请保持这个习惯。
+;   3. **只有屋壳用 CSG** —— 因为要在墙上掏出「门 + 两扇窗」，这正是不做布尔
+;      运算就干不成的事。桌子/凳子/货架只是几个方块，直接用 MeshInstance3D +
+;      一个粗碰撞盒，比 CSG 更省、也更好改。
+;
+; ── 三个容易踩的点（都写在正文注释里）──
+;   · 屋壳**没有地板**（Cavity 往下挖穿到 y = −0.20）：抬高的地板会变成台阶，
+;     而 CharacterBody3D **不会自己上台阶**，玩家会被 2 cm 的坎挡在门外。
+;     所以地板就用平台地面，屋壳只做墙 + 屋顶。
+;   · 屋顶做成**单独一个 UNION 子节点**，才有独立的材质（不然屋顶会是墙的颜色）。
+;   · CSG 的碰撞要 `use_collision = true` 才生成（默认是关的）。
+;
+; 摆放位置写在 `scenes/game.tscn` 的 `MeshHut` 节点上（现在 = (14, 0, −15.5)），
+; 落点是 `_probe_platform_free.gd` 量出来的：与最近障碍（霸王龙的碰撞盒）留 2.95 m。
+
+[sub_resource type="BoxMesh" id="Box_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="CylinderMesh" id="Cyl_pole"]
+top_radius = 0.1
+bottom_radius = 0.1
+height = 3.4
+radial_segments = 12
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.76, 0.74, 0.69, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="Mat_roof"]
+albedo_color = Color(0.29, 0.32, 0.37, 1)
+metallic = 0.05
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.6, 0.45, 0.29, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Mat_crate"]
+albedo_color = Color(0.55, 0.4, 0.25, 1)
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="Mat_metal"]
+albedo_color = Color(0.44, 0.46, 0.5, 1)
+metallic = 0.7
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Mat_lamp"]
+albedo_color = Color(0.95, 0.9, 0.75, 1)
+roughness = 0.6
+emission_enabled = true
+emission = Color(1, 0.9, 0.66, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_trim"]
+albedo_color = Color(0.52, 0.49, 0.45, 1)
+roughness = 0.7
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.42, 0.4, 0.37, 1)
+roughness = 0.95
+
+[sub_resource type="BoxShape3D" id="Shape_desk"]
+size = Vector3(1.6, 0.8, 0.8)
+
+[sub_resource type="BoxShape3D" id="Shape_stool"]
+size = Vector3(0.5, 1.1, 0.5)
+
+[sub_resource type="BoxShape3D" id="Shape_shelf"]
+size = Vector3(1.4, 1.8, 0.4)
+
+[sub_resource type="BoxShape3D" id="Shape_crate"]
+size = Vector3(0.9, 0.9, 0.9)
+
+[sub_resource type="BoxShape3D" id="Shape_post"]
+size = Vector3(0.2, 3.4, 0.2)
+
+[node name="MeshHut" type="Node3D"]
+
+; ══ 屋壳：外壳 ∪ 屋顶 ∪ 雨篷 − 掏空 − 门 − 两窗 ══
+; 顺序要紧：CSG 按**子节点顺序**依次合并。掏空必须在外壳之后、屋顶之前/之后都行
+; （屋顶在 y ≥ 3.00，掏空只到 y = 3.40，靠高度错开），但门与窗必须**在最后**，
+; 否则会被后面的 UNION 补回去。
+[node name="Hut" type="CSGCombiner3D" parent="."]
+use_collision = true
+
+[node name="Walls" type="CSGBox3D" parent="Hut"]
+position = Vector3(0, 1.5, 0)
+size = Vector3(6.6, 3, 5.6)
+material = SubResource("Mat_wall")
+
+; 掏空：比外壳小 0.2（= 墙厚），但**上下都捅穿** —— 上捅穿是为了让屋顶当盖子，
+; 下捅穿是为了**不留地板**（见文件头第 1 个坑）。
+[node name="Cavity" type="CSGBox3D" parent="Hut"]
+position = Vector3(0, 1.6, 0)
+size = Vector3(6.2, 3.6, 5.2)
+operation = 2
+
+[node name="Roof" type="CSGBox3D" parent="Hut"]
+position = Vector3(0, 3.1, 0)
+size = Vector3(7.4, 0.2, 6.4)
+material = SubResource("Mat_roof")
+
+[node name="Canopy" type="CSGBox3D" parent="Hut"]
+position = Vector3(-3.9, 2.55, 0)
+size = Vector3(1.6, 0.1, 1)
+material = SubResource("Mat_roof")
+
+; 门：开在 −X 墙（朝平台中心，玩家从那边过来正好看见门）。
+; 洞 1.20 宽 × 2.20 高，挖穿 0.60（墙只有 0.20 厚，给足余量）。
+;
+; ⚠️ 减法节点上的 `material` 决定**挖出来的那些面**用什么材质（不是默认值）：
+;    不给的话门套/窗套会是 Godot 的默认白灰，在暖色墙上格外突兀（第一版就是这样）。
+;    这里给门窗套一个略深的暖灰，让它们读起来是「特意做的框」。
+[node name="Door" type="CSGBox3D" parent="Hut"]
+position = Vector3(-3.3, 1.1, 0)
+size = Vector3(0.6, 2.2, 1.2)
+operation = 2
+material = SubResource("Mat_trim")
+
+[node name="WindowA" type="CSGBox3D" parent="Hut"]
+position = Vector3(0, 1.85, 2.8)
+size = Vector3(1.2, 0.9, 0.6)
+operation = 2
+material = SubResource("Mat_trim")
+
+[node name="WindowB" type="CSGBox3D" parent="Hut"]
+position = Vector3(3.3, 1.85, 0)
+size = Vector3(0.6, 0.9, 1.2)
+operation = 2
+material = SubResource("Mat_trim")
+
+; ══ 室内地面：**只有外观、故意没有碰撞** ══
+; 0.05 厚、中心在 y = 0 → 顶面在 +0.025（位置与尺寸都还在 0.05 网格上）。
+;
+; ⚠️ 为什么不给它碰撞（这是这一版唯一的「作弊」，值得写清楚）：
+;   有碰撞的地板 = 一道 2.5 cm 的坎，而 **CharacterBody3D 不会自己上台阶** ——
+;   `_verify_mesh_hut` 第 3 节量过：门口放一道 10 cm 的坎，`cast_motion` 的
+;   safe 从 1.000 掉到 0.387，人就被挡在门外了。
+;   「正确」的做法是把平台地板在小屋 footprint 里挖掉（game.gd 为画室609 就是这么
+;   干的），但那条路要改 `_carve_fallback_floor()`，而且 `--splat=off` 时不挖洞、
+;   两块地面会共面闪烁。原型阶段不值当，所以：**没有碰撞 → 绝不可能挡人**，
+;   代价是玩家模型的小腿会陷进这 2.5 cm（4 m 外的越肩相机上约 2~3 px，看不出来）。
+;   哪天要正经用，就照 game.gd 那条挖洞的路走。
+[node name="FloorPlate" type="MeshInstance3D" parent="."]
+scale = Vector3(6.2, 0.05, 5.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_floor")
+
+; ══ 桌子：1.60 × 0.80，台面顶 y = 0.80。贴在 −Z 墙上，避开「门正对着的走道」══
+; 走道 = 门洞中心线（局部 z = 0）左右各 0.90 m。玩家从门进来是直着走的，
+; 家具全塞在走道之外，免得一进门就撞桌子（`_verify_mesh_hut` 第 3 节量这条）。
+[node name="Desk" type="Node3D" parent="."]
+
+[node name="Top" type="MeshInstance3D" parent="Desk"]
+position = Vector3(-0.6, 0.75, -2.2)
+scale = Vector3(1.6, 0.1, 0.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg0" type="MeshInstance3D" parent="Desk"]
+position = Vector3(-1.35, 0.35, -2.55)
+scale = Vector3(0.05, 0.7, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg1" type="MeshInstance3D" parent="Desk"]
+position = Vector3(0.15, 0.35, -2.55)
+scale = Vector3(0.05, 0.7, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg2" type="MeshInstance3D" parent="Desk"]
+position = Vector3(-1.35, 0.35, -1.85)
+scale = Vector3(0.05, 0.7, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg3" type="MeshInstance3D" parent="Desk"]
+position = Vector3(0.15, 0.35, -1.85)
+scale = Vector3(0.05, 0.7, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+; ══ 凳子（带靠背）：座面顶 y = 0.60，摆在桌子前面、背朝走道 ══
+[node name="Stool" type="Node3D" parent="."]
+
+[node name="Seat" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.6, 0.55, -1.3)
+scale = Vector3(0.45, 0.1, 0.45)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Back" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.6, 0.85, -1.1)
+scale = Vector3(0.45, 0.5, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg0" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.8, 0.25, -1.5)
+scale = Vector3(0.05, 0.5, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg1" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.4, 0.25, -1.5)
+scale = Vector3(0.05, 0.5, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg2" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.8, 0.25, -1.1)
+scale = Vector3(0.05, 0.5, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Leg3" type="MeshInstance3D" parent="Stool"]
+position = Vector3(-0.4, 0.25, -1.1)
+scale = Vector3(0.05, 0.5, 0.05)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+; ══ 货架：贴 +Z 墙，三层 ══
+[node name="Shelf" type="Node3D" parent="."]
+
+[node name="Board0" type="MeshInstance3D" parent="Shelf"]
+position = Vector3(2.35, 0.5, 2.4)
+scale = Vector3(1.3, 0.05, 0.35)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Board1" type="MeshInstance3D" parent="Shelf"]
+position = Vector3(2.35, 1, 2.4)
+scale = Vector3(1.3, 0.05, 0.35)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Board2" type="MeshInstance3D" parent="Shelf"]
+position = Vector3(2.35, 1.5, 2.4)
+scale = Vector3(1.3, 0.05, 0.35)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Side0" type="MeshInstance3D" parent="Shelf"]
+position = Vector3(1.7, 1, 2.4)
+scale = Vector3(0.05, 1.6, 0.35)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+[node name="Side1" type="MeshInstance3D" parent="Shelf"]
+position = Vector3(3, 1, 2.4)
+scale = Vector3(0.05, 1.6, 0.35)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_wood")
+
+; ══ 木箱 ×3（两个并排 + 一个叠上去），带碰撞 ══
+[node name="Crates" type="StaticBody3D" parent="."]
+
+[node name="Crate0" type="MeshInstance3D" parent="Crates"]
+position = Vector3(4.2, 0.45, -1.2)
+scale = Vector3(0.9, 0.9, 0.9)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_crate")
+
+[node name="Crate1" type="MeshInstance3D" parent="Crates"]
+position = Vector3(4.2, 0.45, -0.2)
+scale = Vector3(0.9, 0.9, 0.9)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_crate")
+
+[node name="Crate2" type="MeshInstance3D" parent="Crates"]
+position = Vector3(4.2, 1.35, -1.2)
+scale = Vector3(0.9, 0.9, 0.9)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_crate")
+
+[node name="Shape0" type="CollisionShape3D" parent="Crates"]
+position = Vector3(4.2, 0.45, -1.2)
+shape = SubResource("Shape_crate")
+
+[node name="Shape1" type="CollisionShape3D" parent="Crates"]
+position = Vector3(4.2, 0.45, -0.2)
+shape = SubResource("Shape_crate")
+
+[node name="Shape2" type="CollisionShape3D" parent="Crates"]
+position = Vector3(4.2, 1.35, -1.2)
+shape = SubResource("Shape_crate")
+
+; ══ 灯柱（圆的，所以是全场景唯一的圆柱）══
+[node name="LampPost" type="Node3D" parent="."]
+
+[node name="Pole" type="MeshInstance3D" parent="LampPost"]
+position = Vector3(-4.2, 1.7, -2.2)
+mesh = SubResource("Cyl_pole")
+material_override = SubResource("Mat_metal")
+
+[node name="Head" type="MeshInstance3D" parent="LampPost"]
+position = Vector3(-4.2, 3.55, -2.2)
+scale = Vector3(0.5, 0.3, 0.5)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_lamp")
+
+[node name="LampBody" type="StaticBody3D" parent="."]
+
+[node name="Shape" type="CollisionShape3D" parent="LampBody"]
+position = Vector3(-4.2, 1.7, -2.2)
+shape = SubResource("Shape_post")
+
+; ══ 家具的碰撞：一件一个粗盒，不做逐腿碰撞（跑图时没人会去撞桌腿）══
+[node name="FurnitureBody" type="StaticBody3D" parent="."]
+
+[node name="DeskShape" type="CollisionShape3D" parent="FurnitureBody"]
+position = Vector3(-0.6, 0.4, -2.2)
+shape = SubResource("Shape_desk")
+
+[node name="StoolShape" type="CollisionShape3D" parent="FurnitureBody"]
+position = Vector3(-0.6, 0.55, -1.3)
+shape = SubResource("Shape_stool")
+
+[node name="ShelfShape" type="CollisionShape3D" parent="FurnitureBody"]
+position = Vector3(2.35, 0.9, 2.4)
+shape = SubResource("Shape_shelf")
+
+; ══ 灯：两盏都关阴影（省电；本项目对功耗敏感）══
+[node name="HutLamp" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.95, 0)
+scale = Vector3(0.4, 0.1, 0.4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_lamp")
+
+[node name="HutLight" type="OmniLight3D" parent="."]
+position = Vector3(0, 2.6, 0)
+light_color = Color(1, 0.93, 0.8, 1)
+light_energy = 2.0
+shadow_enabled = false
+omni_range = 8.0
+
+[node name="PostLight" type="OmniLight3D" parent="."]
+position = Vector3(-4.2, 3.2, -2.2)
+light_color = Color(1, 0.88, 0.7, 1)
+light_energy = 3.0
+shadow_enabled = false
+omni_range = 14.0
