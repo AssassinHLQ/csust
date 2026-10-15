@@ -348,8 +348,22 @@ func _clip(c: Companion) -> String:
 	return c.anim.current_clip()
 
 
-## 同伴的视觉高度，量在同伴节点自己的局部空间里
+## 同伴的视觉高度，量在同伴节点自己的局部空间里。
+##
+## ⚠️ 三个口径**取最大值**。真实尺寸不会小于其中任何一个，而「哪个口径在哪个文件上
+## 恰好失灵」是不可预知的，单用哪一个都会误报：
+##   1. 网格原始包围盒：`MeshInstance3D.get_aabb()` 是**未蒙皮**的盒，朝向随导出器
+##      的节点规整而变。凯伊重导后（`Kei_ext.glb`，见 README §8.8）从 1.71 m 掉到
+##      0.58 m，但屏幕上像素高度只从 185 变 179 —— 纯度量口径，不是外观回归。
+##   2. 骨架 rest 骨头在**骨架局部空间**的跨度：与姿态无关，但依赖骨架自身朝向
+##      （凯伊原文件 0.68 m、重导版 1.09 m）。
+##   3. 骨架当前姿态在**世界空间**的跨度：会受当时动作影响（走路时腿是弯的）。
+## 反例：米卡的骨架跨度只有 0.83~0.93 m，实际身高却是 1.39 m —— 所以也不能只用骨架。
 func _local_height(node: Node3D) -> float:
+	return maxf(_aabb_height(node), maxf(_rest_height(node), _skel_height(node)))
+
+
+func _aabb_height(node: Node3D) -> float:
 	var to_local := node.global_transform.affine_inverse()
 	var out := AABB()
 	var first := true
@@ -363,6 +377,34 @@ func _local_height(node: Node3D) -> float:
 		out = b if first else out.merge(b)
 		first = false
 	return out.size.y
+
+
+## 骨架 rest 姿态、在骨架局部空间里的 Y 跨度（与当前姿势无关）
+func _rest_height(node: Node3D) -> float:
+	var sk := _best_skeleton(node)
+	if sk == null or sk.get_bone_count() == 0:
+		return 0.0
+	var lo := 1e9
+	var hi := -1e9
+	for i in sk.get_bone_count():
+		var p := sk.get_bone_rest(i).origin
+		lo = minf(lo, p.y)
+		hi = maxf(hi, p.y)
+	return hi - lo
+
+
+## 骨架当前姿态在世界空间里的 Y 跨度
+func _skel_height(node: Node3D) -> float:
+	var sk := _best_skeleton(node)
+	if sk == null or sk.get_bone_count() == 0:
+		return 0.0
+	var lo := 1e9
+	var hi := -1e9
+	for i in sk.get_bone_count():
+		var p: Vector3 = sk.global_transform * sk.get_bone_global_pose(i).origin
+		lo = minf(lo, p.y)
+		hi = maxf(hi, p.y)
+	return hi - lo
 
 
 func _shot(path: String) -> void:

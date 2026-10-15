@@ -1,7 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://bcgiyda55lryw"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="PackedScene" path="res://models/Arisu.glb" id="2_arisu"]
+[ext_resource type="Script" uid="uid://b1crgsif431sb" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" uid="uid://b8wfuumtfuakb" path="res://models/Arisu.glb" id="2_arisu"]
 
 [sub_resource type="Environment" id="Env_main"]
 background_mode = 1
@@ -20,105 +20,116 @@ glow_bloom = 0.05
 adjustment_enabled = true
 adjustment_saturation = 1.08
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=113238099]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=175393659]
 environment = SubResource("Env_main")
 
-[node name="KeyLight" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.866025, -0.321394, 0.383022, 0, 0.766044, 0.642788, -0.5, -0.556670, 0.663414, 2.2, 3.4, 2.6)
+[node name="KeyLight" type="DirectionalLight3D" parent="." unique_id=532812649]
+transform = Transform3D(0.866025, -0.321394, 0.383022, 0, 0.766044, 0.642788, -0.5, -0.55667, 0.663414, 2.2, 3.4, 2.6)
 light_color = Color(1, 0.972549, 0.921569, 1)
 light_energy = 1.15
 shadow_enabled = true
 
-[node name="FillLight" type="DirectionalLight3D" parent="."]
-transform = Transform3D(-0.866025, -0.25, -0.433013, 0, 0.866025, -0.5, 0.5, -0.433013, -0.75, -2.4, 2.0, -1.8)
+[node name="FillLight" type="DirectionalLight3D" parent="." unique_id=274473429]
+transform = Transform3D(-0.866025, -0.25, -0.433013, 0, 0.866025, -0.5, 0.5, -0.433013, -0.75, -2.4, 2, -1.8)
 light_color = Color(0.68, 0.79, 1, 1)
 light_energy = 0.42
 
-[node name="RimLight" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0, -0.342020, -0.939693, 0, 0.939693, -0.342020, 1, 0, 0, 0, 2.2, -3.0)
+[node name="RimLight" type="DirectionalLight3D" parent="." unique_id=1545125107]
+transform = Transform3D(0, -0.34202, -0.939693, 0, 0.939693, -0.34202, 1, 0, 0, 0, 2.2, -3)
 light_color = Color(1, 0.85, 0.65, 1)
 light_energy = 0.55
 
-[node name="CameraRig" type="Node3D" parent="."]
+[node name="CameraRig" type="Node3D" parent="." unique_id=1370165319]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
 
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig" unique_id=1123372503]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -0.55, 0, 0)
 spring_length = 3.2
 margin = 0.08
 
-[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
+[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D" unique_id=79479442]
 fov = 32.0
-near = 0.05
 far = 60.0
 
-[node name="Arisu" type="Node3D" parent="."]
+[node name="Arisu" type="Node3D" parent="." unique_id=1035453046]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, -0.035, 0)
 
-[node name="Model" parent="Arisu" instance=ExtResource("2_arisu")]
+[node name="Model" parent="Arisu" unique_id=836592113 instance=ExtResource("2_arisu")]
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=910554570]
 
-[node name="Panel" type="PanelContainer" parent="HUD"]
+[node name="Panel" type="PanelContainer" parent="HUD" unique_id=770833073]
 offset_left = 16.0
 offset_top = 16.0
 offset_right = 336.0
 offset_bottom = 884.0
 
-[node name="Margin" type="MarginContainer" parent="HUD/Panel"]
+[node name="Margin" type="MarginContainer" parent="HUD/Panel" unique_id=336006378]
+layout_mode = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="VBox" type="VBoxContainer" parent="HUD/Panel/Margin"]
+[node name="VBox" type="VBoxContainer" parent="HUD/Panel/Margin" unique_id=1277133658]
+layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="HUD/Panel/Margin/VBox"]
-text = "长沙理工：2067　动画学习沙盒"
+[node name="Title" type="Label" parent="HUD/Panel/Margin/VBox" unique_id=618163765]
+layout_mode = 2
 theme_override_font_sizes/font_size = 18
+text = "长沙理工：2067　动画学习沙盒"
 
-[node name="Info" type="Label" parent="HUD/Panel/Margin/VBox"]
+[node name="Info" type="Label" parent="HUD/Panel/Margin/VBox" unique_id=1815389124]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "加载中……"
 autowrap_mode = 2
-theme_override_font_sizes/font_size = 12
 
-[node name="HSep" type="HSeparator" parent="HUD/Panel/Margin/VBox"]
+[node name="HSep" type="HSeparator" parent="HUD/Panel/Margin/VBox" unique_id=378151930]
+layout_mode = 2
 
-[node name="Current" type="Label" parent="HUD/Panel/Margin/VBox"]
+[node name="Current" type="Label" parent="HUD/Panel/Margin/VBox" unique_id=1766260708]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
 text = "▶ -"
 autowrap_mode = 2
-theme_override_font_sizes/font_size = 13
 
-[node name="Hint" type="Label" parent="HUD/Panel/Margin/VBox"]
+[node name="Hint" type="Label" parent="HUD/Panel/Margin/VBox" unique_id=1856768064]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "↑/↓ 或 悬停列表滚轮：切动作　空格：暂停/继续
 A/D：左右转视角　W/S：远近　拖拽左键：环绕
 R：重置视角　L：循环　,-/.：减速/加速　H：隐藏面板"
 autowrap_mode = 2
-theme_override_font_sizes/font_size = 11
 
-[node name="HSep2" type="HSeparator" parent="HUD/Panel/Margin/VBox"]
+[node name="HSep2" type="HSeparator" parent="HUD/Panel/Margin/VBox" unique_id=1057508361]
+layout_mode = 2
 
-[node name="AnimList" type="ItemList" parent="HUD/Panel/Margin/VBox"]
+[node name="AnimList" type="ItemList" parent="HUD/Panel/Margin/VBox" unique_id=179017048]
+layout_mode = 2
 size_flags_vertical = 3
+select_mode = 1
 allow_reselect = true
 auto_height = true
 same_column_width = true
-fixed_column_width = 0
-select_mode = 1
 
-[node name="Playback" type="HBoxContainer" parent="HUD/Panel/Margin/VBox"]
+[node name="Playback" type="HBoxContainer" parent="HUD/Panel/Margin/VBox" unique_id=107101208]
+layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="PlayPause" type="Button" parent="HUD/Panel/Margin/VBox/Playback"]
+[node name="PlayPause" type="Button" parent="HUD/Panel/Margin/VBox/Playback" unique_id=837507262]
+layout_mode = 2
 text = "暂停"
 
-[node name="LoopToggle" type="CheckButton" parent="HUD/Panel/Margin/VBox/Playback"]
+[node name="LoopToggle" type="CheckButton" parent="HUD/Panel/Margin/VBox/Playback" unique_id=301033115]
+layout_mode = 2
 button_pressed = true
 text = "循环"
 
-[node name="SpeedLabel" type="Label" parent="HUD/Panel/Margin/VBox/Playback"]
+[node name="SpeedLabel" type="Label" parent="HUD/Panel/Margin/VBox/Playback" unique_id=1411308495]
+layout_mode = 2
 text = "1.00x"

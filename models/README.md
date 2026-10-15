@@ -14,7 +14,8 @@
 | `companions/Momoi.glb` | 可选 | 同伴「小桃」。105 骨、37 动作 |
 | `companions/Midori.glb` | 可选 | 同伴「小绿」。105 骨、31 动作 |
 | `companions/Yuzu.glb` | 可选 | 同伴「柚子」。122 骨、30 动作 |
-| `companions/Kei.glb` | 可选 | 同伴「凯伊」。主骨架 166 骨、32 动作（另有 21/6/1 骨的附属 skin） |
+| `companions/Kei.glb` | 可选 | 同伴「凯伊」的原始版。主骨架 166 骨、32 动作（另有 21/6/1 骨的附属 skin） |
+| `companions/Kei_ext.glb` | ✅（用凯伊时） | 同伴「凯伊」**实际引用**的版本。同上，但跑动 `Move_Ing` 的整体前折已修正（README §8.8）。`game.tscn` 的 `CompanionKei.model_path` 指向它 |
 | `boss/优香霸王龙.fbx` | 可选 | 第一位 Boss（README 第七节）。73 骨、无动画、约 31 万三角形 |
 | `boss_pig/猪猪优香.fbx` | 可选 | 第二位 Boss（README §7.6）。**纯静态网格**，4 网格 / 1.27 万三角形、无骨无动画 |
 

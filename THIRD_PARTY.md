@@ -15,7 +15,7 @@
 | [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | **SIL OFL 1.1** | ✅ 包含于 `assets/ui/` | 设置界面用的中文像素字体（`font_pixel.ttf`），作者 TakWolf。OFL 允许随软件分发，许可原文在 `assets/ui/LICENSE_FusionPixel_OFL.txt` |
 | Sprout Lands UI Pack（美术：Cup Nooble） | **免费但限非商业**：可修改，但**不可再分发或转售（即使修改过）**，且只能用于非商业项目 | ❌ **不包含** | `assets/ui_sprout/`（设置界面的 Sprout Lands 皮肤）。授权原文抄在该目录的 `LICENSE_SproutLands.txt`。**因为禁止再分发**，这一套被 `.gitignore` 排除 —— 克隆后需自行从 [itch](https://cupnooble.itch.io/sprout-lands-ui-pack) 取得；没有它时设置界面会**自动回退**到上面的 Kenney 皮肤，不会报错 |
 | Blue Archive 「Arisu」角色模型与贴图 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `models/Arisu.glb`、`models/Arisu_ext.glb` 与自动解包的 `Arisu*.png`。**仅用于本地学习研究，不得再分发、不得商用、不得用于任何发布产物** |
-| Blue Archive 同伴模型「未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊」 | **专有版权**（同上） | ❌ 不包含 | `models/companions/**`（`Mika.glb` / `Yuuka.glb` / `Noa.glb` / `Momoi.glb` / `Midori.glb` / `Yuzu.glb` / `Kei.glb`，均取**初始形态**）。同样仅供本地学习 |
+| Blue Archive 同伴模型「未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊」 | **专有版权**（同上） | ❌ 不包含 | `models/companions/**`（`Mika.glb` / `Yuuka.glb` / `Noa.glb` / `Momoi.glb` / `Midori.glb` / `Yuzu.glb` / `Kei.glb` / `Kei_ext.glb`（凯伊的重导版，见 README §8.8），均取**初始形态**）。同样仅供本地学习 |
 | 「霸王龙优香」Boss 模型（FBX） | **专有版权**（同上，玩家二创） | ❌ 不包含 | `models/boss/**`（`优香霸王龙.fbx` + 贴图 + ASCII 副本）。同样仅供本地学习 |
 | 「飞猪优香」Boss 模型（FBX，作者：一个睿智） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_pig/**`（`猪猪优香.fbx` + `uv/` + `tex/` + `ref/` 作者的对照渲染图）。同样仅供本地学习 |
 | 高斯泼溅扫描数据（校园 / 画室 609） | **权利状态未核实** | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，其拍摄权、场地权、肖像权与再分发权均未由本项目核实 |
