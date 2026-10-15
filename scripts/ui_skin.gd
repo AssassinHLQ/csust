@@ -12,6 +12,7 @@ extends RefCounted
 ##    **没有中文字形**。Godot 的 `FontFile.allow_system_fallback` 默认开着，中文会
 ##    回退到系统字体渲染 —— 数字/拉丁文用像素字体、中文用系统字体，混排能看但基线
 ##    会略有出入。所以这套字体只用在「纯数字/拉丁」的控件上（弹药数、HP 数字）。
+##    要大段中文（剧情正文）走下面的 `cjk_font()`。
 ##
 ## ⚠️ Sprout 的 `panel.png` 是 106×122、圆角比 Kenney 的 32×32 大得多，两套的
 ##    九宫格边距必须分别给（`margin` 字段），不然小图会被拉伸成糊的。
@@ -34,6 +35,8 @@ const SKINS := [
 		"bar_edge": Color(0.53, 0.74, 0.42),
 		"bar_fill": Color(0.86, 0.24, 0.18),
 		"bar_fill_low": Color(1.0, 0.16, 0.12),
+		# 剧情里的说话人名字。压在 `button.png` 那块浅色牌子上，要够沉才读得清。
+		"dialogue_name": Color(0.72, 0.20, 0.14),
 	},
 	{
 		"label": "Kenney（内置）",
@@ -51,10 +54,36 @@ const SKINS := [
 		"bar_edge": Color(0.52, 0.72, 0.95),
 		"bar_fill": Color(0.90, 0.28, 0.22),
 		"bar_fill_low": Color(1.0, 0.18, 0.14),
+		# 深色面板上用暖琥珀色，比红色更「像名字」、也不跟血条的红打架
+		"dialogue_name": Color(0.98, 0.78, 0.42),
 	},
 ]
 
 const FONT_SIZE := 16
+
+## ── 剧情正文用的中文字体 ──
+##
+## ⚠️ **不能用皮肤字体**。实测（`..\_hud_preview\font_cmap_check.py`，直接解 TTF 的
+##    cmap 表）：
+##      `assets/ui/font.ttf`       6.68 MB  汉字 19214/20992 (91.5%)、中文标点 100%
+##      `assets/ui_sprout/font.ttf` 0.11 MB  汉字 **0/20992**、中文标点 0
+##    Sprout 那套只有 80 个拉丁字形。设置界面（纯数字/拉丁）靠它没事，
+##    大段中文正文必须换字体 —— 否则靠 Godot 的 `allow_system_fallback` 回退到
+##    系统字体，换一台机器就换一副字、也不是像素风。
+##
+## `assets/ui/font.ttf` 是 Fusion Pixel Font **12px**（作者 TakWolf），**SIL OFL 1.1**，
+## 允许随软件分发。字号取 **12 的整数倍**（12/24/36）最锐利 —— 它是像素字体。
+const CJK_FONT_PATH := "res://assets/ui/font.ttf"
+const CJK_FONT_SIZE := 24
+
+
+## 剧情正文的中文字体。拿不到就返回 null（调用方退回皮肤字体，中文交给系统回退）。
+static func cjk_font() -> FontFile:
+	if not ResourceLoader.exists(CJK_FONT_PATH):
+		push_warning("[UiSkin] 找不到 %s，剧情正文会退回皮肤字体（中文靠系统回退）"
+			% CJK_FONT_PATH)
+		return null
+	return load(CJK_FONT_PATH) as FontFile
 
 ## 血条见底的比例。低于它换成更亮的红（玩家和 Boss 用同一个阈值，观感才一致）。
 const BAR_LOW_RATIO := 0.25

@@ -46,6 +46,19 @@ const FLOOR_HOLE_MARGIN := -0.15
 ## 或启动时加 `-- --solid-floor`。
 const CARVE_FALLBACK_FLOOR := true
 
+## ── 开场剧情（第七节 `story_script.gd` / `dialogue_box.gd`）──
+## 剧本文件。想换一段就改这里；也可以只改文件名不管这里 ——
+## 找不到它会自动退回 `story/` 目录里**排序第一份**，并打印用了哪一份。
+const OPENING_STORY := "res://story/开场.txt"
+const STORY_DIR := "res://story/"
+
+## 进关卡要不要自动播开场剧情。
+##
+## ⚠️ `--script` 模式下**一律不播**（见 `_play_opening()`）：13 套自检各自
+##    instantiate 这个场景，一播就把整棵树暂停了，`_verify_settings` 的
+##    「初始没有暂停」当场就红。想「进关卡直接开打」用 `-- --story=off`。
+const PLAY_OPENING := true
+
 var _floor_carved := false
 ## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
 var _room_scene: SplatScene = null
@@ -112,7 +125,7 @@ func _report_input() -> void:
 		if not focus:
 			note = "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
 		elif get_tree().paused:
-			note = "   ← 游戏被暂停（Esc 设置菜单开着）"
+			note = "   ← 游戏被暂停（Esc 设置菜单开着，或正在播剧情对话）"
 		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			# 自愈：有焦点、没暂停、鼠标却没被捕获 ⇒ 自己收回来。
 			# （焦点丢失时 Godot 会把鼠标放出来且**不会自动收回**；player.gd 的
@@ -286,6 +299,50 @@ func _ready() -> void:
 	for child in get_children():
 		if child is Target and not child.is_in_group("targets"):
 			child.died.connect(_on_target_died)
+
+	# 开场剧情放**最后**：HUD / Boss / 同伴都接好了再演，
+	# 这样对话框一结束世界就是完整可玩的（暂停期间 `splat_scene.gd` 的解码线程
+	# 照常在后台跑，只是 `_process` 里的收尾被推迟到恢复之后）。
+	_play_opening()
+
+
+## 播开场剧情。见 `OPENING_STORY` / `PLAY_OPENING`。
+##
+## 命令行覆盖（都写在 `--` 之后）：
+##     -- --story=off                不播开场，直接开打
+##     -- --story=res://story/x.txt  改播指定的那一份（调某一段剧情用）
+func _play_opening() -> void:
+	if not PLAY_OPENING:
+		return
+	# ⚠️ `--script`（自检 / 探针）不自动播。自检里凡是 instantiate 场景的用例
+	#    都会断言「没被暂停」，自动播会一起带红；探针要自己显式调 `play_file`。
+	if OS.get_cmdline_args().has("--script"):
+		return
+	var path := OPENING_STORY
+	var explicit := false
+	for a in OS.get_cmdline_user_args():
+		if a == "--story=off":
+			print("[Game] --story=off：跳过开场剧情")
+			return
+		if a.begins_with("--story="):
+			path = a.substr(8)
+			explicit = true
+	var box := get_node_or_null("DialogueBox")
+	if box == null:
+		push_warning("[Game] 场景里没有 DialogueBox，跳过开场剧情")
+		return
+	if not FileAccess.file_exists(path):
+		if explicit:
+			push_warning("[Game] --story 指定的剧本不存在：%s" % path)
+			return
+		var alt := StoryScript.first_in_dir(STORY_DIR)
+		if alt.is_empty():
+			print("[Game] %s 不存在，%s 里也没有剧本，跳过开场剧情"
+				% [OPENING_STORY, STORY_DIR])
+			return
+		print("[Game] %s 不存在，改用目录里排序第一份：%s" % [OPENING_STORY, alt])
+		path = alt
+	box.call("play_file", path)
 
 
 func _process(_delta: float) -> void:

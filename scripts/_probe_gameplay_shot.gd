@@ -38,6 +38,9 @@ var _menu := false
 var _quality_sweep := false
 ## 打印准星各元素落在**物理像素**上的矩形，验证中心点与十字条是否严格对称。
 var _crosshair := false
+## 让剧情对话框播一段并出图（验证对话框长什么样、有没有压住右下角的弹药面板）
+var _story := false
+var _story_path := "res://story/开场.txt"
 
 
 func _initialize() -> void:
@@ -58,6 +61,11 @@ func _initialize() -> void:
 			_quality_sweep = true
 		elif a == "--crosshair":
 			_crosshair = true
+		elif a == "--story":
+			_story = true
+		elif a.begins_with("--story="):
+			_story = true
+			_story_path = a.substr(8)
 	_run.call_deferred()
 
 
@@ -186,12 +194,69 @@ func _run() -> void:
 	if _crosshair:
 		_report_crosshair(game)
 
+	if _story:
+		await _report_story(game)
+
 	await RenderingServer.frame_post_draw
 	var img: Image = root.get_texture().get_image()
 	var path := out.path_join("%s.png" % _tag)
 	img.save_png(path)
 	print("[shot] 出图 %s" % path)
 	quit(0)
+
+## 让剧情对话框播起来，出图 + 量「有没有压住右下角的弹药面板」。
+##
+## 为什么不能只靠「看着没压住」：`canvas_items` 拉伸的缩放不是整数（2560 宽是
+## 1.4822），对话框和弹药面板的右边缘只差几十个**逻辑**像素，换算到物理像素后
+## 到底会不会碰在一起，目测在小窗口下根本分不出来 —— 直接算矩形相交。
+func _report_story(game: Node) -> void:
+	var box: Node = game.get_node_or_null("DialogueBox")
+	if box == null:
+		push_warning("[shot] 场景里没有 DialogueBox")
+		return
+	if not bool(box.call("play_file", _story_path)):
+		push_warning("[shot] %s 播不起来（见上面的报错）" % _story_path)
+		return
+
+	# 走到第一句**有名字**的台词：开场前两句是旁白（没有名字牌），中间还夹一个
+	# `@wait`。用「名字空就按一下」的循环，不依赖帧率也不依赖剧情内容。
+	for _i in 40:
+		if not bool(box.call("is_active")):
+			break
+		if not String(box.call("current_who")).is_empty():
+			break
+		box.call("advance")
+		for _j in 4:
+			await process_frame
+	box.call("advance")          # 把这一句打完，出图时看到完整的一句
+	for _i in 8:
+		await process_frame
+
+	print("[shot] ── 剧情对话框 ──")
+	print("[shot] 说话人「%s」 已打出 %d / %d 字（完整=%s）" % [
+		box.call("current_who"),
+		String(box.call("visible_text")).length(),
+		String(box.call("current_text")).length(),
+		str(String(box.call("visible_text")) == String(box.call("current_text")))])
+	var br: Rect2 = box.call("box_physical_rect")
+	print("[shot] 对话框物理像素 %s（画布缩放 %.4f）" % [
+		str(br), float(box.call("canvas_scale"))])
+
+	# 和右下角弹药面板比一比
+	var hud: Node = game.get_node_or_null("HUD")
+	var ammo: Control = hud.get_node_or_null("Panel") as Control if hud != null else null
+	if ammo != null:
+		var xf := root.get_final_transform()
+		var ar := ammo.get_global_rect()
+		var a0 := xf * ar.position
+		var a1 := xf * (ar.position + ar.size)
+		var arr := Rect2(a0, a1 - a0)
+		print("[shot] 弹药面板物理像素 %s" % str(arr))
+		print("[shot]   两者相交 = %s（**false 才是对的**：对话框不该压住弹药）" % str(
+			br.intersects(arr)))
+		print("[shot]   右边距差 %.1f 物理 px（对话框右 %.1f，面板左 %.1f）" % [
+			arr.position.x - br.end.x, br.end.x, arr.position.x])
+
 
 ## 量「扫描出来的地面在 x/z 上铺到哪」，再和挖洞用的 content 盒比。
 ##

@@ -9,6 +9,7 @@
 [ext_resource type="Script" uid="uid://lt6sqg4ubp6x" path="res://scripts/trex_boss.gd" id="8_trex"]
 [ext_resource type="Script" uid="uid://dgrtxafrb2nat" path="res://scripts/pig_boss.gd" id="9_pig"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
+[ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -401,3 +402,6 @@ show_percentage = false
 
 [node name="SettingsMenu" type="CanvasLayer" parent="." unique_id=2058157052]
 script = ExtResource("10_settings")
+
+[node name="DialogueBox" type="CanvasLayer" parent="." unique_id=1719002342]
+script = ExtResource("11_dialog")
