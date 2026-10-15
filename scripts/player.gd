@@ -133,6 +133,21 @@ func _ready() -> void:
 	_apply_settings()
 
 
+## 窗口重新获得焦点时把鼠标收回来。
+##
+## ⚠️ 为什么需要：`_ready()` 里那一次 `Input.mouse_mode = CAPTURED` 在**窗口还没获焦**
+## 时会被系统丢掉 —— 从编辑器 F5 起来、游戏窗口没抢到前台时，症状正好是
+## 「鼠标能看见、WASD 按了没反应」（键盘事件全给了编辑器）。
+## 这是「进游戏动不了」最常见的两个原因之一（另一个是 Esc 菜单开着，见 settings_menu.gd）。
+##
+## 菜单开着的时候不收：那正是它故意 `MOUSE_MODE_VISIBLE` 的状态。
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		var tree := get_tree()
+		if tree != null and not tree.paused:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 func _input(event: InputEvent) -> void:
 	# --- 鼠标移动：转视角 ---
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

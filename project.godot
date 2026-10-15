@@ -26,7 +26,13 @@ PlayShots="*res://scripts/_play_shots.gd"
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+; 3 = Fullscreen（开局占满整屏）。想要「有边框的最大化窗口」就改成 2。
+; 用户要求「打开时默认占满全窗口」。
+window/size/mode=3
 window/stretch/mode="canvas_items"
+; expand = 视口按窗口比例铺满，**不留黑边**。默认的 "keep" 在非 16:9 的屏幕上
+; 会上下或左右加黑边（全屏后尤其明显）。
+window/stretch/aspect="expand"
 
 [editor_plugins]
 

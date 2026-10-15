@@ -24,11 +24,21 @@ func _initialize() -> void:
 func _run() -> void:
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
 	root.add_child(game)
+	# ⚠️ 立刻关掉玩家的输入处理，让第 1 节**不受真人鼠标影响**。
+	#
+	# `_ready()` 刚把 `_yaw` 设成 0，之后**任何真实鼠标移动都会改它**
+	# （`player.gd::_input`：`_yaw -= mm.relative.x * mouse_sensitivity`）。
+	# 本喵实测：改成开局全屏（2560×1440）后，捕获鼠标那一下的残余位移就能让
+	# `_yaw` 漂到 −0.0797，于是「出生 _yaw = 0」变成假红 —— 而它其实一直是
+	# 靠「跑自检时别碰鼠标」这条**环境约定**在撑着（README §1.11 记过这类假红）。
+	# 第 1 节量的是 `_ready` 的成果，不是「真人手不动」，所以必须隔离。
+	# 第 2 节要用合成鼠标事件驱动，那里再打开。
+	var player: Player = game.get_node("Player")
+	player.set_process_input(false)
 	await process_frame
 	await process_frame
 	await _wait(30)
 
-	var player: Player = game.get_node("Player")
 	var weapon: Weapon = game.get_node("Player/Weapon")
 	var arena := Vector3(0.0, 0.0, -1.0)
 
@@ -80,6 +90,7 @@ func _run() -> void:
 	print("  已存 %s/spawn_after_fix.png" % out_dir)
 
 	print("\n========== 2. 甩镜头 + 按住左键：先转身、后开火 ==========")
+	player.set_process_input(true)   # 第 1 节隔离掉了输入，这一节要用合成鼠标事件驱动
 	# 甩镜头：真实鼠标移动事件（20 次 × 48 px ≈ 2.1 rad ≈ 120°）
 	for _i in 20:
 		var ev := InputEventMouseMotion.new()

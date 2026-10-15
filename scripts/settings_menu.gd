@@ -120,6 +120,9 @@ func open() -> void:
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = true
+	# 打一行日志：这个菜单会**暂停游戏 + 释放鼠标**，症状和「进游戏动不了」一模一样。
+	# 有这行，下次在控制台就能一眼分辨「是我按了 Esc」还是别的原因。
+	print("[SettingsMenu] 打开：已暂停 + 释放鼠标（再按 Esc 或点关闭恢复）")
 	opened_changed.emit(true)
 
 
@@ -130,6 +133,7 @@ func close() -> void:
 	_root.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	get_tree().paused = false
+	print("[SettingsMenu] 关闭：已恢复 + 重新捕获鼠标")
 	opened_changed.emit(false)
 
 
