@@ -36,6 +36,8 @@ var _look := Vector3.INF
 var _menu := false
 ## 把五个画质档位依次切一遍，读回**真实生效**的缩放/限帧/后处理。
 var _quality_sweep := false
+## 打印准星各元素落在**物理像素**上的矩形，验证中心点与十字条是否严格对称。
+var _crosshair := false
 
 
 func _initialize() -> void:
@@ -54,6 +56,8 @@ func _initialize() -> void:
 			_menu = true
 		elif a == "--quality-sweep":
 			_quality_sweep = true
+		elif a == "--crosshair":
+			_crosshair = true
 	_run.call_deferred()
 
 
@@ -179,6 +183,9 @@ func _run() -> void:
 	if _quality_sweep:
 		await _sweep_quality(game)
 
+	if _crosshair:
+		_report_crosshair(game)
+
 	await RenderingServer.frame_post_draw
 	var img: Image = root.get_texture().get_image()
 	var path := out.path_join("%s.png" % _tag)
@@ -229,8 +236,7 @@ func _report_floor_coverage(room: Node) -> void:
 		(lo.z - cmin.z) * wscale, (cmax.z - hi.z) * wscale])
 
 
-## 把画质档位依次切一遍，读回**真实生效**的值（不是读设置表，是读渲染器）。
-## 判据：`scaling_3d_scale` = 自动上限 × 档位系数，`Engine.max_fps` 与 SSAO/辉光开关一致。
+## 把五个画质档位依次切一遍，读回**真实生效**的缩放/限帧/后处理。
 func _sweep_quality(game: Node) -> void:
 	var vp := root
 	var we: WorldEnvironment = game.get_node_or_null("WorldEnvironment")
@@ -249,3 +255,27 @@ func _sweep_quality(game: Node) -> void:
 	GameSettings.set_value("render_quality", before)
 	await process_frame
 	print("[shot]   已还原为 %s" % before)
+
+
+## 打印准星各元素落在**物理像素**上的矩形，并按覆盖规则算出真正被点亮的像素区间。
+##
+## 判据：中心点与四根十字条的中心必须**逐位相同**（旧版差半个逻辑像素，放大可见）。
+## 覆盖规则：像素 p 被覆盖 ⟺ 它的中心 p+0.5 落在矩形的 [x0, x1) 里。
+func _report_crosshair(game: Node) -> void:
+	var hud: Node = game.get_node_or_null("HUD")
+	if hud == null or not hud.has_method("crosshair_physical_rects"):
+		push_warning("[shot] HUD 上没有 crosshair_physical_rects()")
+		return
+	print("[shot] ── 准星物理像素落点（canvas 缩放 %.4f）──" % float(hud.call("crosshair_scale")))
+	var rects: Dictionary = hud.call("crosshair_physical_rects")
+	for key in ["Dot", "T", "B", "L", "R"]:
+		if not rects.has(key):
+			continue
+		var r: Rect2 = rects[key]
+		var px0 := int(ceil(r.position.x - 0.5))
+		var px1 := int(ceil(r.end.x - 0.5)) - 1
+		var py0 := int(ceil(r.position.y - 0.5))
+		var py1 := int(ceil(r.end.y - 0.5)) - 1
+		print("[shot]   %-4s 浮点 x[%8.3f, %8.3f) y[%8.3f, %8.3f)  点亮像素 x[%d..%d] y[%d..%d]  中心 (%.1f, %.1f)" % [
+			key, r.position.x, r.end.x, r.position.y, r.end.y,
+			px0, px1, py0, py1, (px0 + px1) * 0.5, (py0 + py1) * 0.5])

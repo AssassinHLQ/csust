@@ -1,6 +1,22 @@
 extends CanvasLayer
 ## HUD：弹药、状态、速度、换弹进度条、准星随瞄准/移动扩张。
 
+## 准星随瞄准/移动扩张。
+##
+## ── 尺寸一律按「**物理像素**」给，厚度必须取偶数 ──
+##
+## ⚠️ 为什么这么较真：`canvas_items` 拉伸的缩放是 **1.4822 这种非整数**。
+##    原来中心点写 `offset = -1.5..1.5`（3 逻辑 px）、十字条 `-1..1`（2 逻辑 px），
+##    换算到物理像素是 4.45 与 2.96 —— **两者被栅格化时取整方式不同**，中心点会
+##    整体偏到十字右边约半个逻辑像素。放大截图一眼就能看出来（用户就是这么发现的）。
+##
+##    治法：把准星原点**吸附到整数物理像素**，所有厚度都按物理像素给**偶数**，
+##    这样中心点与十字条共享同一个中心、左右边界严格镜像。
+##    下面三个常量就是「想在 1440p 上画多少物理像素」，改它们即可，不用碰逻辑坐标。
+const CROSS_DOT_PX := 4.0     ## 中心点边长（物理像素，必须偶数）
+const CROSS_THICK_PX := 2.0   ## 十字条粗细（物理像素，必须偶数）
+const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多远由扩散量决定）
+
 @onready var crosshair: Control = $Crosshair
 @onready var dot: ColorRect = $Crosshair/Dot
 @onready var t: ColorRect = $Crosshair/T
@@ -280,23 +296,86 @@ func _on_ammo(current: int, maximum: int) -> void:
 	ammo.modulate = Color(1, 0.45, 0.4) if current == 0 else Color.WHITE
 
 
+## 把准星摆到「中心落在整数物理像素、厚度为偶数物理像素」的位置上。
+##
+## 见 CROSS_DOT_PX 上方那段注释。`_spread` 仍然按**逻辑单位**给（保持原来的手感），
+## 只有厚度与臂长按物理像素换算。
+func _layout_crosshair() -> void:
+	var vp := get_viewport()
+	if vp == null or crosshair == null:
+		return
+	var xf := vp.get_final_transform()
+	var scale := maxf(xf.get_scale().x, 0.0001)
+	var canvas := vp.get_visible_rect().size
+
+	# 1) 准星原点吸附到整数物理像素 —— 对齐的关键就在这一步
+	var center_px := (xf * (canvas * 0.5)).round()
+	var d := xf.affine_inverse() * center_px - canvas * 0.5
+	crosshair.offset_left = d.x
+	crosshair.offset_right = d.x
+	crosshair.offset_top = d.y
+	crosshair.offset_bottom = d.y
+
+	# 2) 厚度与中心点尺寸按物理像素给，÷scale 换算回逻辑坐标
+	var hd := CROSS_DOT_PX * 0.5 / scale
+	dot.offset_left = -hd
+	dot.offset_right = hd
+	dot.offset_top = -hd
+	dot.offset_bottom = hd
+	var ht := CROSS_THICK_PX * 0.5 / scale
+	for c in [t, b]:
+		c.offset_left = -ht
+		c.offset_right = ht
+	for c in [l, r]:
+		c.offset_top = -ht
+		c.offset_bottom = ht
+
+	# 3) 扩散量仍是逻辑单位，臂长按物理像素
+	var gap := _spread
+	var arm := CROSS_ARM_PX / scale
+	t.offset_top = -gap - arm
+	t.offset_bottom = -gap
+	b.offset_top = gap
+	b.offset_bottom = gap + arm
+	l.offset_left = -gap - arm
+	l.offset_right = -gap
+	r.offset_left = gap
+	r.offset_right = gap + arm
+
+
+## 当前「画布逻辑单位 → 物理像素」的缩放。探针/自检拿它判断对齐。
+func crosshair_scale() -> float:
+	var vp := get_viewport()
+	return 1.0 if vp == null else maxf(vp.get_final_transform().get_scale().x, 0.0001)
+
+
+## 每个准星元素**落在物理像素上的矩形** —— 供探针验证「中心点与十字条是否严格对称」。
+func crosshair_physical_rects() -> Dictionary:
+	var vp := get_viewport()
+	if vp == null:
+		return {}
+	var xf := vp.get_final_transform()
+	var out := {}
+	for pair in [["Dot", dot], ["T", t], ["B", b], ["L", l], ["R", r]]:
+		var c: Control = pair[1]
+		if c == null:
+			continue
+		var gr := c.get_global_rect()
+		var p0 := xf * gr.position
+		var p1 := xf * (gr.position + gr.size)
+		out[String(pair[0])] = Rect2(p0, p1 - p0)
+	return out
+
+
 func _process(_delta: float) -> void:
 	if _player == null:
 		return
 
-	# 准星随瞄准收拢、随移动扩散
+	# 准星随瞄准收拢、随移动扩散（尺寸落地见 _layout_crosshair）
 	var moving := Vector2(_player.velocity.x, _player.velocity.z).length()
 	var target := 3.0 if _player.aiming else 7.5 + moving * 1.6
 	_spread = lerpf(_spread, target, 0.18)
-	var s := _spread
-	t.offset_top = -s - 5.0
-	t.offset_bottom = -s
-	b.offset_top = s
-	b.offset_bottom = s + 5.0
-	l.offset_left = -s - 5.0
-	l.offset_right = -s
-	r.offset_left = s
-	r.offset_right = s + 5.0
+	_layout_crosshair()
 	dot.modulate = Color(1, 1, 1, 0.95 if _player.aiming else 0.8)
 
 	var moving_state := ""

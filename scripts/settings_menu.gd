@@ -59,6 +59,14 @@ const VALUE_WIDTH := 84.0
 const PANEL_WIDTH := 620.0
 const ROW_GAP := 10
 
+## 操作说明 / 场地说明。
+##
+## 原来它是 HUD 底部的一个 `Label`（`HUD/Hint`），常驻画面、右端还会被右下角的
+## 弹药面板压住。用户要求收进这里 —— **只在 Esc 设置打开时出现**，平时不占画面。
+const HELP_TEXT := "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近\n" \
+	+ "7 名同伴会帮你打：未花・优香・诺亚・小桃・小绿・柚子・凯伊\n" \
+	+ "屋内是画室609，平台下是校园"
+
 var is_open := false
 
 var _root: Control
@@ -195,6 +203,24 @@ func _build() -> void:
 			_add_slider(vbox, key)
 		else:
 			_add_check(vbox, key)
+
+	vbox.add_child(HSeparator.new())
+
+	# 操作说明（原来贴在 HUD 底部那两行）
+	var help_title := Label.new()
+	help_title.text = "操作"
+	help_title.add_theme_font_size_override("font_size", 15)
+	help_title.add_theme_color_override("font_color", _skin["text"])
+	vbox.add_child(help_title)
+
+	var help := Label.new()
+	help.name = "Help"
+	help.text = HELP_TEXT
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	help.custom_minimum_size.x = PANEL_WIDTH - 44.0
+	help.add_theme_font_size_override("font_size", 13)
+	help.add_theme_color_override("font_color", _skin["subtext"])
+	vbox.add_child(help)
 
 	vbox.add_child(HSeparator.new())
 
