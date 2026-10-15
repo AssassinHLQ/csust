@@ -40,11 +40,11 @@
 
 | 按键 | 动作 |
 |---|---|
-| `W A S D` / 方向键 | 相对相机移动 |
-| `Shift` | 跑动（5.2 m/s） |
-| `Ctrl` | 蹲行（1.1 m/s） |
-| `空格` | 跳跃 |
-| 鼠标右键（按住） | **开镜**：相机拉近过肩、FOV 62→34、散布收窄、移速降到 1.6 m/s |
+| `W A S D` / 方向键 | 相对相机移动（**四个方向都能跑**，见 §1.15） |
+| `Shift` | 跑动（**6.8 m/s**，比走路快 2.8 倍） |
+| `Ctrl` | 蹲行（1.3 m/s） |
+| `空格` | 跳跃（峰值 **1.32 m**、滞空 0.70 s，见 §1.15） |
+| 鼠标右键（按住） | **开镜**：相机拉近过肩、FOV 62→34、散布收窄、移速降到 1.9 m/s |
 | **鼠标左键（按住）** | **开火**：约 13 发/秒，**60 发弹匣**。打空自动换弹，**换完不用再点一次，按住就继续射**。**背对准星时不会开枪，会先转身** |
 | `R` | 手动换弹（1.05 s）。手动换弹同样不打断「按住」状态 |
 | 鼠标移动 | 视角 |
@@ -339,7 +339,7 @@ func shoot() -> bool:
 
 - `Cafe_Walk`（1.27 s，脚摆 ±0.03 m）= **走路**
 - `Move_Ing`（0.67 s，脚摆 ±0.16 m）= **跑步**
-- 切换阈值 `WALK_THRESHOLD = 2.4 m/s`
+- 切换阈值 `WALK_THRESHOLD = 2.8 m/s`（§1.15 调过；必须大于走路的 2.4）
 
 开火/换弹这类一次性动作给了倍速（`FIRE_SPEED = 2.5`、`RELOAD_SPEED = 1.9`），
 否则 2.67 秒的开火动作配 13 发/秒的射速，手感很卡。
@@ -423,7 +423,7 @@ skel.get_bone_global_pose(child_bone).origin
    把躯干前倾角度改小。这是根治办法。
 2. **换一条动作** —— `Move_End_Normal` / `Public01` / `Cafe_Walk` 的前倾都比 `Move_Ing` 小。
    把 `anim_driver.gd` 里 `_update_locomotion()` 的 `"Move_Ing"` 换成其中一条即可，
-   **但它们的步频/脚程与 5.2 m/s 不一定匹配，可能要一并调 `speed_scale`**。
+   **但它们的步频/脚程与 6.8 m/s 不一定匹配，可能要一并调 `speed_scale`**。
 3. **调相机** —— `player.gd` 的 `hip_height`（默认 1.62）与 `_pitch`（默认 -0.04）。
    俯角越小、相机越平，前倾看起来越轻。
 
@@ -452,13 +452,14 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_room.gd       # 49 项通过 + 3 项**已知失败**（§6.8 那三条门洞相关的）
 & $g --path $p --script res://scripts/_verify_story.gd      # 88 项：剧本解析/报错/编码/排版 + 对话框播放与暂停交接 + **角色表/场景表**（第九节）
 & $g --path $p --script res://scripts/_verify_sfx.gd        # 44 项：音效库/素材/调用点对账 + 真场景接线（§1.14）
+& $g --path $p --script res://scripts/_verify_move_feel.gd  # 19 项：移动手感（四方向速度/加速/跳跃/空中机动/转向，§1.15）
 & $g --path $p --script res://scripts/_verify_mesh_hut.gd   # 31 项：手工网格小屋（门洞能走/墙能挡/网格纪律/不撞既有东西，§1.13）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **510 项**（全量实测：**510 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
+合计 **529 项**（全量实测：**529 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
 `_verify_room` 的门洞那三条，是**已知、且与本次改动无关**的既有失败（§6.8）；
-其余 15 套一律 0 失败。
+其余 16 套一律 0 失败。
 
 逐套件的实测 PASS 数（合计数以这张表为准）：
 
@@ -471,8 +472,9 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 | `_verify_spawnview` | 12 | `_verify_sfx` | 44（§1.14） |
 | `_verify_settings` | 29 | `_verify_splat` | 24 |
 | `_verify_boss` | 19 | `_verify_mesh_hut` | 31（§1.13） |
-| `_verify_boss_pig` | 40 | `_verify_room` | 49（另 3 FAIL） |
-| | | **合计** | **510** |
+| `_verify_boss_pig` | 40 | `_verify_move_feel` | 19（§1.15） |
+| | | `_verify_room` | 49（另 3 FAIL） |
+| | | **合计** | **529** |
 
 > ⚠️ 上面命令行注释里写的项数是**各套件自己标的**（比如 `_verify_room` 标 54、
 > 实测 52 条断言），和实测对不上时**以实测为准** —— 旧版本的合计数写成过 352，
@@ -888,6 +890,103 @@ weapon.gd / settings_menu.gd          ← 调用点只写「逻辑名」：Sfx.p
 玩家受伤、脚步（`footstep_concrete` 走平台 / `footstep_wood` 走进画室609）、
 剧情打字机逐字声（`tick_001`）、小屋那块场地的室内嗡鸣。
 **加它们只需要往 `SPEC` 里加行 + 在对应事件里加一次 `Sfx.play*()`。**
+
+---
+
+## 1.15 移动手感（调过一轮，有自检守着）
+
+用户报了一组主观问题：「加速度少了 / 机动性差 / 跳的不高 / 速度要快点 /
+**为什么往后走不能跑步** / 转向时角色需要更灵活」。
+这一节把**主观感受量成数字**（`_verify_move_feel.gd`），顺便防止以后改回去。
+
+### 实测手感一览（`_verify_move_feel.gd` 每次都会打这张表）
+
+| | 现在 | 改之前 |
+|---|---|---|
+| 跑（**任意方向**，含后退） | **6.80 m/s** | 5.20（**后退只有 2.00**） |
+| 走（不按 Shift） | 2.40 m/s | 2.00 |
+| 蹲行 | 1.30 m/s | 1.10 |
+| 开镜 | 1.90 m/s | 1.60 |
+| 静止 → 90% 满速 | **250 ms** | 约 570 ms |
+| 松开 → 停住 | 217 ms | 约 300 ms |
+| 跳跃峰值 / 滞空 | **1.32 m / 700 ms** | 0.87 m / 560 ms |
+| 空中横改（0.2 s 内） | **1.80 m/s** | 0.60 m/s |
+| 换向收到 5° 以内 | **100 ms** | 约 240 ms |
+
+### 改了哪四组数（`player.gd` 顶部）
+
+```gdscript
+SPEED_WALK 2.0 → 2.4      SPEED_RUN 5.2 → 6.8      SPEED_CROUCH 1.1 → 1.3   SPEED_AIM 1.6 → 1.9
+ACCEL_GROUND 12 → 26      ACCEL_AIR 3 → 9          FRICTION 20 → 30
+GRAVITY 22 → 20           JUMP_VELOCITY 6.2 → 7.1
+TURN_SMOOTH 14 → 24       TURN_SMOOTH_FIRE 26 → 34
+```
+
+### ⚠️ 改这组数之前必须知道的四条约束
+
+1. **`SPEED_WALK` 必须小于 `anim_driver.gd` 的 `WALK_THRESHOLD`**（现在 2.4 < 2.8），
+   否则「走路」会去播 `Move_Ing`（跑步动画）。同伴用同一个阈值，它们的 `walk_speed = 2.2`
+   也仍在下面。
+2. **改了速度不要跟着改 `CYCLE_SPEED`。** `anim_driver.gd` 的
+   `speed_scale = 速度 / CYCLE_SPEED[clip]` 是**按实际位移补脚步**的（防脚底打滑）——
+   `CYCLE_SPEED` 是「这条动画按多快的地面速度录的」，不是「想让玩家跑多快」。
+   6.8 / 5.2 = 1.31 倍播放，步幅不变，只是踩得更快。
+3. 跳跃高度 = `JUMP² / (2 × GRAVITY)`、滞空 = `2 × JUMP / GRAVITY`。
+   现在 `7.1² / 40 = 1.26 m`（实测 1.32，多出来的是物理步进的量化）。
+4. 转身是**指数逼近**（每帧 `lerp(TURN_SMOOTH × delta)`），不是恒速：
+   24 在 60 fps 下每帧走 40%，约 5 帧收到 5° 以内。**帧率无关**（`exp(-speed × T)`），
+   所以高刷窗口下手感一致。
+
+### 「往后不能跑步」的真凶
+
+`sprinting` 里原本有一句 **`input.y < 0.1`**，本意是「不许倒着跑」。但
+`Input.get_vector(..., "move_forward", "move_back")` 里 **`move_back` 的 `input.y` 是 +1** ——
+于是按 `S` 永远拿不到跑速，表现就是「往后走不能跑步」。现在四个方向一视同仁。
+
+> 这一条在 `_verify_move_feel.gd` 里有**专门一条**盯着（而且失败信息里直接写着
+> 「以前这里恒为 2.40」），别再把它加回来。
+
+### 转向为什么「更灵活」了：朝向改成跟**输入**走
+
+原来角色朝向跟的是**速度方向**：
+
+```gdscript
+elif horiz.length_squared() > 0.25:        # horiz = 当前速度
+	_facing_yaw = atan2(horiz.x, horiz.z)
+```
+
+速度受加速度限制，换向时要拖小半秒才拐过去 —— 那正是「转向不灵活」的观感。
+现在**有输入就立刻朝意图方向**：
+
+```gdscript
+elif dir.length_squared() > 0.01:          # dir = 相对相机的输入方向
+	_facing_yaw = atan2(dir.x, dir.z)
+elif horiz.length_squared() > 0.25:        # 没输入但在滑行：保持朝滑行方向
+	_facing_yaw = atan2(horiz.x, horiz.z)
+```
+
+第二条 `elif` 不能删：松手后不能回落到相机朝向，否则又会出现 §1.4 那个
+「松开移动键后角色自己转回去面对镜头」的老毛病。`_verify_facing.gd` 第 3 节
+（「松开后 `facing_yaw` 完全冻结」）守着这件事；`_verify_final` §4
+（「跑动时脸朝移动方向」）在稳态下两种写法等价，所以不受影响。
+
+自检里最漂亮的一条是这个**分叉判据**：先朝 −Z 跑满速，再突然换成 +X，
+30 ms 后量「朝向离目标多远」与「速度方向离目标多远」——
+实测 **32° vs 84°**，证明朝向确实**领先于速度**（若还是跟速度走，两个数会几乎相等）。
+
+### 自检
+
+```powershell
+& $g --path $p --script res://scripts/_verify_move_feel.gd -- --splat=off   # 19 项
+```
+
+六节：四个方向的稳态速度（都带 Shift）、加速度与刹车、跳跃高度与滞空、
+空中机动、转向灵活性、各档位速度的递增关系。
+
+⚠️ 两条纪律（`--script` 里量物理量最容易在这里翻车）：
+**等真实时间不等帧数**（真渲染窗口能跑到 1000+ fps），
+以及**开局把鼠标设成 `VISIBLE`**（`player._input` 只在 CAPTURED 时吃鼠标移动，
+否则跑自检时碰一下鼠标就把视角带歪、把转向测量搞脏）。
 
 ---
 
@@ -1342,7 +1441,8 @@ GDGS 的 EditorImportPlugin 会把 `.sog` 展开成 GaussianResource 写进
   （2026-10-14 用户要求）。现在平台没有边界：走出 40 × 40 就往下掉，掉到 y < −60
   由 `game.gd` 的 `FALL_LIMIT` 保险送回出生点。`_verify_splat.gd` 现在验的是
   「护栏确实不在了」+「走出边缘真的会掉」+「掉太深会被送回来」
-  - 历史：那圈护栏刻意只做 0.7 m（跳跃顶点 0.87 m），好让助跑起跳能翻出去看校园；
+  - 历史：那圈护栏刻意只做 0.7 m（当时的跳跃顶点 0.87 m），好让助跑起跳能翻出去看校园；
+    （跳跃手感在 §1.15 调过一轮，现在是 **1.32 m** —— 护栏早就删了，这条只作历史记录）
     再早还做过 4 m 高，结果「怎么跳都出不去」
 - 新增 `SplatScene` 节点：`world_scale = 25`、`auto_place = true`、`top_gap = 12`、`cache_mode = "auto"`
 - 新增 `Room609` 节点：真人尺度（×1.8）的画室，**带墙碰撞和门洞**（§6.8）
@@ -2503,7 +2603,8 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 - 目标点 = 玩家位置 + `slot` 按**玩家相机绕角**旋转。用相机绕角而不是角色朝向，
   是为了甩视角时同伴绕到新的侧后方，而不是绕进画面正中央
 - `walk_speed = 2.2`、`run_speed = 6.4`
-  - ⚠️ `walk_speed` 刻意压在 **2.4 以下**：`AnimDriver` 在 2.4 m/s 才切到 `Move_Ing`，
+  - ⚠️ `walk_speed` 刻意压在 **走路动画阈值以下**：`AnimDriver` 在 `WALK_THRESHOLD`
+    （现在 2.8 m/s，§1.15 调过）才切到 `Move_Ing`，
     高过它的话「站位差 1 m」这种微调也会播跑步动画，看起来像在打滑
 - 站住不动时**跟玩家看同一个方向**（像一队人），走动时朝行进方向
 - 两条保险：离站位 > 26 m、或掉到 y < −60（跟 `game.gd` 的 `FALL_LIMIT` 同源）→ 直接拉回

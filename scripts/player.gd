@@ -26,18 +26,40 @@ signal health_changed(current: float, maximum: float)
 var health := 100.0
 
 # --- 移动手感（米 / 秒）---
-const SPEED_WALK := 2.0
-const SPEED_RUN := 5.2
-const SPEED_CROUCH := 1.1
-const SPEED_AIM := 1.6
-const ACCEL_GROUND := 12.0
-const ACCEL_AIR := 3.0
-const FRICTION := 20.0
-const GRAVITY := 22.0
-const JUMP_VELOCITY := 6.2
-const TURN_SMOOTH := 14.0
+#
+# ⚠️ 这一组是**整体调过一轮**的（用户报：加速度少 / 机动性差 / 跳不高 / 要更快 /
+#    往后不能跑 / 转向不灵活）。改之前先看这四条约束，**别只动一个数**：
+#
+#   1. **`SPEED_WALK` 必须小于 `anim_driver.gd` 的 `WALK_THRESHOLD`**，否则「走路」
+#      会去播 `Move_Ing`（跑步动画）。现在 2.4 < 2.8。同伴的 `walk_speed = 2.2`
+#      用的是同一个阈值，也仍在下面 ✓。
+#   2. 动画的 `speed_scale = 速度 / CYCLE_SPEED[clip]`，那是**按实际位移补脚步**
+#      （防止脚底打滑）。所以**改了速度不要跟着改 `CYCLE_SPEED`** —— 那个数是
+#      「这条动画按多快的地面速度录的」，不是「想让玩家跑多快」。
+#      7.1 / 6.8 之类改完，播的是同一条动画、只是踩得更快，步幅不变。
+#   3. 跳跃高度 = `JUMP² / (2 × GRAVITY)`，滞空 = `2 × JUMP / GRAVITY`。
+#      现在 7.1² / 40 = **1.26 m**（改之前 6.2² / 44 = 0.87 m），滞空 0.71 s。
+#   4. 转身是**指数逼近**（每帧 lerp `TURN_SMOOTH × delta`），不是恒速：
+#      24 在 60 fps 下每帧走 40%，约 5 帧收到 5° 以内。
+#
+# 这些数字都有自检守着（`_verify_move_feel.gd` 把「手感」量成具体数值），
+# 别靠感觉改。
+const SPEED_WALK := 2.4        # 2.0 → 2.4（仍 < WALK_THRESHOLD 2.8）
+const SPEED_RUN := 6.8         # 5.2 → 6.8（+31%）
+const SPEED_CROUCH := 1.3      # 1.1 → 1.3
+const SPEED_AIM := 1.9         # 1.6 → 1.9
+## 地面加速度。26 在 60 fps 下是每帧 +0.43 m/s → 约 0.27 s 加到满速（原来 12 → 0.57 s）
+const ACCEL_GROUND := 26.0     # 12 → 26
+## 空中加速度。原来只有 3，跳起来几乎没法修正落点 —— 这是「机动性差」的主因之一
+const ACCEL_AIR := 9.0         # 3 → 9
+## 地面摩擦（松开方向键后的减速度）。**刻意略大于 ACCEL_GROUND**：起步比刹车慢一点，
+## 换向才干脆 —— 这是「转向灵活」里除转身速度之外的另一半
+const FRICTION := 30.0         # 20 → 30
+const GRAVITY := 20.0          # 22 → 20（配合下面的跳跃速度一起给高度）
+const JUMP_VELOCITY := 7.1     # 6.2 → 7.1（跳高 0.87 → 1.26 m，+45%）
+const TURN_SMOOTH := 24.0      # 14 → 24
 ## 开火/开镜时的转身速度（比平时快，否则「点了没反应」的迟滞感明显）
-const TURN_SMOOTH_FIRE := 26.0
+const TURN_SMOOTH_FIRE := 34.0 # 26 → 34
 
 ## 开火方向与角色朝向的夹角小于这个值（弧度）才算「转到位」。
 ##
@@ -239,8 +261,12 @@ func _physics_process(delta: float) -> void:
 		dir = dir.normalized()
 
 	crouching = Input.is_action_pressed("crouch")
+	# ⚠️ 这里**曾经有一句 `input.y < 0.1`**，本意是「不许倒着跑」。但用户要的正是
+	#    「往后也能跑」，而且它挡掉的不只是 Shift —— `move_back` 的 `input.y` 是 **+1**，
+	#    所以按 S 永远拿不到跑速，表现就是「往后走不能跑步」。现在四个方向一视同仁。
+	#    （`_verify_move_feel.gd` 有一条专门盯着这件事，别再把它加回来。）
 	sprinting = Input.is_action_pressed("sprint") and not aiming and not crouching \
-		and input.y < 0.1 and dir.length_squared() > 0.01
+		and dir.length_squared() > 0.01
 
 	var target_speed := SPEED_WALK
 	if crouching:
@@ -281,7 +307,15 @@ func _physics_process(delta: float) -> void:
 	var want_face_aim := aiming or _fire_held
 	if want_face_aim:
 		_facing_yaw = _yaw + CAMERA_FORWARD_OFFSET
+	elif dir.length_squared() > 0.01:
+		# ⚠️ 有输入就**立刻朝意图方向**，不要等速度转过来 —— 速度受加速度限制，
+		#    换向时要拖小半秒才拐过去，那正是「转向不灵活」的观感。
+		#    `dir` 是相对相机的**输入**方向，`horiz` 是**当前速度**；方向不变时两者
+		#    相同，所以「跑动时脸朝移动方向」那条断言照样成立（见 _verify_final §4）。
+		_facing_yaw = atan2(dir.x, dir.z)
 	elif horiz.length_squared() > 0.25:
+		# 没输入但在滑行：保持朝滑行方向，**不要**回落到相机朝向
+		# （那正是 `_facing_yaw` 那段注释里踩过的坑：松手后角色自己转回去面对镜头）
 		_facing_yaw = atan2(horiz.x, horiz.z)
 
 	# 开火转身要快一点，不然「点了没反应」的感觉很明显

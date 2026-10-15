@@ -24,7 +24,10 @@ const CYCLE_SPEED := {
 	"Cafe_Walk": 1.6,
 	"Move_Ing": 5.2,
 }
-const WALK_THRESHOLD := 2.4      # 低于这个速度用 Cafe_Walk，高于用 Move_Ing
+const WALK_THRESHOLD := 2.8      # 低于这个速度用 Cafe_Walk，高于用 Move_Ing
+                                 # ⚠️ 必须**大于** `player.gd` 的 `SPEED_WALK`（2.4），
+                                 #    否则「走路」会去播跑步动画。同伴用同一个阈值，
+                                 #    它们的 `walk_speed = 2.2` 也仍在下面 ✓（2.4 → 2.8）
 const FADE := 0.18               # 交叉淡入时间
 
 ## 一次性动作的播放倍速。
