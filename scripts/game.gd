@@ -19,6 +19,9 @@ var _spawn := Vector3.ZERO
 var _score := 0
 var _shots := 0
 var _hits := 0
+## 输入自检用：累计收到的真实键盘按下事件数（见 _input）。一直 0 就说明
+## 按键事件压根没进 Godot，而不是 InputMap 没匹配上。
+var _keys_seen := 0
 
 
 ## 输入自检：把「窗口到底有没有拿到前台焦点」打出来，并尽力抢一次前台。
@@ -39,23 +42,56 @@ var _hits := 0
 func _watch_input() -> void:
 	if OS.get_cmdline_args().has("--script"):
 		return
-	# 尽力抢一次前台（Windows 的 SetForegroundWindow 有前台锁，不保证成功）
-	DisplayServer.window_move_to_foreground()
-	get_window().grab_focus()
 	_report_input.call_deferred()
 
 
+## 数「收到的真实按键事件」。
+##
+## ⚠️ 这是唯一能回答「键盘到底有没有到 Godot」的办法：
+## `Input.is_action_pressed()` 为 false 有两种完全不同的原因 ——
+##   ① 按键事件压根没进 Godot（操作系统/焦点层面的问题）
+##   ② 事件进来了，但 InputMap 没匹配上动作（映射问题）
+## 看这个计数就知道是哪种：一直 0 就是①，在涨就是②。
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and (event as InputEventKey).pressed:
+		_keys_seen += 1
+
+
 func _report_input() -> void:
-	for i in 8:
+	for i in 12:
 		await get_tree().create_timer(1.0).timeout
 		var focus := DisplayServer.window_is_focused()
-		var line := "[Game] 输入自检 第 %d 秒：window_is_focused=%s  mouse_mode=%d  paused=%s" % [
-			i + 1, str(focus), Input.mouse_mode, str(get_tree().paused)]
+		var note := ""
 		if not focus:
-			line += "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
-		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused:
-			line += "   ← ⚠️ 有焦点但鼠标未被捕获（按 Esc 开着设置菜单？）"
-		print(line)
+			note = "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
+		elif get_tree().paused:
+			note = "   ← 游戏被暂停（Esc 设置菜单开着）"
+		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			# 自愈：有焦点、没暂停、鼠标却没被捕获 ⇒ 自己收回来。
+			# （焦点丢失时 Godot 会把鼠标放出来且**不会自动收回**；player.gd 的
+			#   _notification 只在「重新获得焦点」那一刻收，漏了就一直是 VISIBLE。）
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			note = "   ← 有焦点却没捕获，已自动收回 mouse_mode=%d" % Input.mouse_mode
+		print("[Game] 输入自检 第 %2d 秒：focused=%s  mouse_mode=%d  paused=%s  累计按键事件=%d" % [
+			i + 1, str(focus), Input.mouse_mode, str(get_tree().paused), _keys_seen])
+		print("[Game]            └─ Player：%s%s" % [_player_state(), note])
+
+
+## Player 节点还活不活 —— 这是把「两个症状是不是同一个原因」分开的关键。
+##
+## 如果 `player.gd` 的 `_ready()` 根本没跑，那么「没捕获鼠标」和「WASD 不动」
+## 就是**同一个原因**（脚本没执行）；而如果它活得好好的，两个症状就得分开查。
+## 只看鼠标模式是分不出来的 —— 默认值本来就是 0（VISIBLE）。
+func _player_state() -> String:
+	var pl := get_node_or_null("Player")
+	if pl == null:
+		return "**节点不存在**"
+	var s := "script=%s  is_physics_processing=%s  is_processing_input=%s  vel=%s  pos=%s" % [
+		"有" if pl.get_script() != null else "**无**",
+		str(pl.is_physics_processing()), str(pl.is_processing_input()),
+		str((pl as CharacterBody3D).velocity.snappedf(0.01)),
+		str((pl as Node3D).global_position.snappedf(0.01))]
+	return s
 
 
 ## 视口比设计分辨率大不少时，按比例**只缩小 3D 渲染**分辨率（UI 仍全分辨率）。
