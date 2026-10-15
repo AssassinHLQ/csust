@@ -628,7 +628,8 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
 ### UI 与皮肤（**可整套切换**）
 
 UI 全部**代码构建**（和 `hud.gd` 里 Boss 血条同一套做法）。皮肤是**一整套**：
-一个目录 + 一套配色 + 九宫格边距，定义在 `settings_menu.gd` 顶部的 `SKINS` 里，
+一个目录 + 一套配色 + 九宫格边距，定义在 **`ui_skin.gd`** 的 `SKINS` 里
+（原来写在 `settings_menu.gd`，HUD 也要跟着换皮时抽出来了，免得两边配色走散），
 **按优先级**挑第一套文件齐的。两套皮肤的文件名刻意保持一致，所以换皮肤只是换目录：
 
 | 皮肤 | 目录 | 授权 | 仓库里有吗 |
@@ -639,11 +640,17 @@ UI 全部**代码构建**（和 `hud.gd` 里 Boss 血条同一套做法）。皮
 文件名约定（两套一致）：`panel.png`、`button.png`、`button_pressed.png`、
 可选的 `button_hover.png`、`font.ttf`。
 
+⚠️ **字体不归皮肤管**（这一条是换显示字体那轮改的）：皮肤只管面板九宫格和配色，
+**整套 UI 的字**由 `ui_skin.gd` 的 `UI_FONT_CANDIDATES` 决定，优先级是
+`assets/ui_font/*`（本地自备）→ `assets/ui/font.ttf`（OFL 兜底）→ 皮肤自带字体。
+所以换皮肤时对话框的木头板会跟着换，**字不变**。见 §9.5 坑 1。
+
 ⚠️ **Sprout Lands 那套为什么不在仓库里**：它的授权原文写着
 `You can not redistribute or resale, even if modified.` —— 提交进仓库就等于「再分发」。
 所以 `.gitignore` 把它排除了，需要自己从
 [itch](https://cupnooble.itch.io/sprout-lands-ui-pack) 取得后放进 `assets/ui_sprout/`。
 **没有它会自动回退到 Kenney 那套**，不报错、也不缺图。
+同样处理的还有 `assets/ui_font/`（现在放的是商用需授权的「Aa暗夜深渊」）。
 
 现在 `assets/ui_sprout/` 里用的是从 `可用素材_待接入` 裁出来的三样：
 `Setting menu.png` 的空白面板（106×122，九宫格边距取 12）、
@@ -791,7 +798,9 @@ _arisu_learn/
 ├─ addons/
 │  └─ gdgs/                 GDGS 3.3.0 高斯泼溅插件（**纯 GDScript，无 DLL**，MIT，第六节）
 ├─ assets/
-│  ├─ ui/                   设置界面的**内置**皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
+│  ├─ ui/                   界面**内置**皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
+│  ├─ ui_font/              **界面显示字体投放目录**：放进来就整套 UI 换字
+│  │  └─ README.md          说明（字体本身被 .gitignore 排除，只留这份说明）
 │  └─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）
 ├─ models/
 │  ├─ README.md             说明：要放什么模型、版权与换模型的三个注意点
@@ -2621,19 +2630,44 @@ story/开场.txt          ← 你写的东西（UTF-8 纯文本）
 
 ## 9.5 ⚠️ 七个坑（都踩过）
 
-### 坑 1：皮肤字体**没有汉字**，正文必须换字体
+### 坑 1：皮肤字体**没有汉字**，中文必须另找一套（现在整套 UI 都换了）
 
-两套皮肤的 `font.ttf` 都不够用。直接解 TTF 的 `cmap` 表量过
-（脚本在 `..\_hud_preview\font_cmap_check.py`）：
+两套皮肤的 `font.ttf` 都不够用。把「游戏里**实际会出现**的 190 个字」对着
+`cmap` 表逐个查过（`..\_hud_preview\font_needed.py`，按界面分组报缺字）：
 
-| 字体 | 大小 | CJK 汉字 | 中文标点 | 假名 |
-|---|---|---|---|---|
-| `assets/ui/font.ttf`（Fusion Pixel **12px**，OFL） | 6.68 MB | **19214 / 20992 = 91.5%** | 100% | 100% |
-| `assets/ui_sprout/font.ttf` | 0.11 MB | **0 / 20992** | 0% | 0% |
+| 字体 | 大小 | 剧情 94 字 | 名字 18 字 | HUD 30 字 | 设置 96 字 | 结论 |
+|---|---|---|---|---|---|---|
+| `assets/ui_font/Aa暗夜深渊.ttf` | 3.86 MB | ✅ | ✅ | ✅ | ✅ | 整套可用（**不在仓库里**） |
+| `assets/ui/font.ttf`（Fusion Pixel 12px，OFL） | 6.68 MB | ✅ | ✅ | ✅ | ✅ | 整套可用（兜底） |
+| `assets/ui_sprout/font.ttf` | 0.11 MB | ❌ | ❌ | ❌ | ❌ | 缺 **213** 个字，只够画数字 |
 
 Sprout 那套只有 80 个拉丁字形（设置界面全是数字/拉丁，所以一直没暴露）。
-正文走 `UiSkin.cjk_font()` → `assets/ui/font.ttf`。它是**像素字体**，
-字号取 **12 的整数倍**最锐利，所以正文用 24（实测行高 32.0 px）。
+
+**现在是整套 UI 一套字**，走 `UiSkin.ui_font()`：
+
+```
+assets/ui_font/Aa暗夜深渊.ttf      ← 本地放进去就自动启用（不在版本库里）
+        ↓ 没有它时回退
+assets/ui/font.ttf                 ← Fusion Pixel 12px，OFL，随仓库分发
+        ↓ 连它也没有时
+皮肤自带的 font.ttf                ← 只够画数字，中文交给系统字体回退
+```
+
+`UI_FONT_CANDIDATES` 就是这张优先级表。**丢新字体进去要导入一次**
+（`--headless --path . --import`），否则 `ResourceLoader.exists()` 认不出来。
+挑字体前先跑 `font_needed.py` 查缺字 —— 显示字体经常只有 GB2312 那 6763 字。
+
+> ⚠️ 换字体**不需要动版式**：实测两套字体的字宽几乎完全一致
+> （16 px 下「鼠标灵敏度」都是 80 px；24 px 下 28 个汉字是 611 / 612 px），
+> 所以对话框的「一行 44 个汉字」、行高 32.0 px、设置面板 620 宽全都照旧。
+>
+> ⚠️ **Aa暗夜深渊商用需授权**，所以它被 `.gitignore` 排除、不随仓库分发，
+> 克隆者会自动回退到 OFL 的 Fusion Pixel。见 §11.1 与 `THIRD_PARTY.md`。
+>
+> HUD 上的数字（HP / 弹药）原来走像素字体是为了「醒目」（HUD 那一轮的明确要求）。
+> 现在跟整套 UI 统一了；想改回「HUD 数字保持像素字体」就把
+> `ui_skin.gd` 的 `HUD_FOLLOWS_UI_FONT` 改成 `false`。
+> 想反过来「用这套字但加粗」可以用 `FontVariation.variation_embolden`。
 
 ### 坑 2：两个节点都会 `paused = true`，必须定交接规则
 
