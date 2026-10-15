@@ -86,7 +86,39 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var box_door_center := 0.0
 @export var auto_start := true
 
+@export_group("Collapse")
+## 动态 3DGS「坍缩」：所有高斯同时等比变小，并向锚点收敛，最终在一点上塌掉。
+##
+## 实现只有一处：把系数乘进 _local_basis()。因为
+##   位置 world_pos = basis * 源点 + offset   ⇒ basis 变小 ⇒ 点被拉向 offset
+##   椭球 world_cov = object_linear * cov * object_linearᵀ ⇒ 吃 basis² ⇒ 同时变小
+## 所以 Compute / Raster 两套后端**一行都不用改**，也天然兼容锚点：
+## use_anchor 时 offset = anchor_world − basis * anchor_source，
+## basis → 0 时所有点恰好收敛到 anchor_world 这个点。
+@export var collapse_enabled := false
+## 从 t=0 走到 t=1 的秒数。
+@export_range(0.1, 120.0, 0.1) var collapse_duration := 6.0
+## 开始前的停顿秒数。
+@export_range(0.0, 60.0, 0.1) var collapse_delay := 0.0
+@export_enum("linear", "in_quad", "in_cubic", "in_quart", "out_cubic", "in_out_cubic") var collapse_easing := "in_cubic"
+## 到 1 之后自动倒放回 0（来回呼吸）；false 则停在坍缩状态。
+@export var collapse_ping_pong := false
+## 泼溅加载完成后自动开始播放。
+@export var collapse_auto_play := false
+## 坍缩到底时保留的缩放。不取 0：全 0 的基矩阵是奇异的，Godot 会报错。
+@export_range(0.0, 0.1, 0.0001) var collapse_min_scale := 0.0004
+## 收缩的同时让整体淡出（写内部 MultiMesh 的 transparency），
+## 这样末帧不会剩一个死亮的白点。
+@export var collapse_fade := false
+## 淡出从 t 的哪个位置开始（1.0 = 到最后才淡）。
+@export_range(0.0, 1.0, 0.01) var collapse_fade_from := 0.55
+
 var splat_node: Node3D = null
+## 坍缩进度：0 = 原始大小，1 = 完全坍缩。
+var collapse_t := 0.0
+var collapsing := false
+var _collapse_clock := 0.0
+var _collapse_dir := 1.0
 var splat_center := Vector3.ZERO
 var splat_aabb := AABB()
 ## 内容稳健包围盒（1‰~99.9‰ 分位，排除 floaters）
@@ -125,15 +157,15 @@ func _ready() -> void:
 		start()
 
 
-func _process(_delta: float) -> void:
-	if _thread == null or _thread.is_alive():
-		return
-	_thread.wait_to_finish()
-	_thread = null
-	_mutex.lock()
-	var result := _result
-	_mutex.unlock()
-	_finish(result)
+func _process(delta: float) -> void:
+	if _thread != null and not _thread.is_alive():
+		_thread.wait_to_finish()
+		_thread = null
+		_mutex.lock()
+		var result := _result
+		_mutex.unlock()
+		_finish(result)
+	_advance_collapse(delta)
 
 
 # --- 对外接口 ---
@@ -185,6 +217,116 @@ func content_top_y() -> float:
 func apply_transform() -> void:
 	if splat_node:
 		splat_node.transform = Transform3D(_local_basis(), _resolve_offset())
+
+
+# --- 坍缩 / 动态 3DGS ---------------------------------------------------------
+
+## 当前缩放系数：1 = 原始大小，降到 collapse_min_scale = 塌成一点。
+func collapse_factor() -> float:
+	if not collapse_enabled:
+		return 1.0
+	return maxf(1.0 - _collapse_ease(collapse_t), collapse_min_scale)
+
+
+## 从 from_t 开始播放坍缩（默认从头）。
+func play_collapse(from_t: float = 0.0) -> void:
+	collapse_t = clampf(from_t, 0.0, 1.0)
+	_collapse_clock = 0.0
+	_collapse_dir = 1.0
+	collapsing = true
+	apply_transform()
+	_apply_collapse_fade()
+
+
+## 立刻回到原始大小。
+func reset_collapse() -> void:
+	collapsing = false
+	collapse_t = 0.0
+	_collapse_clock = 0.0
+	_collapse_dir = 1.0
+	apply_transform()
+	_apply_collapse_fade()
+
+
+## 直接切到某个进度，不启动时钟。给探针 / Sequencer / 外部驱动用。
+func set_collapse(t: float) -> void:
+	collapse_t = clampf(t, 0.0, 1.0)
+	collapsing = false
+	apply_transform()
+	_apply_collapse_fade()
+
+
+func _collapse_ease(x: float) -> float:
+	var u := clampf(x, 0.0, 1.0)
+	match collapse_easing:
+		"linear":
+			return u
+		"in_quad":
+			return u * u
+		"in_cubic":
+			return u * u * u
+		"in_quart":
+			return u * u * u * u
+		"out_cubic":
+			return 1.0 - pow(1.0 - u, 3.0)
+		"in_out_cubic":
+			return 4.0 * u * u * u if u < 0.5 else 1.0 - pow(-2.0 * u + 2.0, 3.0) * 0.5
+		_:
+			return u
+
+
+## 每帧推进坍缩时钟。
+##
+## splat_node 还是 null 时直接不动 —— 画室 609 那档要解码 21 s，
+## 若从 _ready 就开始计时，等画面出来时动画早跑完了。
+func _advance_collapse(delta: float) -> void:
+	if not collapsing or splat_node == null:
+		return
+	_collapse_clock += delta
+	var t := 0.0
+	if collapse_duration <= 0.0:
+		t = 1.0
+	else:
+		# 停顿只在正向那一段生效，倒放（ping-pong）时不再等一次。
+		var pause := collapse_delay if _collapse_dir > 0.0 else 0.0
+		t = clampf((_collapse_clock - pause) / collapse_duration, 0.0, 1.0)
+	if _collapse_dir < 0.0:
+		t = 1.0 - t
+	collapse_t = t
+	apply_transform()
+	_apply_collapse_fade()
+	if t >= 1.0 or t <= 0.0:
+		if collapse_ping_pong:
+			_collapse_dir = -_collapse_dir
+			_collapse_clock = 0.0
+		else:
+			collapsing = false
+
+
+var _fade_mesh: GeometryInstance3D = null
+
+
+## 可选的整体淡出。后端把 MultiMeshInstance3D 当 INTERNAL 子节点挂在泼溅
+## 节点下，所以这里写它的 transparency，不用碰插件一行代码。
+func _apply_collapse_fade() -> void:
+	if not collapse_fade or splat_node == null:
+		return
+	if _fade_mesh == null or not is_instance_valid(_fade_mesh):
+		_fade_mesh = _find_render_mesh()
+		if _fade_mesh == null:
+			return
+	var span := maxf(1.0 - collapse_fade_from, 0.0001)
+	_fade_mesh.transparency = clampf((collapse_t - collapse_fade_from) / span, 0.0, 1.0)
+
+
+## 按类型找后端的渲染网格，不依赖它的名字（_GdgsRasterSplat 属于插件内部约定）。
+func _find_render_mesh() -> GeometryInstance3D:
+	if splat_node == null:
+		return null
+	for child in splat_node.get_children(true):
+		if child is GeometryInstance3D:
+			return child
+	return null
 
 
 # --- 内部 ---
@@ -243,6 +385,8 @@ func _finish(result: Dictionary) -> void:
 	splat_node.set("gaussian", res)
 	add_child(splat_node)
 	apply_transform()
+	if collapse_enabled and collapse_auto_play:
+		play_collapse()
 	if build_collision:
 		_build_collision()
 	if build_box_collision:
@@ -278,7 +422,8 @@ func _local_basis() -> Basis:
 		* Basis.from_scale(Vector3(world_scale, world_scale, world_scale))
 	if use_default_orientation:
 		b = b * GaussianSplatNodeScript.get_model_orientation_correction().basis
-	return b
+	# 坍缩系数。均匀缩放与旋转可交换，所以乘在最后即可，不影响 yaw 校正。
+	return b * Basis.from_scale(Vector3.ONE * collapse_factor())
 
 
 ## 自动摆放：水平把内容中心对到原点，竖向把内容顶面沉到 -top_gap
