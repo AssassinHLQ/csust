@@ -28,6 +28,13 @@
 # 所以**不能**随仓库分发。本地放进 assets/ui_sprout/ 就会自动启用（否则回退 assets/ui/）。
 /assets/ui_sprout/**
 
+# 界面显示字体（现在放的是 Aa 字库的「Aa暗夜深渊」，商用需授权）——
+# 同样**不随仓库分发**。本地丢进 assets/ui_font/ 就自动启用，
+# 没有它时回退 assets/ui/font.ttf（Fusion Pixel，OFL，可分发）。
+# 见 assets/ui_font/README.md 与 THIRD_PARTY.md。
+/assets/ui_font/**
+!/assets/ui_font/README.md
+
 # 但保留两个目录下的说明文件，克隆者要靠它们知道该放什么
 !/models/README.md
 !/splatdata/README.md

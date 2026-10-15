@@ -170,7 +170,7 @@ func _build_player_health() -> void:
 	var title := Label.new()
 	title.text = "HP"
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", UiSkin.font(_skin))
+	title.add_theme_font_override("font", UiSkin.hud_number_font(_skin))
 	title.add_theme_font_size_override("font_size", int(HP_TITLE_FONT_SIZE))
 	title.add_theme_color_override("font_color", _skin["subtext"])
 	_place(title, Vector2(HP_PAD, HP_ROW_TOP), Vector2(70.0, HP_ROW_H))
@@ -180,7 +180,7 @@ func _build_player_health() -> void:
 	_health_text.name = "HealthText"
 	_health_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_health_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_health_text.add_theme_font_override("font", UiSkin.font(_skin))
+	_health_text.add_theme_font_override("font", UiSkin.hud_number_font(_skin))
 	_health_text.add_theme_font_size_override("font_size", int(HP_FONT_SIZE))
 	_health_text.add_theme_color_override("font_color", _skin["text"])
 	_place(_health_text, Vector2(HP_PAD, HP_ROW_TOP), Vector2(inner_w, HP_ROW_H))
@@ -252,7 +252,7 @@ func _style_ammo_panel() -> void:
 
 	reload_trough.add_theme_stylebox_override("panel", UiSkin.bar_trough(_skin))
 
-	ammo.add_theme_font_override("font", UiSkin.font(_skin))
+	ammo.add_theme_font_override("font", UiSkin.hud_number_font(_skin))
 	ammo.add_theme_font_size_override("font_size", AMMO_FONT_SIZE)
 	ammo.add_theme_color_override("font_color", _skin["text"])
 

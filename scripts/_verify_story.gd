@@ -234,8 +234,8 @@ func _test_template_file() -> void:
 
 	# ── 排版检查：按**真实字体**量每一句会不会撑破对话框 ──
 	# 这一段是给写剧本的人用的：改完剧本跑一次，就知道哪一行太长。
-	var font := UiSkin.cjk_font()
-	_check(font != null, "拿到中文字体 %s" % UiSkin.CJK_FONT_PATH)
+	var font := UiSkin.ui_font()
+	_check(font != null, "拿到界面字体 %s" % UiSkin.ui_font_path())
 	if font == null:
 		return
 	var max_lines := DialogueBox.max_body_lines(font)

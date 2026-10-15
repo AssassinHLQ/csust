@@ -11,8 +11,8 @@ extends RefCounted
 ## ⚠️ `font.ttf` 是 Sprout Lands 的像素字体（`pixelFont-7-8x14-sproutLands`），
 ##    **没有中文字形**。Godot 的 `FontFile.allow_system_fallback` 默认开着，中文会
 ##    回退到系统字体渲染 —— 数字/拉丁文用像素字体、中文用系统字体，混排能看但基线
-##    会略有出入。所以这套字体只用在「纯数字/拉丁」的控件上（弹药数、HP 数字）。
-##    要大段中文（剧情正文）走下面的 `cjk_font()`。
+##    会略有出入。所以这套字体只用在「纯数字/拉丁」的控件上（弹药数、HP 数字），
+##    而且 HUD 那三处是**显式覆盖**进去的（`hud.gd` 里的 `hud_number_font()`）。
 ##
 ## ⚠️ Sprout 的 `panel.png` 是 106×122、圆角比 Kenney 的 32×32 大得多，两套的
 ##    九宫格边距必须分别给（`margin` 字段），不然小图会被拉伸成糊的。
@@ -59,31 +59,62 @@ const SKINS := [
 	},
 ]
 
+## ── 界面字体：整套 UI 共用一套（剧情正文 / HUD / Esc 设置界面）──
+##
+## 候选**按优先级排**，第一个存在的用它。这样「本地丢一套显示字体进来」不用改代码；
+## 克隆仓库的人没有它时自动回退到仓库自带的 Fusion Pixel（OFL，可分发）。
+##
+## ⚠️ 实测（`..\_hud_preview\font_needed.py`：把游戏里**实际会出现**的 190 个字
+##    对着 cmap 查一遍）：
+##      `assets/ui_font/Aa暗夜深渊.ttf`  3.86 MB  剧情 94 字 / 名字 18 字 /
+##                                                HUD 30 字 / 设置 29+67 字 —— **一个不缺**
+##      `assets/ui/font.ttf`             6.68 MB  汉字 19214/20992 = 91.5%，也一个不缺
+##      `assets/ui_sprout/font.ttf`      0.11 MB  只覆盖 80 个拉丁字形，**缺 213 个汉字**
+##    所以 Sprout 那套皮肤字体只够画数字，任何中文都得走这里。
+##
+## ⚠️ 丢进新字体之后必须**导入一次**，否则 `ResourceLoader.exists()` 认不出来：
+##        & <godot> --headless --path . --import
+const UI_FONT_CANDIDATES := [
+	"res://assets/ui_font/Aa暗夜深渊.ttf",
+	"res://assets/ui/font.ttf",
+]
+
+## 一个标签占多宽：实测**两套字体的字宽几乎完全一致**（16 px 下「鼠标灵敏度」
+## 都是 80 px、24 px 下 28 个汉字都是 611~612 px），所以换字体**不需要动任何版式**，
+## 对话框的「一行 44 个汉字」和设置面板的 620 宽都照旧。
 const FONT_SIZE := 16
 
-## ── 剧情正文用的中文字体 ──
+## HUD 上的**数字**（HP / 弹药）要不要跟着换成界面字体。
 ##
-## ⚠️ **不能用皮肤字体**。实测（`..\_hud_preview\font_cmap_check.py`，直接解 TTF 的
-##    cmap 表）：
-##      `assets/ui/font.ttf`       6.68 MB  汉字 19214/20992 (91.5%)、中文标点 100%
-##      `assets/ui_sprout/font.ttf` 0.11 MB  汉字 **0/20992**、中文标点 0
-##    Sprout 那套只有 80 个拉丁字形。设置界面（纯数字/拉丁）靠它没事，
-##    大段中文正文必须换字体 —— 否则靠 Godot 的 `allow_system_fallback` 回退到
-##    系统字体，换一台机器就换一副字、也不是像素风。
-##
-## `assets/ui/font.ttf` 是 Fusion Pixel Font **12px**（作者 TakWolf），**SIL OFL 1.1**，
-## 允许随软件分发。字号取 **12 的整数倍**（12/24/36）最锐利 —— 它是像素字体。
-const CJK_FONT_PATH := "res://assets/ui/font.ttf"
-const CJK_FONT_SIZE := 24
+## ⚠️ 默认 **false**，是有意的：HUD 那一轮使用者明确要求「血量要醒目」，而
+##    HUD 的数字原来走**像素字体**（`hud.gd` 里对 HP 标题 / 血量数字 / 弹药
+##    三处显式 `add_theme_font_override`）。像素字体的方块感正是「醒目」的一部分，
+##    换成清秀的显示字体笔画会细一圈。想要整套统一就把它改成 true。
+const HUD_FOLLOWS_UI_FONT := true
 
 
-## 剧情正文的中文字体。拿不到就返回 null（调用方退回皮肤字体，中文交给系统回退）。
-static func cjk_font() -> FontFile:
-	if not ResourceLoader.exists(CJK_FONT_PATH):
-		push_warning("[UiSkin] 找不到 %s，剧情正文会退回皮肤字体（中文靠系统回退）"
-			% CJK_FONT_PATH)
+## 当前用的界面字体。候选一个都没有就返回 null（调用方退回皮肤字体，
+## 中文交给 Godot 的系统字体回退 —— 能看，但换台机器就换一副字）。
+static func ui_font() -> FontFile:
+	var p := ui_font_path()
+	if p.is_empty():
+		push_warning("[UiSkin] 候选界面字体一个都没找到，中文会退回系统字体：%s"
+			% str(UI_FONT_CANDIDATES))
 		return null
-	return load(CJK_FONT_PATH) as FontFile
+	return load(p) as FontFile
+
+
+## 实际用的是哪一份（探针 / 自检打印用；没有就返回空串）。
+static func ui_font_path() -> String:
+	for p in UI_FONT_CANDIDATES:
+		if ResourceLoader.exists(p):
+			return p
+	return ""
+
+
+## HUD 数字用的字体：受 `HUD_FOLLOWS_UI_FONT` 控制。
+static func hud_number_font(skin: Dictionary) -> FontFile:
+	return ui_font() if HUD_FOLLOWS_UI_FONT else font(skin)
 
 ## 血条见底的比例。低于它换成更亮的红（玩家和 Boss 用同一个阈值，观感才一致）。
 const BAR_LOW_RATIO := 0.25
@@ -111,7 +142,14 @@ static func font(skin: Dictionary) -> FontFile:
 
 static func make_theme(skin: Dictionary) -> Theme:
 	var theme := Theme.new()
-	var f := font(skin)
+	# ⚠️ 优先级：**界面字体 > 皮肤自带字体**。
+	#    皮肤字体（Sprout 的 pixelFont）只有 80 个拉丁字形、0 个汉字，本来只够画数字；
+	#    换上一套带汉字的显示字体之后整套 UI 应该跟着走，否则会出现「设置界面用显示
+	#    字体、HUD 数字还是像素字体」这种两副字混排。
+	#    想反过来（HUD 数字保持像素字体）看 `HUD_FOLLOWS_UI_FONT`。
+	var f := ui_font()
+	if f == null:
+		f = font(skin)
 	if f != null:
 		theme.default_font = f
 	theme.default_font_size = FONT_SIZE

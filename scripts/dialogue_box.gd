@@ -26,11 +26,10 @@ extends CanvasLayer
 ##      见 `_resume()`。
 ##
 ## ── 正文用哪套字体 ──
-## **不用皮肤字体**。两套皮肤的 `font.ttf` 都没有汉字（`assets/ui_sprout/font.ttf`
-## 实测 cmap 只覆盖 80 个拉丁字形、**0 个汉字**），靠 Godot 的系统字体回退虽然能
-## 显示，但换一台机器就换一副字、也不是像素风。正文走 `UiSkin.cjk_font()`
-## （Fusion Pixel 12px，OFL，实测覆盖 19214/20992 个汉字）。皮肤只负责面板
-## 九宫格和配色 —— 换皮肤时对话框的木头板会跟着换，字不会变。
+## 走 `UiSkin.ui_font()`，**不用皮肤字体**。两套皮肤的 `font.ttf` 都没有汉字
+## （`assets/ui_sprout/font.ttf` 实测 cmap 只覆盖 80 个拉丁字形、**0 个汉字**），
+## 靠 Godot 的系统字体回退虽然能显示，但换一台机器就换一副字。
+## 皮肤只负责面板九宫格和配色 —— 换皮肤时对话框的木头板跟着换，字不跟着换。
 
 ## 播放开始 / 结束。`game.gd` 靠 finished 决定「要不要在演完之后做点什么」。
 signal started
@@ -105,7 +104,7 @@ func _ready() -> void:
 	_root.visible = false
 	set_process(false)
 	print("[Dialogue] 皮肤 = %s  正文字体 = %s" % [
-		_skin["label"], "Fusion Pixel（中文）" if _font != null else "**皮肤字体（无汉字）**"])
+		_skin["label"], UiSkin.ui_font_path() if _font != null else "**皮肤字体（无汉字）**"])
 
 
 # --- 对外接口 ---------------------------------------------------------------
@@ -357,7 +356,7 @@ func _resume() -> void:
 ## 全部**代码构建**（和 `hud.gd` / `settings_menu.gd` 一致）：对话框的布局是
 ## 算出来的（名字牌宽度要量字），写成 .tscn 反而两头对不上。
 func _build() -> void:
-	_font = UiSkin.cjk_font()
+	_font = UiSkin.ui_font()
 
 	_root = Control.new()
 	_root.name = "Root"
