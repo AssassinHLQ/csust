@@ -95,7 +95,10 @@ scripts/companion_gun.gd  同伴的枪：自己选目标开火，不误伤 / 不
 scripts/hud.gd            准星、弹药、状态、速度、换弹条、Boss 血条组
 scripts/game_settings.gd  全局设置：存值 / 落盘 / 广播（**静态类**，§1.12）
 scripts/settings_menu.gd  Esc 设置界面：代码构建 UI + 暂停 + 像素皮肤（§1.12）
-scripts/game.gd           玩法总控（按类型收 Boss / 同伴）
+scripts/ui_skin.gd        界面皮肤（两套）+ 血条 / MC Boss 条样式 + 中文字体（§1.12 / §9.5）
+scripts/story_script.gd   剧情剧本解析 + 校验（**静态类**，第九节）
+scripts/dialogue_box.gd   剧情对话框：打字机 / 翻页 / 播放时暂停世界（第九节）
+scripts/game.gd           玩法总控（按类型收 Boss / 同伴；进关卡开播剧情）
 scripts/main.gd           动画查看器主控
 ```
 
@@ -446,11 +449,31 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_companion_attack.gd # 10 项：同伴开火 + 不误伤 / 不隔墙 / 背后停火（§8.7）
 & $g --path $p --script res://scripts/_verify_companion.gd  # 100 项：七名同伴跟随 + 不挡镜头 + 朝向/接地（第八节）
 & $g --path $p --script res://scripts/_verify_splat.gd      # 24 项：泼溅摆放 / 悬浮平台 / 走出边缘会掉（第六节）
-& $g --path $p --script res://scripts/_verify_room.gd       # 54 项：画室609 摆放/轴对齐/裁剪/墙碰撞/门洞 + 玩家朝向（§6.8）
+& $g --path $p --script res://scripts/_verify_room.gd       # 49 项通过 + 3 项**已知失败**（§6.8 那三条门洞相关的）
+& $g --path $p --script res://scripts/_verify_story.gd      # 78 项：剧本解析/报错/编码/排版 + 对话框播放与暂停交接（第九节）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **352 项**（本轮全量实测 352 PASS / 0 FAIL）。
+合计 **425 项**（全量实测：**425 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
+`_verify_room` 的门洞那三条，是**已知、且与本次改动无关**的既有失败（§6.8）；
+其余 13 套一律 0 失败。
+
+逐套件的实测 PASS 数（合计数以这张表为准）：
+
+| 套件 | PASS | 套件 | PASS |
+|---|---|---|---|
+| `_verify_final` | 17 | `_verify_trex_attack` | 9 |
+| `_verify_facing` | 14 | `_verify_companion_attack` | 10 |
+| `_verify_mag` | 16 | `_verify_companion` | 100 |
+| `_verify_turnfire` | 8 | `_verify_story` | 78 |
+| `_verify_spawnview` | 12 | `_verify_splat` | 24 |
+| `_verify_settings` | 29 | `_verify_room` | 49（另 3 FAIL） |
+| `_verify_boss` | 19 | | |
+| `_verify_boss_pig` | 40 | **合计** | **425** |
+
+> ⚠️ 上面命令行注释里写的项数是**各套件自己标的**（比如 `_verify_room` 标 54、
+> 实测 52 条断言），和实测对不上时**以实测为准** —— 旧版本的合计数写成过 352，
+> 那是个没对上的错数字。
 
 除 `_verify_splat` 外建议都加 `-- --splat=off`：615 万点的逐帧光栅化会让这些渲染相关用例
 慢很多（第六节实测，`_verify_final` 第 5 节甚至会卡住）。`_verify_splat` 要开着泼溅跑。
@@ -511,6 +534,8 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
 & $g --headless --path $p --script res://scripts/_probe_sort_cost.gd  # Raster 排序耗时 + 源顺序局部性（§6.10）
 & $g --path $p --script res://scripts/_probe_stale_order.gd          # 转身后排序表多久才更新（§6.10）
 & $g --headless --path $p --script res://scripts/_probe_room_collision.gd  # 导出房间碰撞的 5 个盒（§6.8）
+& $g --path $p --script res://scripts/_probe_gameplay_shot.gd -- --tag=story --story --splat=off
+                                                       # 剧情对话框出图 + 量「有没有压住右下角弹药面板」（第九节）
 ```
 
 ## 1.12 设置界面（`Esc`）
@@ -691,21 +716,46 @@ Arisu                       Node3D      ← 180° 旋转节点
 | 10 | Normal_Attack_Delay | 1.00 s | 22 | Vital_Panic | 1.00 s |
 | 11 | Normal_Attack_End | 0.67 s | 23 | Vital_Retreat | 1.67 s |
 
-## 2.3 口型 / 表情形变
+## 2.3 口型 / 表情切换
 
-10 个 `Mouth_*` 网格各带 **1 个 blend shape**（Godot 命名为 `morph_0`）。
-每条动画都有 **10 条 `weights` 通道**打在这些网格上，**口型烘进每条动作里**。
+10 个 `Mouth_*` 网格各带 **1 个 blend shape**（Godot 命名为 `morph_0`），
+每条动画都有 **10 条 `weights` 通道**打在这些网格上，**口型切换烘进每条动作里**。
 
-实测（`scripts/_probe_morph.gd`，`Normal_Callsign` / `Mouth_401`）：
+⚠️ **这个 morph 不是「张嘴 / 闭嘴」，而是「把这一块口型缩没」**。直接读 GLB 的形态键增量
+（`..\_blender_arisu\glb_morph_collapse.py`）实测：每块 25 个顶点，权重 = 1 时所有顶点被拉到
+基准包围盒中心、残余半径只剩原来的 **11.3%**（凯伊是 8.4%）—— 等同于隐藏。
 
-```
-t=0.000s  morph_0=1.0000      ← 张嘴
-t=0.214s  morph_0=1.0000
-t=0.429s  morph_0=0.0000      ← 闭嘴
-```
+所以切换口型的机制是：**每条动画把 10 块里的 9 块压到 1（藏起来），只留 1 块为 0（显示）**；
+要换表情就把「留 0 的那块」换成另一块。实测（`scripts/_probe_mouth_state.gd`，凯伊 14 块）：
+
+| 动画 | 时刻 | 留 0（= 可见）的是 |
+|---|---|---|
+| `Normal_Idle` | 全程 | `Mouth_401` |
+| `Normal_Callsign` | 0.00 s | `Mouth_402` |
+| `Normal_Callsign` | 1.25 s | `Mouth_602` ← 动画中途换了表情 |
 
 值在 0/1 之间跳变 → 源文件是 **STEP 插值**的口型切换，Godot 原样保留。
 嘴网格挂在骨骼节点下：`Arisu/Model/Aris_Original_Mesh/bone_root/Bip001/Skeleton3D/Mouth_401`
+
+> 这里早先把 `morph_0=1` 记成「张嘴」、`0` 记成「闭嘴」，方向是反的：**1 是藏起来**。
+> `Normal_Callsign` 里 `Mouth_401` 从 1 变 0，意思是「换成了 401 这个表情」，不是「张开嘴」。
+
+### 2.3.1 想要的话，口型是可以自由换的
+
+- **换口型（不改模型）**：直接改这 10（凯伊 14）条 `morph_0` 权重，或干脆用 `visible` 显隐 ——
+  两条路等价（morph 就是「缩没」）。和骨骼动作完全解耦，不会打架。
+- **加新口型**：复制任意一块 `Mouth_*` 网格 + 换一张贴图 + 保留那个「缩没」形态键即可，
+  结构和其他块一模一样（25 顶点、1 个 morph）。凯伊那 14 张 `Character_Mouth_X_Y.png`
+  每张就是**一个完整口型**画在透明底上，自己做一张同规格的就能加。
+- **注意顺序**：14 块是**共面叠在同一处**的，靠 morph 藏掉 13 块。所以任何时候都必须保证
+  「只有一块权重为 0」，否则会叠出多张嘴。
+- **眉毛 / 眼型不是贴图切换，是骨骼**：凯伊有 25 根 `bone_eye_*` / `eye_L/R(_1/_2)` /
+  `Xtra_eyebrowL1/L2` / `Xtra_eyebrowR1/R2` / `Xtra_eyeL/R` / `bone_Eyering_L/R_01..03` /
+  `bone_Mouth`。几何长在身体网格里（`Mouth_*` 之外没有单独的眼/眉网格），
+  **形状画在 `CH0335_Face` / `Aris_Original_Face` 贴图上** —— 所以能抬眉、皱眉、眯眼、转眼，
+  但想换「眉形」得换那张脸贴图。
+- **瞳色 / 眼白**：`CH0335_EyeMouth` / `Aris_Original_EyeMouth`（一张 128×128 的单眼图，
+  两只眼共用、其中一只镜像）。换瞳色就是换这张图。
 
 ## 2.4 网格与材质
 
@@ -765,9 +815,11 @@ _arisu_learn/
 │  ├─ school_playable.sogdata  **实际加载**的校园泼溅（清理版，86.6 MB）※不随仓库分发
 │  ├─ school_raw.sogdata       原始未清理扫描（仅存档）※不随仓库分发
 │  └─ room609.sogdata          「画室 609」扫描（40.7 MB / 2,774,116 点，裁后 2,769,851）※不随仓库分发
+├─ story/
+│  └─ 开场.txt              **剧情剧本**（UTF-8 纯文本，改这个文件就能改剧情，第九节）
 ├─ scenes/
 │  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 下沉校园 + 平台上的画室609
-│  │                        （§6.8，有墙碰撞和门洞）+ 2 位 Boss + 7 名同伴；**无护栏**）
+│  │                        （§6.8，有墙碰撞和门洞）+ 2 位 Boss + 7 名同伴 + 对话框；**无护栏**）
 │  ├─ player.tscn           玩家（模型 + 动画 + 武器 + 相机）
 │  ├─ companion.tscn        同伴（模型由 companion.gd 按 model_path 运行时实例化）
 │  └─ main.tscn             动画查看器
@@ -783,11 +835,14 @@ _arisu_learn/
 │  ├─ companion_gun.gd      同伴的枪：自己选目标开火，不误伤 / 不隔墙（§8.7）
 │  ├─ game_settings.gd      全局设置：存值 / 落盘 / 广播（**静态类**，§1.12）
 │  ├─ settings_menu.gd      Esc 设置界面：代码构建 UI + 暂停 + 像素皮肤（§1.12）
+│  ├─ story_script.gd       剧情剧本的**解析 + 校验**（纯静态类，逐行报错，第九节）
+│  ├─ dialogue_box.gd       剧情对话框：打字机 / 翻页 / 播放时暂停世界（第九节）
+│  ├─ ui_skin.gd            界面皮肤（两套）+ 血条样式 + MC 风格 Boss 条 + **中文字体**（§1.12）
 │  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放 + 锚点摆放 + 裁剪（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd
 │  │                        （hud.gd 的泼溅状态、Boss 血条都是**一份场地/一位 Boss 一行**）
-│  ├─ _verify_*.gd          [工具] 自检（见 §1.11、§7.6、§8.4、§6.8）
+│  ├─ _verify_*.gd          [工具] 自检（见 §1.11、§7.6、§8.4、§6.8、§9.4）
 │  ├─ _capture.gd           [工具] 24 条动作取样帧
 │  ├─ _pose_shots.gd        [工具] 多机位姿势检查
 │  ├─ _play_shots.gd        [工具] 玩法全流程截图
@@ -2472,7 +2527,201 @@ Y 跨度 / 骨架当前姿态在世界空间的 Y 跨度。单用任何一个都
 
 ---
 
-# 九、下一步
+# 九、剧情系统（纯文本剧本 + 对话框）
+
+## 9.1 一句话：**剧本是数据，代码只是播放器**
+
+剧情**不写在 `.gd` 里**。加一句台词 = 往 `story/开场.txt` 里加一行，代码零改动。
+代码那边只有两件事：把文本读成一串「步骤」，再把步骤画到屏幕上。
+
+```
+story/开场.txt          ← 你写的东西（UTF-8 纯文本）
+        │
+        ├─ scripts/story_script.gd   解析 + 校验（**纯静态类**，不碰节点、不读场景）
+        └─ scripts/dialogue_box.gd   屏幕下方的对话框：打字机、翻页、暂停世界
+                │
+                └─ scripts/game.gd `_play_opening()`   进关卡时自动开播
+```
+
+| 文件 | 干什么 | 什么时候要动它 |
+|---|---|---|
+| `story/开场.txt` | **剧本正文** | 每次写剧情 |
+| `scripts/story_script.gd` | 解析 / 报错 / 校验 | 想加新指令时 |
+| `scripts/dialogue_box.gd` | 对话框外观与播放 | 想改样式 / 版式时 |
+| `scripts/_verify_story.gd` | 自检（含**排版检查**） | 改完剧本跑一次 |
+
+## 9.2 剧本格式
+
+文件放 `res://story/`，后缀 `.txt`，**必须是 UTF-8**。只认五种写法：
+
+| 写法 | 意思 |
+|---|---|
+| `# 任意文字` | 注释（**整行**以 `#` 开头才算） |
+| `名字: 台词` | 有名字的对话（半角 `:` 和全角 `：` 都行） |
+| `* 任意文字` | 没有名字的旁白（`*` 后面要有内容） |
+| `@wait 1.2` | 停一拍（秒，> 0） |
+| `@clear` | 清空对话框，停 `StoryScript.CLEAR_SECONDS`（0.6 s） |
+| `@speed 45` | 之后每句的打字速度（字/秒，> 0） |
+| `@end` | 到此为止，后面的不播 |
+
+认不出来的行**不会静默跳过**——启动时在控制台报错，并给出**第几行 + 原行原文 +
+怎么改**。剧本有任何一处错误就**整段不播**（宁可不出，也别演半截）：
+
+```
+第 2 行：不认识的指令 `@bgm`。现在只有这四个：
+        @wait <秒>        停一拍，例如 @wait 1.2
+        @clear            清空对话框，停一个空档（CLEAR_SECONDS）
+        @speed <字/秒>    改打字速度，例如 @speed 45
+        @end              到此为止，后面的内容不播 ｜ 原行「@bgm 天台」
+```
+
+四个刻意的取舍（都是「写剧本的人不该操心的事」）：
+
+1. **一行 = 一句**，不做 `\n` 转义 —— 要换行就多写一行。
+2. **不支持行尾注释**：`优香: 你好 # 备注` 里的 `#` 是正文。否则正文里的 `#`
+   会被悄悄吃掉，那种 bug 最难查。
+3. **台词只在第一个冒号处切**：`优香: 他说：好` → 说话人「优香」、正文「他说：好」。
+4. 正文不能以 `*` 或 `@` 开头（那是语法）。真要用就前面加个全角空格。
+
+## 9.3 播放时的行为
+
+| 键 | 效果 |
+|---|---|
+| 空格 / 回车 / 小键盘回车 / 鼠标左键 | 第一次把**当前这句打完**，第二次翻到下一句 |
+| `@wait` | 画面**保持不动**等 N 秒，自己往下走（按键可以跳过） |
+| `@clear` | 清空 + 停 0.6 秒 |
+| `Esc` | 照常开设置界面；设置界面**优先**，剧情会等着 |
+
+**播放期间整个世界是暂停的**（`get_tree().paused = true`）。这样做有两个好处：
+开场剧情不会被同伴的枪声和 Boss 的预警圈打断；而且**顺带关掉了开火**（见 9.5 坑 4）。
+播完自动恢复。
+
+想「进关卡直接开打、不看剧情」，或者想直接跳到某一段剧情：
+
+```powershell
+& <godot> --path . -- --story=off                     # 不播开场
+& <godot> --path . -- --story=res://story/开场.txt     # 改播指定的那一份
+```
+
+## 9.4 改完剧本怎么知道改对了
+
+```powershell
+# 只跑剧情这一套（几秒）
+& <godot> --path . --script res://scripts/_verify_story.gd -- --splat=off
+```
+
+它会做四件你最关心的事：
+
+1. **解析真剧本**，把每一条错误、每一条提醒打出来（带行号）；
+2. **排版检查**：按**真实字体**量每一句在对话框里占几行，太长就点名
+   （`[太长] 第 12 行要 3 行 →「…」`）。对话框只放得下 **2 行**，
+   一行约 **44 个汉字**（正文区 1060 逻辑 px ÷ 24 px 字宽）；
+3. 解析器 / 报错 / 编码的边界用例；
+4. 播放：打字机、翻页、`@wait` 自己走、`@end` 收尾并恢复运行。
+
+## 9.5 ⚠️ 七个坑（都踩过）
+
+### 坑 1：皮肤字体**没有汉字**，正文必须换字体
+
+两套皮肤的 `font.ttf` 都不够用。直接解 TTF 的 `cmap` 表量过
+（脚本在 `..\_hud_preview\font_cmap_check.py`）：
+
+| 字体 | 大小 | CJK 汉字 | 中文标点 | 假名 |
+|---|---|---|---|---|
+| `assets/ui/font.ttf`（Fusion Pixel **12px**，OFL） | 6.68 MB | **19214 / 20992 = 91.5%** | 100% | 100% |
+| `assets/ui_sprout/font.ttf` | 0.11 MB | **0 / 20992** | 0% | 0% |
+
+Sprout 那套只有 80 个拉丁字形（设置界面全是数字/拉丁，所以一直没暴露）。
+正文走 `UiSkin.cjk_font()` → `assets/ui/font.ttf`。它是**像素字体**，
+字号取 **12 的整数倍**最锐利，所以正文用 24（实测行高 32.0 px）。
+
+### 坑 2：两个节点都会 `paused = true`，必须定交接规则
+
+`SettingsMenu` 和 `DialogueBox` 都会暂停世界。不定规则就有两个真 bug：
+
+- 剧情播完时**无条件** `paused = false` → 会把用户正在看的设置界面解除暂停；
+- `DialogueBox` 的 `_input` 在设置界面开着时吞鼠标 → 设置界面的**按钮点不动**。
+
+现在的规则写在 `dialogue_box.gd` 的 `_menu_open()` 里：设置界面开着时
+**什么都不吞**，剧情结束时**也不解除暂停**（把恢复交给菜单）。
+`_verify_story` 第 6 节专门验这两条。
+
+### 坑 3：`_input` 比 GUI 事件**先跑**
+
+Godot 的顺序是 `_input` → `_gui_input` → `_unhandled_input`。
+所以在 `_input` 里无脑吞鼠标 = 全屏所有按钮失灵。见坑 2 的规则。
+
+### 坑 4：开火是**轮询**的，`set_input_as_handled()` 拦不住
+
+`player.gd` 用 `Input.is_mouse_button_pressed()` 在 `_process` 里判开火
+（不是收事件）。吞事件只能拦住事件那一路，**拦不住 poll**。
+真正让「过场里点鼠标不会开枪」的是**暂停**——`_process` 不跑了。
+这也是为什么对话框必须是 `PROCESS_MODE_ALWAYS`（否则自己也停了，打字机和
+翻页全死，和 `settings_menu.gd` 遇到的是同一个问题）。
+
+### 坑 5：暂停会**卡住泼溅的收尾**，舞台要等剧情完才出现
+
+`splat_scene.gd` 的 `_process()` 干两件性质不同的事：**后台解码线程的 join**
+（`_finish()`）和两个纯观赏用的动态效果（坍缩 / 粒子上升）。默认的
+`process_mode` 是「跟着暂停走」，于是剧情一播：
+
+- 后台线程照常把点数解码完（`Thread` 不受暂停影响）；
+- 但 `_process()` 不跑 ⇒ **join 不执行 ⇒ `_finish()` 不执行** ⇒ 泼溅**不出现**。
+
+实测（正常启动、停在开场第一句、跑 70 秒）：日志里只有画室609 的
+`[SplatScene] 裁剪：留 2769851 点…`，**没有**任何 `[SplatScene] 完成：…`
+（那句在 `_finish()` 里）——舞台会等剧情读完才**突然**冒出来，
+而开场旁白第一句就在讲「脚下的校园」。
+
+修法：`splat_scene.gd` 的 `_ready()` 里 `process_mode = PROCESS_MODE_ALWAYS`。
+**资源加载不该被游戏暂停卡住。** 代价是 `play_collapse()` / 粒子上升这类效果
+在暂停期间也会继续走 —— 目前只有 `_probe_collapse.gd` 用它们，而它不暂停。
+
+改完复测（同一次正常运行）：剧情**还停在第一句**（`paused=true`）的时候，
+`[SplatScene] 完成：2769851 点，耗时 1.6 s（缓存 true）` 已经打出来了。
+
+### 坑 6：`--script` 下**不能**自动播开场
+
+13 套自检各自 instantiate `game.tscn`。`_play_opening()` 里第一件事就是
+「`--script` 在命令行里吗」，是就退。不这么写，一进场景整棵树就被暂停，
+`_verify_settings` 的「初始没有暂停」当场就红。
+
+### 坑 7：编码 —— **GBK** 与 **BOM**
+
+两个都栽在「中文 Windows 的编辑器」上，都已在解析器里堵上：
+
+- **GBK**：记事本「另存为」的默认编码是 ANSI = GBK。Godot 的
+  `get_file_as_string()` **假定 UTF-8**、不认 GBK，中文会变成一串 `�`。
+  解析器检测到 `U+FFFD` 就报「文件不是 UTF-8」，并给出记事本/VS Code 的救法。
+  `_verify_story` 第 3 节是**真写两个 GBK 字节**（`0xBA 0xC3` =「好」）验的，
+  不是模拟。
+- **BOM**：某些编辑器存 UTF-8 会带 `\uFEFF`，不去掉的话**第一行头一个字符
+  就是 BOM**，注释和台词都认不出来，而那行**看着完全正常**。解析器会剥掉它。
+
+## 9.6 ⚠️ 导出成 exe 之后要放行 `.txt`
+
+Godot 只把「导入过的资源」和 `export_presets.cfg` 里 `include_filter` 列出的
+后缀打进包，`.txt` 两者都不是 —— 不写的话，编辑器里跑得好好的，
+导出后剧本**读不到**（`FileAccess.file_exists()` 返回 false）。
+
+本仓库现在还没有 `export_presets.cfg`（只能编辑器 / 源码跑），所以这条先记在
+§11.3 的发布检查表里。
+
+## 9.7 想加新指令要动哪两处
+
+1. `story_script.gd` 的 `COMMANDS`（**报错时列给用户看的就是这张表**，
+   也是「剧本语义」的唯一真相来源）；
+2. 同一个文件的 `_parse_command()` 里的 `match`。
+
+播放侧再按需要在 `dialogue_box.gd` 的 `_run_current()` 里加一个 `match` 分支。
+
+**想往「过场动画」走的时候**：现在这一版刻意不碰相机、不摆人物走位
+（用户选的是「原地式」）。加一个 `@camera` / `@cast` 指令即可 ——
+播放器的结构不用改，只是多一个步骤分支，这就是当初先做「原地式」的原因。
+
+---
+
+# 十、下一步
 
 1. ~~**重做 `Move_Ing`** —— 跑动前倾偏大（见 §1.10），走 Blender 管线改躯干角度~~
    **已完成并启用**：`Move_Ing` 胸腔前倾 Blender 侧 +13.5° → +5.2°、
@@ -2484,13 +2733,24 @@ Y 跨度 / 骨架当前姿态在世界空间的 Y 跨度。单用任何一个都
 4. **写 toon 着色器** —— 18 个材质换 `ShaderMaterial`，加描边和硬边明暗
 5. **动画分层** —— 现在开火会整体覆盖跑动；想「边跑边射」需要 upper/lower body 分层
 6. **清掉泼溅的 floaters** —— 见 §6.5 已知瑕疵，用 `splat-transform` 重新过滤数据
-7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第十节）
+7. **换原创素材** —— 换掉模型与泼溅数据后本工程才能真正对外发布（见第十一节）
+8. **剧情的下一步**（第一版已能跑，见第九节）——
+   现在的形态是「原地式 + 纯线性 + 进关卡自动播」。按价值排，接下来可以加：
+   - **触发方式**：走到某个区域自动播（推门进画室609 就演一段）、打完 Boss 播、
+     按 `E` 和同伴搭话。**都不需要动播放器**，只要在 `game.gd` 里再调一次
+     `play_file()`，配一个「播过没有」的标记
+   - **进度存档**：现在同一段剧情每次进关卡都会重播；要「看过就不再播」得写
+     `user://story.cfg`（照 `game_settings.gd` 的 `_load/_save` 抄一份即可）
+   - **选项分支**：解析器加 `@choice` + `@label`（`story_script.gd` 的 `steps`
+     已经是「带行号的步骤表」，加跳转不影响现有结构）
+   - **运镜 / 人物走位**：加 `@camera` / `@cast`。这是当初先做「原地式」的原因 ——
+     它是加运镜的**地基**，不是要被替换掉的临时方案
 
 ---
 
-# 十、开源与许可
+# 十一、开源与许可
 
-## 10.1 结论
+## 11.1 结论
 
 **除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。**
 逐项清单见 [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -2506,7 +2766,7 @@ Y 跨度 / 骨架当前姿态在世界空间的 Y 跨度。单用任何一个都
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
 | `icon.png` | 待仓库作者确认 | ✅（如非原创请替换） |
 
-## 10.2 克隆者怎么跑起来
+## 11.2 克隆者怎么跑起来
 
 ```powershell
 git clone <你的仓库>
@@ -2526,7 +2786,7 @@ cd <仓库目录>
 
 第一次打开时 Godot 会自动导入 glb / fbx 并解包贴图，然后就能 F5。
 
-## 10.3 发布自己的版本前的检查表
+## 11.3 发布自己的版本前的检查表
 
 - [ ] `models/` 换成**你有权分发**的模型（或明确许可允许再分发的模型），
       含 `models/companions/` 与 `models/boss_pig/` 这两处新加进来的
@@ -2537,8 +2797,10 @@ cd <仓库目录>
 - [ ] `icon.png` 换成你自己的图标
 - [ ] 检查 `.gitignore`：`git status` 里**不该**出现任何 `.glb` / `.sogdata` / 大体积贴图
 - [ ] 顺手确认没把 `..\_blender_arisu\`（专有模型的派生数据）一起推上去
+- [ ] **建 `export_presets.cfg` 时，把 `*.txt` 加进 `include_filter`** —— 否则
+      导出后 `story/` 里的剧本读不到（见 §9.6），开场剧情会静默变成「没有剧情」
 
-## 10.4 关于截图
+## 11.4 关于截图
 
 `_arisu_captures/` 里的截图是在本机渲染的、含专有角色形象，
 **不建议**放进公开仓库的 README（截图是模型形象的派生作品）。
