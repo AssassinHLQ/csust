@@ -451,13 +451,14 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_splat.gd      # 24 项：泼溅摆放 / 悬浮平台 / 走出边缘会掉（第六节）
 & $g --path $p --script res://scripts/_verify_room.gd       # 49 项通过 + 3 项**已知失败**（§6.8 那三条门洞相关的）
 & $g --path $p --script res://scripts/_verify_story.gd      # 88 项：剧本解析/报错/编码/排版 + 对话框播放与暂停交接 + **角色表/场景表**（第九节）
+& $g --path $p --script res://scripts/_verify_sfx.gd        # 44 项：音效库/素材/调用点对账 + 真场景接线（§1.14）
 & $g --path $p --script res://scripts/_verify_mesh_hut.gd   # 31 项：手工网格小屋（门洞能走/墙能挡/网格纪律/不撞既有东西，§1.13）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **466 项**（全量实测：**466 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
+合计 **510 项**（全量实测：**510 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
 `_verify_room` 的门洞那三条，是**已知、且与本次改动无关**的既有失败（§6.8）；
-其余 14 套一律 0 失败。
+其余 15 套一律 0 失败。
 
 逐套件的实测 PASS 数（合计数以这张表为准）：
 
@@ -467,10 +468,11 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 | `_verify_facing` | 14 | `_verify_companion_attack` | 10 |
 | `_verify_mag` | 16 | `_verify_companion` | 100 |
 | `_verify_turnfire` | 8 | `_verify_story` | 88 |
-| `_verify_spawnview` | 12 | `_verify_splat` | 24 |
-| `_verify_settings` | 29 | `_verify_mesh_hut` | 31（§1.13） |
-| `_verify_boss` | 19 | `_verify_room` | 49（另 3 FAIL） |
-| `_verify_boss_pig` | 40 | **合计** | **466** |
+| `_verify_spawnview` | 12 | `_verify_sfx` | 44（§1.14） |
+| `_verify_settings` | 29 | `_verify_splat` | 24 |
+| `_verify_boss` | 19 | `_verify_mesh_hut` | 31（§1.13） |
+| `_verify_boss_pig` | 40 | `_verify_room` | 49（另 3 FAIL） |
+| | | **合计** | **510** |
 
 > ⚠️ 上面命令行注释里写的项数是**各套件自己标的**（比如 `_verify_room` 标 54、
 > 实测 52 条断言），和实测对不上时**以实测为准** —— 旧版本的合计数写成过 352，
@@ -800,6 +802,95 @@ footprint 对账，而那来自 `content_min/max` —— 不加载泼溅就是�
 
 ---
 
+## 1.14 音效（Kenney CC0 + 静态音效库）
+
+在这之前，**工程里一个音频文件都没有**（`master_volume` 那条设置一直就在，只是没东西可听）。
+现在第一批接了**用户选的两组**：武器（枪声 / 换弹两头 / 空仓扣扳机）和界面（按钮 / 开关 / 滑条 / 开关菜单）。
+
+| | |
+|---|---|
+| 素材 | 13 个 `.ogg`，共 **102.7 KB**，全部来自 Kenney 的三个音频包（Interface Sounds / Sci-fi Sounds / RPG Audio） |
+| 许可 | **CC0** —— 所以**故意提交进仓库**，克隆者不用做任何事就有声音（见 `assets/sfx/LICENSE_Kenney_CC0.md`） |
+| 库 | `scripts/sfx.gd`：9 个逻辑名 → 候选文件 + 基准音量 + 音高抖动 + 最小间隔 |
+| 接线 | `weapon.gd` 三处（开火 / 换弹开始 / 换弹完成 / 空仓）、`settings_menu.gd` 五处（开 / 关 / 按钮 / 开关 / 滑条） |
+| 音量 | 直接走**已有的** `master_volume`（设置界面那个滑条，作用在 `Master` 总线上）—— 没有新增设置 |
+
+```
+weapon.gd / settings_menu.gd          ← 调用点只写「逻辑名」：Sfx.play("fire")
+        │
+        └─ scripts/sfx.gd  SPEC 表      ← 逻辑名 → 候选文件 + db + pitch + gap_ms
+                │
+                └─ assets/sfx/*.ogg     ← 真正的文件（Kenney 原始文件名，便于追溯来源）
+```
+
+### 三条刻意的取舍
+
+1. **文件缺失 = 静默。** 加载不到只 `push_warning` 一次并记进 `missing_files()`，
+   绝不影响玩法 —— 克隆者删掉整个 `assets/sfx/` 也照样能跑。
+2. **暂停时照样响。** 宿主与播放器的 `process_mode` 都是 `ALWAYS`：设置菜单一开
+   `get_tree().paused = true`，而那正是 UI 音效最需要响的时候。自检第 5 节拿**真场景**
+   验了这条（`世界已暂停（true），ui_open 照样响了`）。
+3. **玩家自己的枪走 2D（非定位）。** 枪永远「在耳边」，用 3D 定位反而会随镜头左右漂；
+   世界里的声音（命中 / Boss / 脚步，下一批）走 `Sfx.play_at(name, pos)`。
+
+### 加一条新音效 = 两处
+
+1. `.ogg` / `.wav` 丢进 `assets/sfx/`（**保持原始文件名**，来源可查）；
+2. `scripts/sfx.gd` 的 `SPEC` 里加一行；然后 `--headless --path . --import`。
+
+**调用点不用改，别的代码也不用改。** 反过来，调用点里写错一个字母会被自检抓出来
+（见下面第 2 节）—— 这条是整套音效自检里最值钱的一项：**声音加了没接、或者接的名字
+打错了，两种错都不会报错、也不会有声音，自己几乎发现不了。**
+
+### ⚠️ 四个坑（都踩过）
+
+**① 静态函数**绝对不能**叫 `reset_state()` —— 引擎会静默接管。**
+这是本工程踩过最阴的一个坑，也是这一节最该记住的一条：
+
+**`Script` / `GDScript` 自带一个原生方法就叫 `reset_state`**（实测
+`ClassDB.class_has_method("Script", "reset_state") == true`，而 `Object` 没有）。
+而 `class_name Sfx` 的**类名本身就是那个脚本对象** —— 于是 `Sfx.reset_state()`
+解析到了**原生方法**上去：自己写的静态函数**一行都不执行，也不报任何错**。
+本喵当时在自检里连函数体第一行的 `print` 都看不到，查了三轮才用 `ClassDB` 问出来。
+（第 3 节现在把这两条钉成了断言，免得以后有人再起这个名字。）
+
+> 推论：给 `class_name` 脚本的静态函数起名时，要避开的是**`Script` / `GDScript`
+> 的原生方法名**，不是 `Object` 的。`play` / `stop_all` / `has` / `names` 这些都没事。
+
+**② `[&"Master"] == ["Master"]` 是 `false`。**
+`AudioStreamPlayer.bus` 的类型是 **`StringName`**，而数组的 `==` 不放过元素类型差异。
+自检里「播放器都走 Master 总线」那条因此假红过一次 —— 比较前必须 `String(bus)`。
+
+**③ 时长下限别写太严。** Kenney 的 `click_002.ogg` 只有 **10 ms**（就是个「嗒」），
+本喵第一版把「合理时长」下限写成 20 ms，把它判成了坏文件。
+
+**④ 别把 `play()` 和 `last_reason()` 塞进同一个表达式。**
+实参求值顺序不能想当然，读到的可能是**上一次**调用留下的说明 —— 本喵就因此被一条
+假线索带偏了一轮。**先取值、再 `_check()`** 是这里的规矩。
+
+### 自检
+
+```powershell
+& $g --path $p --script res://scripts/_verify_sfx.gd -- --splat=off   # 44 项
+```
+
+五节：素材与库表（文件都在、能加载、时长正常）、**调用点 ↔ 库表双向对账**、
+播放机制（真能响 / 多声不互切 / gap 节流 / 3D 定位 / **暂停时也响**）、
+与设置系统的接线（主音量拉 0 真的静音，且**测完改回原值**）、
+**真场景里的接线**（菜单开→关、开一枪、走一次换弹，各验「真的响了」）。
+
+⚠️ 要加 `--splat=off`（第 5 节会 instantiate `game.tscn`），
+而且**不要用 `--headless`** —— headless 的音频驱动是空的，「真的在播」测不出东西。
+
+### 还没接的（第二批候选，文件都在本地、表也留好了位置）
+
+命中（`impactMetal_light` / `impactWood_medium`）、打爆靶子、Boss 蓄力预警、
+玩家受伤、脚步（`footstep_concrete` 走平台 / `footstep_wood` 走进画室609）、
+剧情打字机逐字声（`tick_001`）、小屋那块场地的室内嗡鸣。
+**加它们只需要往 `SPEC` 里加行 + 在对应事件里加一次 `Sfx.play*()`。**
+
+---
+
 # 二、导入验证：Arisu.glb 到底导进来了什么
 
 ## 2.1 骨骼
@@ -927,7 +1018,11 @@ _arisu_learn/
 │  ├─ ui/                   界面**内置**皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
 │  ├─ ui_font/              **界面显示字体投放目录**：放进来就整套 UI 换字
 │  │  └─ README.md          说明（字体本身被 .gitignore 排除，只留这份说明）
-│  └─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）├─ models/
+│  ├─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）
+│  └─ sfx/                  **音效**：13 个 Kenney .ogg（**CC0，随仓库分发**，§1.14）
+│     ├─ README.md          逻辑名 ↔ 文件对照 + 怎么加新音效
+│     └─ LICENSE_Kenney_CC0.md  来源与许可（为什么这批能进仓库而模型不行）
+├─ models/
 │  ├─ README.md             说明：要放什么模型、版权与换模型的三个注意点
 │  ├─ Arisu.glb             原模型（24 条动作）※不随仓库分发
 │  ├─ Arisu_ext.glb         **实际使用**的模型（27 条动作，见第五节）※不随仓库分发
@@ -976,6 +1071,7 @@ _arisu_learn/
 │  ├─ story_script.gd       剧情剧本的**解析 + 校验**（含角色表/场景表，纯静态类，逐行报错，第九节）
 │  ├─ dialogue_box.gd       剧情对话框：打字机 / 翻页 / 播放时暂停世界（第九节）
 │  ├─ ui_skin.gd            界面皮肤（两套）+ 血条样式 + MC 风格 Boss 条 + **中文字体**（§1.12）
+│  ├─ sfx.gd                **音效库**：逻辑名 → 候选文件 + 音量/音高/节流 + 播放池（静态类，§1.14）
 │  ├─ splat_scene.gd        高斯泼溅接入器：后台线程解码 + 自动摆放 + 锚点摆放 + 裁剪（第六节）
 │  ├─ sog_runtime.gd        运行时 SOG 解码器（绕开编辑器导入器，第六节）
 │  ├─ target.gd / hud.gd / game.gd / main.gd
@@ -3010,6 +3106,8 @@ Godot 只把「导入过的资源」和 `export_presets.cfg` 里 `include_filter
 |---|---|---|
 | 本项目作者编写的全部代码与文档（`scripts/`、`scenes/`、`project.godot`、README…） | **MIT** | ✅ |
 | `addons/gdgs/`（GDGS 3.3.0，ReconWorldLab） | MIT（作者原许可保留在 `addons/gdgs/LICENSE`） | ✅ |
+| `assets/ui_sprout/` | Sprout Lands 皮肤 | 专有（禁止再分发） | ❌ 被 `.gitignore` 排除 |
+| `assets/sfx/*.ogg`（13 个，Kenney Interface/Sci-fi/RPG Audio） | **CC0** | ✅ **随仓库分发**（§1.14） |
 | `models/Arisu*.glb` + 解包贴图 | © NEXON Games / Yostar，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/companions/*.glb`（未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | 同上，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/boss/优香霸王龙.fbx` + 贴图 | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |

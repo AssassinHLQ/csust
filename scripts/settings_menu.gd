@@ -100,6 +100,7 @@ func open() -> void:
 	# 打一行日志：这个菜单会**暂停游戏 + 释放鼠标**，症状和「进游戏动不了」一模一样。
 	# 有这行，下次在控制台就能一眼分辨「是我按了 Esc」还是别的原因。
 	print("[SettingsMenu] 打开：已暂停 + 释放鼠标（再按 Esc 或点关闭恢复）")
+	Sfx.play("ui_open")
 	opened_changed.emit(true)
 
 
@@ -111,6 +112,7 @@ func close() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	get_tree().paused = false
 	print("[SettingsMenu] 关闭：已恢复 + 重新捕获鼠标")
+	Sfx.play("ui_close")
 	opened_changed.emit(false)
 
 
@@ -238,6 +240,7 @@ func _add_slider(parent: Node, key: String) -> void:
 	row.add_child(value_label)
 
 	slider.value_changed.connect(func(v: float) -> void:
+		Sfx.play("ui_slider")
 		GameSettings.set_value(key, v))
 	_rows[key] = {"control": slider, "value": value_label}
 
@@ -270,6 +273,7 @@ func _add_check(parent: Node, key: String) -> void:
 	row.add_child(value_label)
 
 	check.toggled.connect(func(on: bool) -> void:
+		Sfx.play("ui_toggle")
 		GameSettings.set_value(key, on))
 	_rows[key] = {"control": check, "value": value_label}
 
@@ -327,6 +331,7 @@ func _add_choice(parent: Node, key: String) -> void:
 
 
 func _on_choice_pressed(key: String, choice: Variant) -> void:
+	Sfx.play("ui_press")
 	GameSettings.set_value(key, choice)
 
 
@@ -355,7 +360,9 @@ func _make_button(text: String, handler: Callable) -> Button:
 	# ⚠️ 空 Callable 不能 connect（会报 `at: connect`）——分段按钮自己接
 	#    `_on_choice_pressed`，所以这里允许传空。
 	if handler.is_valid():
-		b.pressed.connect(handler)
+		b.pressed.connect(func() -> void:
+			Sfx.play("ui_press")
+			handler.call())
 	return b
 
 

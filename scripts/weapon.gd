@@ -149,6 +149,10 @@ func shoot() -> bool:
 		return false
 	_turning = false
 	if current_ammo <= 0:
+		# 空仓：干响一声。`_trigger` 全程保持 true，所以这一句在换弹开始前
+		# 每帧都会被走到 —— 靠 `Sfx` 里 "empty" 的 gap_ms=150 节流，
+		# 不然会变成一串「咔咔咔咔」。
+		Sfx.play("empty")
 		try_reload()
 		return false
 
@@ -161,6 +165,8 @@ func shoot() -> bool:
 		_driver.request_fire()
 
 	_fire_raycast()
+	# 枪声走**非定位**（2D）：玩家自己的枪永远「在耳边」，用 3D 定位会随镜头左右漂。
+	Sfx.play("fire")
 
 	if _player:
 		var sign_x := 1.0 if randf() < 0.5 else -1.0
@@ -247,6 +253,7 @@ func try_reload() -> void:
 	# ⚠️ 这里**不要**清 _trigger！
 	# 清了的话，按住左键打空 → 自动换弹 → 换完必须重新点一次鼠标才能射击。
 	# 保持 _trigger 不动，换完弹 _process 里那句 shoot() 就会自动接上。
+	Sfx.play("reload_out")
 	reload_started.emit()
 	if _driver:
 		_driver.request_reload()
@@ -263,6 +270,7 @@ func _finish_reload() -> void:
 	# 收招余量：换完弹先空一拍再允许开火，避免动作被立刻吐出的子弹腰斩。
 	# 注意不要动 _trigger —— 它保持 true，所以按住不放会自动续射。
 	_cooldown = maxf(_cooldown, post_reload_delay)
+	Sfx.play("reload_in")
 	reload_finished.emit()
 
 

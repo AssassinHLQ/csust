@@ -15,6 +15,9 @@
 | [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | **SIL OFL 1.1** | ✅ 包含于 `assets/ui/` | **中文像素字体**（`assets/ui/font.ttf`），作者 TakWolf。实测覆盖 19214/20992 个 CJK 统一汉字、100% 中文标点、100% 假名与谚文。它是现在整套 UI 字体（`ui_skin.gd` 的 `UI_FONT_CANDIDATES`）的**兜底**：本地没放 `assets/ui_font/` 时就用它，所以克隆仓库的人一定有一套能显示中文的字。OFL 允许随软件分发，许可原文在 `assets/ui/LICENSE_FusionPixel_OFL.txt` |
 | Aa 字库「Aa暗夜深渊」 | **商用需授权**（字体压缩包内附 `获取商用授权.url`）；个人学习 / 非商业使用 | ❌ **不包含** | `assets/ui_font/Aa暗夜深渊.ttf`（3.86 MB）。现在整套 UI 用的显示字体。实测覆盖游戏里**实际会显示的 189 个字一个不缺**（含全部中文标点、同伴与 Boss 名字；`tools/font/font_needed.py` 可复现）。和 Sprout Lands 皮肤同一类处理：**可本地使用、不可再分发** —— `.gitignore` 排除该目录（只保留一份 README 说明），克隆者会自动回退到上面的 Fusion Pixel。**发布任何产物前请自行取得商用授权，或换一套允许分发的字体（如思源黑体 / 霞鹜文楷等 OFL 字体）** |
 | Sprout Lands UI Pack（美术：Cup Nooble） | **免费但限非商业**：可修改，但**不可再分发或转售（即使修改过）**，且只能用于非商业项目 | ❌ **不包含** | `assets/ui_sprout/`（设置界面的 Sprout Lands 皮肤）。授权原文抄在该目录的 `LICENSE_SproutLands.txt`。**因为禁止再分发**，这一套被 `.gitignore` 排除 —— 克隆后需自行从 [itch](https://cupnooble.itch.io/sprout-lands-ui-pack) 取得；没有它时设置界面会**自动回退**到上面的 Kenney 皮肤，不会报错 |
+| [Interface Sounds](https://kenney.nl/assets/interface-sounds) 1.0 | **CC0 1.0**（公有领域，可商用、无需署名） | ✅ 包含于 `assets/sfx/` | 界面音效，作者 Kenney：`click_001.ogg`（空仓干响）/ `click_002.ogg`（按钮）/ `toggle_001.ogg`（开关）/ `tick_002.ogg`（滑条）/ `open_001.ogg`、`close_001.ogg`（菜单开 / 关）。原许可保留在 `assets/sfx/LICENSE_Kenney_CC0.md` |
+| [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) | 同上 | ✅ 包含于 `assets/sfx/` | 枪声：`laserSmall_000` ~ `laserSmall_004`（**5 条候选随机播 + 音高抖动**，免得连发听起来像复读机）。挑它是因为武器打的是可见的光弹（§1.6），能量枪声比写实枪声更贴 |
+| [RPG Audio](https://kenney.nl/assets/rpg-audio) | 同上 | ✅ 包含于 `assets/sfx/` | 换弹两声：`metalLatch.ogg`（拔弹匣 / 松卡榫）、`metalClick.ogg`（推上弹匣） |
 | Blue Archive 「Arisu」角色模型与贴图 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `models/Arisu.glb`、`models/Arisu_ext.glb` 与自动解包的 `Arisu*.png`。**仅用于本地学习研究，不得再分发、不得商用、不得用于任何发布产物** |
 | Blue Archive 同伴模型「未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊」 | **专有版权**（同上） | ❌ 不包含 | `models/companions/**`（`Mika.glb` / `Yuuka.glb` / `Noa.glb` / `Momoi.glb` / `Midori.glb` / `Yuzu.glb` / `Kei.glb` / `Kei_ext.glb`（凯伊的重导版，见 README §8.8），均取**初始形态**）。同样仅供本地学习 |
 | 「霸王龙优香」Boss 模型（FBX） | **专有版权**（同上，玩家二创） | ❌ 不包含 | `models/boss/**`（`优香霸王龙.fbx` + 贴图 + ASCII 副本）。同样仅供本地学习 |
@@ -36,8 +39,10 @@ _arisu_learn/
 │  │                       丢进来就整套 UI 换字；没有它会**自动回退**到下面的
 │  │                       Fusion Pixel，不会报错。放进去后要导入一次：
 │  │                       `--headless --path . --import`。见 assets/ui_font/README.md
-│  └─ ui_sprout/        ← 可选：Sprout Lands 皮肤（panel.png / button*.png / font.ttf）
-│                          没有它会**自动回退**到仓库自带的 Kenney 皮肤，不会报错
+│  ├─ ui_sprout/        ← 可选：Sprout Lands 皮肤（panel.png / button*.png / font.ttf）
+│  │                          没有它会**自动回退**到仓库自带的 Kenney 皮肤，不会报错
+│  └─ sfx/              ← **不用补**：13 个 Kenney 音效（CC0）已经在仓库里，
+│                            克隆下来就有声音；没有文件时也只是静默、不报错（§1.14）
 └─ splatdata/           ← 可选：放入校园 / 画室609 的 .sogdata（见 splatdata/README.md）
                           两份都没有也能跑：`-- --splat=off`
 ```
