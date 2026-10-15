@@ -78,12 +78,24 @@ Godot 会通过 GDGS 插件的 `EditorImportPlugin` 把 `.sog` 展开成 Gaussia
   `yaw_degrees = 248.6`、`auto_place = false` + `use_anchor = true`
   （把源坐标的地板中心对到 **(0, 0.03, 4.25)** —— 罩住出生点，否则第三人称相机会落到
   房间外面）、`crop_enabled = true`（裁掉离群 floaters）、
-  `build_box_collision = true`（四面墙碰撞 + 朝靶场那面 1.6 m 门洞）
+  `build_box_collision = false` + **`Room609/RoomCollision` 下 5 个手摆的盒**
+  （4 面墙，z− 那面被 1.6 m 门洞切成 2 段；数值是把生成算法的输出抄进来的，见主 README §6.8）
 
 ⚠️ 换缩放时注意：`crop_margin` / `crop_max_scale` 是**源坐标单位**，与 `world_scale`
 无关，改缩放不用重调；但 `anchor_world` 和 `box_wall_thickness` / `box_door_width`
 是**世界单位**，缩放变小以后要重新看它们合不合适（例如墙厚 0.3 m 在 ×6.4 下几乎看不见，
 在 ×1.8 下才是一堵正常的墙）。
+
+⚠️⚠️ **改完摆放参数必须重摆房间碰撞**：`game.tscn` 里那 5 个盒是**静态**数值，和
+`world_scale` / `yaw_degrees` / `anchor_*` / `crop_*` 绑死，不会自己跟着动。重摆办法：
+
+```powershell
+# ① 把 Room609 的 build_box_collision 临时设成 true，导出生成结果
+& $godot --headless --path . --script res://scripts/_probe_room_collision.gd
+# ② 把 stdout 那段 .tscn 文本贴回 game.tscn 覆盖旧的 5 个盒，再把开关设回 false
+# ③ 跑 _verify_room.gd —— §5 会拿 box_* 参考值校验这 5 个盒
+& $godot --path . --script res://scripts/_verify_room.gd
+```
 
 换一份扫描后的两条路：
 

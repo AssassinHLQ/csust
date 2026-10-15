@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -75,6 +75,26 @@ roughness = 0.55
 albedo_color = Color(0.35, 0.62, 0.88, 1)
 roughness = 0.55
 
+; 画室609 的房间碰撞形状：**手摆**的 5 个盒 = 4 面墙（z− 那面被 1.6 m 门洞切成 2 段）。
+; 数值是把 Room609 的 build_box_collision 打开时**生成出来的结果**原样抄进来的，
+; 用 scripts/_probe_room_collision.gd 导出（见 README §6.8），所以和原来自动生成的等价。
+; ⚠️ 这些是**静态**数值：改了 world_scale / yaw_degrees / anchor_* / crop_* 之后
+;    必须重新导出并覆盖，否则墙会和画面里的房间错位。改完跑 _verify_room.gd §5 会校验。
+[sub_resource type="BoxShape3D" id="Shape_room_xneg"]
+size = Vector3(0.3, 8.2994, 27.2121)
+
+[sub_resource type="BoxShape3D" id="Shape_room_xpos"]
+size = Vector3(0.3, 8.2994, 27.2121)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zneg_a"]
+size = Vector3(11.5096, 8.2994, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zneg_b"]
+size = Vector3(10.7937, 8.2994, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zpos"]
+size = Vector3(23.9033, 8.2994, 0.3)
+
 [node name="Game" type="Node3D"]
 script = ExtResource("4_game")
 
@@ -102,7 +122,7 @@ surface_material_override/0 = SubResource("Mat_floor")
 ; ⚠️ 原来的四面隐形护栏（WallPX/NX/PZ/NZ，高 0.7 m）**已按用户要求删除**。
 ;    现在平台没有边界：走出 40 × 40 平台就会掉下去，掉到 y < −60 由 game.gd
 ;    的保险送回出生点（FALL_LIMIT）。能挡住你的只剩画室609 自己的四面墙
-;    （见下面 Room609 的 build_box_collision）。
+;    （见下面 Room609/RoomCollision —— 已改成**手摆在场景里**的 5 个盒）。
 ;    历史：那圈护栏刻意只做 0.7 m，好让「助跑起跳能翻出去看校园」；
 ;    现在干脆不要了。
 
@@ -138,8 +158,11 @@ surface_material_override/0 = SubResource("Mat_floor")
 ;                        （单个尺度可达 15.13 源单位），放大后就是糊满屏的**大白团**。
 ;                       分位盒外扩 0.5 + 丢尺度 > 0.5 的点，实测留 2,769,851 / 丢 4,265。
 ;                       ⚠️ 这两个阈值是**源坐标单位**，与 world_scale 无关，改缩放不用重调。
-;   box_*                四面墙碰撞（厚 0.3 m，从包围盒面往房间里长），门开在 **z−**
-;                        （朝靶场）那一面、宽 1.6 m、正对出生点。
+;   box_*                **参考值**，不再是开关：四面墙的碰撞已经手摆进本文件
+;                        （Room609/RoomCollision 下的 5 个盒），build_box_collision = false。
+;                        留着这几个数是给 _verify_room.gd §5 校验手摆的盒用的。
+;                        含义：厚 0.3 m（从包围盒面往房间里长）、门开在 **z−**（朝靶场）
+;                        那一面、宽 1.6 m、正对出生点。
 ;                        ⚠️ 门的位置是**设计**出来的、不是量出来的：先试过在
 ;                        「地板面 ~ +1.2 m」带里找墙上的缺口，结果那条带里全是桌椅；
 ;                        改用包围盒面更糟 —— 两端 0.1% 的离群点把面推到了墙外。
@@ -157,11 +180,40 @@ anchor_world = Vector3(0, 0.03, 4.25)
 crop_enabled = true
 crop_margin = 0.5
 crop_max_scale = 0.5
-build_box_collision = true
+build_box_collision = false
 box_wall_thickness = 0.3
 box_door_side = "z-"
 box_door_width = 1.6
 box_door_center = 0
+
+; 房间碰撞：**手摆**在场景里的 5 个盒（4 面墙，z− 那面被 1.6 m 门洞切成 2 段）。
+; 为什么从生成改成手摆：生成式碰撞在编辑器里**根本不存在**，看不见也拖不动。
+; 现在它们是普通节点 —— 选中 CollisionShape3D 用移动手柄挪、或在检查器改 shape.size 都行。
+; ⚠️ build_box_collision 必须保持 false，否则脚本会再生成一个同名 RoomCollision，
+;    变成两套碰撞叠在一起（而 _verify_room.gd 要求恰好 5 个盒）。
+; ⚠️ 数值是静态的，和 world_scale / anchor_* / crop_* 绑死。房间参数一改就要重新导出：
+;      & $g --headless --path $p --script res://scripts/_probe_room_collision.gd
+[node name="RoomCollision" type="StaticBody3D" parent="Room609"]
+
+[node name="WallXNeg" type="CollisionShape3D" parent="Room609/RoomCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.1596, 1.2768, 4.0346)
+shape = SubResource("Shape_room_xneg")
+
+[node name="WallXPos" type="CollisionShape3D" parent="Room609/RoomCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.4437, 1.2768, 4.0346)
+shape = SubResource("Shape_room_xpos")
+
+[node name="WallZNegA" type="CollisionShape3D" parent="Room609/RoomCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5548, 1.2768, -9.4215)
+shape = SubResource("Shape_room_zneg_a")
+
+[node name="WallZNegB" type="CollisionShape3D" parent="Room609/RoomCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1968, 1.2768, -9.4215)
+shape = SubResource("Shape_room_zneg_b")
+
+[node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.358, 1.2768, 17.4907)
+shape = SubResource("Shape_room_zpos")
 
 ; 霸王龙优香：站在平台右侧、朝 -X 正对场地中心。
 ; 模型自身脸朝 +Z，所以绕 Y 转 -90° 就变成朝 -X。

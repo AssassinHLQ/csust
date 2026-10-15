@@ -201,12 +201,34 @@ func _ready() -> void:
 			var want := a.substr(8)
 			if want != "" and want != "all" and venue != "" and venue != want:
 				print("[SplatScene] %s 不在 --venue=%s 里，跳过" % [display_name, want])
+				_disable_placed_collision()
 				return
 		elif a == "--splat=off" or a == "--no-splat":
 			print("[SplatScene] 命令行要求跳过泼溅加载")
+			_disable_placed_collision()
 			return
 	if auto_start:
 		start()
+
+
+## 跳过加载时，把**预先摆在场景里**的碰撞一并关掉。
+##
+## ⚠️ 画室609 的四面墙现在是 game.tscn 里**手摆的静态节点**
+## （`Room609/RoomCollision`，见 README §6.8），不再由 `_build_box_collision()`
+## 在 `_finish()` 里生成 —— 也就是说它们**不受「加载没加载」影响**，一进场景
+## 就在那儿挡人挡子弹。而一份没被加载的场地不该留下看不见的墙：不关的话，
+## 带 `--splat=off` 的自检里子弹会被 z− 墙拦下（实测 `_verify_final` §6 靶子
+## 100 → 100、`_verify_boss` 射线打不到本体、`_verify_mag` / `_verify_boss_pig`
+## / `_verify_companion*` 会一起红）。
+##
+## 关法用 `collision_layer = 0`（而不是 `queue_free()`）：不改场景树结构、可逆，
+## 也不影响自检去数节点。
+func _disable_placed_collision() -> void:
+	for child in get_children():
+		if child is CollisionObject3D:
+			var body := child as CollisionObject3D
+			body.collision_layer = 0
+			body.collision_mask = 0
 
 
 func _process(delta: float) -> void:
