@@ -11,7 +11,7 @@ extends CanvasLayer
 ##
 ## UI 全部**代码构建**（与 `hud.gd` 里 Boss 血条的做法一致），不写 .tscn。
 ##
-## 皮肤是**可换的一整套**（见 `SKINS`）：一个目录 + 一套配色 + 九宫格边距。
+## 皮肤是**可换的一整套**（见 `ui_skin.gd` 的 `SKINS`）：一个目录 + 一套配色 + 九宫格边距。
 ## 两套皮肤的文件名刻意保持一致（`panel.png` / `button*.png` / `font.ttf`），
 ## 所以「换皮肤」只是换目录，加载代码一行都不用动。
 
@@ -24,34 +24,9 @@ signal opened_changed(is_open: bool)
 ##    属于「可本地使用、不可再分发」，和角色模型 / 泼溅数据同一类处理：
 ##    本地放进 `assets/ui_sprout/` 就自动启用，克隆仓库的人没有它会回退到
 ##    仓库自带的 Kenney 那套（CC0，可分发）。详见 THIRD_PARTY.md。
-const SKINS := [
-	{
-		"label": "Sprout Lands",
-		"dir": "res://assets/ui_sprout/",
-		"margin": 12.0,                   # 106×122 的面板，圆角比 Kenney 的大
-		"panel_tint": Color(1, 1, 1, 1),  # 面板本身就是米色，不用再染
-		"button_tint": Color(1, 1, 1, 1),
-		"text": Color(0.34, 0.22, 0.12),  # 深棕字压在米色面板上
-		"subtext": Color(0.46, 0.33, 0.20),
-		"trough": Color(0.78, 0.66, 0.50),
-		"fill": Color(0.53, 0.74, 0.42),  # 草绿，跟素材的农场色调一套
-		"grabber": Color(0.99, 0.94, 0.83),
-		"dim": Color(0.07, 0.06, 0.05, 0.55),
-	},
-	{
-		"label": "Kenney（内置）",
-		"dir": "res://assets/ui/",
-		"margin": 8.0,                    # 32×32 的像素块，边框约 6 px
-		"panel_tint": Color(0.17, 0.20, 0.26, 1.0),
-		"button_tint": Color(0.42, 0.47, 0.56),
-		"text": Color(0.93, 0.95, 1.0),
-		"subtext": Color(0.68, 0.73, 0.83),
-		"trough": Color(0.10, 0.12, 0.16),
-		"fill": Color(0.52, 0.72, 0.95),
-		"grabber": Color(0.95, 0.96, 1.0),
-		"dim": Color(0.04, 0.05, 0.08, 0.62),
-	},
-]
+## 皮肤数据（两套目录 + 配色 + 九宫格边距）搬去了 `ui_skin.gd`：
+## HUD 的血条和 Boss 血条要用**同一套**配色，各留一份迟早会走散。
+## 这里只留布局常量。
 
 const FONT_SIZE := 16
 const LABEL_WIDTH := 150.0
@@ -85,20 +60,14 @@ func _ready() -> void:
 	print("[SettingsMenu] 皮肤 = %s（%s）" % [_skin["label"], _skin["dir"]])
 
 
-## 选第一套**关键文件齐**的皮肤。判据只查面板与字体：有这两样就能画出完整界面；
-## 按钮缺 `button_hover.png` 时会退回 normal + 提亮（见 `_button_style`）。
+## 挑皮肤的判据在 `ui_skin.gd`：只查面板与字体，有这两样就能画出完整界面；
+## 按钮缺 `button_hover.png` 时会退回 normal + 提亮（见 `UiSkin.button_style`）。
 func _pick_skin() -> Dictionary:
-	for skin in SKINS:
-		var dir: String = skin["dir"]
-		if ResourceLoader.exists(dir + "panel.png") \
-				and ResourceLoader.exists(dir + "font.ttf"):
-			return skin
-	push_warning("[SettingsMenu] 两套皮肤的素材都没找到，界面会是空的")
-	return SKINS[SKINS.size() - 1]
+	return UiSkin.pick()
 
 
 func _tex(name: String) -> String:
-	return String(_skin["dir"]) + name
+	return UiSkin.tex(_skin, name)
 
 
 # --- 开关 ---
@@ -390,24 +359,9 @@ func _make_button(text: String, handler: Callable) -> Button:
 	return b
 
 
-## 按钮三态。`button_hover.png` 是**可选**的：没有就用 normal 的图 + 提亮 tint，
-## 这样换一套只给 normal/pressed 的皮肤（比如这里裁出来的 Sprout）也不用改代码。
+## 按钮三态由 `UiSkin.button_style` 给，HUD 想画按钮时也是同一份实现。
 func _button_style(kind: String) -> StyleBoxTexture:
-	var base: Color = _skin["button_tint"]
-	match kind:
-		"hover":
-			if ResourceLoader.exists(_tex("button_hover.png")):
-				return _make_style(_tex("button_hover.png"), base)
-			return _make_style(_tex("button.png"), Color(
-				minf(base.r * 1.25, 1.0), minf(base.g * 1.25, 1.0),
-				minf(base.b * 1.25, 1.0), base.a))
-		"pressed":
-			if ResourceLoader.exists(_tex("button_pressed.png")):
-				return _make_style(_tex("button_pressed.png"), base)
-			return _make_style(_tex("button.png"), Color(
-				base.r * 0.8, base.g * 0.8, base.b * 0.8, base.a))
-		_:
-			return _make_style(_tex("button.png"), base)
+	return UiSkin.button_style(_skin, kind)
 
 
 ## 滑块：**刻意不用九宫格素材** —— 槽只有约 8 px 高，而九宫格的边距有 8~12 px，
@@ -466,30 +420,15 @@ func _style_check(check: CheckButton) -> void:
 
 ## 纯色小方块纹理（给 grabber 用）。像素风不需要渐变和圆角。
 static func _solid_texture(size: int, color: Color) -> ImageTexture:
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	img.fill(color)
-	return ImageTexture.create_from_image(img)
+	return UiSkin.solid_texture(size, color)
 
 
 func _make_style(tex_path: String, tint: Color) -> StyleBoxTexture:
-	var sb := StyleBoxTexture.new()
-	sb.texture = load(tex_path)
-	var m: float = _skin["margin"]
-	sb.texture_margin_left = m
-	sb.texture_margin_right = m
-	sb.texture_margin_top = m
-	sb.texture_margin_bottom = m
-	sb.modulate_color = tint
-	return sb
+	return UiSkin.make_style(_skin, tex_path, tint)
 
 
 func _make_theme() -> Theme:
-	var theme := Theme.new()
-	var font := load(_tex("font.ttf")) as FontFile
-	if font != null:
-		theme.default_font = font
-	theme.default_font_size = FONT_SIZE
-	return theme
+	return UiSkin.make_theme(_skin)
 
 
 # --- 控件 <-> 设置 同步 ---

@@ -1,5 +1,25 @@
 extends CanvasLayer
-## HUD：弹药、状态、速度、换弹进度条、准星随瞄准/移动扩张。
+## HUD：玩家血量、Boss 血条、弹药、换弹进度条、泼溅加载状态、准星随瞄准/移动扩张。
+##
+## 皮肤走 `ui_skin.gd`：
+##   玩家血量 / 弹药 走 Sprout 的九宫格米色木板 + 「红条 + 草绿描边」；
+##   **Boss 血条走 Minecraft 风格**（细长五行渐变条 + 白字名字，无底板无外框），
+##   几何与配色见 `ui_skin.gd` 的 `MC_BAR_PX` 那一段。
+##
+## 布局（逻辑单位；`canvas_items` 拉伸下再乘缩放）：
+##   ┌ 左上  玩家血量面板（一整块 Sprout 面板，自己画）
+##   ├ 顶部中 Boss 血条组（一位一行，见 bind_bosses）
+##   ├ 左上   泼溅加载状态行（贴在血量面板下沿）
+##   └ 右下  弹药 + 换弹条
+##
+## 定位一律用**绝对矩形**，不靠容器自动排版 —— 画布逻辑高度固定 900，位置算得准，
+## 而且这一层要跟准星一样做物理像素对齐，自动排版那种「大概齐」反而添乱。
+##
+## ⚠️ 节点命名是**约定**，不是随手起的：自检按名字取（`_verify_boss_pig.gd` 取
+##    `BossBar0/1`、`BossName0/1`，`_verify_room.gd` 取 `SplatStatus0/1`），
+##    所以它们必须**保持是 HUD 的直接子节点**、且名字不能变。
+##    （曾经靠遍历顺序取，结果深度遍历是倒序的，把「打霸王龙掉的是飞猪那条」
+##     误判成了 bug —— 名字是唯一可靠的锚点。）
 
 ## 准星随瞄准/移动扩张。
 ##
@@ -17,6 +37,9 @@ const CROSS_DOT_PX := 4.0     ## 中心点边长（物理像素，必须偶数�
 const CROSS_THICK_PX := 2.0   ## 十字条粗细（物理像素，必须偶数）
 const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多远由扩散量决定）
 
+## 血条描边宽度（逻辑 px）。见 `_make_bar_stack()` 那段关于 `ProgressBar` 的注释。
+const BAR_EDGE_PX := 2.0
+
 @onready var crosshair: Control = $Crosshair
 @onready var dot: ColorRect = $Crosshair/Dot
 @onready var t: ColorRect = $Crosshair/T
@@ -24,13 +47,58 @@ const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多�
 @onready var l: ColorRect = $Crosshair/L
 @onready var r: ColorRect = $Crosshair/R
 @onready var ammo: Label = $Panel/Margin/VBox/Ammo
-@onready var state: Label = $Panel/Margin/VBox/State
-@onready var speed: Label = $Panel/Margin/VBox/Speed
-@onready var reload_bar: ProgressBar = $Panel/Margin/VBox/Reload
+@onready var reload_trough: Panel = $Panel/Margin/VBox/ReloadTrough
+@onready var reload_bar: ProgressBar = $Panel/Margin/VBox/ReloadTrough/Reload
+
+# --- 左上角玩家血量面板 ---
+const HP_PANEL_POS := Vector2(24.0, 20.0)   ## 左上角留出的边距
+const HP_PANEL_SIZE := Vector2(344.0, 92.0)
+const HP_PAD := 16.0                        ## 面板内左右留白
+const HP_ROW_TOP := 8.0                     ## 「HP」和数字那一行
+const HP_ROW_H := 42.0
+const HP_BAR_TOP := 54.0
+const HP_BAR_HEIGHT := 22.0
+const HP_FONT_SIZE := 34.0                  ## 血量数字：要够大才「醒目」
+const HP_TITLE_FONT_SIZE := 18.0
+
+# --- 右下角弹药面板 ---
+const AMMO_FONT_SIZE := 34
+const RELOAD_BAR_HEIGHT := 12.0
+
+# --- 顶部 Boss 血条组（Minecraft 风格）---
+## **一个 Boss 一行**，自上而下按索引排。
+## 加同伴那一轮场上变成两位 Boss（霸王龙优香 / 飞猪优香），所以从单条改成一组。
+##
+## 宽 = MC 的 182 × 3；**高是单独给的，故意比 MC 的 5×3 薄** ——
+## 用户反馈三倍高的条还是嫌挡视野，所以宽度保留 MC 的观感、厚度压到 12。
+const BOSS_BAR_WIDTH := 546.0
+const BOSS_BAR_HEIGHT := 12.0
+## 全体 Boss 统一用 MC 的哪种条色。MC 里末影龙那条是 `pink`（粉紫），也是用户点名要的。
+## 想换成凋灵那种偏蓝的紫就改 `"purple"`；想按 Boss 分别配色，把这里改成查表即可。
+const BOSS_BAR_COLOR := "pink"
+const BOSS_NAME_FONT_SIZE := 16
+const BOSS_NAME_HEIGHT := 22.0
+## 名字底边到条顶边的空隙（MC 是 2 px）
+const BOSS_NAME_GAP := 6.0
+## 一行的竖向步距（MC 是 19 px；这里按本工程更大的字模放大后的值）
+const BOSS_ROW_HEIGHT := 46.0
+## 第一条的 y。
+## ⚠️ 必须 ≥ `BOSS_NAME_HEIGHT + BOSS_NAME_GAP`，否则**第一行的名字会被顶出画面**。
+##    （MC 敢用 y = 12 是因为它的名字只有 9 px 高，本工程的字模更高。）
+const BOSS_TOP := 30.0
+
+# --- 左上角泼溅加载状态行 ---
+## **一份场地一行**，贴在血量面板下沿（不挡住血量）。
+const SPLAT_ROW_HEIGHT := 20.0
+const SPLAT_ROW_TOP := 128.0
 
 var _player: Player
 var _weapon: Weapon
 var _spread := 8.0
+## 当前皮肤（`ui_skin.gd` 的 SKINS 里的一项）
+var _skin: Dictionary = {}
+var _health_bar: ProgressBar
+var _health_text: Label
 ## 左上角泼溅状态行：**一份场地一行**，每行 {label: Label, title: String, done: bool}
 var _splat_rows: Array[Dictionary] = []
 ## 顶部 Boss 血条组：一个 Boss 一行，每行 {name: Label, bar: ProgressBar, title: String}
@@ -47,18 +115,152 @@ const SPLAT_PHASE := {
 
 
 func _ready() -> void:
+	_skin = UiSkin.pick()
+	_style_ammo_panel()
+	_build_player_health()
 	# 泼溅状态行不在这里建：见 bind_splats()，要按场上实际有几份场地来排行数。
 	# （校园 615 万点首次要解码约 50 s，不给状态行玩家会以为卡死了。）
 	# Boss 血条同理：见 bind_bosses()，要按场上实际有几位来排行数。
-	# ⚠️ 这里不能只有注释 —— GDScript 要求每个函数体至少有一条语句。
-	pass
+	print("[HUD] 皮肤 = %s（%s）" % [_skin["label"], _skin["dir"]])
 
 
-## 顶部居中的 Boss 血条组。**一个 Boss 一行**，自上而下按索引排。
-## 加同伴那一轮场上变成两位 Boss（霸王龙优香 / 飞猪优香），所以从单条改成一组。
-const BOSS_ROW_HEIGHT := 38.0
-const BOSS_BAR_WIDTH := 440.0
+# --- 摆放小工具 --------------------------------------------------------------
 
+## 左上角定位（父节点是 CanvasLayer 或普通 Control，锚点 0）。
+func _place(c: Control, pos: Vector2, size: Vector2) -> void:
+	c.anchor_left = 0.0
+	c.anchor_top = 0.0
+	c.anchor_right = 0.0
+	c.anchor_bottom = 0.0
+	c.offset_left = pos.x
+	c.offset_top = pos.y
+	c.offset_right = pos.x + size.x
+	c.offset_bottom = pos.y + size.y
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+## 水平居中定位（相对画布中线；父节点是 CanvasLayer 时 offset 就是绝对偏移）。
+func _place_centered(c: Control, rect: Rect2) -> void:
+	c.anchor_left = 0.5
+	c.anchor_right = 0.5
+	c.anchor_top = 0.0
+	c.anchor_bottom = 0.0
+	c.offset_left = rect.position.x
+	c.offset_top = rect.position.y
+	c.offset_right = rect.position.x + rect.size.x
+	c.offset_bottom = rect.position.y + rect.size.y
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+# --- 左上角：玩家血量 ---------------------------------------------------------
+
+## 玩家血量面板。**自己画的一整块**（血量是最该一眼看到的信息，不能挤在角落里当小字）。
+##
+## ⚠️ 这里刻意**不用** `PanelContainer`/`VBoxContainer`：容器会把控件按最小尺寸摆，
+##    而下面这些坐标是照着 344×92 的固定面板手算的，交给容器反而不好对。
+func _build_player_health() -> void:
+	var panel := Panel.new()
+	panel.name = "PlayerHealth"
+	panel.add_theme_stylebox_override("panel", UiSkin.panel_style(_skin))
+	_place(panel, HP_PANEL_POS, HP_PANEL_SIZE)
+	add_child(panel)
+
+	var inner_w := HP_PANEL_SIZE.x - HP_PAD * 2.0
+
+	var title := Label.new()
+	title.text = "HP"
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", UiSkin.font(_skin))
+	title.add_theme_font_size_override("font_size", int(HP_TITLE_FONT_SIZE))
+	title.add_theme_color_override("font_color", _skin["subtext"])
+	_place(title, Vector2(HP_PAD, HP_ROW_TOP), Vector2(70.0, HP_ROW_H))
+	panel.add_child(title)
+
+	_health_text = Label.new()
+	_health_text.name = "HealthText"
+	_health_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_health_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_health_text.add_theme_font_override("font", UiSkin.font(_skin))
+	_health_text.add_theme_font_size_override("font_size", int(HP_FONT_SIZE))
+	_health_text.add_theme_color_override("font_color", _skin["text"])
+	_place(_health_text, Vector2(HP_PAD, HP_ROW_TOP), Vector2(inner_w, HP_ROW_H))
+	panel.add_child(_health_text)
+
+	var stack := _make_bar_stack(
+		Vector2(HP_PAD, HP_BAR_TOP), Vector2(inner_w, HP_BAR_HEIGHT),
+		"HealthTrough")
+	panel.add_child(stack["trough"])
+	_health_bar = stack["bar"]
+	_health_bar.value = 1.0
+
+
+## 血条三层：**槽面板 → 填充条**。返回 {"trough": Panel, "bar": ProgressBar}。
+##
+## ⚠️ 为什么不是一个 `ProgressBar` 加两个样式盒就够了 —— 本喵踩过这个坑：
+##    实测（`_probe_bar_margin.gd` + 逐像素量游戏截图）**`ProgressBar` 不会拿
+##    `background` 样式盒的 `get_margin()` 去内缩 `fill`**，红条永远从条框最外沿
+##    开始画。`content_margin` 设 8、设默认、换 `StyleBoxFlat` 还是九宫格，
+##    结果一模一样（对照组里只有 `PanelContainer.panel` 的内缩真生效）。
+##    表现就是：HP 条的草绿描边、Boss 条的木板外框**整个被红条盖住**，一点都看不见。
+##    所以外框/槽交给独立的 `Panel`，填充条自己用 `StyleBoxEmpty` 当背景、
+##    按算好的内缩矩形摆。
+func _make_bar_stack(pos: Vector2, size: Vector2, trough_name: String) -> Dictionary:
+	var trough := Panel.new()
+	trough.name = trough_name
+	trough.add_theme_stylebox_override("panel", UiSkin.bar_trough(_skin))
+	_place(trough, pos, size)
+
+	var bar := ProgressBar.new()
+	bar.max_value = 1.0
+	bar.value = 1.0
+	bar.show_percentage = false
+	bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+	bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, 1.0))
+	_place(bar, Vector2(BAR_EDGE_PX, BAR_EDGE_PX),
+		size - Vector2(BAR_EDGE_PX, BAR_EDGE_PX) * 2.0)
+	trough.add_child(bar)
+
+	return {"trough": trough, "bar": bar}
+
+
+func _on_player_health(current: float, maximum: float) -> void:
+	if _health_bar == null:
+		return
+	var ratio := 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
+	_health_bar.value = ratio
+	_health_bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, ratio))
+	_health_text.text = "%d / %d" % [int(ceil(current)), int(maximum)]
+	# 见底时数字也变红，比只变条更早被注意到
+	_health_text.add_theme_color_override("font_color",
+		_skin["bar_fill_low"] if ratio < UiSkin.BAR_LOW_RATIO else _skin["text"])
+
+
+# --- 右下角：弹药 -------------------------------------------------------------
+
+## 把 .tscn 里那个默认灰面板换成 Sprout 的九宫格米色板。
+## 内容只有「弹药数 + 换弹条」两行 —— 「腰射 / 蹲行」和速度显示已经撤掉，
+## 状态那点信息不值得常驻占一块画面。
+func _style_ammo_panel() -> void:
+	var panel := $Panel as PanelContainer
+	panel.add_theme_stylebox_override("panel", UiSkin.panel_style(_skin))
+
+	var margin := $Panel/Margin as MarginContainer
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 10)
+
+	reload_trough.add_theme_stylebox_override("panel", UiSkin.bar_trough(_skin))
+
+	ammo.add_theme_font_override("font", UiSkin.font(_skin))
+	ammo.add_theme_font_size_override("font_size", AMMO_FONT_SIZE)
+	ammo.add_theme_color_override("font_color", _skin["text"])
+
+	reload_bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+	reload_bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, 1.0))
+
+
+# --- 顶部：Boss 血条组 --------------------------------------------------------
 
 func bind_bosses(bosses: Array) -> void:
 	_boss_rows.clear()
@@ -78,26 +280,30 @@ func bind_boss(boss: Boss) -> void:
 	bind_bosses([boss])
 
 
+## 一行 = 名字 `Label` + 血条 `ProgressBar`，**都是 HUD 的直接子节点**（自检按名字取）。
+##
+## 样子照 Minecraft：一根细长的五行渐变条，白字名字带阴影压在正上方居中，
+## **没有底板、没有外框** —— MC 就是不画（这一点本喵扒过字节码确认：
+## `render()` 从头到尾只有 `blitSprite` 和 `drawString`，没有任何 `fill`）。
+## 五行比例与七色主色见 `ui_skin.gd` 的 `MC_BAR_PX` 那一段。
 func _add_boss_row(index: int, title: String) -> void:
-	var top := 18.0 + float(index) * BOSS_ROW_HEIGHT
+	var top := BOSS_TOP + float(index) * BOSS_ROW_HEIGHT
 
 	var label := Label.new()
 	label.name = "BossName%d" % index
 	label.text = title
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.75, 0.95))
+	label.add_theme_font_size_override("font_size", BOSS_NAME_FONT_SIZE)
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
-	label.add_theme_constant_override("shadow_offset_x", 1)
-	label.add_theme_constant_override("shadow_offset_y", 1)
-	label.anchor_left = 0.5
-	label.anchor_right = 0.5
-	label.offset_left = -BOSS_BAR_WIDTH * 0.5
-	label.offset_right = BOSS_BAR_WIDTH * 0.5
-	label.offset_top = top
-	label.offset_bottom = top + 20.0
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	_place_centered(label, Rect2(-BOSS_BAR_WIDTH * 0.5,
+		top - BOSS_NAME_GAP - BOSS_NAME_HEIGHT,
+		BOSS_BAR_WIDTH, BOSS_NAME_HEIGHT))
 	add_child(label)
+
+	var bright := UiSkin.mc_color(BOSS_BAR_COLOR)
 
 	var bar := ProgressBar.new()
 	bar.name = "BossBar%d" % index
@@ -105,21 +311,12 @@ func _add_boss_row(index: int, title: String) -> void:
 	bar.max_value = 1.0
 	bar.value = 1.0
 	bar.show_percentage = false
-	bar.anchor_left = 0.5
-	bar.anchor_right = 0.5
-	bar.offset_left = -BOSS_BAR_WIDTH * 0.5
-	bar.offset_right = BOSS_BAR_WIDTH * 0.5
-	bar.offset_top = top + 22.0
-	bar.offset_bottom = top + 36.0
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.12, 0.13, 0.16, 0.85)
-	bg.set_corner_radius_all(3)
-	bar.add_theme_stylebox_override("background", bg)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.92, 0.42, 0.34)
-	fill.set_corner_radius_all(3)
-	bar.add_theme_stylebox_override("fill", fill)
+	# ⚠️ 贴图是 182×5 的像素画，放大 3 倍必须 NEAREST，不然五行会被插值糊成一条渐变。
+	bar.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bar.add_theme_stylebox_override("background", UiSkin.mc_bar_style(bright, false))
+	bar.add_theme_stylebox_override("fill", UiSkin.mc_bar_style(bright, true))
+	_place_centered(bar, Rect2(-BOSS_BAR_WIDTH * 0.5, top,
+		BOSS_BAR_WIDTH, BOSS_BAR_HEIGHT))
 	add_child(bar)
 
 	_boss_rows.append({"name": label, "bar": bar, "title": title})
@@ -128,17 +325,13 @@ func _add_boss_row(index: int, title: String) -> void:
 func _on_boss_health(current: float, maximum: float, index: int) -> void:
 	if index < 0 or index >= _boss_rows.size():
 		return
-	var row: Dictionary = _boss_rows[index]
-	var bar: ProgressBar = row["bar"]
-	var label: Label = row["name"]
-	var ratio := 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
-	bar.value = ratio
-	label.text = "%s　%d / %d" % [row["title"], int(ceil(current)), int(maximum)]
-	# 血量见底时闪红
-	var fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
-	if fill:
-		fill.bg_color = Color(1.0, 0.25, 0.2) if ratio < 0.25 else Color(0.92, 0.42, 0.34)
+	var bar: ProgressBar = _boss_rows[index]["bar"]
+	# MC 的名字行**只有名字、不带数字**（血量靠条的长度看），所以这里只动条。
+	# ⚠️ 自检那边也相应改成直接对 Boss 的真实 `health` 比，不再从文本里抠数字。
+	bar.value = 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
 
+
+# --- 左上角：泼溅加载状态 -----------------------------------------------------
 
 func bind_splat(splat: SplatScene) -> void:
 	if splat == null:
@@ -146,12 +339,9 @@ func bind_splat(splat: SplatScene) -> void:
 	bind_splats([splat])
 
 
-## 顶部左上的泼溅状态组。**一份场地一行**，自上而下按传入顺序排。
+## 左上角的泼溅状态组。**一份场地一行**，自上而下按传入顺序排。
 ## 加「画室609」那一轮场上变成两份泼溅（校园 615 万 + 画室 277 万），所以从
 ## 单行改成一组 —— 两份同时解码时能分清是哪一份在等、哪一份已经就绪。
-const SPLAT_ROW_HEIGHT := 20.0
-
-
 func bind_splats(splats: Array) -> void:
 	# 先把上一次的标签和连线都撤掉。
 	# ⚠️ 不撤会报 "Signal 'progress' is already connected to given callable"：
@@ -174,7 +364,9 @@ func bind_splats(splats: Array) -> void:
 			continue
 		var label := Label.new()
 		label.name = "SplatStatus%d" % index
-		label.position = Vector2(18, 16 + index * SPLAT_ROW_HEIGHT)
+		# ⚠️ 行距必须**正好**是 SPLAT_ROW_HEIGHT：`_verify_room.gd` 直接断言
+		#    `row1.position.y - row0.position.y == 20.0`。
+		label.position = Vector2(18, SPLAT_ROW_TOP + index * SPLAT_ROW_HEIGHT)
 		label.add_theme_font_size_override("font_size", 14)
 		label.add_theme_color_override("font_color", Color(0.86, 0.91, 1.0, 0.92))
 		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
@@ -251,9 +443,9 @@ func _on_splat_loaded(info: Dictionary, index: int) -> void:
 		var row2 := _splat_row(index)
 		if row2.is_empty():
 			return
-		var l: Label = row2["label"]
-		if is_instance_valid(l):
-			l.visible = false)
+		var l2: Label = row2["label"]
+		if is_instance_valid(l2):
+			l2.visible = false)
 
 
 func _on_splat_failed(message: String, index: int) -> void:
@@ -285,10 +477,15 @@ func bind(player: Player, weapon: Weapon) -> void:
 	_player = player
 	_weapon = weapon
 	weapon.ammo_changed.connect(_on_ammo)
-	weapon.reload_started.connect(func() -> void: reload_bar.visible = true)
-	weapon.reload_finished.connect(func() -> void: reload_bar.visible = false)
+	weapon.reload_started.connect(func() -> void: reload_trough.visible = true)
+	weapon.reload_finished.connect(func() -> void: reload_trough.visible = false)
 	_on_ammo(weapon.current_ammo, weapon.magazine_size)
-	reload_bar.visible = false
+	reload_trough.visible = false
+
+	# 玩家的血量走信号，不在 _process 里每帧读 —— 血条只在掉血/回血时变。
+	if not player.health_changed.is_connected(_on_player_health):
+		player.health_changed.connect(_on_player_health)
+	_on_player_health(player.health, player.max_health)
 
 
 func _on_ammo(current: int, maximum: int) -> void:
@@ -377,22 +574,6 @@ func _process(_delta: float) -> void:
 	_spread = lerpf(_spread, target, 0.18)
 	_layout_crosshair()
 	dot.modulate = Color(1, 1, 1, 0.95 if _player.aiming else 0.8)
-
-	var moving_state := ""
-	if _player.crouching:
-		moving_state = "蹲行"
-	elif _player.aiming:
-		moving_state = "瞄准"
-	elif _player.sprinting:
-		moving_state = "跑动"
-	else:
-		moving_state = "腰射"
-	if _weapon and _weapon.is_reloading():
-		moving_state = "换弹中"
-	elif _weapon and _weapon.is_turning():
-		moving_state = "转向中"
-	state.text = "%s　HP %d/%d" % [moving_state, int(ceil(_player.health)), int(_player.max_health)]
-	speed.text = "%.1f m/s" % moving
 
 	if _weapon:
 		reload_bar.value = _weapon.reload_progress()

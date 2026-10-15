@@ -170,8 +170,8 @@ func _run() -> void:
 	print("  第 2 行「%s」→ %.2f" % [n1.text if n1 else "（无）", bar1.value if bar1 else -1.0])
 	_check(bar_count == 2 and bar0 != null and bar1 != null,
 		"HUD 上正好有 BossBar0 / BossBar1 两条血条")
-	_check(n0 != null and n0.text.begins_with("霸王龙优香"), "第 1 行是霸王龙优香")
-	_check(n1 != null and n1.text.begins_with("飞猪优香"), "第 2 行是飞猪优香")
+	_check(n0 != null and n0.text == "霸王龙优香", "第 1 行是霸王龙优香（名字行只写名字，不带血量数字）")
+	_check(n1 != null and n1.text == "飞猪优香", "第 2 行是飞猪优香")
 	_check(absf(bar1.value - 1.0) < 0.001,
 		"飞猪血条在重生后回到满格（%.2f）" % bar1.value)
 
@@ -182,8 +182,12 @@ func _run() -> void:
 	print("  打霸王龙 300：第 1 行 %.3f「%s」  第 2 行 %.3f「%s」" % [
 		bar0.value, n0.text, bar1.value, n1.text])
 	_check(pig.health == pig_hp and absf(bar1.value - 1.0) < 0.001, "打霸王龙完全不影响飞猪那条")
-	_check(bar0.value < 0.999 and n0.text.contains("2700"),
-		"第 1 行同步到 2700/3000（血条 %.3f）" % bar0.value)
+	# ⚠️ 这里原先断言名字文本里带 "2700"。换成 Minecraft 风格后名字行**只写名字**、
+	#    不再显示血量数字（见 hud.gd 的 _add_boss_row），所以改成直接对着 Boss 的
+	#    真实 `health` 比 —— 不抠文本，还顺便挡住「同伴偷偷帮打」造成的数值漂移。
+	_check(bar0.value < 0.999 and absf(bar0.value - trex.health / trex.max_health) < 0.001,
+		"第 1 行血条跟着霸王龙走（%.3f，血 %d/%d）" % [
+			bar0.value, int(trex.health), int(trex.max_health)])
 
 	# 再打飞猪 180 → 只动第 2 行
 	var trex_hp := trex.health
@@ -192,8 +196,9 @@ func _run() -> void:
 	print("  再打飞猪 180：第 1 行 %.3f「%s」  第 2 行 %.3f「%s」" % [
 		bar0.value, n0.text, bar1.value, n1.text])
 	_check(trex.health == trex_hp and absf(bar0.value - 0.9) < 0.01, "打飞猪完全不影响霸王龙那条")
-	_check(bar1.value < 0.999 and n1.text.contains("1620"),
-		"第 2 行同步到 1620/1800（血条 %.3f）" % bar1.value)
+	_check(bar1.value < 0.999 and absf(bar1.value - pig.health / pig.max_health) < 0.001,
+		"第 2 行血条跟着飞猪走（%.3f，血 %d/%d）" % [
+			bar1.value, int(pig.health), int(pig.max_health)])
 
 	print("\n========== 6. 飞猪现在也会攻击 ==========")
 	# 飞猪原来只是木桩（boss.gd），这一轮换成了 pig_boss.gd（骚扰型）。

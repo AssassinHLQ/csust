@@ -1,15 +1,14 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene format=3 uid="uid://bwd07grn6wg8l"]
 
-[ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
+[ext_resource type="Script" uid="uid://dbk7lch6jtavg" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
-[ext_resource type="Script" path="res://scripts/target.gd" id="3_target"]
-[ext_resource type="Script" path="res://scripts/game.gd" id="4_game"]
-[ext_resource type="Script" path="res://scripts/splat_scene.gd" id="5_splat"]
-[ext_resource type="Script" path="res://scripts/boss.gd" id="6_boss"]
+[ext_resource type="Script" uid="uid://jk6hyvped6dl" path="res://scripts/target.gd" id="3_target"]
+[ext_resource type="Script" uid="uid://cxgq1r1yq3vt1" path="res://scripts/game.gd" id="4_game"]
+[ext_resource type="Script" uid="uid://d2ynys1em84hn" path="res://scripts/splat_scene.gd" id="5_splat"]
 [ext_resource type="PackedScene" path="res://scenes/companion.tscn" id="7_companion"]
-[ext_resource type="Script" path="res://scripts/trex_boss.gd" id="8_trex"]
-[ext_resource type="Script" path="res://scripts/pig_boss.gd" id="9_pig"]
-[ext_resource type="Script" path="res://scripts/settings_menu.gd" id="10_settings"]
+[ext_resource type="Script" uid="uid://lt6sqg4ubp6x" path="res://scripts/trex_boss.gd" id="8_trex"]
+[ext_resource type="Script" uid="uid://dgrtxafrb2nat" path="res://scripts/pig_boss.gd" id="9_pig"]
+[ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -28,14 +27,14 @@ sky = SubResource("Sky_arena")
 ambient_light_source = 3
 ambient_light_color = Color(0.55, 0.62, 0.78, 1)
 ambient_light_energy = 0.5
-fog_enabled = true
-fog_light_color = Color(0.32, 0.36, 0.46, 1)
-fog_density = 0.006
 tonemap_mode = 3
 ssao_enabled = true
 ssao_intensity = 1.2
 glow_enabled = true
 glow_intensity = 0.25
+fog_enabled = true
+fog_light_color = Color(0.32, 0.36, 0.46, 1)
+fog_density = 0.006
 adjustment_enabled = true
 adjustment_saturation = 1.06
 
@@ -45,11 +44,25 @@ size = Vector3(40, 1, 40)
 [sub_resource type="BoxMesh" id="Mesh_floor"]
 size = Vector3(40, 1, 40)
 
-; 悬浮平台四周的隐形护栏已经删掉（用户要求）。下面这两个 BoxShape3D 也一并删。
 [sub_resource type="StandardMaterial3D" id="Mat_floor"]
 albedo_color = Color(0.21, 0.23, 0.27, 1)
-roughness = 0.9
 metallic = 0.05
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="Shape_room_xneg"]
+size = Vector3(0.3, 8.2994, 20.375868)
+
+[sub_resource type="BoxShape3D" id="Shape_room_xpos"]
+size = Vector3(0.3, 8.2994, 15.108234)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zneg_a"]
+size = Vector3(10.501027, 8.2994, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zneg_b"]
+size = Vector3(2.9842682, 8.2994, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_room_zpos"]
+size = Vector3(10.584586, 8.2994, 0.3)
 
 [sub_resource type="BoxShape3D" id="Shape_pillar"]
 size = Vector3(1.6, 0.8, 1.6)
@@ -75,98 +88,31 @@ roughness = 0.55
 albedo_color = Color(0.35, 0.62, 0.88, 1)
 roughness = 0.55
 
-; 画室609 的房间碰撞形状：**手摆**的 5 个盒 = 4 面墙（z− 那面被 1.6 m 门洞切成 2 段）。
-; 数值是把 Room609 的 build_box_collision 打开时**生成出来的结果**原样抄进来的，
-; 用 scripts/_probe_room_collision.gd 导出（见 README §6.8），所以和原来自动生成的等价。
-; ⚠️ 这些是**静态**数值：改了 world_scale / yaw_degrees / anchor_* / crop_* 之后
-;    必须重新导出并覆盖，否则墙会和画面里的房间错位。改完跑 _verify_room.gd §5 会校验。
-[sub_resource type="BoxShape3D" id="Shape_room_xneg"]
-size = Vector3(0.3, 8.2994, 27.2121)
-
-[sub_resource type="BoxShape3D" id="Shape_room_xpos"]
-size = Vector3(0.3, 8.2994, 27.2121)
-
-[sub_resource type="BoxShape3D" id="Shape_room_zneg_a"]
-size = Vector3(11.5096, 8.2994, 0.3)
-
-[sub_resource type="BoxShape3D" id="Shape_room_zneg_b"]
-size = Vector3(10.7937, 8.2994, 0.3)
-
-[sub_resource type="BoxShape3D" id="Shape_room_zpos"]
-size = Vector3(23.9033, 8.2994, 0.3)
-
-[node name="Game" type="Node3D"]
+[node name="Game" type="Node3D" unique_id=1193326363]
 script = ExtResource("4_game")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1829002269]
 environment = SubResource("Env_arena")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1316585409]
 transform = Transform3D(0.798636, -0.382683, 0.462554, 0, 0.770513, 0.637424, -0.601815, -0.509041, 0.615661, 12, 18, 8)
 light_color = Color(1, 0.96, 0.9, 1)
 light_energy = 1.25
 shadow_enabled = true
 directional_shadow_max_distance = 60.0
 
-[node name="Floor" type="StaticBody3D" parent="."]
+[node name="Floor" type="StaticBody3D" parent="." unique_id=803985293]
 
-[node name="Collision" type="CollisionShape3D" parent="Floor"]
+[node name="Collision" type="CollisionShape3D" parent="Floor" unique_id=413805074]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("Shape_floor")
 
-[node name="Mesh" type="MeshInstance3D" parent="Floor"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+[node name="Mesh" type="MeshInstance3D" parent="Floor" unique_id=1724024066]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0.0202322)
 mesh = SubResource("Mesh_floor")
 surface_material_override/0 = SubResource("Mat_floor")
 
-; ⚠️ 原来的四面隐形护栏（WallPX/NX/PZ/NZ，高 0.7 m）**已按用户要求删除**。
-;    现在平台没有边界：走出 40 × 40 平台就会掉下去，掉到 y < −60 由 game.gd
-;    的保险送回出生点（FALL_LIMIT）。能挡住你的只剩画室609 自己的四面墙
-;    （见下面 Room609/RoomCollision —— 已改成**手摆在场景里**的 5 个盒）。
-;    历史：那圈护栏刻意只做 0.7 m，好让「助跑起跳能翻出去看校园」；
-;    现在干脆不要了。
-
-; ⚠️ 校园泼溅（`SplatScene`）**已从本场景移出**（2026-10-14 用户要求「先把学校去掉，
-;    我以后放到别的场景」）。它现在是一个独立场景：
-;      res://scenes/campus_venue.tscn   ← 想用就把它实例化进任何场景
-;    本场景不再加载它，所以启动只解码画室609 那一份（显存压力也少一半）。
-;    想看校园：把它实例化进 game.tscn（或别的场景）即可，
-;    参数（×25、auto_place、top_gap = 12、venue = "campus"）都在那个场景文件里。
-
-; 高斯泼溅「画室609」：平台上的室内场地，**有墙碰撞 + 一个门洞**。
-; 参数全部是量出来的（scripts/_probe_room_layout.gd / _probe_room_on_platform.gd /
-; _verify_room.gd §3），不要凭感觉改：
-;   world_scale = 4.25   内容源尺寸 5.63 × 1.95 × 6.41 → 世界 28.0 × 9.8 × 32.0 m
-;                       （包围盒；室内净高约 6.3 m）。这是用户定的「就当是房间被
-;                       神秘力量放大了」：桌椅也是 2.5 倍，比 Arisu 1.4 m 大一圈。
-;                       想要真人比例就改 1.5~2 —— 但**别再往下调到 1.8 以下**：
-;                       这份扫描偏扁（高 ÷ 进深 ≈ 0.20），×1.8 时相机到天花板
-;                       只剩 0.39 m，上半屏会糊成一片灰（实测过）。
-;   yaw_degrees = 248.6  把房间矩形转成世界轴对齐。**别用 _probe_room_layout.gd
-;                       打印的「主轴偏角 −18.10°」**：那个数是 XZ 协方差主轴
-;                       **相对 +X** 的，而且地板 4.87 × 5.40 源单位接近正方形、
-;                       主轴本身不稳定 —— 拿它当「相对 +Z」用会让房间整整歪 39.5°
-;                       （老版本就是这样，桌椅全斜）。正确量法是「墙直方图峰值
-;                       集中度」，在 _verify_room.gd §3，自带合成自检锁符号方向。
-;   anchor_*             地板在源坐标是 y = −0.333 的平面、地板中心
-;                        (0.022, −0.333, −0.121)；把它对到 **(0, 0.03, 6)**
-;                        —— 也就是**出生点**，让房间罩住出生点。
-;                       为什么不是平台正中：第三人称相机在玩家背后 3.5 m，
-;                       房间摆在正中时相机会落到墙外，开局看到的是外墙（这份扫描
-;                       只扫了室内，外面是糊的）。
-;   crop_*               裁掉离群 floaters：本扫描 0.2% 的点是又大又远的椭球
-;                        （单个尺度可达 15.13 源单位），放大后就是糊满屏的**大白团**。
-;                       分位盒外扩 0.5 + 丢尺度 > 0.5 的点，实测留 2,769,851 / 丢 4,265。
-;                       ⚠️ 这两个阈值是**源坐标单位**，与 world_scale 无关，改缩放不用重调。
-;   box_*                **参考值**，不再是开关：四面墙的碰撞已经手摆进本文件
-;                        （Room609/RoomCollision 下的 5 个盒），build_box_collision = false。
-;                        留着这几个数是给 _verify_room.gd §5 校验手摆的盒用的。
-;                        含义：厚 0.3 m（从包围盒面往房间里长）、门开在 **z−**（朝靶场）
-;                        那一面、宽 1.6 m、正对出生点。
-;                        ⚠️ 门的位置是**设计**出来的、不是量出来的：先试过在
-;                        「地板面 ~ +1.2 m」带里找墙上的缺口，结果那条带里全是桌椅；
-;                        改用包围盒面更糟 —— 两端 0.1% 的离群点把面推到了墙外。
-[node name="Room609" type="Node3D" parent="."]
+[node name="Room609" type="Node3D" parent="." unique_id=971848442]
 script = ExtResource("5_splat")
 sog_path = "res://splatdata/room609.sogdata"
 display_name = "画室609"
@@ -178,330 +124,280 @@ use_anchor = true
 anchor_source = Vector3(0.022, -0.333, -0.121)
 anchor_world = Vector3(0, 0.03, 4.25)
 crop_enabled = true
-crop_margin = 0.5
 crop_max_scale = 0.5
-build_box_collision = false
-box_wall_thickness = 0.3
 box_door_side = "z-"
-box_door_width = 1.6
-box_door_center = 0
 
-; 房间碰撞：**手摆**在场景里的 5 个盒（4 面墙，z− 那面被 1.6 m 门洞切成 2 段）。
-; 为什么从生成改成手摆：生成式碰撞在编辑器里**根本不存在**，看不见也拖不动。
-; 现在它们是普通节点 —— 选中 CollisionShape3D 用移动手柄挪、或在检查器改 shape.size 都行。
-; ⚠️ build_box_collision 必须保持 false，否则脚本会再生成一个同名 RoomCollision，
-;    变成两套碰撞叠在一起（而 _verify_room.gd 要求恰好 5 个盒）。
-; ⚠️ 数值是静态的，和 world_scale / anchor_* / crop_* 绑死。房间参数一改就要重新导出：
-;      & $g --headless --path $p --script res://scripts/_probe_room_collision.gd
-[node name="RoomCollision" type="StaticBody3D" parent="Room609"]
+[node name="RoomCollision" type="StaticBody3D" parent="Room609" unique_id=2101091049]
 
-[node name="WallXNeg" type="CollisionShape3D" parent="Room609/RoomCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.1596, 1.2768, 4.0346)
+[node name="WallXNeg" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1260600156]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.698859, 1.2768, 3.558024)
 shape = SubResource("Shape_room_xneg")
 
-[node name="WallXPos" type="CollisionShape3D" parent="Room609/RoomCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.4437, 1.2768, 4.0346)
+[node name="WallXPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1711597667]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.706125, 1.2768, 5.901933)
 shape = SubResource("Shape_room_xpos")
 
-[node name="WallZNegA" type="CollisionShape3D" parent="Room609/RoomCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5548, 1.2768, -9.4215)
+[node name="WallZNegA" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=675542165]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.48005772, 1.2768, -6.628549)
 shape = SubResource("Shape_room_zneg_a")
 
-[node name="WallZNegB" type="CollisionShape3D" parent="Room609/RoomCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1968, 1.2768, -9.4215)
+[node name="WallZNegB" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1699283073]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4.657739, 1.2768, -5.2530003)
 shape = SubResource("Shape_room_zneg_b")
 
-[node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.358, 1.2768, 17.4907)
+[node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1495928316]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4993732, 1.2768, 13.710994)
 shape = SubResource("Shape_room_zpos")
 
-; 霸王龙优香：站在平台右侧、朝 -X 正对场地中心。
-; 模型自身脸朝 +Z，所以绕 Y 转 -90° 就变成朝 -X。
-; ⚠️ x 不能小于 13：x=9 时它的碰撞盒（约 7.8 m 长）会横在
-;    「玩家(6,-4) → Target1(6,-10)」的弹道上，把每一发都吃掉。
-; 默认身高 4.5 m（约 2.6 个 Arisu）、3000 血、受击闪白、倒下 6 秒后重生。
-; ⚠️ 它**不再是木桩**：挂 trex_boss.gd（重击型），会画红色预警圈打人 ——
-;    圈大 4.8 m、冷却 4.5 s、一下 24 血 + 击退 8。机制见 scripts/boss_attacker.gd。
-[node name="Boss" type="StaticBody3D" parent="."]
+[node name="Boss" type="StaticBody3D" parent="." unique_id=2075354218]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)
 script = ExtResource("8_trex")
 
-; 飞猪优香（作者：一个睿智）——第二个 Boss，与霸王龙同场。
-; 与霸王龙的三点不同：
-;   1. **纯静态网格**（无骨骼、无动画），所以 boss.gd 走 _mesh_box() 而不是 _bone_box()
-;   2. 本体**朝 +Z**（实测鼻子 z=+2.17、尾巴 z=−1.95），不需要补 180°；
-;      绕 Y 转 +90° 让它朝 +X（面向场地中心），与霸王龙的朝向习惯一致。
-;   3. 贴图用 texture_map 显式绑（不依赖 Godot 对 FBX 相对路径的自动解析）
-; 位置 x=−13 是为了**不挡**「玩家(6,−4) → Target1(6,−10)」那条自检弹道：
-; 它长轴沿世界 X，占 x ∈ [−15.0, −11.0]、z ∈ [−9.2, −6.8]，离 x=6 很远。
-; 默认身高 2.6 m（含光环）、1800 血、倒下 6 秒后重生。
-; ⚠️ 它**也不再是木桩**：挂 pig_boss.gd（骚扰型），会画**紫色**预警圈打人 ——
-;    圈小 3.4 m、冷却只有 3.0 s、一下 14 血 + 击退 5。和霸王龙共用
-;    scripts/boss_attacker.gd 那套机制，只有参数不同（紫色是为了和霸王龙区分开）。
-[node name="BossPig" type="StaticBody3D" parent="."]
+[node name="BossPig" type="StaticBody3D" parent="." unique_id=666610584]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -13, 0, -8)
 script = ExtResource("9_pig")
 display_name = "飞猪优香"
 model_path = "res://models/boss_pig/猪猪优香.fbx"
-height = 2.6
-max_health = 1800.0
 texture_map = {
+"Yuuka_Original_Halo_0Mat": "res://models/boss_pig/tex/pig_halo.png",
 "材质": "res://models/boss_pig/tex/pig_untitled1.png",
 "材质.001": "res://models/boss_pig/tex/pig_nose.png",
-"材质.002": "res://models/boss_pig/tex/pig_tail.png",
-"Yuuka_Original_Halo_0Mat": "res://models/boss_pig/tex/pig_halo.png"
+"材质.002": "res://models/boss_pig/tex/pig_tail.png"
 }
 collision_factors = Vector3(0.85, 0.8, 0.75)
+height = 2.6
+max_health = 1800.0
 
-[node name="Pillar1" type="StaticBody3D" parent="."]
+[node name="Pillar1" type="StaticBody3D" parent="." unique_id=260400481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.4, -10)
 
-[node name="Collision" type="CollisionShape3D" parent="Pillar1"]
+[node name="Collision" type="CollisionShape3D" parent="Pillar1" unique_id=1467438045]
 shape = SubResource("Shape_pillar")
 
-[node name="Mesh" type="MeshInstance3D" parent="Pillar1"]
+[node name="Mesh" type="MeshInstance3D" parent="Pillar1" unique_id=1586971369]
 mesh = SubResource("Mesh_pillar")
 surface_material_override/0 = SubResource("Mat_pillar")
 
-[node name="Pillar2" type="StaticBody3D" parent="."]
+[node name="Pillar2" type="StaticBody3D" parent="." unique_id=550256964]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0.4, -11)
 
-[node name="Collision" type="CollisionShape3D" parent="Pillar2"]
+[node name="Collision" type="CollisionShape3D" parent="Pillar2" unique_id=1329008322]
 shape = SubResource("Shape_pillar")
 
-[node name="Mesh" type="MeshInstance3D" parent="Pillar2"]
+[node name="Mesh" type="MeshInstance3D" parent="Pillar2" unique_id=613447015]
 mesh = SubResource("Mesh_pillar")
 surface_material_override/0 = SubResource("Mat_pillar")
 
-[node name="Pillar3" type="StaticBody3D" parent="."]
+[node name="Pillar3" type="StaticBody3D" parent="." unique_id=1860215076]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -16)
 
-[node name="Collision" type="CollisionShape3D" parent="Pillar3"]
+[node name="Collision" type="CollisionShape3D" parent="Pillar3" unique_id=1723270256]
 shape = SubResource("Shape_pillar")
 
-[node name="Mesh" type="MeshInstance3D" parent="Pillar3"]
+[node name="Mesh" type="MeshInstance3D" parent="Pillar3" unique_id=1625563766]
 mesh = SubResource("Mesh_pillar")
 surface_material_override/0 = SubResource("Mat_pillar")
 
-[node name="Target1" type="StaticBody3D" parent="."]
+[node name="Target1" type="StaticBody3D" parent="." unique_id=1559164072]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.375, -10)
 script = ExtResource("3_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Target1"]
+[node name="Collision" type="CollisionShape3D" parent="Target1" unique_id=1974975342]
 shape = SubResource("Shape_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Target1"]
+[node name="Mesh" type="MeshInstance3D" parent="Target1" unique_id=1386477904]
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target")
 
-[node name="Target2" type="StaticBody3D" parent="."]
+[node name="Target2" type="StaticBody3D" parent="." unique_id=1501669450]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 1.375, -11)
 script = ExtResource("3_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Target2"]
+[node name="Collision" type="CollisionShape3D" parent="Target2" unique_id=1150852297]
 shape = SubResource("Shape_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Target2"]
+[node name="Mesh" type="MeshInstance3D" parent="Target2" unique_id=382865243]
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target_b")
 
-[node name="Target3" type="StaticBody3D" parent="."]
+[node name="Target3" type="StaticBody3D" parent="." unique_id=1535514572]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.375, -16)
 script = ExtResource("3_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Target3"]
+[node name="Collision" type="CollisionShape3D" parent="Target3" unique_id=964763042]
 shape = SubResource("Shape_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Target3"]
+[node name="Mesh" type="MeshInstance3D" parent="Target3" unique_id=1923741485]
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target")
 
-[node name="Target4" type="StaticBody3D" parent="."]
+[node name="Target4" type="StaticBody3D" parent="." unique_id=1050994046]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 0.6, -4)
 script = ExtResource("3_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Target4"]
+[node name="Collision" type="CollisionShape3D" parent="Target4" unique_id=1596437086]
 shape = SubResource("Shape_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Target4"]
+[node name="Mesh" type="MeshInstance3D" parent="Target4" unique_id=623600]
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target_b")
 
-[node name="Target5" type="StaticBody3D" parent="."]
+[node name="Target5" type="StaticBody3D" parent="." unique_id=2110903027]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0.6, -3)
 script = ExtResource("3_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Target5"]
+[node name="Collision" type="CollisionShape3D" parent="Target5" unique_id=1550194209]
 shape = SubResource("Shape_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Target5"]
+[node name="Mesh" type="MeshInstance3D" parent="Target5" unique_id=1877135726]
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target")
 
-[node name="Player" parent="." instance=ExtResource("2_player")]
+[node name="Player" parent="." unique_id=739379284 instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6)
 
-; 三名同伴（只跟随、不开火）。站位在 companion.gd 里按**玩家局部坐标**给：
-;   +X 右、+Z 是玩家背后（镜头那一侧）。
-; ⚠️ 站位硬约束：**别落在相机与玩家之间**（相机在玩家背后 3.4~4.2 m）——
-;    站正后方 2.4 m 时同伴离相机只有 1.8 m，会挡掉近半个画面。
-; 还有一条（第一版没注意到）：站位是**跟着相机绕角转**的，所以两个人的
-; 「侧向 ÷ 纵深」比例若相同，在屏幕上就会**永远重叠**。诺亚原来放在 (−2.9, +0.9)，
-; 与未花 (−2.0, +0.9) 几乎同一条视线（屏幕 x 451 / 463）—— 等于白加一个人。
-; 站位是用 scripts/_probe_slot.gd **扫出来的**（自己算三角函数错了两次）：
-;   未花 (−2.0, +0.9) → 屏幕 x ≈ 442     优香 (+2.0, +0.9) → ≈ 1348
-;   诺亚 (−3.0, −3.2) → ≈ 539（与未花间距 97 px、偏离画面中心 261 px）
-; 判据：偏离中心 > 160 px（不挡准星）、两两间距 > 60 px、离玩家 ≤ 5 m。
-; 初始位置就是各自站位的世界坐标（玩家出生在 (0, 0.05, 6)、相机绕角 0），
-; 所以进场时它们已经在位，不会先走一段路。
-; 初始 rotation.y = PI 是「跟玩家看同一个方向」（玩家出生朝向就是 PI）。
-[node name="CompanionMika" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionMika" parent="." unique_id=912549288 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 0.05, 6.9)
-display_name = "未花"
 model_path = "res://models/companions/Mika.glb"
-slot = Vector3(-2, 0, 0.9)
+display_name = "未花"
 
-[node name="CompanionYuuka" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionYuuka" parent="." unique_id=743736729 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2, 0.05, 6.9)
-display_name = "优香"
 model_path = "res://models/companions/Yuuka.glb"
+display_name = "优香"
 slot = Vector3(2, 0, 0.9)
 
-[node name="CompanionNoa" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionNoa" parent="." unique_id=8448545 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -3, 0.05, 2.8)
-display_name = "诺亚"
 model_path = "res://models/companions/Noa.glb"
+display_name = "诺亚"
 slot = Vector3(-3, 0, -3.2)
 
-; 第二批同伴（2026-10-14 加）：小桃 / 小绿 / 柚子 / 凯伊，都取**初始形态**
-; （不带 (Battle)/(Maid)/(Pajama) 等变体）。四份 GLB 的贴图是**内嵌**的，不需要另拷 PNG。
-; 站位还是 scripts/_probe_slot.gd 在真实相机下扫出来的，判据同上；实测屏幕 x：
-;   凯伊 161 ｜ 未花 442 ｜ 诺亚 539 ｜ 小绿 632 ｜ 柚子 1040 ｜ 小桃 1146 ｜ 优香 1348
-; 两两最小间距 93 px（> 60）、离相机都 > 7 m、都离画面中心 > 160 px。
-[node name="CompanionMomoi" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionMomoi" parent="." unique_id=2047222995 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3, 0.05, 2.8)
-display_name = "小桃"
 model_path = "res://models/companions/Momoi.glb"
+display_name = "小桃"
 slot = Vector3(3, 0, -3.2)
 
-[node name="CompanionMidori" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionMidori" parent="." unique_id=1416495891 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.4, 0.05, 1.4)
-display_name = "小绿"
 model_path = "res://models/companions/Midori.glb"
+display_name = "小绿"
 slot = Vector3(2.4, 0, -4.6)
 
-[node name="CompanionYuzu" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionYuzu" parent="." unique_id=601492507 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2.4, 0.05, 1.4)
-display_name = "柚子"
 model_path = "res://models/companions/Yuzu.glb"
+display_name = "柚子"
 slot = Vector3(-2.4, 0, -4.6)
 
-[node name="CompanionKei" parent="." instance=ExtResource("7_companion")]
+[node name="CompanionKei" parent="." unique_id=2054857283 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -5.2, 0.05, 4.6)
+model_path = "res://models/companions/Kei_ext.glb"
 display_name = "凯伊"
-model_path = "res://models/companions/Kei.glb"
 slot = Vector3(-5.2, 0, -1.4)
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1253512132]
 script = ExtResource("1_hud")
 
-[node name="Crosshair" type="Control" parent="HUD"]
+[node name="Crosshair" type="Control" parent="HUD" unique_id=345623173]
+layout_mode = 3
+anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 
-[node name="Dot" type="ColorRect" parent="HUD/Crosshair"]
-offset_left = -1.5
-offset_top = -1.5
-offset_right = 1.5
-offset_bottom = 1.5
+[node name="Dot" type="ColorRect" parent="HUD/Crosshair" unique_id=940758574]
+layout_mode = 0
+offset_left = -1.0
+offset_top = -1.0
+offset_right = 1.0
+offset_bottom = 1.0
 color = Color(1, 1, 1, 0.9)
 
-[node name="T" type="ColorRect" parent="HUD/Crosshair"]
+[node name="T" type="ColorRect" parent="HUD/Crosshair" unique_id=1687723650]
+layout_mode = 0
 offset_left = -1.0
 offset_top = -13.0
 offset_right = 1.0
 offset_bottom = -5.0
 color = Color(1, 1, 1, 0.75)
 
-[node name="B" type="ColorRect" parent="HUD/Crosshair"]
+[node name="B" type="ColorRect" parent="HUD/Crosshair" unique_id=308085466]
+layout_mode = 0
 offset_left = -1.0
 offset_top = 5.0
 offset_right = 1.0
 offset_bottom = 13.0
 color = Color(1, 1, 1, 0.75)
 
-[node name="L" type="ColorRect" parent="HUD/Crosshair"]
+[node name="L" type="ColorRect" parent="HUD/Crosshair" unique_id=1171350529]
+layout_mode = 0
 offset_left = -13.0
 offset_top = -1.0
 offset_right = -5.0
 offset_bottom = 1.0
 color = Color(1, 1, 1, 0.75)
 
-[node name="R" type="ColorRect" parent="HUD/Crosshair"]
+[node name="R" type="ColorRect" parent="HUD/Crosshair" unique_id=423884421]
+layout_mode = 0
 offset_left = 5.0
 offset_top = -1.0
 offset_right = 13.0
 offset_bottom = 1.0
 color = Color(1, 1, 1, 0.75)
 
-[node name="Panel" type="PanelContainer" parent="HUD"]
+[node name="Panel" type="PanelContainer" parent="HUD" unique_id=757962623]
+anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -280.0
-offset_top = -108.0
+offset_left = -216.0
+offset_top = -98.0
 offset_right = -18.0
 offset_bottom = -18.0
 grow_horizontal = 0
 grow_vertical = 0
 
-[node name="Margin" type="MarginContainer" parent="HUD/Panel"]
+[node name="Margin" type="MarginContainer" parent="HUD/Panel" unique_id=1650430125]
+layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 8
 
-[node name="VBox" type="VBoxContainer" parent="HUD/Panel/Margin"]
+[node name="VBox" type="VBoxContainer" parent="HUD/Panel/Margin" unique_id=1917142185]
+layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="Ammo" type="Label" parent="HUD/Panel/Margin/VBox"]
+[node name="Ammo" type="Label" parent="HUD/Panel/Margin/VBox" unique_id=786717952]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
 text = "15 / 15"
 horizontal_alignment = 2
-theme_override_font_sizes/font_size = 30
 
-[node name="State" type="Label" parent="HUD/Panel/Margin/VBox"]
-text = "腰射"
-horizontal_alignment = 2
-theme_override_font_sizes/font_size = 13
+[node name="ReloadTrough" type="Panel" parent="HUD/Panel/Margin/VBox" unique_id=809231647]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
 
-[node name="Speed" type="Label" parent="HUD/Panel/Margin/VBox"]
-text = "0.0 m/s"
-horizontal_alignment = 2
-theme_override_font_sizes/font_size = 12
-
-[node name="Reload" type="ProgressBar" parent="HUD/Panel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 6)
+[node name="Reload" type="ProgressBar" parent="HUD/Panel/Margin/VBox/ReloadTrough" unique_id=1139643166]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
 max_value = 1.0
-value = 0.0
 show_percentage = false
 
-[node name="Hint" type="Label" parent="HUD"]
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 18.0
-offset_top = -34.0
-offset_right = 1480.0
-offset_bottom = -14.0
-grow_vertical = 0
-text = "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　Esc 设置　｜　7 名同伴会帮你打（未花・优香・诺亚・小桃・小绿・柚子・凯伊）　｜　屋内是画室609，平台下是校园"
-
-; Esc 设置界面（scripts/settings_menu.gd）。**它接管了 Esc**：原来 Esc 只是切鼠标捕获，
-; 现在打开时一并暂停游戏 + 释放鼠标，再按一次关掉并恢复。UI 全部代码构建，
-; 皮肤在 assets/ui/（Kenney 九宫格 CC0 + FusionPixel 字体 OFL）。
-[node name="SettingsMenu" type="CanvasLayer" parent="."]
+[node name="SettingsMenu" type="CanvasLayer" parent="." unique_id=2058157052]
 script = ExtResource("10_settings")
-theme_override_font_sizes/font_size = 13
