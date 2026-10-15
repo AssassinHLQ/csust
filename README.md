@@ -801,8 +801,7 @@ _arisu_learn/
 │  ├─ ui/                   界面**内置**皮肤：Kenney 九宫格（CC0）+ FusionPixel 中文字体（OFL，§1.12）
 │  ├─ ui_font/              **界面显示字体投放目录**：放进来就整套 UI 换字
 │  │  └─ README.md          说明（字体本身被 .gitignore 排除，只留这份说明）
-│  └─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）
-├─ models/
+│  └─ ui_sprout/            Sprout Lands 皮肤 ※不随仓库分发（授权禁止再分发，§1.12）├─ models/
 │  ├─ README.md             说明：要放什么模型、版权与换模型的三个注意点
 │  ├─ Arisu.glb             原模型（24 条动作）※不随仓库分发
 │  ├─ Arisu_ext.glb         **实际使用**的模型（27 条动作，见第五节）※不随仓库分发
@@ -874,6 +873,10 @@ _arisu_learn/
 │  ├─ _probe_splat_backend.gd [工具] Raster vs Compute 后端同视角出图 + 深度剔除偏置扫描，§6.11
 │  ├─ splat_compositor.gd    autoload：给当前相机自动挂 CompositorEffect（Compute 后端必需），§6.11
 │  └─ _probe_*.gd           [工具] 一次性探针（口型/枪口/时间线/泼溅渲染/FPS）
+├─ tools/
+│  └─ font/                 [工具] 查字体有没有你要的那些字（纯标准库 Python，§9.5 坑 1）
+│     ├─ font_needed.py       把「游戏里实际会显示的每个字」对着 cmap 查一遍
+│     └─ font_cmap_check.py   底层 cmap 解析 + 覆盖率区块统计
 └─ .godot/                  导入缓存（已被 .gitignore 排除）
 
 …\GODOT\
@@ -2632,10 +2635,11 @@ story/开场.txt          ← 你写的东西（UTF-8 纯文本）
 
 ### 坑 1：皮肤字体**没有汉字**，中文必须另找一套（现在整套 UI 都换了）
 
-两套皮肤的 `font.ttf` 都不够用。把「游戏里**实际会出现**的 190 个字」对着
-`cmap` 表逐个查过（`..\_hud_preview\font_needed.py`，按界面分组报缺字）：
+两套皮肤的 `font.ttf` 都不够用。把「游戏里**实际会显示**的 189 个字」对着
+`cmap` 表逐个查过（`tools\font\font_needed.py`，按界面分组报缺字；
+剧情那一组直接读 `story/*.txt`，且按解析器语法剥掉了注释与 `@指令`）：
 
-| 字体 | 大小 | 剧情 94 字 | 名字 18 字 | HUD 30 字 | 设置 96 字 | 结论 |
+| 字体 | 大小 | 剧情 97 字 | 名字 18 字 | HUD 30 字 | 设置 96 字 | 结论 |
 |---|---|---|---|---|---|---|
 | `assets/ui_font/Aa暗夜深渊.ttf` | 3.86 MB | ✅ | ✅ | ✅ | ✅ | 整套可用（**不在仓库里**） |
 | `assets/ui/font.ttf`（Fusion Pixel 12px，OFL） | 6.68 MB | ✅ | ✅ | ✅ | ✅ | 整套可用（兜底） |

@@ -64,10 +64,10 @@ const SKINS := [
 ## 候选**按优先级排**，第一个存在的用它。这样「本地丢一套显示字体进来」不用改代码；
 ## 克隆仓库的人没有它时自动回退到仓库自带的 Fusion Pixel（OFL，可分发）。
 ##
-## ⚠️ 实测（`..\_hud_preview\font_needed.py`：把游戏里**实际会出现**的 190 个字
-##    对着 cmap 查一遍）：
-##      `assets/ui_font/Aa暗夜深渊.ttf`  3.86 MB  剧情 94 字 / 名字 18 字 /
-##                                                HUD 30 字 / 设置 29+67 字 —— **一个不缺**
+## ⚠️ 实测（`tools/font/font_needed.py`：把游戏里**实际会显示**的 189 个字
+##    对着 cmap 查一遍，剧情那一组直接读 `story/*.txt`）：
+##      `assets/ui_font/Aa暗夜深渊.ttf`  3.86 MB  剧情 97 字 / 名字 18 字 /
+##                                                HUD 30 字 / 设置 96 字 —— **一个不缺**
 ##      `assets/ui/font.ttf`             6.68 MB  汉字 19214/20992 = 91.5%，也一个不缺
 ##      `assets/ui_sprout/font.ttf`      0.11 MB  只覆盖 80 个拉丁字形，**缺 213 个汉字**
 ##    所以 Sprout 那套皮肤字体只够画数字，任何中文都得走这里。

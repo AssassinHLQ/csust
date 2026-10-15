@@ -47,5 +47,9 @@ _import_out*.log
 _selftest_out*.log
 _probe_out*.log
 
+# Python 工具的字节码缓存（`tools/font/font_needed.py` 会 import 同目录的模块）
+__pycache__/
+*.pyc
+
 # ---- 如果你自己加了原创模型/场景，想让它进仓库，
 #      就把上面 /models/*.glb 那几行改成显式排除 ----
