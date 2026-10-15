@@ -43,6 +43,30 @@ uniform bool aa_compensation = false;
 // pixels (reduces distant shimmer). 0 disables it.
 uniform float min_pixel_size = 0.0;
 
+// --- 动态 3DGS：逐高斯错峰坍缩 + 布朗漂移 -----------------------------------
+//
+// 全部由 raster_render_backend.gd::_drive_collapse 每帧从节点轮询推入，
+// 所以脚本赋值、检测器拖动、动画驱动走的是同一条路径。
+//
+// 关键取舍：**每个高斯的随机数不占显存**。着色器里直接用它的源索引 sidx
+// 当种子做哈希 —— 277 万点若各存一个随机数就是十几 MB，而哈希是零成本的，
+// 且因为种子稳定，同一个高斯的错峰时刻与漂移方向在整个动画里不会逐帧乱跳。
+//
+// ⚠️ 仅 Raster 后端实现。Compute 侧的 gsplat_projection.glsl 有它自己的一套
+//    time_factor 入场动画，但**没有**错峰坍缩与布朗漂移，因此这项特性上
+//    两后端不保持 parity（与文件顶部声明的协方差/重光照 parity 无关）。
+uniform bool anim_active = false;
+uniform float anim_t = 0.0;             // 全局进度 0..1
+uniform vec3 anim_center = vec3(0.0);   // 收敛点（与位置同为局部/源坐标系）
+uniform float anim_stagger = 0.0;       // 0..0.95：起播时刻的错峰占比
+uniform int anim_ease_mode = 1;         // 0 线性 / 1 in_cubic / 2 in_quad / 3 smoothstep
+uniform float anim_min_scale = 0.0004;  // 不取 0：全 0 的协方差会让椭球退化
+uniform float anim_fade = 0.0;          // 0 = 不淡出，1 = 塌到底时透明度归零
+uniform int anim_seed = 0;
+uniform float anim_brown_amp = 0.0;     // 局部空间振幅
+uniform float anim_brown_freq = 1.0;    // Hz
+uniform float anim_brown_time = 0.0;    // 秒
+
 // --- relighting (see CLAUDE.md, phase R2) -----------------------------------
 // Baked per-splat surface record (RGBA8, 1 texel per splat): octahedral outward
 // normal in RG, ambient occlusion in B, confidence in A. Deliberately NOT
@@ -229,6 +253,54 @@ vec3 eval_sh(vec3 view_dir, float c[48]) {
 	return max(vec3(0.0), rgb);
 }
 
+// --- 动态 3DGS 的逐高斯噪声与缓动（Dave Hoskins 风格哈希，无纹理） -----------
+float anim_hash01(float p) {
+	p = fract(p * 0.1031);
+	p *= p + 33.33;
+	p *= p + p;
+	return fract(p);
+}
+
+vec3 anim_hash31(float p) {
+	vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.1030, 0.0973));
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.xxy + p3.yzz) * p3.zyx);
+}
+
+float anim_ease_value(float u, int mode) {
+	if (mode == 0) {
+		return u;
+	}
+	if (mode == 1) {
+		return u * u * u;
+	}
+	if (mode == 2) {
+		return u * u;
+	}
+	return u * u * (3.0 - 2.0 * u);   // smoothstep
+}
+
+// 布朗运动：两段八度的正弦叠加。
+//
+// 真正的布朗运动是白噪声的积分，需要跨帧累积状态；着色器是无状态的，
+// 所以这里用「每个高斯一组随机相位 + 随机频率的慢漂移」去逼近它：视觉上
+// 是无序的缓慢游走，且天然平滑、可循环、不会逐帧抖成噪点。两段八度是为了
+// 让路径同时有慢趋势和小抖动，单频正弦看起来太"摇摆"。
+vec3 anim_brownian(float seed, float t, float amp, float freq) {
+	vec3 o = vec3(0.0);
+	float a = amp;
+	float f = freq;
+	for (int i = 0; i < 2; i++) {
+		vec3 ph = anim_hash31(seed + float(i) * 17.0) * 6.2831853;
+		vec3 rt = mix(vec3(0.61, 0.83, 1.07), vec3(1.43, 1.71, 2.09),
+			anim_hash31(seed + float(i) * 31.0 + 5.0)) * f;
+		o += vec3(sin(t * rt.x + ph.x), sin(t * rt.y + ph.y), sin(t * rt.z + ph.z)) * a;
+		a *= 0.5;
+		f *= 2.3;
+	}
+	return o;
+}
+
 void vertex() {
 	// Start culled: NDC (2,2,2) is outside the clip volume, so an unmodified
 	// quad is clipped away. The success path at the bottom overwrites POSITION
@@ -261,6 +333,29 @@ void vertex() {
 			vec3(t1.x, t1.y, t1.z),
 			vec3(t1.y, t1.w, t2.x),
 			vec3(t1.z, t2.x, t2.y));
+
+		// --- 动态 3DGS：逐高斯错峰坍缩 ---------------------------------------
+		if (anim_active) {
+			// 用源索引当种子 ⇒ 每个高斯的随机相位稳定，且不占一点显存
+			float r = anim_hash01(float(sidx) + float(anim_seed));
+			// 错峰：第 i 个高斯从 anim_t = r*anim_stagger 才开始动；
+			// 除以 span 同时做归一化，保证所有高斯仍在 anim_t = 1 处收齐。
+			float span = max(1.0 - anim_stagger, 1e-4);
+			float lt = clamp((anim_t - r * anim_stagger) / span, 0.0, 1.0);
+			float e = anim_ease_value(lt, anim_ease_mode);
+			float k = max(1.0 - e, anim_min_scale);
+			// 位置向 anim_center 收敛；协方差吃 k² ⇒ 每个高斯同时等比变小
+			splat_pos = mix(splat_pos, anim_center, e);
+			float kk = k * k;
+			cov3d = mat3(cov3d[0] * kk, cov3d[1] * kk, cov3d[2] * kk);
+			opacity *= mix(1.0, 1.0 - e, anim_fade);
+		}
+
+		// --- 布朗漂移：以**原位置为中心**的小幅游走，硬上界 1.5×amp ---
+		if (anim_brown_amp > 0.0) {
+			splat_pos += anim_brownian(float(sidx) + float(anim_seed) * 3.0,
+				anim_brown_time, anim_brown_amp, anim_brown_freq);
+		}
 
 		vec4 world_pos = MODEL_MATRIX * vec4(splat_pos, 1.0);
 		vec4 view_pos = VIEW_MATRIX * world_pos;

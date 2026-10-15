@@ -25,6 +25,9 @@ const SortJob := preload("res://addons/gdgs/runtime/render/raster/raster_sort_jo
 const SortDriver := preload("res://addons/gdgs/runtime/render/raster/raster_sort_driver.gd")
 
 const SPLATS_PER_INSTANCE := 128
+
+## 动态 3DGS 的缓动档位：与 gaussian_raster.gdshader 的 anim_ease_mode 一一对应。
+const EASE_MODE_IDS := {"linear": 0, "in_cubic": 1, "in_quad": 2, "smoothstep": 3}
 const DRIVER_NODE_NAME := "_GdgsRasterDriver"
 # Re-sort when the local view direction rotates past ~1 degree (cos threshold).
 const RESORT_DOT_THRESHOLD := 0.99985
@@ -211,9 +214,38 @@ func _any_attached_node() -> Node:
 			return entry.mmi
 	return null
 
+## 动态 3DGS：把节点上的逐高斯动画参数推给材质。
+##
+## 走逐帧轮询而不是给后端接口加事件，理由和 _drive_lighting 一样 —— 参数只是
+## 几个 Variant 读取，检测器编辑、脚本赋值、动画驱动会被同一条路径接住。
+##
+## 用 `in node` 探测属性名而不是直接 get()：节点可能来自没有这组导出的旧版
+## 插件，缺属性时静默当成关闭，不刷错误。
+func _drive_collapse(entry: Entry) -> void:
+	if entry.material == null or entry.mmi == null or not is_instance_valid(entry.mmi):
+		return
+	var node := entry.mmi.get_parent()
+	if node == null or not ("dynamic_active" in node):
+		return
+	var m := entry.material
+	m.set_shader_parameter("anim_active", bool(node.get("dynamic_active")))
+	m.set_shader_parameter("anim_t", float(node.get("dynamic_t")))
+	m.set_shader_parameter("anim_center", node.get("dynamic_center"))
+	m.set_shader_parameter("anim_stagger", float(node.get("dynamic_stagger")))
+	m.set_shader_parameter("anim_ease_mode",
+		int(EASE_MODE_IDS.get(str(node.get("dynamic_ease")), 1)))
+	m.set_shader_parameter("anim_min_scale", float(node.get("dynamic_min_scale")))
+	m.set_shader_parameter("anim_fade", float(node.get("dynamic_fade")))
+	m.set_shader_parameter("anim_seed", int(node.get("dynamic_seed")))
+	m.set_shader_parameter("anim_brown_amp", float(node.get("dynamic_brownian_amp")))
+	m.set_shader_parameter("anim_brown_freq", float(node.get("dynamic_brownian_freq")))
+	m.set_shader_parameter("anim_brown_time", float(node.get("dynamic_brownian_time")))
+
+
 func _drive_entry(entry: Entry) -> void:
 	if entry.job == null or entry.mmi == null or not is_instance_valid(entry.mmi):
 		return
+	_drive_collapse(entry)
 
 	# Collect a finished sort and push it to the GPU.
 	if entry.job.poll():

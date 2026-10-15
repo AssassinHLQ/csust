@@ -26,6 +26,11 @@ var _crop := false
 var _tag := ""
 var _easing := "in_cubic"
 var _duration := 6.0
+var _mode := "uniform"
+var _stagger := 0.6
+var _brown := 0.0
+var _brown_freq := 1.0
+var _brown_seed := 0
 
 
 func _initialize() -> void:
@@ -48,6 +53,16 @@ func _run() -> void:
 			_easing = a.substr(9)
 		elif a.begins_with("--duration="):
 			_duration = float(a.substr(11))
+		elif a.begins_with("--mode="):
+			_mode = a.substr(7)
+		elif a.begins_with("--stagger="):
+			_stagger = float(a.substr(10))
+		elif a.begins_with("--brown="):
+			_brown = float(a.substr(8))
+		elif a.begins_with("--brownfreq="):
+			_brown_freq = float(a.substr(12))
+		elif a.begins_with("--brownseed="):
+			_brown_seed = int(a.substr(12))
 		elif a.begins_with("--tag="):
 			_tag = a.substr(6)
 		elif a.begins_with("--t="):
@@ -83,6 +98,13 @@ func _run() -> void:
 	scene.set("collapse_fade", _fade)
 	scene.set("collapse_duration", _duration)
 	scene.set("collapse_easing", _easing)
+	scene.set("collapse_mode", _mode)
+	scene.set("collapse_stagger", _stagger)
+	scene.set("collapse_shader_ease", "in_cubic")
+	scene.set("collapse_shader_fade", 1.0 if _mode == "staggered" else 0.0)
+	scene.set("brownian_amp", _brown)
+	scene.set("brownian_freq", _brown_freq)
+	scene.set("brownian_seed", _brown_seed)
 	root.add_child(scene)
 
 	var t0 := Time.get_ticks_msec()
@@ -135,31 +157,72 @@ func _run() -> void:
 		.path_join("_arisu_captures").path_join("_collapse")
 	DirAccess.make_dir_recursive_absolute(out)
 
+	var staggered := _mode == "staggered"
 	var base_size := box0.size
 	var bad := 0
-	print("[collapse] t      系数k    期望尺寸            实测尺寸            比值    期望比  判定")
-	for t in _steps:
+	var cov0 := -1.0
+	var cov_last := -1.0
+	print("[collapse] 模式 %s%s%s" % [
+		_mode,
+		("（错峰 %.2f）" % _stagger) if staggered else "",
+		("（布朗 amp=%.4f freq=%.1f seed=%d）" % [_brown, _brown_freq, _brown_seed])
+			if _brown > 0.0 else ""])
+	print("[collapse] 判据：%s" % (
+		"画面覆盖率（逐高斯坍缩不缩放节点，包围盒判据失效）" if staggered
+		else "包围盒尺寸必须 = k × 原尺寸"))
+	print("[collapse] t       系数k     覆盖率   期望尺寸        实测尺寸        k比值   判定")
+	for si in _steps.size():
+		var t := _steps[si]
 		scene.call("set_collapse", t)
 		await _frames(14)
 		var k := float(scene.call("collapse_factor"))
 		var box: AABB = scene.call("content_world_aabb")
-		var want := base_size * k
 		var ratio := box.size.length() / maxf(base_size.length(), 1e-6)
-		var want_ratio := k
-		# 尺寸随 k 等比，所以逐轴相对误差应当极小；用长度比做单一判据。
-		var ok := absf(ratio - want_ratio) <= maxf(0.002, want_ratio * 0.02)
-		if not ok:
-			bad += 1
-		print("[collapse] %-6.3f %-8.5f %-19s %-19s %-7.4f %-7.4f %s" % [
-			t, k, str(want.snappedf(0.01)), str(box.size.snappedf(0.01)),
-			ratio, want_ratio, "OK" if ok else "**不符**"])
 		await RenderingServer.frame_post_draw
 		var img: Image = root.get_texture().get_image()
-		img.save_png(out.path_join("%st%03d.png" % [_tag, int(round(t * 100.0))]))
+		img.save_png(out.path_join("%st%03d_i%d.png" % [_tag, int(round(t * 100.0)), si]))
+		var cov := _coverage(img)
+		if cov0 < 0.0:
+			cov0 = cov
+		cov_last = cov
+		var ok := true
+		if not staggered:
+			# 尺寸随 k 等比，所以相对误差应当极小；用长度比做单一判据。
+			ok = absf(ratio - k) <= maxf(0.002, k * 0.02)
+			if not ok:
+				bad += 1
+		print("[collapse] %-7.3f %-9.5f %-8.4f %-15s %-15s %-7.4f %s" % [
+			t, k, cov,
+			str((base_size * k).snappedf(0.01)) if not staggered else "-",
+			str(box.size.snappedf(0.01)),
+			ratio, "OK" if ok else "**不符**"])
+
+	if staggered:
+		var shrunk := cov_last <= cov0 * 0.25
+		if not shrunk:
+			bad += 1
+		print("[collapse] 覆盖率 %.4f → %.4f（要降到 25%% 以下）：%s" % [
+			cov0, cov_last, "OK" if shrunk else "**不符**"])
+	else:
+		print("[collapse] 尺寸校验：%d 档，%d 档不符" % [_steps.size(), bad])
 
 	print("[collapse] 输出目录 %s" % out)
-	print("[collapse] 尺寸校验：%d 档，%d 档不符" % [_steps.size(), bad])
 	quit(1 if bad > 0 else 0)
+
+
+## 画面覆盖率代理：缩到 160×90 后统计明显亮于背景的像素占比。
+## 背景是 (0.07, 0.08, 0.11)，所以阈值取 0.18。
+func _coverage(img: Image) -> float:
+	var small := Image.new()
+	small.copy_from(img)
+	small.resize(160, 90, Image.INTERPOLATE_BILINEAR)
+	var hit := 0
+	for y in 90:
+		for x in 160:
+			var c := small.get_pixel(x, y)
+			if maxf(c.r, maxf(c.g, c.b)) > 0.18:
+				hit += 1
+	return float(hit) / float(160 * 90)
 
 
 func _frames(n: int) -> void:

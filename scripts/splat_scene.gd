@@ -112,6 +112,34 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var collapse_fade := false
 ## 淡出从 t 的哪个位置开始（1.0 = 到最后才淡）。
 @export_range(0.0, 1.0, 0.01) var collapse_fade_from := 0.55
+## 坍缩方式：
+##   uniform   —— 缩放整个节点。所有高斯**同步**收缩并收敛；Compute/Raster 都能用。
+##   staggered —— 在 Raster 着色器里逐高斯做，**可错峰**，且能和布朗漂移共存。
+@export_enum("uniform", "staggered") var collapse_mode := "uniform"
+## （staggered）错峰程度：0 = 同时动；0.6 = 起播时刻在 [0, 0.6] 内随机铺开，
+## 但所有高斯仍在 collapse_t = 1 处收齐。
+@export_range(0.0, 0.95, 0.01) var collapse_stagger := 0.6
+## （staggered）着色器里的缓动档。独立于 collapse_easing —— 后者只给 uniform 用，
+## 因为错峰必须逐高斯求值，只能放在着色器里。
+@export_enum("linear", "in_cubic", "in_quad", "smoothstep") var collapse_shader_ease := "in_cubic"
+## （staggered）随坍缩淡出到透明。0 = 亮度不变。
+@export_range(0.0, 1.0, 0.01) var collapse_shader_fade := 0.0
+
+@export_group("Brownian")
+## 布朗漂移幅度，单位是**源坐标**。每个高斯在自己的原位置旁边小幅游走，
+## 位移以原位置为中心，硬上界 = 1.5 × 本值（两段八度 amp + 0.5×amp）。
+##
+## 量纲提示：画室/村落这类扫描源尺寸约 6.8 单位，取 0.005 ~ 0.03 就是"小幅度"。
+## ⚠️ 这项走的是逐高斯着色器路径，所以后端必须是 Raster。
+@export_range(0.0, 5.0, 0.0001) var brownian_amp := 0.0
+## 漂移频率（Hz）。越大抖得越快越碎。
+@export_range(0.0, 20.0, 0.01) var brownian_freq := 1.0
+## 换一批随机相位/频率。错峰顺序与它共用种子，所以也会一起变。
+@export var brownian_seed := 0
+## 漂移时间自动走。关掉则用手动的 brownian_time，便于定格比对。
+@export var brownian_auto_time := true
+## 手动漂移时间（秒），brownian_auto_time = false 时生效。
+@export var brownian_time := 0.0
 
 var splat_node: Node3D = null
 ## 坍缩进度：0 = 原始大小，1 = 完全坍缩。
@@ -119,6 +147,10 @@ var collapse_t := 0.0
 var collapsing := false
 var _collapse_clock := 0.0
 var _collapse_dir := 1.0
+## 内容中心（源坐标）。逐高斯坍缩的收敛点 —— 与 uniform 模式的锚点机制对齐：
+## use_anchor 时内容中心被钉在 anchor_world 上，所以两种模式塌到同一个世界点。
+var _content_center := Vector3.ZERO
+var _brownian_clock := 0.0
 var splat_center := Vector3.ZERO
 var splat_aabb := AABB()
 ## 内容稳健包围盒（1‰~99.9‰ 分位，排除 floaters）
@@ -166,6 +198,7 @@ func _process(delta: float) -> void:
 		_mutex.unlock()
 		_finish(result)
 	_advance_collapse(delta)
+	_advance_dynamic(delta)
 
 
 # --- 对外接口 ---
@@ -222,8 +255,11 @@ func apply_transform() -> void:
 # --- 坍缩 / 动态 3DGS ---------------------------------------------------------
 
 ## 当前缩放系数：1 = 原始大小，降到 collapse_min_scale = 塌成一点。
+##
+## staggered 模式下恒返回 1.0 —— 那条路的收缩是在着色器里逐高斯做的，
+## 这里再乘一次就成了双重收缩。
 func collapse_factor() -> float:
-	if not collapse_enabled:
+	if not collapse_enabled or collapse_mode == "staggered":
 		return 1.0
 	return maxf(1.0 - _collapse_ease(collapse_t), collapse_min_scale)
 
@@ -236,6 +272,7 @@ func play_collapse(from_t: float = 0.0) -> void:
 	collapsing = true
 	apply_transform()
 	_apply_collapse_fade()
+	_push_dynamic()
 
 
 ## 立刻回到原始大小。
@@ -246,6 +283,7 @@ func reset_collapse() -> void:
 	_collapse_dir = 1.0
 	apply_transform()
 	_apply_collapse_fade()
+	_push_dynamic()
 
 
 ## 直接切到某个进度，不启动时钟。给探针 / Sequencer / 外部驱动用。
@@ -254,6 +292,7 @@ func set_collapse(t: float) -> void:
 	collapsing = false
 	apply_transform()
 	_apply_collapse_fade()
+	_push_dynamic()
 
 
 func _collapse_ease(x: float) -> float:
@@ -303,13 +342,53 @@ func _advance_collapse(delta: float) -> void:
 			collapsing = false
 
 
+# --- 逐高斯路径（错峰坍缩 + 布朗漂移）---
+
+## 把逐高斯参数推给泼溅节点；光栅后端每帧轮询它们并写进材质。
+func _push_dynamic() -> void:
+	if splat_node == null or not ("dynamic_active" in splat_node):
+		return
+	var active := collapse_enabled and collapse_mode == "staggered"
+	splat_node.set("dynamic_active", active)
+	splat_node.set("dynamic_t", collapse_t)
+	splat_node.set("dynamic_center", _content_center)
+	splat_node.set("dynamic_stagger", collapse_stagger)
+	splat_node.set("dynamic_ease", collapse_shader_ease)
+	splat_node.set("dynamic_min_scale", collapse_min_scale)
+	splat_node.set("dynamic_fade", collapse_shader_fade)
+	splat_node.set("dynamic_seed", brownian_seed)
+	splat_node.set("dynamic_brownian_amp", brownian_amp)
+	splat_node.set("dynamic_brownian_freq", brownian_freq)
+	splat_node.set("dynamic_brownian_time",
+		_brownian_clock if brownian_auto_time else brownian_time)
+
+
+## 推进布朗漂移时钟，并把逐高斯参数刷新到节点上。
+##
+## 为什么必须每帧推：着色器是无状态的，每个高斯的漂移位置完全由
+## anim_brown_time 决定，而材质只能从节点属性里读到它 —— 所以得由这里持续刷。
+## 既没开错峰坍缩也没开布朗时直接返回，零开销。
+func _advance_dynamic(delta: float) -> void:
+	if splat_node == null:
+		return
+	var staggered := collapse_enabled and collapse_mode == "staggered"
+	var jitter := brownian_amp > 0.0
+	if not staggered and not jitter:
+		return
+	if jitter and brownian_auto_time:
+		_brownian_clock += delta
+	_push_dynamic()
+
+
 var _fade_mesh: GeometryInstance3D = null
 
 
 ## 可选的整体淡出。后端把 MultiMeshInstance3D 当 INTERNAL 子节点挂在泼溅
 ## 节点下，所以这里写它的 transparency，不用碰插件一行代码。
 func _apply_collapse_fade() -> void:
-	if not collapse_fade or splat_node == null:
+	# staggered 模式的淡出是着色器里逐高斯做的（透明度归零会把 quad 收到 0），
+	# 这里再用节点 transparency 淡一次就是双重淡出。
+	if not collapse_fade or collapse_mode == "staggered" or splat_node == null:
 		return
 	if _fade_mesh == null or not is_instance_valid(_fade_mesh):
 		_fade_mesh = _find_render_mesh()
@@ -380,6 +459,9 @@ func _finish(result: Dictionary) -> void:
 			content_min = cb["min"]
 			content_max = cb["max"]
 
+	# 逐高斯坍缩的收敛点（源坐标）。必须在建节点之前定好，否则第一帧的
+	# _push_dynamic 会把 0 当成收敛点推下去。
+	_content_center = (content_min + content_max) * 0.5
 	splat_node = GaussianSplatNodeScript.new()
 	splat_node.name = "Splat"
 	splat_node.set("gaussian", res)
