@@ -70,6 +70,42 @@ const COMMANDS := {
 ## 剧本文件的后缀（`list_txt()` 用）
 const EXT := "txt"
 
+## ── 设定表（角色表 / 场景表） ──
+##
+## 写在 `res://story/设定.md`：**同一份文件，人看着写剧本，代码拿去校验**。
+## 表格夹在两个 HTML 注释标记之间，**第一列就是剧本里能写的名字**：
+##
+##     <!-- CAST:BEGIN -->
+##     | 名字 | 身份 | … |
+##     |---|---|---|
+##     | 优香 | 同伴 | … |
+##     <!-- CAST:END -->
+##
+## 为什么让一份**给人看的**文档同时能被解析：角色表要是拆成「文档一份 +
+## 代码里再列一遍」，两边迟早对不上；而对不上的时候，校验要么失效、
+## 要么开始冤枉人（这正是「校验」最该避免的两种失败）。
+##
+## 标记只认前缀，所以 `<!-- CAST:BEGIN -->` 和 `<!-- CAST:BEGIN 说明 -->` 都行。
+const BIBLE_PATH := "res://story/设定.md"
+const CAST_BEGIN := "<!-- CAST:BEGIN"
+const CAST_END := "<!-- CAST:END"
+const SCENES_BEGIN := "<!-- SCENES:BEGIN"
+const SCENES_END := "<!-- SCENES:END"
+
+## 两张表的列名。**改了会让校验失效**，所以代码里显式点名要求它们。
+##     COL_NAME     角色表第一列：剧本里的说话人怎么写
+##     COL_SCENE    场景表第一列：场景代号
+##     COL_NODE     两张表都用：节点路径（相对 game.tscn 根），自检拿它去对场景
+##     COL_INSIDE   场景表：这个场地在不在 game.tscn 里（「在」/「不在」）
+const COL_NAME := "名字"
+const COL_SCENE := "代号"
+const COL_NODE := "节点"
+const COL_INSIDE := "在场景里吗"
+
+## 名字打错时的建议阈值：编辑距离 ≤ 这个数才提示「是不是想写 X」。
+## 取 2 是因为「凯依 → 凯伊」这种同音字距离就是 1~2；再大就成了瞎猜，比不猜更烦人。
+const TYPO_DISTANCE := 2
+
 
 ## 解析一段剧本文本。**没有副作用、不读盘**，所以自检可以直接喂字符串。
 ##
@@ -227,7 +263,229 @@ static func summary(res: Dictionary) -> Dictionary:
 	}
 
 
+## ── 设定表：读 + 校验 ──────────────────────────────────────────────────────
+
+
+## 读设定表，把两个标记之间的 Markdown 表格变成数据。**没有副作用之外的写入**。
+##
+## 返回：
+##     ok       bool          —— 有没有 error
+##     cast     Dictionary    —— {"columns": Array[String], "rows": Array[Dictionary]}
+##     scenes   Dictionary    —— 同上
+##     errors   Array[String] —— 每条都带行号
+##
+## 数据行的每一格按**列名**存成字典，所以表里加一列不用改代码。
+static func read_bible(path := BIBLE_PATH) -> Dictionary:
+	var errors: Array = []
+	if not FileAccess.file_exists(path):
+		return {"ok": false, "cast": _empty_table(), "scenes": _empty_table(),
+			"errors": ["找不到设定表：%s" % path]}
+	var body := FileAccess.get_file_as_string(path)
+	body = body.replace("\r\n", "\n").replace("\r", "\n")
+	if body.begins_with("\uFEFF"):
+		body = body.substr(1)
+	# 和剧本同一个坑：Godot 假定 UTF-8，GBK 会变成一串 U+FFFD。
+	var bad := body.count("\uFFFD")
+	if bad > 0:
+		errors.append("设定表不是 UTF-8（有 %d 个字符解不出来，多半被存成了 GBK/ANSI）。"
+			% bad + "记事本「另存为」时把编码选成 UTF-8。")
+	var lines := body.split("\n")
+	var cast := _table(lines, CAST_BEGIN, CAST_END, "角色表", COL_NAME, errors)
+	var scenes := _table(lines, SCENES_BEGIN, SCENES_END, "场景表", COL_SCENE, errors)
+	return {"ok": errors.is_empty(), "cast": cast, "scenes": scenes, "errors": errors}
+
+
+## 只取角色表的**名字**（= 表格第一列的每一行）。
+##
+## 读不到设定表（例如导出时忘了放行 `.md`）就返回**空数组** —— 调用方据此
+## 「没有表就不校验」，而不是每句台词刷一条报警。
+static func cast_names(path := BIBLE_PATH) -> Array[String]:
+	var out: Array[String] = []
+	for row in read_bible(path)["cast"]["rows"]:
+		out.append(String(row.get(COL_NAME, "")))
+	return out
+
+
+## 只取场景表的行（每行是「列名 → 单元格」的字典）。
+static func scene_rows(path := BIBLE_PATH) -> Array:
+	return read_bible(path)["scenes"]["rows"]
+
+
+## 校验剧本里的说话人**在不在角色表里**。
+##
+## 返回的是**提醒**而不是错误：名字打错的剧本照样能播（名字牌上会写一个游戏里
+## 不存在的角色），所以不该拦着不让玩 —— 但这种错自己几乎发现不了
+## （`凯依` / `凯伊`），报出来就是纯赚。`names` 为空（没有设定表）时返回空数组。
+##
+## 同一个错名字只报一次（按**首次出现**的行号），免得一句话写错就刷满控制台。
+static func check_speakers(res: Dictionary, names: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	if names.is_empty():
+		return out
+	var reported := {}
+	for s in res.get("steps", []):
+		if String(s.get("kind", "")) != K_SAY:
+			continue
+		var who := String(s.get("who", ""))
+		if names.has(who) or reported.has(who):
+			continue
+		reported[who] = true
+		var hint := ""
+		var guess := _closest(who, names)
+		if guess != "":
+			hint = " —— 是不是想写「%s」？" % guess
+		out.append("第 %d 行：说话人「%s」不在角色表里%s（表在 %s）"
+			% [int(s.get("line", 0)), who, hint, BIBLE_PATH])
+	return out
+
+
 # --- 内部 -------------------------------------------------------------------
+
+
+## 取出 `begin` / `end` 两个标记之间的 Markdown 表格。
+##
+## 只认最朴素的写法：表头一行 `| 甲 | 乙 |`、紧跟着一行分隔 `|---|---|`、
+## 然后是数据行。标记之间出现**非空、又不以 `|` 开头**的行 → 报错（不静默跳过，
+## 和剧本解析一个脾气）。
+static func _table(lines: PackedStringArray, begin: String, end: String,
+		what: String, first_col: String, errors: Array) -> Dictionary:
+	var b := -1
+	var e := -1
+	for i in lines.size():
+		var s := String(lines[i]).strip_edges()
+		if b < 0 and s.begins_with(begin):
+			b = i
+		elif b >= 0 and s.begins_with(end):
+			e = i
+			break
+	if b < 0 or e < 0:
+		errors.append("%s 找不到标记 —— 需要 `%s` 和 `%s` 各占一行，把表格夹在中间"
+			% [what, begin, end])
+		return _empty_table()
+
+	var columns: Array[String] = []
+	var rows: Array = []
+	var seen := {}
+	var header_done := false
+	var need_sep := false
+	for i in range(b + 1, e):
+		var n := i + 1
+		var s := String(lines[i]).strip_edges()
+		if s.is_empty():
+			continue
+		if not s.begins_with("|"):
+			errors.append("第 %d 行：%s 的标记之间只能放表格行（`| … |`）｜ 原行「%s」"
+				% [n, what, s])
+			continue
+		var cells := _cells(s)
+		if not header_done:
+			header_done = true
+			need_sep = true
+			columns = cells
+			var got: String = "" if columns.is_empty() else columns[0]
+			if got != first_col:
+				errors.append("第 %d 行：%s 第一列的列名必须是「%s」（收到「%s」）"
+					% [n, what, first_col, got])
+			continue
+		if need_sep:
+			need_sep = false
+			if not _is_separator(cells):
+				errors.append("第 %d 行：%s 的表头下面少了一行分隔行（`|---|`）｜ 原行「%s」"
+					% [n, what, s])
+			continue
+		if cells.size() != columns.size():
+			errors.append("第 %d 行：%s 这一行有 %d 格、表头有 %d 格 ｜ 原行「%s」"
+				% [n, what, cells.size(), columns.size(), s])
+			continue
+		var row := {}
+		for c in columns.size():
+			row[columns[c]] = cells[c]
+		var key := cells[0]
+		if seen.has(key):
+			errors.append("第 %d 行：%s 里「%s」出现了两次（第一列要唯一）" % [n, what, key])
+		seen[key] = true
+		rows.append(row)
+
+	if columns.is_empty():
+		errors.append("%s 没有表头" % what)
+	elif rows.is_empty():
+		errors.append("%s 一行数据都没有" % what)
+	return {"columns": columns, "rows": rows}
+
+
+static func _empty_table() -> Dictionary:
+	var cols: Array[String] = []
+	return {"columns": cols, "rows": []}
+
+
+## `| 甲 | 乙 |` → `["甲", "乙"]`。
+##
+## 单元格里用反引号包起来的**代码格式会被剥掉** —— 表格是给人看的（`Player`
+## 比 Player 显眼），而代码要的是原值。只在**整格**被包住时才剥，
+## 所以 `` `a.glb` ※说明 `` 这种不动。
+static func _cells(line: String) -> Array[String]:
+	var s := line.strip_edges()
+	if s.begins_with("|"):
+		s = s.substr(1)
+	if s.ends_with("|"):
+		s = s.substr(0, s.length() - 1)
+	var out: Array[String] = []
+	for c in s.split("|"):
+		var cell := String(c).strip_edges()
+		if cell.length() >= 2 and cell.begins_with("`") and cell.ends_with("`"):
+			cell = cell.substr(1, cell.length() - 2)
+		out.append(cell)
+	return out
+
+
+## `|---|---|` 或 `|:--:|` 这种分隔行。
+static func _is_separator(cells: Array[String]) -> bool:
+	if cells.is_empty():
+		return false
+	for c in cells:
+		if not c.contains("-"):
+			return false
+		if not c.replace("-", "").replace(":", "").strip_edges().is_empty():
+			return false
+	return true
+
+
+## 在 `names` 里找和 `who` 最像的那个（编辑距离最小）。差太远返回空串 ——
+## 「随便猜一个」比不猜更烦人。
+static func _closest(who: String, names: Array[String]) -> String:
+	var best := ""
+	var best_d := TYPO_DISTANCE + 1
+	for n in names:
+		var d := _distance(who, String(n))
+		if d < best_d:
+			best_d = d
+			best = String(n)
+	return "" if best_d > TYPO_DISTANCE else best
+
+
+## 编辑距离（增/删/改各算 1）。
+##
+## ⚠️ `prev = cur` 之后**必须** `duplicate()`：GDScript 的数组是引用类型，
+## 不复制的话下一轮 `cur.clear()` 会把 `prev` 一起清掉，结果恒为 0。
+static func _distance(a: String, b: String) -> int:
+	var la := a.length()
+	var lb := b.length()
+	if la == 0:
+		return lb
+	if lb == 0:
+		return la
+	var prev: Array[int] = []
+	var cur: Array[int] = []
+	for j in lb + 1:
+		prev.append(j)
+	for i in range(1, la + 1):
+		cur.clear()
+		cur.append(i)
+		for j in range(1, lb + 1):
+			var cost := 0 if a[i - 1] == b[j - 1] else 1
+			cur.append(mini(mini(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost))
+		prev = cur.duplicate()
+	return prev[lb]
 
 
 ## 第一个半角或全角冒号的位置；都没有返回 -1。

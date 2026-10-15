@@ -130,6 +130,12 @@ func play_file(path: String) -> bool:
 	var sum := StoryScript.summary(res)
 	print("[Dialogue] 播 %s：%d 步 / %d 字 / 说话人 %s" % [
 		path, sum["steps"], sum["chars"], str(sum["speakers"])])
+	# 说话人校验：名字打错**不会**让剧本失败（照样能播），但名字牌上会出现一个
+	# 游戏里不存在的角色 —— 这是写剧本时最容易犯、又最难自己发现的错，所以每次
+	# 都按 `story/设定.md` 的角色表查一遍。设定表读不到就静默跳过（导出的包
+	# 忘了放行 `.md` 时不该每句刷一条报警）。
+	for w in StoryScript.check_speakers(res, StoryScript.cast_names()):
+		push_warning("[Dialogue] %s" % w)
 	play_steps(steps, path)
 	return true
 

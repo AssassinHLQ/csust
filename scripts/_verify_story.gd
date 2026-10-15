@@ -6,6 +6,8 @@ extends SceneTree
 ##   4. 真剧本文件：解析无错 + 按**真实字体**量「有没有哪句撑破对话框」
 ##   5. 播放：打字机 / 第一次按键把当前句打完 / 翻页 / @end 收尾并恢复
 ##   6. 和 Esc 设置界面的交接：菜单开着时剧情不抢输入、播完不解暂停
+##   7. 设定表（`story/设定.md`）：角色表 / 场景表能解析，说话人校验能给建议，
+##      表里写的节点与场景实际状态一致
 ##
 ## 用法：godot --path <工程> --script res://scripts/_verify_story.gd -- --splat=off
 ##
@@ -46,6 +48,7 @@ func _run() -> void:
 
 	_test_template_file()
 	await _test_playback(game)
+	_test_bible(game)
 
 	_cleanup()
 	print("\n================ 结果 ================")
@@ -391,6 +394,103 @@ func _test_playback(game: Node) -> void:
 	_check(not bool(box.call("is_active")), "剧情确实已经结束")
 	menu.call("close")
 	_check(not paused, "菜单关掉 → 恢复运行")
+
+
+# --- 7. 设定表（角色表 / 场景表） ---------------------------------------------
+
+## `story/设定.md` 是**给人看的**，同时也被 `story_script.gd` 解析来校验剧本。
+## 这一节验三件事：
+##   1. 表本身能解析（列名对、名字不重复、标记没被删掉）；
+##   2. 剧本里的说话人**都在表里** —— 含反例：故意打错一个字要能被认出来并给出建议；
+##   3. 表里写的**节点**在 game.tscn 里真的存在，且「校园在不在场景里」两边说法一致。
+##
+## 第 3 条才是这一节存在的主要理由：设定表最容易变成「写了、但早就过期」的文档，
+## 而过期的文档比没有文档更坑人。
+func _test_bible(game: Node) -> void:
+	print("\n========== 7. 设定表 %s ==========" % StoryScript.BIBLE_PATH)
+	_check(FileAccess.file_exists(StoryScript.BIBLE_PATH),
+		"设定表在 %s" % StoryScript.BIBLE_PATH)
+	if not FileAccess.file_exists(StoryScript.BIBLE_PATH):
+		return
+
+	var bible := StoryScript.read_bible()
+	_check(bool(bible["ok"]), "设定表解析零错误（errors=%d）" % bible["errors"].size())
+	for e in bible["errors"]:
+		print("      %s" % e)
+
+	# 反例：没有表时必须**明确失败**，不能静默返回一张空表
+	var none := StoryScript.read_bible("user://_verify_story_none.md")
+	_check(not bool(none["ok"]), "设定表缺失 → ok = false（不是静默成功）")
+
+	var cast_rows: Array = bible["cast"]["rows"]
+	var names: Array[String] = []
+	for row in cast_rows:
+		names.append(String(row.get(StoryScript.COL_NAME, "")))
+	# 10 = 主角 + 七名同伴 + 两位 Boss。少一个多半是表被误删了行。
+	_check(names.size() >= 10, "角色表里 %d 个名字：%s" % [names.size(), str(names)])
+
+	# 真剧本的说话人必须都在表里
+	var real := StoryScript.load_file(TEMPLATE)
+	var speakers: Array = StoryScript.summary(real)["speakers"]
+	var unknown: Array[String] = StoryScript.check_speakers(real, names)
+	_check(unknown.is_empty(), "真剧本 %s 的说话人 %s 全在角色表里"
+		% [TEMPLATE.get_file(), str(speakers)])
+	for u in unknown:
+		print("      [!!] %s" % u)
+
+	# 反例①：故意打错一个字（凯依 / 凯伊），必须报出来**并给出正确的建议**
+	var typo := StoryScript.parse("凯依: 打错了一个字。\n")
+	var hits: Array[String] = StoryScript.check_speakers(typo, names)
+	_check(hits.size() == 1 and hits[0].contains("凯伊") and hits[0].contains("第 1 行"),
+		"说话人打错一个字（凯依）→ 报出来并建议「凯伊」：%s" % _join(hits))
+	# 反例②：没有角色表（导出忘了放行 .md）时必须**沉默**，不能每句都报警
+	var empty_names: Array[String] = []
+	_check(StoryScript.check_speakers(typo, empty_names).is_empty(),
+		"没有角色表 → 不校验、不报警（不影响播放）")
+	# 旁白没有名字，不参与校验
+	_check(StoryScript.check_speakers(StoryScript.parse("* 只有旁白。\n"), names).is_empty(),
+		"旁白（`*` 行）不参与说话人校验")
+
+	# ── 表里写的节点必须真的在 game.tscn 里 ──
+	var all_rows: Array = []
+	all_rows.append_array(cast_rows)
+	all_rows.append_array(bible["scenes"]["rows"])
+	var missing: Array[String] = []
+	var checked := 0
+	for row in all_rows:
+		var node := String(row.get(StoryScript.COL_NODE, "")).strip_edges()
+		if node.is_empty() or node.begins_with("不在"):
+			continue
+		checked += 1
+		if game.get_node_or_null(node) == null:
+			missing.append("%s → %s" % [String(row.values()[0]), node])
+	_check(missing.is_empty() and checked >= 10,
+		"设定表里 %d 个「节点」在 game.tscn 里都存在%s"
+		% [checked, "" if missing.is_empty() else "（缺 %s）" % str(missing)])
+
+	# ── 「校园在不在场景里」：表里怎么写、场景里就该怎么是 ──
+	# 校园那份泼溅是按用户要求从 game.tscn 搬去 campus_venue.tscn 的，而开场旁白
+	# 第一句就在讲「脚下的校园」—— 这里是「文案里有的东西，画面里没有」最容易复发
+	# 的地方，所以钉成常驻断言。
+	var campus_in_scene := game.get_node_or_null("CampusVenue") != null
+	var campus_row := _row_by(bible["scenes"]["rows"], StoryScript.COL_SCENE, "campus")
+	if campus_row.is_empty():
+		_check(false, "场景表里有 campus 这一行")
+	else:
+		var flag := String(campus_row.get(StoryScript.COL_INSIDE, "")).strip_edges()
+		var said_in := flag == "在"
+		_check(said_in == campus_in_scene,
+			"校园：game.tscn 里%s、场景表写「%s」→ %s" % [
+				"有" if campus_in_scene else "没有", flag,
+				"一致" if said_in == campus_in_scene else "**对不上，改 story/设定.md 那一行**"])
+
+
+## 在 `rows` 里按某个列的取值找一行（找不到返回空字典）。
+func _row_by(rows: Array, key: String, value: String) -> Dictionary:
+	for row in rows:
+		if String(row.get(key, "")) == value:
+			return row
+	return {}
 
 
 # --- 工具 -------------------------------------------------------------------
