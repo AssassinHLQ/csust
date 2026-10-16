@@ -81,17 +81,40 @@ const RELOAD_SPEED := 1.9
 ##    而这条动作是**全骨架**的（实测爱丽丝 228 条轨道、其中**下半身 48 条**；
 ##    小桃 46 条、优香 26 条）—— 于是开火期间腿也被定格，人在地上滑。
 ##
+## ⚠️ 而且**光滤下半身还不够**（用户报「跑打确实腿动了但是感觉身体倾斜了好多」）：
+##    开火动作是**站桩**的，它的躯干（脊椎 / 胸）会把跑步的前倾一下掰成站桩——
+##    实测差 **65°**。所以叠加层分两层：移动时再滤掉躯干，站定时保留。
+##    细节见 `TRUNK_KEYWORDS` 与 `_setup_upper_layer()`。
+##
 
 ## 「下半身」的判据：名字里带这些词的骨，其**开火轨道会被滤掉**。
 ## 裙骨（skirt）也算：腿在跑、裙子却按站桩姿势摆，一眼假。
 const LOWER_KEYWORDS := ["thigh", "calf", "foot", "toe", "leg", "pelvis", "hip", "root", "skirt"]
 
+## 「躯干」的判据：**移动时**的开火叠加层要再滤掉这些骨。
+##
+## ⚠️ 为什么必须滤（用户报「跑打确实腿动了但是感觉身体倾斜了好多」）：
+##    `Normal_Attack_Ing` 是**站桩开火**的动作，它的脊椎 / 胸是按「站着」摆的；
+##    而 `Move_Ing` 的躯干是**大幅前倾**的。实测 `Bip001 Spine1` 的「上」轴
+##    （`_probe_fire_lean.gd` + `_probe_run_fire_pose_shot.gd`）：
+##      · 只跑（`Move_Ing`）        (0.62, −0.76, −0.20)
+##      · 跑 + 开火（只滤下半身）    (0.97, **+0.25**, −0.03)   ← **差 65°**
+##    也就是上半身会在开火那一瞬间从「跑步的前倾」弹成「站桩的坐姿」。
+##    滤掉这两根之后，跑打开火的躯干与「只跑」**逐位相同**（0.0°）。
+##
+## ⚠️ 但**站定开火要留着**：那是上一轮明确要的「静止开枪不动」，素材里那套站桩
+##    姿势比「待机躯干 + 开火手臂」好看。所以叠**两层**，按当时速度选一层
+##    （`_setup_upper_layer()` / `active_upper_layer()`）。
+const TRUNK_KEYWORDS := ["spine", "chest"]
+
 var state := State.LOCOMOTION
 ## 基础层：整体动画（`Normal_Idle` / `Move_Ing`），一直播着，包括开火期间。
 var player: AnimationPlayer
-## 叠加层：只写上半身的开火 / 换弹，`process_priority` 比基础层大 ⇒ 后写、赢。
-## 下半身只有基础层写，所以「边跑边打」时腿照样在跑。
+## 叠加层（静止）：完整上半身的开火 / 换弹，含脊椎 / 胸 —— 站桩开火用这层。
+## `process_priority` 比基础层大 ⇒ 后写、赢；下半身只有基础层写，所以腿照样跑。
 var upper: AnimationPlayer
+## 叠加层（移动）：在静止层的基础上**再滤掉躯干**，跑打开火用这层。
+var upper_move: AnimationPlayer
 var skeleton: Skeleton3D
 
 var _speed := 0.0
@@ -99,6 +122,8 @@ var _aiming := false
 var _auto_return := false
 ## 滤掉的下半身轨道条数（自检用）
 var lower_tracks_removed := 0
+## 移动层额外滤掉的躯干轨道条数（自检用）
+var trunk_tracks_removed := 0
 
 
 func _ready() -> void:
@@ -124,31 +149,39 @@ func _ready() -> void:
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)
 	player.animation_finished.connect(_on_finished)
-	if upper != null:
-		upper.animation_finished.connect(_on_finished)
+	for l in [upper, upper_move]:
+		if l != null:
+			l.animation_finished.connect(_on_finished)
 
 
-## 搭「上半身叠加层」：把开火 / 换弹各复制一份、**把下半身的轨道全删掉**，
-## 挂到第二个 `AnimationPlayer` 上。
+## 搭「上半身叠加层」：**两层**，把开火 / 换弹各复制一份、滤掉不该写的轨道。
+##   · `UpperBody`     只滤下半身 —— **站桩开火**用它，素材里的站桩姿势完整保留
+##   · `UpperBodyMove` 再滤躯干   —— **跑打开火**用它，躯干保持 `Move_Ing` 的前倾
 ##
 ## ── 为什么这么绕（三条都是量出来的）──
 ##   1. **`AnimationTree` 在这份骨架上根本不驱动骨骼**（§1.7：逐帧截图 0 像素差异），
 ##      所以官方那条「用 Blend2 + 骨骼遮罩」的路走不通；
 ##   2. `AnimationPlayer` 没有**逐轨道遮罩**，但**两个播放器写同一具骨架时，后写的赢** ——
-##      于是「下半身只有基础层写、上半身两层都写」正好拼出想要的叠加；
+##      于是「下半身只有基础层写、上半身叠加层写」正好拼出想要的叠加；
 ##   3. 实测开火动作是**全骨架**的（爱丽丝 228/228 条轨道，下半身 48 条；且
 ##      「移动有、攻击没有」的骨 **0 根**），所以**必须先滤掉下半身**，否则腿还是会被它按住。
 ##
-## `process_priority` 是关键：基础层 0、叠加层 1 ⇒ 叠加层后处理 ⇒ 上半身以它为准。
+## `process_priority` 是关键：基础层 0、两层都 1 ⇒ 两层都后处理 ⇒ 上半身以后写的为准
+## （同一时刻只有一层在播，见 `active_upper_layer()`）。
 func _setup_upper_layer() -> void:
 	var host := player.get_parent()
 	if host == null:
 		return
-	upper = AnimationPlayer.new()
-	upper.name = "UpperBody"
-	# 轨道路径是相对 `root_node` 的字符串，两层必须指向**同一个**根节点才对得上
-	upper.root_node = player.root_node
-	upper.process_priority = player.process_priority + 1
+	upper = _make_overlay(host, "UpperBody", [])
+	upper_move = _make_overlay(host, "UpperBodyMove", TRUNK_KEYWORDS)
+
+
+## 造一层叠加层：轨道路径是相对 `root_node` 的字符串，两层必须指向**同一个**根节点。
+func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPlayer:
+	var ov := AnimationPlayer.new()
+	ov.name = layer_name
+	ov.root_node = player.root_node
+	ov.process_priority = player.process_priority + 1
 	# 库先装好（还没进树也能装），**不要**去 `get_animation_library("")` ——
 	# 新建的 AnimationPlayer 没有默认库，那一句会返回 null 并报 ERROR。
 	var lib := AnimationLibrary.new()
@@ -156,26 +189,49 @@ func _setup_upper_layer() -> void:
 		if not player.has_animation(clip):
 			continue
 		var a: Animation = player.get_animation(clip).duplicate(true)
-		lower_tracks_removed += _strip_lower(a)
+		var low_n := 0
+		var trunk_n := 0
+		for t in range(a.get_track_count() - 1, -1, -1):
+			var bone := _bone_of(String(a.track_get_path(t)))
+			var is_low := _in_keywords(bone, LOWER_KEYWORDS)
+			if is_low or _in_keywords(bone, extra):
+				if is_low:
+					low_n += 1
+				else:
+					trunk_n += 1
+				a.remove_track(t)
+		# 两层滤掉的下半身是同一批，只统计一次；躯干只有移动层滤
+		if extra.is_empty():
+			lower_tracks_removed += low_n
+		else:
+			trunk_tracks_removed += trunk_n
 		lib.add_animation(clip, a)
-	upper.add_animation_library(&"", lib)
+	ov.add_animation_library(&"", lib)
 	# ⚠️ **必须延后一帧加进树**：`_ready()` 期间父节点还在装自己的孩子，
 	#    直接 `add_child()` 会失败（"Parent node is busy setting up children"）——
-	#    而失败是**静默**的：`upper` 不在树里 ⇒ 它一帧都不更新 ⇒ 上半身根本没叠上去、
+	#    而失败是**静默**的：不在树里 ⇒ 一帧都不更新 ⇒ 上半身根本没叠上去、
 	#    而且 `animation_finished` 永远不来（状态卡在 Fire，再也开不了下一枪）。
 	#    本喵第一版就是这样：结构断言全绿，只有「右手在不在动」那条红了才露馅。
-	host.add_child.call_deferred(upper)
+	host.add_child.call_deferred(ov)
+	return ov
 
 
-## 把一条动作里**下半身的轨道**全删掉，返回删了几条。
-## 倒着删：`remove_track()` 会把后面的轨道索引整体前移。
-func _strip_lower(a: Animation) -> int:
-	var removed := 0
-	for t in range(a.get_track_count() - 1, -1, -1):
-		if _is_lower_bone(_bone_of(String(a.track_get_path(t)))):
-			a.remove_track(t)
-			removed += 1
-	return removed
+## 这一发该用哪一层：**在动**用「滤掉躯干」那层（躯干保持跑步的前倾），
+## **站着**用完整上半身那层（素材里的站桩开火姿势）。
+func active_upper_layer() -> AnimationPlayer:
+	if _speed > IDLE_SPEED and upper_move != null:
+		return upper_move
+	return upper
+
+
+func _in_keywords(bone: String, kws: Array) -> bool:
+	if bone.is_empty():
+		return false
+	var low := bone.to_lower()
+	for k in kws:
+		if low.contains(String(k)):
+			return true
+	return false
 
 
 ## `Aris_Original_Mesh/bone_root/Bip001/Skeleton3D:bone_Railgunup_01` → `bone_Railgunup_01`
@@ -185,13 +241,7 @@ func _bone_of(path: String) -> String:
 
 
 func _is_lower_bone(bone: String) -> bool:
-	if bone.is_empty():
-		return false
-	var low := bone.to_lower()
-	for k in LOWER_KEYWORDS:
-		if low.contains(k):
-			return true
-	return false
+	return _in_keywords(bone, LOWER_KEYWORDS)
 
 
 func _configure_library() -> void:
@@ -296,10 +346,11 @@ func _play_once(anim: String, new_state: State) -> void:
 	state = new_state
 	_auto_return = true
 	var speed := RELOAD_SPEED if new_state == State.RELOAD else FIRE_SPEED
-	if upper != null and upper.is_inside_tree() and upper.has_animation(anim):
+	var layer := active_upper_layer()
+	if layer != null and layer.is_inside_tree() and layer.has_animation(anim):
 		# **主路径**：只在叠加层播，而且只有上半身 —— 下半身还是基础层的移动动画
-		upper.speed_scale = speed
-		upper.play(anim, 0.08, 1.0)
+		layer.speed_scale = speed
+		layer.play(anim, 0.08, 1.0)
 		return
 	# 兜底（叠加层还没进树 / 模型里没这条动作）：老办法，整体切过去
 	player.speed_scale = speed
@@ -326,34 +377,53 @@ func _return_to_locomotion() -> void:
 
 
 ## 停叠加层（自检也会用；不在树里时 `stop()` 会报一串 ERROR，所以在这里挡一道）
+## 两层都停：调用的时机（收招 / 自检复位）分不清刚才用的哪一层。
 func stop_upper_layer() -> void:
-	if upper != null and upper.is_inside_tree():
-		upper.stop()
+	for l in [upper, upper_move]:
+		if l != null and l.is_inside_tree():
+			l.stop()
 
 
 # --- 自检用的读数 ---------------------------------------------------------------
 
 func has_upper_layer() -> bool:
-	return upper != null
+	return upper != null and upper_move != null
 
 
+## 当前这一发实际在演哪一层（站定 / 移动由 `active_upper_layer()` 决定）。
 func upper_clip() -> String:
-	return upper.current_animation if upper != null else ""
+	var l := active_upper_layer()
+	return l.current_animation if l != null else ""
 
 
-func upper_track_count(clip := "Normal_Attack_Ing") -> int:
-	if upper == null or not upper.has_animation(clip):
+func upper_track_count(clip := "Normal_Attack_Ing", moving := false) -> int:
+	var l := upper_move if moving else upper
+	if l == null or not l.has_animation(clip):
 		return -1
-	return upper.get_animation(clip).get_track_count()
+	return l.get_animation(clip).get_track_count()
 
 
-func upper_lower_track_count(clip := "Normal_Attack_Ing") -> int:
-	if upper == null or not upper.has_animation(clip):
+func upper_lower_track_count(clip := "Normal_Attack_Ing", moving := false) -> int:
+	var l := upper_move if moving else upper
+	if l == null or not l.has_animation(clip):
 		return -1
-	var a := upper.get_animation(clip)
+	var a := l.get_animation(clip)
 	var n := 0
 	for t in a.get_track_count():
 		if _is_lower_bone(_bone_of(String(a.track_get_path(t)))):
+			n += 1
+	return n
+
+
+## 这一层里还剩多少条**躯干**轨道（移动层应为 0，静止层应 > 0）。
+func upper_trunk_track_count(clip := "Normal_Attack_Ing", moving := false) -> int:
+	var l := upper_move if moving else upper
+	if l == null or not l.has_animation(clip):
+		return -1
+	var a := l.get_animation(clip)
+	var n := 0
+	for t in a.get_track_count():
+		if _in_keywords(_bone_of(String(a.track_get_path(t))), TRUNK_KEYWORDS):
 			n += 1
 	return n
 
@@ -367,6 +437,17 @@ func bone_local_origin(bone: String) -> Vector3:
 	if i < 0:
 		return Vector3.ZERO
 	return skeleton.get_bone_global_pose(i).origin
+
+
+## 一根骨在**骨架局部空间**里的「上」轴 —— 「躯干有没有被开火动作掰走」量这个
+## （§1.20：跑打开火时 `Bip001 Spine1` 的上轴必须与「只跑」一致）。
+func bone_up_axis(bone: String) -> Vector3:
+	if skeleton == null:
+		return Vector3.UP
+	var i := skeleton.find_bone(bone)
+	if i < 0:
+		return Vector3.UP
+	return skeleton.get_bone_global_pose(i).basis.y.normalized()
 
 
 func _find_first(n: Node, cls: String) -> Node:

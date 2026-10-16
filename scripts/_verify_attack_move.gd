@@ -31,6 +31,11 @@ const FOOT_STILL := 0.03
 ##    卡绝对值会在全量回归里擦边（第一版卡 0.08 m，实测 0.079 就红了）。
 const HAND_ACTING := 0.03
 
+## 胸椎：跑打开火时它的「上」轴不许离开「只跑」的姿势集（§7）
+const CHEST := "Bip001 Spine1"
+## 允许的最大偏离（度）。修好后实测 ≈ 0，改前是 65。
+const TRUNK_TOL := 8.0
+
 var _fail := 0
 var _pass := 0
 var _p: Player
@@ -61,6 +66,7 @@ func _run() -> void:
 	await _test_running_reload()
 	await _test_recover()
 	await _test_weapon_path()
+	await _test_trunk_kept()
 	await _wait(2)
 
 	print("\n================ 结果 ================")
@@ -73,25 +79,29 @@ func _run() -> void:
 
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 上半身叠加层 ==========")
-	_check(_anim != null and _anim.has_upper_layer(), "主角的驱动有叠加层（UpperBody）")
+	_check(_anim != null and _anim.has_upper_layer(), "主角的驱动有**两层**叠加层（UpperBody / UpperBodyMove）")
 	if _anim == null or not _anim.has_upper_layer():
 		return
-	_check(_anim.upper.root_node == _anim.player.root_node,
-		"两层的 root_node 相同（轨道路径才对得上）：%s" % str(_anim.upper.root_node))
-	_check(_anim.upper.process_priority > _anim.player.process_priority,
-		"叠加层 process_priority=%d > 基础层 %d（**后写、赢**）"
-		% [_anim.upper.process_priority, _anim.player.process_priority])
+	for l in [_anim.upper, _anim.upper_move]:
+		var nm := (l as AnimationPlayer).name
+		_check(l.root_node == _anim.player.root_node,
+			"%s 的 root_node 与基础层相同（轨道路径才对得上）" % nm)
+		_check(l.process_priority > _anim.player.process_priority,
+			"%s 的 process_priority=%d > 基础层 %d（**后写、赢**）"
+			% [nm, l.process_priority, _anim.player.process_priority])
 
 	var full := _anim.player.get_animation("Normal_Attack_Ing").get_track_count()
-	var upper_tracks := _anim.upper_track_count()
-	_check(upper_tracks > 0 and upper_tracks < full,
-		"开火动作被复制成上半身版：%d → %d 条轨道（原动作是全骨架的）"
-		% [full, upper_tracks])
-	_check(_anim.upper_lower_track_count() == 0,
-		"上半身版里**下半身轨道 0 条**（滤掉 %d 条）" % _anim.lower_tracks_removed)
-	_check(_anim.upper.has_animation("Normal_Reload")
-		and _anim.upper_track_count("Normal_Reload") > 0,
-		"换弹动作也做了上半身版（%d 条轨道）" % _anim.upper_track_count("Normal_Reload"))
+	for moving in [false, true]:
+		var nm := "移动层" if moving else "静止层"
+		var upper_tracks := _anim.upper_track_count("Normal_Attack_Ing", moving)
+		_check(upper_tracks > 0 and upper_tracks < full,
+			"%s 的开火动作：%d → %d 条轨道（原动作是全骨架的）" % [nm, full, upper_tracks])
+		_check(_anim.upper_lower_track_count("Normal_Attack_Ing", moving) == 0,
+			"%s 里**下半身轨道 0 条**" % nm)
+		_check(_anim.upper.has_animation("Normal_Reload")
+			and _anim.upper_track_count("Normal_Reload", moving) > 0,
+			"换弹动作也做了%s（%d 条轨道）"
+			% [nm, _anim.upper_track_count("Normal_Reload", moving)])
 
 	# 七名同伴
 	var mates := 0
@@ -102,10 +112,12 @@ func _test_structure(game: Node) -> void:
 		var c := child as Companion
 		var a := c.anim as AnimDriver
 		mates += 1
-		if a == null or not a.has_upper_layer() or a.upper_lower_track_count() != 0:
+		if a == null or not a.has_upper_layer() \
+				or a.upper_lower_track_count("Normal_Attack_Ing", true) != 0 \
+				or a.upper_trunk_track_count("Normal_Attack_Ing", true) != 0:
 			bad.append(c.display_name)
 	_check(mates == 7 and bad.is_empty(),
-		"%d 名同伴也都搭上了叠加层、下半身轨道为 0%s"
+		"%d 名同伴也都搭上了两层、下半身与躯干轨道都为 0%s"
 		% [mates, "" if bad.is_empty() else "（有问题：%s）" % str(bad)])
 
 
@@ -228,6 +240,75 @@ func _test_weapon_path() -> void:
 	await _wait(2)
 
 
+# --- 7. 跑打开火时躯干不许被开火动作掰走 ---------------------------------------
+
+## 用户报：「跑打确实腿动了但是感觉身体倾斜了好多」。
+##
+## 根因：开火动作是**站桩**的，只滤下半身的话，它的脊椎 / 胸会把跑步的前倾
+## 一下掰成站桩姿势 —— 实测 `Bip001 Spine1` 的上轴差 **65°**。
+## 修法：叠加层分两层，**在动**用「再滤掉躯干」那层（躯干保持 `Move_Ing` 的前倾），
+## 站着用完整上半身那层（站桩开火姿势保留）。
+##
+## 判据（自校准，不靠 65 这个魔数）：把「只跑」一个周期的胸椎上轴收成一个**姿势集**，
+## 再量「跑打开火」的每一个采样到那个集合的**最小夹角** —— 修好后应当 ≈ 0°，
+## 而把移动层摘掉（= 改前的行为）必须能红。
+func _test_trunk_kept() -> void:
+	print("\n========== 7. 跑打开火：躯干不许被掰 ==========")
+	_check(_anim.upper_trunk_track_count("Normal_Attack_Ing", true) == 0,
+		"移动层里**躯干轨道 0 条**（额外滤掉 %d 条：脊椎 / 胸保持基础层的跑步前倾）"
+		% _anim.trunk_tracks_removed)
+	var still_trunk := _anim.upper_trunk_track_count("Normal_Attack_Ing", false)
+	_check(still_trunk > 0,
+		"静止层里**仍然保留 %d 条躯干轨道**（站桩开火那套姿势没被吃掉）" % still_trunk)
+
+	# 动态：只跑 vs 跑+开火
+	await _reset()
+	_check(_anim.active_upper_layer() == _anim.upper, "站定时用的是静止层")
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(600)
+	_check(_anim.active_upper_layer() == _anim.upper_move,
+		"跑起来之后自动换成移动层（速度 %.2f m/s）" % _speed())
+	var run_set := await _sample_axis(CHEST, 700)
+	_anim.request_fire()
+	await _wait_ms(120)
+	var fire_set := await _sample_axis(CHEST, 500)
+	var worst := _dist_to_set(fire_set, run_set)
+	_m["trunk_deg"] = worst
+	_check(worst < TRUNK_TOL,
+		"**跑打开火时胸椎离「只跑」的姿势集最多 %.1f°**（< %.0f°，改前是 65°）"
+		% [worst, TRUNK_TOL])
+
+	# 反向对照：把移动层摘掉（= 改前的行为）必须量到大角度
+	var keep := _anim.upper_move
+	_anim.upper_move = null
+	await _reset()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(600)
+	_anim.request_fire()
+	await _wait_ms(120)
+	var old_set := await _sample_axis(CHEST, 500)
+	var old_deg := _dist_to_set(old_set, run_set)
+	_anim.upper_move = keep
+	_m["trunk_deg_old"] = old_deg
+	_check(old_deg > 20.0,
+		"反向对照：只滤下半身时同一个量是 %.1f° —— 这就是用户看到的「身体倾斜」" % old_deg)
+	_release_all()
+	await _wait(2)
+
+	# 站定开火：躯干**应该**跟着开火动作走（这是上一轮要的站桩姿势）
+	await _reset()
+	var idle_set := await _sample_axis(CHEST, 400)
+	_anim.request_fire()
+	await _wait_ms(120)
+	var stand_set := await _sample_axis(CHEST, 400)
+	var stand_deg := _dist_to_set(stand_set, idle_set)
+	_m["trunk_stand"] = stand_deg
+	_check(stand_deg > 10.0,
+		"但站定开火时躯干**照样演素材里的站桩姿势**：离待机 %.1f°（> 10°）" % stand_deg)
+
+
 # --- 工具 ---------------------------------------------------------------------
 
 ## 若干根骨在 `ms` 毫秒里**各自相对自己的最大位移**（骨架局部空间 ——
@@ -250,6 +331,28 @@ func _travel(bones: Array, ms: int) -> Dictionary:
 func _bone_travel(bone: String, ms: int) -> float:
 	var t := await _travel([bone], ms)
 	return float(t[bone])
+
+
+## `ms` 毫秒里每帧采一次某根骨的「上」轴 —— 一个姿势**集合**。
+func _sample_axis(bone: String, ms: int) -> Array:
+	var out: Array = []
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		await process_frame
+		out.append(_anim.bone_up_axis(bone))
+	return out
+
+
+## 这个集合到那个集合的**最小夹角**（度）：集合里每个采样，取它到参考集的最小值，
+## 再取最大 —— 「这些姿势离参考姿势能有多远」。
+func _dist_to_set(set_a: Array, set_b: Array) -> float:
+	var worst := 0.0
+	for a in set_a:
+		var best := 999.0
+		for b in set_b:
+			best = minf(best, rad_to_deg((a as Vector3).angle_to(b as Vector3)))
+		worst = maxf(worst, best)
+	return worst
 
 
 func _speed() -> float:
@@ -281,6 +384,12 @@ func _print_table() -> void:
 	print("  跑（对照）        %.3f" % float(_m.get("foot_run", 0.0)))
 	print("  跑 + 开火         %.3f   ← 用户要的：还在跑" % float(_m.get("foot_run_fire", 0.0)))
 	print("  跑 + 换弹         %.3f" % float(_m.get("foot_reload", 0.0)))
+	print("\n================ 跑打开火时胸椎的偏离（度，越小越好）================")
+	print("  改后（移动层滤掉躯干）  %.1f" % float(_m.get("trunk_deg", -1.0)))
+	print("  改前（只滤下半身）      %.1f   ← 用户报的「身体倾斜了好多」"
+		% float(_m.get("trunk_deg_old", -1.0)))
+	print("  站定开火 vs 待机        %.1f   ← 站桩姿势仍然保留"
+		% float(_m.get("trunk_stand", -1.0)))
 
 
 func _check(cond: bool, label: String) -> void:
