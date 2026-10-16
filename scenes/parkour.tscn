@@ -1,0 +1,570 @@
+[gd_scene load_steps=23 format=3]
+
+; ── 跑酷路线：「记忆平台 →（西）→ 信号塔岛」────────────────────────────────
+;
+; 从平台**西边缘**（x = −20）跳出去，10 跳 + 1 段窄梁，最终落到一座
+; 16 × 16 m 的悬浮岛（顶面 y = +4.70），岛上有信号塔、掩体、货箱和
+; 一台「回平台」的传送台 —— 那就是「下一个区域」。
+;
+; ── 怎么读这个文件 ──
+;   1. **坐标系 = 世界坐标**：根节点不带偏移，所以下面所有 `position` 都是
+;      世界坐标（小屋 mesh_hut.tscn 用的是「自己的原点 + 摆在场景里」，
+;      那是**道具**的写法；这一份是**关卡几何**，直接对着平台写更好核对）。
+;      唯一的例外是 `Island/Props`：它被抬到岛面（局部 y = 0），
+;      所以岛上那些东西的坐标是**相对岛面**的（y = 0 就是地面）。
+;   2. 整份场景只用**6 个网格资源**，平台一律 `Box_unit`（1×1×1）+ 节点的
+;      `scale` 拉伸 —— 所以「一块板多大」写在 scale 里。
+;   3. **所有位置与尺寸都落在 0.05 m 网格上**（自检 `_verify_parkour.gd` 会逐个核对）。
+;   4. 落脚板 = `StaticBody3D` + `Mesh` + `Col`，**碰撞形状共用同一个
+;      1×1×1 的 `Shape_unit`、靠节点 scale 拉伸**（实测可行：探针量到
+;      正中和内沿都精确站在台面 +0.000；见 README §1.16）。
+;      好处是「板多大」只有 scale 这一处真相，网格和碰撞不可能走散。
+;
+; ── 尺寸是怎么定出来的（每一跳都留了余量）──
+;   实测（`_verify_parkour.gd` 第 3 节每次都会重量）：按住 Shift 跑满 6.8 m/s、
+;   起跳 7.1 m/s、重力 20 —— 于是
+;       平跳最远 6.8 × 0.71 = 4.83 m     +0.8 m 抬升只剩 3.87 m
+;                                        −1.0 m 落差能到 5.65 m
+;   另外实测**挂在板边上**还能站住，容差 +0.20 m（胶囊半径 0.30）。
+;   本文件里最长的一跳是 H3 = 4.00 m 平跳（余量 0.83 m），其余都在 2.2~3.5 m。
+;   ⚠️ **改了 `player.gd` 的速度/跳跃/重力，这条路线要重新量一遍** ——
+;      `_verify_parkour.gd` 第 3 节会把「实测最远」和「本关最远一跳」摆在一起，
+;      余量不够就直接红。
+;
+; ── 视觉上的两处刻意选择 ──
+;   · 起跳跑道（`Launch`）是**画在平台地面上的标记，故意没有碰撞** ——
+;     2.5 cm 的坎就能把 CharacterBody3D 挡在门外（README §1.13 量过 10 cm 坎
+;     让 cast_motion 的 safe 从 1.000 掉到 0.387）。有碰撞 = 玩家上不去跑道。
+;   · 只有 2 盏灯（岛上信号塔顶 1 + 掩体 1），都关阴影 ——
+;     本项目对功耗敏感，跑酷这条线本来就在大太阳底下，跑道起点不另加灯。
+
+[ext_resource type="Script" path="res://scripts/parkour.gd" id="1_parkour"]
+
+[sub_resource type="BoxMesh" id="Box_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="CylinderMesh" id="Cyl_leg"]
+top_radius = 0.15
+bottom_radius = 0.15
+height = 10.0
+radial_segments = 12
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Cyl_mast"]
+top_radius = 0.1
+bottom_radius = 0.1
+height = 5.0
+radial_segments = 12
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Cyl_post"]
+top_radius = 0.05
+bottom_radius = 0.05
+height = 2.6
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Cyl_bollard"]
+top_radius = 0.25
+bottom_radius = 0.25
+height = 1.2
+radial_segments = 12
+rings = 1
+
+[sub_resource type="SphereMesh" id="Sphere_beacon"]
+radius = 0.5
+height = 1.0
+radial_segments = 16
+rings = 8
+
+[sub_resource type="BoxShape3D" id="Shape_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="CylinderShape3D" id="Shape_leg"]
+radius = 0.15
+height = 10.0
+
+[sub_resource type="CylinderShape3D" id="Shape_post"]
+radius = 0.05
+height = 2.6
+
+[sub_resource type="CylinderShape3D" id="Shape_bollard"]
+radius = 0.25
+height = 1.2
+
+[sub_resource type="BoxShape3D" id="Shape_crate"]
+size = Vector3(0.9, 0.9, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="Mat_runway"]
+albedo_color = Color(0.25, 0.26, 0.29, 1)
+metallic = 0.2
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="Mat_mark"]
+albedo_color = Color(0.95, 0.6, 0.22, 1)
+roughness = 0.6
+emission_enabled = true
+emission = Color(0.95, 0.55, 0.18, 1)
+emission_energy_multiplier = 1.8
+
+[sub_resource type="StandardMaterial3D" id="Mat_pad"]
+albedo_color = Color(0.62, 0.6, 0.57, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="Mat_beam"]
+albedo_color = Color(0.44, 0.46, 0.5, 1)
+metallic = 0.7
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Mat_island"]
+albedo_color = Color(0.5, 0.49, 0.46, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="Mat_bollard"]
+albedo_color = Color(0.8, 0.72, 0.35, 1)
+roughness = 0.6
+
+[sub_resource type="StandardMaterial3D" id="Mat_tower"]
+albedo_color = Color(0.31, 0.33, 0.37, 1)
+metallic = 0.5
+roughness = 0.6
+
+[sub_resource type="StandardMaterial3D" id="Mat_shed"]
+albedo_color = Color(0.72, 0.7, 0.65, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="Mat_lamp"]
+albedo_color = Color(0.95, 0.9, 0.75, 1)
+roughness = 0.6
+emission_enabled = true
+emission = Color(1, 0.9, 0.66, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_beacon"]
+albedo_color = Color(1, 0.36, 0.3, 1)
+roughness = 0.5
+emission_enabled = true
+emission = Color(1, 0.3, 0.24, 1)
+emission_energy_multiplier = 2.6
+
+[node name="Parkour" type="Node3D"]
+script = ExtResource("1_parkour")
+route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/Beam"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/P8"), NodePath("Route/P9"), NodePath("Island")]
+
+; ══ 起跳段：平台西边缘的跑道（10 × 3 m），只有外观、没有碰撞 ══
+[node name="Launch" type="MeshInstance3D" parent="."]
+position = Vector3(-15, 0, 4)
+scale = Vector3(10, 0.05, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_runway")
+
+; 起跳线：紧贴平台边缘（x = −20）的一条橙带，给玩家一个「就从这儿出去」的锚点
+[node name="LaunchMark" type="MeshInstance3D" parent="."]
+position = Vector3(-19.7, 0, 4)
+scale = Vector3(0.6, 0.05, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_mark")
+
+; ══ 起跳段的指路牌（立在跑道南侧，不挡跑道）══
+[node name="SignPost" type="StaticBody3D" parent="."]
+position = Vector3(-11.5, 0, 6.2)
+
+[node name="Mesh" type="MeshInstance3D" parent="SignPost"]
+position = Vector3(0, 1.3, 0)
+mesh = SubResource("Cyl_post")
+material_override = SubResource("Mat_tower")
+
+[node name="Col" type="CollisionShape3D" parent="SignPost"]
+position = Vector3(0, 1.3, 0)
+shape = SubResource("Shape_post")
+
+[node name="SignText" type="Label3D" parent="SignPost"]
+position = Vector3(0, 2.2, 0)
+billboard = 1
+alpha_cut = 1
+text = "跑酷 → 信号塔"
+font_size = 64
+outline_size = 14
+pixel_size = 0.008
+
+; ══ 十块落脚板 + 一段窄梁 ══
+; 每块的 `position.y` 都等于「台面高 − 0.25」（板厚 0.5），台面高见每段注释。
+[node name="Route" type="Node3D" parent="."]
+
+; H1：平台边缘 → 3.50 m 平跳，抬升 +0.40。台面 0.40
+[node name="P1" type="StaticBody3D" parent="Route"]
+position = Vector3(-24.8, 0.15, 4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P1"]
+scale = Vector3(2.6, 0.5, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P1"]
+scale = Vector3(2.6, 0.5, 3)
+shape = SubResource("Shape_unit")
+
+; H2：3.00 m，抬升 +0.50（同时往南错 0.40 m，路线开始有味道）。台面 0.90
+[node name="P2" type="StaticBody3D" parent="Route"]
+position = Vector3(-30.3, 0.65, 4.4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P2"]
+scale = Vector3(2.4, 0.5, 2.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P2"]
+scale = Vector3(2.4, 0.5, 2.6)
+shape = SubResource("Shape_unit")
+
+; H3：**全线最难的一跳** —— 4.00 m 平跳（实测最远 4.83 m，余量 0.83 m）。
+; 板也给得最大（3 × 3），因为这一跳的落点误差最大。台面 0.90
+[node name="P3" type="StaticBody3D" parent="Route"]
+position = Vector3(-37, 0.65, 4.4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P3"]
+scale = Vector3(3, 0.5, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P3"]
+scale = Vector3(3, 0.5, 3)
+shape = SubResource("Shape_unit")
+
+; 窄梁：5.00 m 长、**只有 0.80 m 宽**（站得住的横向余量 ±0.7 m，见自检第 2 节）。
+; 它与 P3 的台面同高、且紧贴着 P3 的西边缘（x = −38.50），所以是**走**过去不是跳过去。
+; 放在最难的 H3 之后：这一段是全程唯一能喘口气的地方，也是唯一的平衡考验。
+[node name="Beam" type="StaticBody3D" parent="Route"]
+position = Vector3(-41, 0.65, 4.4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/Beam"]
+scale = Vector3(5, 0.5, 0.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_beam")
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beam"]
+scale = Vector3(5, 0.5, 0.8)
+shape = SubResource("Shape_unit")
+
+; H4：窄梁西端 → 2.50 m，抬升 +0.80。台面 1.70
+[node name="P4" type="StaticBody3D" parent="Route"]
+position = Vector3(-47, 1.45, 4.4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P4"]
+scale = Vector3(2, 0.5, 2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P4"]
+scale = Vector3(2, 0.5, 2)
+shape = SubResource("Shape_unit")
+
+; H5：2.80 m，抬升 +0.80。台面 2.50
+[node name="P5" type="StaticBody3D" parent="Route"]
+position = Vector3(-52.1, 2.25, 4.4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P5"]
+scale = Vector3(2.6, 0.5, 2.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P5"]
+scale = Vector3(2.6, 0.5, 2.6)
+shape = SubResource("Shape_unit")
+
+; H6：2.80 m +0.80，从这里开始往北收（z 4.40 → 3.60 → 3.00），
+; 斜跳的**三维距离** 2.91 m（自检按三维距离算余量）。台面 3.30
+[node name="P6" type="StaticBody3D" parent="Route"]
+position = Vector3(-57.5, 3.05, 3.6)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P6"]
+scale = Vector3(2.6, 0.5, 2.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P6"]
+scale = Vector3(2.6, 0.5, 2.6)
+shape = SubResource("Shape_unit")
+
+; H7：2.40 m（三维 2.47）+0.80。台面 4.10
+[node name="P7" type="StaticBody3D" parent="Route"]
+position = Vector3(-62.3, 3.85, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P7"]
+scale = Vector3(2.2, 0.5, 2.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P7"]
+scale = Vector3(2.2, 0.5, 2.2)
+shape = SubResource("Shape_unit")
+
+; H8：2.20 m +0.80。台面 4.90
+[node name="P8" type="StaticBody3D" parent="Route"]
+position = Vector3(-66.7, 4.65, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P8"]
+scale = Vector3(2.2, 0.5, 2.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P8"]
+scale = Vector3(2.2, 0.5, 2.2)
+shape = SubResource("Shape_unit")
+
+; H9：2.20 m +0.80（全程最高点）。台面 5.70
+[node name="P9" type="StaticBody3D" parent="Route"]
+position = Vector3(-71.1, 5.45, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/P9"]
+scale = Vector3(2.2, 0.5, 2.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/P9"]
+scale = Vector3(2.2, 0.5, 2.2)
+shape = SubResource("Shape_unit")
+
+; ══ 终点：信号塔岛（16 × 16 m，台面 y = +4.70）══
+; H10：P9 西缘 → 4.00 m 的**下跳**（落差 −1.00 m，实测能到 5.65 m，余量 1.65 m）。
+; 落点在世界 x ≈ −77.9、z = 3.0，所以岛面东侧那一块是净空的（见自检第 5 节）。
+[node name="Island" type="StaticBody3D" parent="."]
+position = Vector3(-84.2, 4.1, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Island"]
+scale = Vector3(16, 1.2, 16)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_island")
+
+[node name="Col" type="CollisionShape3D" parent="Island"]
+scale = Vector3(16, 1.2, 16)
+shape = SubResource("Shape_unit")
+
+; 岛面：这一层起，所有坐标的 y = 0 就是**地面**
+[node name="Props" type="Node3D" parent="Island"]
+position = Vector3(0, 0.6, 0)
+
+; ── 四角警示柱（既是边界提示，也是「这块地是给人站的」的视觉锚点）──
+[node name="Bollards" type="StaticBody3D" parent="Island/Props"]
+
+[node name="Mesh0" type="MeshInstance3D" parent="Island/Props/Bollards"]
+position = Vector3(7.4, 0.6, 7.4)
+mesh = SubResource("Cyl_bollard")
+material_override = SubResource("Mat_bollard")
+
+[node name="Col0" type="CollisionShape3D" parent="Island/Props/Bollards"]
+position = Vector3(7.4, 0.6, 7.4)
+shape = SubResource("Shape_bollard")
+
+[node name="Mesh1" type="MeshInstance3D" parent="Island/Props/Bollards"]
+position = Vector3(7.4, 0.6, -7.4)
+mesh = SubResource("Cyl_bollard")
+material_override = SubResource("Mat_bollard")
+
+[node name="Col1" type="CollisionShape3D" parent="Island/Props/Bollards"]
+position = Vector3(7.4, 0.6, -7.4)
+shape = SubResource("Shape_bollard")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Island/Props/Bollards"]
+position = Vector3(-7.4, 0.6, 7.4)
+mesh = SubResource("Cyl_bollard")
+material_override = SubResource("Mat_bollard")
+
+[node name="Col2" type="CollisionShape3D" parent="Island/Props/Bollards"]
+position = Vector3(-7.4, 0.6, 7.4)
+shape = SubResource("Shape_bollard")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Island/Props/Bollards"]
+position = Vector3(-7.4, 0.6, -7.4)
+mesh = SubResource("Cyl_bollard")
+material_override = SubResource("Mat_bollard")
+
+[node name="Col3" type="CollisionShape3D" parent="Island/Props/Bollards"]
+position = Vector3(-7.4, 0.6, -7.4)
+shape = SubResource("Shape_bollard")
+
+; ── 信号塔：四腿 + 顶台 + 桅杆 + 信标灯（岛上的地标，从平台就能看见）──
+; 顶台与桅杆**故意没给碰撞**：从岛面（+4.70）到顶台（+15.1）有 10 m，
+; 够不着，给了也只是白占物理资源。
+[node name="Tower" type="StaticBody3D" parent="Island/Props"]
+position = Vector3(-6, 0, 0)
+
+[node name="Leg0" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(1.2, 5, 1.2)
+mesh = SubResource("Cyl_leg")
+material_override = SubResource("Mat_tower")
+
+[node name="Col0" type="CollisionShape3D" parent="Island/Props/Tower"]
+position = Vector3(1.2, 5, 1.2)
+shape = SubResource("Shape_leg")
+
+[node name="Leg1" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(1.2, 5, -1.2)
+mesh = SubResource("Cyl_leg")
+material_override = SubResource("Mat_tower")
+
+[node name="Col1" type="CollisionShape3D" parent="Island/Props/Tower"]
+position = Vector3(1.2, 5, -1.2)
+shape = SubResource("Shape_leg")
+
+[node name="Leg2" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(-1.2, 5, 1.2)
+mesh = SubResource("Cyl_leg")
+material_override = SubResource("Mat_tower")
+
+[node name="Col2" type="CollisionShape3D" parent="Island/Props/Tower"]
+position = Vector3(-1.2, 5, 1.2)
+shape = SubResource("Shape_leg")
+
+[node name="Leg3" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(-1.2, 5, -1.2)
+mesh = SubResource("Cyl_leg")
+material_override = SubResource("Mat_tower")
+
+[node name="Col3" type="CollisionShape3D" parent="Island/Props/Tower"]
+position = Vector3(-1.2, 5, -1.2)
+shape = SubResource("Shape_leg")
+
+[node name="Platform" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(0, 10.2, 0)
+scale = Vector3(4, 0.4, 4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_tower")
+
+[node name="Mast" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(0, 12.8, 0)
+mesh = SubResource("Cyl_mast")
+material_override = SubResource("Mat_tower")
+
+[node name="Beacon" type="MeshInstance3D" parent="Island/Props/Tower"]
+position = Vector3(0, 15.6, 0)
+mesh = SubResource("Sphere_beacon")
+material_override = SubResource("Mat_beacon")
+
+[node name="Light" type="OmniLight3D" parent="Island/Props/Tower"]
+position = Vector3(0, 15.6, 0)
+light_color = Color(1, 0.45, 0.35, 1)
+light_energy = 3.0
+shadow_enabled = false
+omni_range = 22.0
+
+; ── 掩体：三面墙 + 顶，朝南（+z）开口，玩家能从落点直接走进去 ──
+; 墙给碰撞、顶不给（够不着）；这三面墙的尺寸同时就是碰撞盒的 scale。
+[node name="Shed" type="StaticBody3D" parent="Island/Props"]
+position = Vector3(-3, 0, -4)
+
+[node name="WallN" type="MeshInstance3D" parent="Island/Props/Shed"]
+position = Vector3(0, 1.3, -1.5)
+scale = Vector3(4, 2.6, 0.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_shed")
+
+[node name="ColN" type="CollisionShape3D" parent="Island/Props/Shed"]
+position = Vector3(0, 1.3, -1.5)
+scale = Vector3(4, 2.6, 0.2)
+shape = SubResource("Shape_unit")
+
+[node name="WallW" type="MeshInstance3D" parent="Island/Props/Shed"]
+position = Vector3(-1.9, 1.3, 0)
+scale = Vector3(0.2, 2.6, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_shed")
+
+[node name="ColW" type="CollisionShape3D" parent="Island/Props/Shed"]
+position = Vector3(-1.9, 1.3, 0)
+scale = Vector3(0.2, 2.6, 3)
+shape = SubResource("Shape_unit")
+
+[node name="WallE" type="MeshInstance3D" parent="Island/Props/Shed"]
+position = Vector3(1.9, 1.3, 0)
+scale = Vector3(0.2, 2.6, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_shed")
+
+[node name="ColE" type="CollisionShape3D" parent="Island/Props/Shed"]
+position = Vector3(1.9, 1.3, 0)
+scale = Vector3(0.2, 2.6, 3)
+shape = SubResource("Shape_unit")
+
+[node name="Roof" type="MeshInstance3D" parent="Island/Props/Shed"]
+position = Vector3(0, 2.7, 0)
+scale = Vector3(4.4, 0.2, 3.4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_tower")
+
+[node name="Lamp" type="MeshInstance3D" parent="Island/Props/Shed"]
+position = Vector3(0, 2.45, 0)
+scale = Vector3(0.5, 0.1, 0.5)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_lamp")
+
+[node name="Light" type="OmniLight3D" parent="Island/Props/Shed"]
+position = Vector3(0, 2.1, 0)
+light_color = Color(1, 0.93, 0.8, 1)
+light_energy = 2.0
+shadow_enabled = false
+omni_range = 9.0
+
+; ── 两只货箱（给「下一章要用的地方」一点人气）──
+[node name="Crates" type="StaticBody3D" parent="Island/Props"]
+
+[node name="Mesh0" type="MeshInstance3D" parent="Island/Props/Crates"]
+position = Vector3(2.2, 0.45, 4.6)
+scale = Vector3(0.9, 0.9, 0.9)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_shed")
+
+[node name="Col0" type="CollisionShape3D" parent="Island/Props/Crates"]
+position = Vector3(2.2, 0.45, 4.6)
+shape = SubResource("Shape_crate")
+
+[node name="Mesh1" type="MeshInstance3D" parent="Island/Props/Crates"]
+position = Vector3(3, 0.45, 3.9)
+scale = Vector3(0.9, 0.9, 0.9)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_shed")
+
+[node name="Col1" type="CollisionShape3D" parent="Island/Props/Crates"]
+position = Vector3(3, 0.45, 3.9)
+shape = SubResource("Shape_crate")
+
+; ── 传送台：回平台 ──
+; ⚠️ 它**不能凸出岛面** —— 4 cm 的台唇就够把人挡在外面（CharacterBody3D 不会上台阶）。
+; 所以它就是一块 7 cm 厚的发光标记（只有外观）+ 上方一个 Area3D。
+[node name="ReturnPad" type="Node3D" parent="Island/Props"]
+position = Vector3(-4, 0, 5)
+
+[node name="Mark" type="MeshInstance3D" parent="Island/Props/ReturnPad"]
+scale = Vector3(3, 0.1, 3)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_mark")
+
+[node name="Trigger" type="Area3D" parent="Island/Props/ReturnPad"]
+
+[node name="Col" type="CollisionShape3D" parent="Island/Props/ReturnPad/Trigger"]
+position = Vector3(0, 1, 0)
+scale = Vector3(2.8, 2, 2.8)
+shape = SubResource("Shape_unit")
+
+[node name="Label" type="Label3D" parent="Island/Props/ReturnPad"]
+position = Vector3(0, 2.3, 0)
+billboard = 1
+alpha_cut = 1
+text = "传送台：回平台"
+font_size = 64
+outline_size = 14
+pixel_size = 0.008
+
+; ── 岛名 ──
+; ⚠️ 摆在岛的**北侧**（局部 z = −5.5）：从东边的落点看过来，它在视野右侧，
+;    不会和传送台那块「传送台：回平台」的牌子叠在一起（第一版两行字糊成一团）。
+[node name="IslandSign" type="Label3D" parent="Island/Props"]
+position = Vector3(4.5, 3.2, -5.5)
+billboard = 1
+alpha_cut = 1
+text = "信号塔\n跑酷终点"
+font_size = 96
+outline_size = 16
+pixel_size = 0.01
+
+[connection signal="body_entered" from="Island/Props/ReturnPad/Trigger" to="." method="_on_return_pad_entered"]

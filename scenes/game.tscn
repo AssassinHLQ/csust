@@ -11,6 +11,7 @@
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
 [ext_resource type="PackedScene" path="res://scenes/mesh_hut.tscn" id="12_hut"]
+[ext_resource type="PackedScene" path="res://scenes/parkour.tscn" id="13_parkour"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -157,6 +158,12 @@ shape = SubResource("Shape_room_zpos")
 ; 「玩家(6,−4) → 靶1(6,−10)」。改了位置请重跑那个探针 + `_verify_mesh_hut`。
 [node name="MeshHut" parent="." instance=ExtResource("12_hut")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
+
+; ── 平台西侧的跑酷路线（scenes/parkour.tscn）──
+; 从平台西边缘（x = −20）跳出去，10 跳 + 一段窄梁，落到 56 m 外的「信号塔岛」。
+; 这一份**刻意不做偏移**：它在场景文件里就是按世界坐标写的（关卡几何，
+; 不是道具），所以这里是恒等变换。每一跳的余量、尺寸依据见那个文件的头注释。
+[node name="Parkour" parent="." instance=ExtResource("13_parkour")]
 
 [node name="Boss" type="StaticBody3D" parent="." unique_id=2075354218]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)

@@ -204,15 +204,25 @@ func _test_playback() -> void:
 		"3D 播放器被摆到了指定位置（%s）"
 		% (str(found.global_position.snappedf(0.01)) if found != null else "没找到 3D 播放器"))
 
-	# 「真的在走时钟」：播放位置随真实时间前进
+	# 「真的在走时钟」：播放位置随真实时间前进。
+	#
+	# ⚠️ **必须按真实毫秒等，不能等帧数**（README §1.15 那条纪律）。
+	#    这里原来写的是 `await _wait(20)`：60 fps 下 20 帧 = 0.33 s，而 `ui_open`
+	#    这条 Kenney 音效只有 **0.25 s 左右** —— 它**播完了**，`playing` 变 false，
+	#    于是这条断言时红时绿（2026-10 的全量回归里红过一次，而当时把
+	#    game.tscn 换成带跑酷场景的那一版，谁看都像是新场景搞的鬼）。
+	#    现在改成：**挑库表里最长的一条**，按它长度的 1/4 等真实毫秒。
 	Sfx.reset_for_test()
 	Sfx.stop_all()
-	Sfx.play("ui_open")
-	await _wait(20)
+	var clip := _longest_clip()
+	var wait_ms := int(clampf(float(clip.get("len", 0.25)) * 0.25, 0.03, 0.4) * 1000.0)
+	Sfx.play(String(clip.get("name", "ui_open")))
+	await _wait_ms(wait_ms)
 	var p := _playing_2d()
-	_check(p != null and p.playing, "等了 20 帧之后还在播（没被立刻掐掉）")
-	if p != null:
-		print("  ── 播放位置 %.3f s / 总长 %.3f s ──" % [p.get_playback_position(), p.stream.get_length()])
+	var pos := p.get_playback_position() if p != null else -1.0
+	_check(p != null and p.playing and pos > 0.005,
+		"等了 %d ms（真实时间）之后还在播、时钟在走：位置 %.3f s / 总长 %.3f s"
+		% [wait_ms, pos, float(clip.get("len", 0.0))])
 
 	Sfx.stop_all()
 	_check(Sfx.active_count() == 0, "stop_all() 之后一个都不响了")
@@ -326,6 +336,22 @@ func _script_files() -> Array[String]:
 	return out
 
 
+## 库表里**最长**的那条音效（`{name, len}`）。用途见上面「等真实毫秒」那段：
+## 想量「还在播」就不能挑一条比等待时间还短的音效。
+func _longest_clip() -> Dictionary:
+	var best := {}
+	for name in Sfx.names():
+		for f in Sfx.files(String(name)):
+			if not ResourceLoader.exists(f):
+				continue
+			var st := load(f) as AudioStream
+			if st == null:
+				continue
+			if best.is_empty() or st.get_length() > float(best["len"]):
+				best = {"name": String(name), "len": st.get_length()}
+	return best
+
+
 func _playing_2d() -> AudioStreamPlayer:
 	var host := root.get_node_or_null("SfxHost")
 	if host == null:
@@ -361,4 +387,11 @@ func _quit() -> void:
 
 func _wait(n: int) -> void:
 	for _i in maxi(n, 1):
+		await process_frame
+
+
+## 等**真实毫秒**（真窗口能跑到 1000+ fps，「等 60 帧」可能只有 16 ms）
+func _wait_ms(ms: int) -> void:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
 		await process_frame
