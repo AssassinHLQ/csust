@@ -116,7 +116,7 @@ func _run() -> void:
 			print("  %-12s ✗ 动画驱动不全（骨架 %s / 播放器 %s）" % [
 				c.get("display_name"), str(skel_a), str(ap)])
 			continue
-		ap.play("Cafe_Walk", -1.0, 1.0)
+		ap.play("Move_Ing", -1.0, 1.0)
 		await process_frame
 		var before := _pose_snapshot(skel_a)
 		for _f in 20:

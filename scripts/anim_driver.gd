@@ -9,9 +9,13 @@ extends Node
 ##   完全正常。为了不让玩法卡死，这里绕开 AnimationTree，用 AnimationPlayer 自己做。
 ##
 ## 状态：
-##   LOCOMOTION  按速度在 Normal_Idle / Cafe_Walk / Move_Ing 之间切
+##   LOCOMOTION  按速度在 Normal_Idle / Move_Ing 之间切
 ##   FIRE        播一次 Normal_Attack_Ing，播完回 LOCOMOTION
 ##   RELOAD      播一次 Normal_Reload，播完回 LOCOMOTION
+##
+## ⚠️ **为什么只有两条循环动画，没有 `Cafe_Walk`** —— 这一条是踩过一次才想明白的，
+##    改动前务必看 `CYCLE_SPEED` 上面那段注释（用户报「为什么小桃小绿行走动作是拿
+##    游戏机的，还有好多角色行走也没有拿枪了」就是它）。
 ##
 ## 标注速度：每个循环动画在某个移动速度下脚步最贴合，用它算播放速率，
 ## 避免「脚下打滑」。
@@ -19,15 +23,47 @@ extends Node
 enum State { LOCOMOTION, FIRE, RELOAD }
 
 ## 循环动画的标称速度（米/秒）——按这个速度播时脚步与位移最匹配
+##
+## ⚠️⚠️ **这里只有 Idle 和 Move_Ing 两条，是故意的 —— `Cafe_Walk` 一律不用。**
+##
+## ── 起因（用户报）──
+## 「为什么小桃小绿行走动作是拿游戏机的，还有好多角色行走也没有拿枪了」
+##
+## ── 量出来的真相（`scripts/_probe_companion_anim.gd`）──
+## Blue Archive 的 `Cafe_*` 是**咖啡厅模式**的动画，那一套里角色**不拿武器**：
+## 素材是靠**把武器骨的 scale 缩到 ≈0** 来藏枪的。实测 8 个模型**全都如此** ——
+## `Cafe_Walk` 里的武器骨 scale.x 最小是
+##     爱丽丝 0.038 / 未花 0.020 / 优香 0.143 + 0.107 / 诺亚 0.001 /
+##     小桃 0.000 / 小绿 0.000 / 柚子 0.020 / 凯伊 0.001
+## 而同一根骨在 `Move_Ing`（战斗移动）里是 **1.0**（拿枪）。
+## 所以「走路不拿枪」**不是挑错了 clip，是素材本身如此**；小桃/小绿在咖啡厅姿势里
+## 手里那个「游戏机」就是她们的招牌道具。
+##
+## ── 试过并否掉的修法 ──
+## 把 `Cafe_Walk` 复制一份、把「Move_Ing 里显示、Cafe_Walk 里藏起来」的骨 scale
+## 改回 1.0（保住漫步步态 + 补回武器）：枪确实回来了，但**是挂在身侧的**，
+## 两只手还在胸前捧着游戏机（那件道具**不在武器骨下**，改 scale 抠不掉它）——
+## 比原来更怪。四种候选的对照图见 `scripts/_probe_armed_walk_shot.gd`
+## （输出在 `_arisu_captures/_armedwalk/`）。
+##
+## ── 结论 ──
+## 整个游戏（主角 + 七名同伴）**一律用战斗动画**，走 / 跑只靠 `speed_scale` 区分。
+## 这也正是 BA 自己的做法：`Cafe_*` 只在咖啡厅界面出现，战斗里只有 `Move_Ing`。
+## 代价是「走路时用的是跑步的**姿势**、放慢到 0.46 倍」——步幅仍然吻合
+## （见下面 `speed_scale` 那段），只是上身前倾是跑步那一下。
 const CYCLE_SPEED := {
 	"Normal_Idle": 0.0,
-	"Cafe_Walk": 1.6,
 	"Move_Ing": 5.2,
 }
-const WALK_THRESHOLD := 2.8      # 低于这个速度用 Cafe_Walk，高于用 Move_Ing
-                                 # ⚠️ 必须**大于** `player.gd` 的 `SPEED_WALK`（2.4），
-                                 #    否则「走路」会去播跑步动画。同伴用同一个阈值，
-                                 #    它们的 `walk_speed = 2.2` 也仍在下面 ✓（2.4 → 2.8）
+## 低于这个速度就播待机（原来是「低于 WALK_THRESHOLD 播 Cafe_Walk」）
+const IDLE_SPEED := 0.15
+## 播放速率的上下限。
+##
+## ⚠️ 下限从 0.35 放到 **0.25**：蹲行（1.3 m/s）现在也走 `Move_Ing`（标称 5.2），
+##    1.3 / 5.2 = 0.25。卡在 0.35 会让脚比地面快 40%（打滑），
+##    而「步幅吻合」比「步频好看」重要 —— 播放速率是**按实际位移补脚步**的。
+const SPEED_SCALE_MIN := 0.25
+const SPEED_SCALE_MAX := 2.0
 const FADE := 0.18               # 交叉淡入时间
 
 ## 一次性动作的播放倍速。
@@ -71,7 +107,9 @@ func _ready() -> void:
 
 
 func _configure_library() -> void:
-	for n in ["Normal_Idle", "Cafe_Walk", "Move_Ing"]:
+	# 只给**用到的**两条循环动画设循环；`Cafe_Walk` 也在模型里，但本工程不播它
+	# （理由见 CYCLE_SPEED 上面那段），所以不用管它。
+	for n in ["Normal_Idle", "Move_Ing"]:
 		if player.has_animation(n):
 			player.get_animation(n).loop_mode = Animation.LOOP_LINEAR
 	for n in ["Normal_Attack_Ing", "Normal_Reload"]:
@@ -137,19 +175,19 @@ func reload_clip_length() -> float:
 # --- 内部 ---
 
 func _update_locomotion() -> void:
-	var want := "Normal_Idle"
-	if _speed >= WALK_THRESHOLD:
-		want = "Move_Ing"
-	elif _speed > 0.15:
-		want = "Cafe_Walk"
+	# 走 / 跑 / 蹲 / 开镜 **都用 Move_Ing**（战斗动画：两只手在枪上），
+	# 只靠 `speed_scale` 区分快慢。理由见 CYCLE_SPEED 上面那段（`Cafe_Walk` 不拿枪）。
+	var want := "Normal_Idle" if _speed <= IDLE_SPEED else "Move_Ing"
 
 	if player.current_animation != want:
 		player.play(want, FADE, 1.0)
 
-	# 播放速率按实际速度 / 该动画的标称速度算
+	# 播放速率按实际速度 / 该动画的标称速度算 —— 这一条是**防脚底打滑**的：
+	# `Move_Ing` 的标称是 5.2 m/s，走 2.4 m/s 就播 0.46 倍，
+	# 一个循环仍然是 3.47 m 的步幅（2.4 × 0.667 / 0.46 = 3.48），和地面严丝合缝。
 	var nominal: float = CYCLE_SPEED.get(want, 0.0)
 	if nominal > 0.01:
-		player.speed_scale = clampf(_speed / nominal, 0.35, 2.0)
+		player.speed_scale = clampf(_speed / nominal, SPEED_SCALE_MIN, SPEED_SCALE_MAX)
 	else:
 		player.speed_scale = 1.0
 

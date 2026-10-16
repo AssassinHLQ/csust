@@ -46,11 +46,22 @@ func _run() -> void:
 	print("\n========== 2. 向右跑，等转向收敛 ==========")
 	Input.action_press("move_right")
 	await _wait(180)
-	var f_moving := _face(skel)
 	var vel := _flat(player.velocity).normalized()
-	print("  移动 %s   脸 %s   夹角 %.1f 度" % [
-		str(vel.snappedf(0.01)), str(f_moving.snappedf(0.01)), rad_to_deg(f_moving.angle_to(vel))])
-	if rad_to_deg(f_moving.angle_to(vel)) < 10.0:
+	# ⚠️ 判据用 **`model_root.rotation.y`**（代码真正控制的那个角），**不要用眼骨**：
+	#    眼骨在头局部带横向偏移、头部动画又一直在摆，实测哪怕站得笔直，
+	#    「眼睛中点 − 头骨」与真实朝向也恒定差约 46°（`player.gd` 顶部那段）。
+	#    这里把它顺带打出来当参考：2026-10 把「走路」从 `Cafe_Walk` 换成 `Move_Ing`
+	#    （§1.17）之后，奔跑循环的头部摆动比漫步大，**同一个采样点**从 ~9° 变成 ~15° ——
+	#    朝向本身一点没变（rig 差 0.0°），变的只是**姿势**。旧写法只卡眼骨 10°，
+	#    于是这条断言测的其实是「采样到循环的哪一帧」。
+	var rig_err := rad_to_deg(absf(angle_difference(atan2(vel.x, vel.z),
+		player.model_root.rotation.y)))
+	var f_moving := _face(skel)
+	var eye_err := rad_to_deg(f_moving.angle_to(vel))
+	print("  移动 %s   朝向 rig %+.3f rad（差 %.1f 度）   眼-头方向 %s（差 %.1f 度，含动画摆动）"
+		% [str(vel.snappedf(0.01)), player.model_root.rotation.y, rig_err,
+			str(f_moving.snappedf(0.01)), eye_err])
+	if rig_err < 5.0 and eye_err < 30.0:
 		print("  [PASS] 跑动时脸朝移动方向")
 	else:
 		print("  [FAIL] 跑动时脸没朝移动方向"); fail += 1

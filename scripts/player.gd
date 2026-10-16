@@ -30,9 +30,11 @@ var health := 100.0
 # ⚠️ 这一组是**整体调过一轮**的（用户报：加速度少 / 机动性差 / 跳不高 / 要更快 /
 #    往后不能跑 / 转向不灵活）。改之前先看这四条约束，**别只动一个数**：
 #
-#   1. **`SPEED_WALK` 必须小于 `anim_driver.gd` 的 `WALK_THRESHOLD`**，否则「走路」
-#      会去播 `Move_Ing`（跑步动画）。现在 2.4 < 2.8。同伴的 `walk_speed = 2.2`
-#      用的是同一个阈值，也仍在下面 ✓。
+#   1. **动画那边只有 `Normal_Idle` / `Move_Ing` 两条循环**：走 / 跑 / 蹲 / 开镜
+#      **都用 `Move_Ing`**（战斗动画，两只手在枪上），快慢只靠 `speed_scale` 区分。
+#      ⚠️ **不要再按速度去切 `Cafe_Walk`** —— BA 的咖啡厅动画**不拿武器**
+#      （素材把武器骨的 scale 缩到 ≈0，小桃小绿手里还会多出个游戏机），
+#      详见 `anim_driver.gd` 的 `CYCLE_SPEED` 上面那段与 README §1.17。
 #   2. 动画的 `speed_scale = 速度 / CYCLE_SPEED[clip]`，那是**按实际位移补脚步**
 #      （防止脚底打滑）。所以**改了速度不要跟着改 `CYCLE_SPEED`** —— 那个数是
 #      「这条动画按多快的地面速度录的」，不是「想让玩家跑多快」。
@@ -44,7 +46,7 @@ var health := 100.0
 #
 # 这些数字都有自检守着（`_verify_move_feel.gd` 把「手感」量成具体数值），
 # 别靠感觉改。
-const SPEED_WALK := 2.4        # 2.0 → 2.4（仍 < WALK_THRESHOLD 2.8）
+const SPEED_WALK := 2.4        # 2.0 → 2.4
 const SPEED_RUN := 6.8         # 5.2 → 6.8（+31%）
 const SPEED_CROUCH := 1.3      # 1.1 → 1.3
 const SPEED_AIM := 1.9         # 1.6 → 1.9

@@ -335,14 +335,19 @@ func shoot() -> bool:
 | **`AnimationPlayer.play()` 直接播** | **正常**，每个动作 40/40 帧姿态都不同 |
 
 所以 `anim_driver.gd` 退回到最朴素的做法：**直接用 `AnimationPlayer`**，
-自己按速度在 `Normal_Idle` / `Cafe_Walk` / `Move_Ing` 之间切（带 0.18 s 交叉淡入），
+自己按速度在 `Normal_Idle` / `Move_Ing` 之间切（带 0.18 s 交叉淡入），
 用 `speed_scale` 让播放速率跟着实际速度走。一次性动作用 `animation_finished` 回落。
 
 **动作命名与实际内容相反**（按脚的摆幅和时长判定）：
 
-- `Cafe_Walk`（1.27 s，脚摆 ±0.03 m）= **走路**
-- `Move_Ing`（0.67 s，脚摆 ±0.16 m）= **跑步**
-- 切换阈值 `WALK_THRESHOLD = 2.8 m/s`（§1.15 调过；必须大于走路的 2.4）
+- `Move_Ing`（0.67 s，脚摆 ±0.16 m）= **跑 / 走都用它**（战斗移动动画）
+- `Cafe_Walk`（1.27 s，脚摆 ±0.03 m）= 蓝档咖啡厅的**漫步** —— **本工程不用**，
+  因为它**不拿武器**（素材把武器骨 scale 缩到 ≈0），§1.17 有完整的实测与取舍
+
+> ⚠️ 这条「按速度切 `Cafe_Walk` / `Move_Ing`」曾经存在过（阈值 `WALK_THRESHOLD = 2.8`），
+> 后来**删掉了**：它会让走动时把手里的枪藏起来，小桃/小绿还会多出个游戏机。
+> 现在走 / 跑 / 蹲 / 开镜**都播 `Move_Ing`**，快慢只靠 `speed_scale` 区分。
+> 详见 **§1.17**。
 
 开火/换弹这类一次性动作给了倍速（`FIRE_SPEED = 2.5`、`RELOAD_SPEED = 1.9`），
 否则 2.67 秒的开火动作配 13 发/秒的射速，手感很卡。
@@ -424,7 +429,8 @@ skel.get_bone_global_pose(child_bone).origin
 
 1. **重做跑动动作** —— 走 `..\_blender_arisu\build_anim.py` 那套管线（见第五节），
    把躯干前倾角度改小。这是根治办法。
-2. **换一条动作** —— `Move_End_Normal` / `Public01` / `Cafe_Walk` 的前倾都比 `Move_Ing` 小。
+2. **换一条动作** —— `Move_End_Normal` / `Public01` 的前倾都比 `Move_Ing` 小。
+   ⚠️ **`Cafe_Walk` 不能选**：它不拿武器（§1.17），为了减前倾把枪藏起来不值当。
    把 `anim_driver.gd` 里 `_update_locomotion()` 的 `"Move_Ing"` 换成其中一条即可，
    **但它们的步频/脚程与 6.8 m/s 不一定匹配，可能要一并调 `speed_scale`**。
 3. **调相机** —— `player.gd` 的 `hip_height`（默认 1.62）与 `_pitch`（默认 -0.04）。
@@ -929,9 +935,10 @@ TURN_SMOOTH 14 → 24       TURN_SMOOTH_FIRE 26 → 34
 
 ### ⚠️ 改这组数之前必须知道的四条约束
 
-1. **`SPEED_WALK` 必须小于 `anim_driver.gd` 的 `WALK_THRESHOLD`**（现在 2.4 < 2.8），
-   否则「走路」会去播 `Move_Ing`（跑步动画）。同伴用同一个阈值，它们的 `walk_speed = 2.2`
-   也仍在下面。
+1. **动画那边只有 `Normal_Idle` / `Move_Ing` 两条循环**：走 / 跑 / 蹲 / 开镜都用
+   `Move_Ing`（战斗动画 = 两只手在枪上），快慢只靠 `speed_scale`。
+   **不要再按速度去切 `Cafe_Walk`** —— BA 的咖啡厅动画不拿武器（§1.17）。
+   （这条以前写的是「`SPEED_WALK` 必须小于 `WALK_THRESHOLD` 2.8」，那个阈值已删。）
 2. **改了速度不要跟着改 `CYCLE_SPEED`。** `anim_driver.gd` 的
    `speed_scale = 速度 / CYCLE_SPEED[clip]` 是**按实际位移补脚步**的（防脚底打滑）——
    `CYCLE_SPEED` 是「这条动画按多快的地面速度录的」，不是「想让玩家跑多快」。
@@ -1111,6 +1118,80 @@ Launcher(平台上的跑道) → P1 → P2 → P3 → 窄梁 → P4 → P5 → P
 人能走进去）、两只货箱、**传送台**、两块 Label3D 指路牌。
 灯只加了 2 盏（塔顶 + 掩体），都关阴影 —— 这条线本来就在大太阳底下，
 本项目对功耗敏感（§6.6）。
+
+---
+
+## 1.17 ⚠️ 手里拿什么：BA 素材是**用「骨的 scale」藏道具**的
+
+用户报：「为什么小桃小绿**行走动作是拿游戏机的**，还有好多角色**行走也没有拿枪了**」。
+
+### 先量，再猜
+
+`scripts/_probe_companion_anim.gd` 把 8 个模型（主角 + 七名同伴）的 clip 清单、
+以及**每条循环动画对「道具骨」做了什么**全打出来。结论很清楚：
+
+1. **clip 一条都不缺** —— 8 个模型都自带 `Normal_Idle` / `Cafe_Walk` / `Move_Ing` /
+   `Normal_Attack_Ing` / `Normal_Reload`（个别 30~38 条，只是多了跪姿/胜利那些）。
+   所以**不是挑错了 clip、也不是枪没挂上**。
+2. **道具是「把骨的 scale 缩到 ≈0」藏起来的**（不是 `visible`、不是 blend shape）。
+3. `Cafe_Walk`（咖啡厅漫步）在**每一个**模型里都把武器骨缩到 ≈0：
+
+| | `Cafe_Walk` 里武器骨 scale.x 最小 | `Move_Ing` 里同一根骨 |
+|---|---|---|
+| 爱丽丝（主角） | **0.038** | 1.000 |
+| 未花 | **0.020** | 0.900 |
+| 优香 | **0.143 + 0.107**（左右各一把） | 1.000 |
+| 诺亚 | **0.001** | 1.100 |
+| 小桃 | **0.000** | 1.000 |
+| 小绿 | **0.000** | 1.000 |
+| 柚子 | **0.020** | 1.000 |
+| 凯伊 | **0.001** | 0.900 |
+
+⇒ **「走路不拿枪」是素材本身的设计**：BA 的 `Cafe_*` 是**咖啡厅模式**的动画，
+在咖啡厅里当然不拿枪；小桃/小绿在那个姿势里手里那个「游戏机」就是她们的招牌道具。
+这也解释了为什么只有她们俩「拿游戏机」—— 那是角色道具，不是动画挑错了。
+
+### 试过并否掉的修法（有对照图）
+
+把 `Cafe_Walk` 复制一份、把「`Move_Ing` 里显示、`Cafe_Walk` 里藏起来」的骨 scale
+改回 1.0（想保住漫步步态、只把枪补回身上）。**枪确实回来了，但是挂在身侧的**，
+两只手还在胸前捧着游戏机 —— 那件道具**不在武器骨下**，改 scale 抠不掉它。
+四种候选（A 原样 / B 补武器 / C 用 `Move_Ing` 降速 / D 战斗待机）的对照渲染见
+`scripts/_probe_armed_walk_shot.gd`，输出在 `_arisu_captures/_armedwalk/`
+（上排正面、下排转 40°，一眼看出 B 不行、C 两只手都在枪上）。
+
+> 顺便踩到一个**浮点门槛**的坑：判「这根骨在 `Move_Ing` 里是显示的」原本写
+> `>= 0.9`，而未花的武器骨正好是 **0.900**，存下来略小于 0.9 ⇒ 整根骨被跳过、
+> B 列看起来和 A 列一模一样，白看一轮。门槛放到 0.5 才对。
+
+### 采用的修法：**整局都只用战斗动画**
+
+```gdscript
+const CYCLE_SPEED := { "Normal_Idle": 0.0, "Move_Ing": 5.2 }   # Cafe_Walk 删掉
+const IDLE_SPEED := 0.15
+# speed_scale = clamp(速度 / 5.2, 0.25, 2.0)   ← 走 / 跑 / 蹲 / 开镜 全靠它区分
+```
+
+- **主角和七名同伴一起改**（同一个 `AnimDriver`），所以「好多角色」一次修完；
+- **步幅仍然吻合**（这是 `speed_scale` 的本职）：`Move_Ing` 标称 5.2 m/s、
+  一个循环 3.47 m；走 2.4 m/s 播 0.46 倍 ⇒ 一个循环仍是 3.48 m，脚不打滑。
+  代价只是「走路用的是跑步的**姿势**」——上身前倾是跑步那一下；
+- `SPEED_SCALE_MIN` 从 0.35 放到 **0.25**：蹲行 1.3 m/s 现在也走 `Move_Ing`，
+  1.3/5.2 = 0.25，卡在 0.35 会让脚比地面快 40%；
+- 这也正是 BA 自己的做法：战斗里只有 `Move_Ing`，`Cafe_*` 只在咖啡厅界面出现。
+
+### 守着它的断言
+
+- `_verify_move_feel.gd` 第 1 节：**「走路 2.40 m/s 播的是 `Move_Ing`、播放速率
+  0.46（≈ 2.4 / 5.2）」** —— 这条原来写的是「走路速度必须低于动画阈值」（正好反了）。
+  ⚠️ 读法上有个坑：必须**注入速度后当场读**，一旦让过一个物理帧，
+  `player.gd` 会用**真实速度**再调一次 `set_locomotion()`，注入值被冲掉
+  （第一版量到 0.25 —— 那是人已经停下、速度掉到 1.3 时的速率）。
+- `_verify_companion.gd` 第 1 节：七只都**必须**有 `Normal_Idle` + `Move_Ing`
+  （以前查的是 `Cafe_Walk`，那正是「查了个不用的动画」）。
+- `scripts/_probe_companion_anim.gd`（量 clip 与道具骨）与
+  `scripts/_probe_armed_walk_shot.gd`（四种候选的对照图）都留在仓库里，
+  换模型（再加同伴）时先跑前者。
 
 ---
 
@@ -1404,7 +1485,7 @@ if($b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF){
 
 | 检查项 | 结果 |
 |---|---|
-| 驱动器引用的 5 条动作 | `Normal_Idle` / `Cafe_Walk` / `Move_Ing` / `Normal_Attack_Ing` / `Normal_Reload` **两边全在** |
+| 驱动器引用的 4 条动作 | `Normal_Idle` / `Move_Ing` / `Normal_Attack_Ing` / `Normal_Reload` **两边全在**（`Cafe_Walk` 也在模型里，但本工程不播它，§1.17） |
 | `Move_Ing` / `Normal_Attack_Ing` / `Normal_Reload` 时长 | **完全一致**（0.6667 / 2.6667 / 2.0000 s）→ `CYCLE_SPEED` 表不用改 |
 | `Normal_Idle` / `Cafe_Walk` | 只差 0.5 / 1.0 帧（≤1.3%，无感） |
 | `RESET` | 只有原版有；它是 glTF 的 rest pose，驱动器从不引用 |
@@ -2727,9 +2808,9 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 - 目标点 = 玩家位置 + `slot` 按**玩家相机绕角**旋转。用相机绕角而不是角色朝向，
   是为了甩视角时同伴绕到新的侧后方，而不是绕进画面正中央
 - `walk_speed = 2.2`、`run_speed = 6.4`
-  - ⚠️ `walk_speed` 刻意压在 **走路动画阈值以下**：`AnimDriver` 在 `WALK_THRESHOLD`
-    （现在 2.8 m/s，§1.15 调过）才切到 `Move_Ing`，
-    高过它的话「站位差 1 m」这种微调也会播跑步动画，看起来像在打滑
+  - 两者**播同一条 `Move_Ing`**，只靠 `speed_scale` 区分（0.42 倍 vs 1.23 倍）——
+    以前这里写的是「`walk_speed` 要压在走路动画阈值以下」，那套阈值已经删了
+    （`Cafe_Walk` 不拿武器，§1.17）
 - 站住不动时**跟玩家看同一个方向**（像一队人），走动时朝行进方向
 - 两条保险：离站位 > 26 m、或掉到 y < −60（跟 `game.gd` 的 `FALL_LIMIT` 同源）→ 直接拉回
 - 动画驱动：`player.tscn` 里 `AnimDriver` 是写死 NodePath 的，但三只 GLB 的内部节点名

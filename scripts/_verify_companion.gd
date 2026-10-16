@@ -48,8 +48,11 @@ func _run() -> void:
 		_check(c.model != null, "%s：模型已实例化" % c.display_name)
 		_check(skel != null and skel.get_bone_count() > 50,
 			"%s：骨架找对了（%d 骨）" % [c.display_name, skel.get_bone_count() if skel else 0])
-		_check(ap != null and ap.has_animation("Normal_Idle") and ap.has_animation("Cafe_Walk"),
-			"%s：动画找到 Normal_Idle + Cafe_Walk" % c.display_name)
+		# ⚠️ 这里查的必须是**本工程真的会播**的两条：驱动只用 `Normal_Idle` /
+		#    `Move_Ing`（`Cafe_Walk` 是咖啡厅动画、不拿武器，§1.17）。
+		_check(ap != null and ap.has_animation("Normal_Idle") and ap.has_animation("Move_Ing"),
+			"%s：动画找到 Normal_Idle + Move_Ing（战斗待机 + 战斗移动，都拿枪）"
+			% c.display_name)
 		_check(c.collision_layer == Companion.LAYER and c.collision_mask == 1,
 			"%s：在朋友层（layer=%d mask=%d）" % [c.display_name, c.collision_layer, c.collision_mask])
 		_check(h > 1.0 and h < 1.9, "%s：身高 %.2f m 在合理区间" % [c.display_name, h])

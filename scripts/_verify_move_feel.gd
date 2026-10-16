@@ -24,9 +24,9 @@ extends SceneTree
 const SPAWN := Vector3(0, 0.05, 6)
 ## 稳态速度的容许误差（米/秒）
 const SPEED_TOL := 0.15
-## `anim_driver.gd` 的走路 / 跑步动画分界。**必须大于 SPEED_WALK**，否则走路会播跑。
-## 这里写死复制一份是故意的：它跨文件，改动时两边都得看一眼（自检就是那个「看一眼」）。
-const ANIM_WALK_THRESHOLD := 2.8
+## ⚠️ 这里**不再**复制 `anim_driver.gd` 的走路阈值了：那套「低于阈值播 Cafe_Walk」
+##    的逻辑已经删掉（BA 的咖啡厅动画不拿武器，§1.17）。现在第 1 节直接问
+##    `AnimDriver.current_clip()`，比复制一个常量更能盯住真东西。
 
 var _fail := 0
 var _pass := 0
@@ -89,10 +89,27 @@ func _test_speeds() -> void:
 		_m["walk_" + String(a[0])] = r["speed"]
 		_check(absf(float(r["speed"]) - Player.SPEED_WALK) < SPEED_TOL,
 			"%s（不按 Shift）：速度 %.2f（期望 %.2f）" % [a[1], r["speed"], Player.SPEED_WALK])
-	# 走路速度必须低于动画阈值，否则播的是跑步动画
-	_check(Player.SPEED_WALK < ANIM_WALK_THRESHOLD,
-		"走路 %.2f < 动画阈值 %.2f（否则走路会播 Move_Ing）"
-		% [Player.SPEED_WALK, ANIM_WALK_THRESHOLD])
+	# **走路也必须是战斗动画（手里有枪）。**
+	#
+	# 这里原来断言的是「走路速度 < 动画阈值（否则会播跑步动画）」—— 反了：
+	# 用户要的正是「走路也拿枪」，而 BA 的 `Cafe_Walk`（咖啡厅漫步）**不拿武器**
+	# （素材把武器骨的 scale 缩到 ≈0），小桃/小绿在那个姿势里手里是游戏机。
+	# 现在驱动只切 `Normal_Idle` / `Move_Ing` 两条，所以正确的断言是
+	# 「走路的 clip 就是 `Move_Ing`，而且播放速率按实际速度降下来了（步幅吻合）」。
+	#
+	# ⚠️ 必须**当场读、不 await**：一旦让过一个物理帧，`player.gd` 会用**真实速度**
+	#    再调一次 `set_locomotion()`，注入的那个数就被冲掉了（第一版量到 0.25 ——
+	#    那是人已经停下、速度掉到 1.3 时的速率，不是走路的 0.46）。
+	_p.velocity = Vector3.ZERO
+	var anim: AnimDriver = _p.anim
+	var nominal: float = AnimDriver.CYCLE_SPEED["Move_Ing"]
+	anim.set_locomotion(Player.SPEED_WALK, true, 0.0)
+	var walk_clip := anim.current_clip()
+	var walk_scale := anim.player.speed_scale if anim.player != null else 0.0
+	_check(walk_clip == "Move_Ing" and absf(walk_scale - Player.SPEED_WALK / nominal) < 0.02,
+		"走路 %.2f m/s 播的是「%s」、播放速率 %.2f（期望 %.2f）—— 战斗动画、**手上有枪**；"
+		% [Player.SPEED_WALK, walk_clip, walk_scale, Player.SPEED_WALK / nominal]
+		+ "以前这里切到 Cafe_Walk 就不拿了（§1.17）")
 
 
 # --- 2. 加速度 / 刹车 ---------------------------------------------------------
