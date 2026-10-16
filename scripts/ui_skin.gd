@@ -271,44 +271,83 @@ const MC_COLORS := {
 const MC_CAP_INSET := [1, 0, 0, 0, 1]
 const MC_CAP_RATIO := [0.22, 0.52, 0.80]
 
+## 两端「像素圆角」一共占几列源像素：`MC_CAP_INSET` 挖掉的 1 列 + `MC_CAP_RATIO` 的 3 列。
+const MC_CAP_COLS := 4
+
 
 static func mc_color(name: String) -> Color:
 	var v: Vector3i = MC_COLORS.get(name, MC_COLORS["white"])
 	return Color8(v.x, v.y, v.z)
 
 
-## 按 MC 的五行的比例现算一条 182×5 的贴图。`progress` 选高光那组还是槽那组。
-static func mc_bar_texture(bright: Color, progress: bool) -> ImageTexture:
+## 满血时条两端的帽宽（逻辑 px）。
+##
+## ⚠️ 这是「**条框宽度 / 182 × 4 源列**」，也就是满血时把 182 px 贴图拉伸到条框宽度后
+##    帽自然呈现的宽度。设给九宫格时必须用它，否则满血的条会跟槽的圆角对不上。
+##    （本工程的条框 546 ⇒ 12 px。）
+static func mc_bar_cap_px(bar_width: float) -> float:
+	return float(MC_CAP_COLS) / float(MC_BAR_PX.x) * bar_width
+
+
+## 按 MC 的五行的比例现算一条贴图。`progress` 选高光那组还是槽那组。
+##
+## `hscale` 是**横向烘焙倍率**：每 1 列源像素烘成 `hscale` 列。
+##
+## ⚠️ 为什么需要它（用户报「血条有时候会回退到长方形没有圆边」）：
+##    `ProgressBar` 把 `fill` 样式盒**整张拉伸**进「按血量缩短后的矩形」——
+##    既不裁剪、也不给帽保留最小宽度。像素圆角是**烤在贴图两端**的，
+##    于是帽宽 ∝ 血量比例：满血 182→546（3 倍）帽有 12 px，10% 血时帽不到 1 px。
+##    给样式盒设**九宫格边距**能让帽不参与拉伸，但实测（`_probe_boss_bar_caps.gd`）
+##    Godot 的九宫格边距是**按源像素 1:1** 画的：给 182 px 宽的贴图设 12，
+##    屏幕上只有 4 px（= 真正有色的源列数）。所以先把贴图横向烘大 `hscale` 倍，
+##    再让边距 = `MC_CAP_COLS * hscale`，帽宽就**恰好等于满血时的大小**，与血量无关。
+static func mc_bar_texture(bright: Color, progress: bool, hscale := 1) -> ImageTexture:
 	var ratios: Array = MC_PROGRESS_RATIO if progress else MC_BACKGROUND_RATIO
-	var img := Image.create(MC_BAR_PX.x, MC_BAR_PX.y, false, Image.FORMAT_RGBA8)
+	var w := MC_BAR_PX.x * hscale
+	var img := Image.create(w, MC_BAR_PX.y, false, Image.FORMAT_RGBA8)
 	for y in MC_BAR_PX.y:
 		var k: float = ratios[y]
 		var row := Color(bright.r * k, bright.g * k, bright.b * k, 1.0)
 		# 1) 先铺这一行的平色
-		img.fill_rect(Rect2i(0, y, MC_BAR_PX.x, 1), row)
+		img.fill_rect(Rect2i(0, y, w, 1), row)
 		# 2) 两端改成像素圆角：先挖掉最外 inset 列，再铺由暗到亮的过渡
 		var inset: int = MC_CAP_INSET[y]
 		for i in inset:
-			img.set_pixel(i, y, Color(0, 0, 0, 0))
-			img.set_pixel(MC_BAR_PX.x - 1 - i, y, Color(0, 0, 0, 0))
+			var a := i * hscale
+			img.fill_rect(Rect2i(a, y, hscale, 1), Color(0, 0, 0, 0))
+			img.fill_rect(Rect2i(w - a - hscale, y, hscale, 1), Color(0, 0, 0, 0))
 		for i in MC_CAP_RATIO.size():
 			var t := float(MC_CAP_RATIO[i])
 			var cap := Color(row.r * t, row.g * t, row.b * t, 1.0)
-			var lx: int = inset + i
-			img.set_pixel(lx, y, cap)
-			img.set_pixel(MC_BAR_PX.x - 1 - lx, y, cap)
+			var lx: int = (inset + i) * hscale
+			img.fill_rect(Rect2i(lx, y, hscale, 1), cap)
+			img.fill_rect(Rect2i(w - lx - hscale, y, hscale, 1), cap)
 	return ImageTexture.create_from_image(img)
 
 
 ## 条用的样式盒。
 ##
-## `STRETCH` 是有意的：整张 182×5 被拉到节点尺寸，五行等比放大；配上节点上的
+## `STRETCH` 是有意的：整张贴图被拉到节点尺寸，五行等比放大；配上节点上的
 ## `TEXTURE_FILTER_NEAREST` 就是干净的整数倍像素放大（本工程的条正好 3 倍）。
 ## 这里**不需要**内容边距 —— 贴图本身就是整条，`ProgressBar` 那条「不吃
 ## background 边距」的坑（见 `bar_trough`）在这儿用不上。
-static func mc_bar_style(bright: Color, progress: bool) -> StyleBoxTexture:
+##
+## `cap_px > 0` 时开**九宫格**：贴图横向烘大 `cap_px / MC_CAP_COLS` 倍，
+## 边距 = `MC_CAP_COLS * hscale` ⇒ 两端的帽**固定这么宽**，不再随血量缩水
+## （用户报的「血条回退成长方形」）。`cap_px = 0` 保持老的整张拉伸行为。
+##
+## ⚠️ 边距只在**横向**开：竖向要是也开九宫格，5 行就变成「上下 1 行各占 1 逻辑 px、
+##    中间 3 行挤在剩下的高度里」，五行的比例会散掉。竖向留 STRETCH，5 行等比放大。
+static func mc_bar_style(bright: Color, progress: bool, cap_px := 0.0) -> StyleBoxTexture:
+	var hscale := 1
+	var margin := 0.0
+	if cap_px > 0.0:
+		hscale = maxi(roundi(cap_px / float(MC_CAP_COLS)), 1)
+		margin = float(MC_CAP_COLS * hscale)
 	var sb := StyleBoxTexture.new()
-	sb.texture = mc_bar_texture(bright, progress)
+	sb.texture = mc_bar_texture(bright, progress, hscale)
 	sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
 	sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	sb.texture_margin_left = margin
+	sb.texture_margin_right = margin
 	return sb

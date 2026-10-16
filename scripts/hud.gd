@@ -304,6 +304,10 @@ func _add_boss_row(index: int, title: String) -> void:
 	add_child(label)
 
 	var bright := UiSkin.mc_color(BOSS_BAR_COLOR)
+	# 两端的帽固定成「满血时那么大」（4 源列 × 条框宽度 / 182 = 12 px）。
+	# ⚠️ 不设它就回到「整张贴图被拉进缩短后的矩形」：帽宽跟着血量缩水，
+	#    血量一低条就变成**长方形**（用户报的「回退到没有圆边」）。
+	var cap := UiSkin.mc_bar_cap_px(BOSS_BAR_WIDTH)
 
 	var bar := ProgressBar.new()
 	bar.name = "BossBar%d" % index
@@ -313,8 +317,8 @@ func _add_boss_row(index: int, title: String) -> void:
 	bar.show_percentage = false
 	# ⚠️ 贴图是 182×5 的像素画，放大 3 倍必须 NEAREST，不然五行会被插值糊成一条渐变。
 	bar.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bar.add_theme_stylebox_override("background", UiSkin.mc_bar_style(bright, false))
-	bar.add_theme_stylebox_override("fill", UiSkin.mc_bar_style(bright, true))
+	bar.add_theme_stylebox_override("background", UiSkin.mc_bar_style(bright, false, cap))
+	bar.add_theme_stylebox_override("fill", UiSkin.mc_bar_style(bright, true, cap))
 	_place_centered(bar, Rect2(-BOSS_BAR_WIDTH * 0.5, top,
 		BOSS_BAR_WIDTH, BOSS_BAR_HEIGHT))
 	add_child(bar)
