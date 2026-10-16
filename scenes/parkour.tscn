@@ -486,72 +486,72 @@ shape = SubResource("Shape_unit")
 
 ; X1：横跳 1/5（z 偏 +1.5）
 [node name="X1" type="StaticBody3D" parent="Route"]
-position = Vector3(-140.1, 1.75, -3.4)
+position = Vector3(-139.55, 1.75, -1.7)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X1"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/X1"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 shape = SubResource("Shape_unit")
 
 ; X2：★ 横跳 2/5：z 甩 −3.0 m（窄板 1.6）
 [node name="X2" type="StaticBody3D" parent="Route"]
-position = Vector3(-146.05, 1.75, -6.4)
+position = Vector3(-145.15, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X2"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(2.6, 0.5, 2.6)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/X2"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(2.6, 0.5, 2.6)
 shape = SubResource("Shape_unit")
 
 ; X3：★ 横跳 3/5：z 甩 +3.0 m
 [node name="X3" type="StaticBody3D" parent="Route"]
-position = Vector3(-152, 1.75, -3.4)
+position = Vector3(-150.75, 1.75, -8.1)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X3"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/X3"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 shape = SubResource("Shape_unit")
 
 ; X4：★ 横跳 4/5：z 甩 −3.0 m
 [node name="X4" type="StaticBody3D" parent="Route"]
-position = Vector3(-157.95, 1.75, -6.4)
+position = Vector3(-156.35, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X4"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(2.6, 0.5, 2.6)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/X4"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(2.6, 0.5, 2.6)
 shape = SubResource("Shape_unit")
 
 ; X5：★ 横跳 5/5：z 甩 +3.0 m
 [node name="X5" type="StaticBody3D" parent="Route"]
-position = Vector3(-163.9, 1.75, -3.4)
+position = Vector3(-161.95, 1.75, -1.7)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X5"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/X5"]
-scale = Vector3(2.2, 0.5, 1.6)
+scale = Vector3(3.4, 0.5, 3.4)
 shape = SubResource("Shape_unit")
 
 ; F1：渡口东岸（移动平台 A 从这块板西缘接人）
 [node name="F1" type="StaticBody3D" parent="Route"]
-position = Vector3(-170.75, 1.75, -4.9)
+position = Vector3(-167.9, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/F1"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -564,7 +564,7 @@ shape = SubResource("Shape_unit")
 
 ; F2：★ 移动平台 A 摆渡过来落这儿（7.0 m 缺口）
 [node name="F2" type="StaticBody3D" parent="Route"]
-position = Vector3(-180.25, 1.75, -4.9)
+position = Vector3(-177.4, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/F2"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -577,7 +577,7 @@ shape = SubResource("Shape_unit")
 
 ; C3：★ 段 3 终点：再坐移动平台 B 过来（7.0 m 缺口）
 [node name="C3" type="StaticBody3D" parent="Route"]
-position = Vector3(-190.5, 1.75, -4.9)
+position = Vector3(-187.65, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C3"]
 scale = Vector3(4, 0.5, 4)
@@ -590,7 +590,7 @@ shape = SubResource("Shape_unit")
 
 ; W1：螺旋塔 1/8（+0.80，绕柱 90°；这一跳是全程进来的一跳，要助跑）
 [node name="W1" type="StaticBody3D" parent="Route"]
-position = Vector3(-197.1, 2.55, -4.9)
+position = Vector3(-194.25, 2.55, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W1"]
 scale = Vector3(2, 0.5, 2)
@@ -603,98 +603,98 @@ shape = SubResource("Shape_unit")
 
 ; W2：螺旋塔 2/8
 [node name="W2" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.7, 3.35, -2.3)
+position = Vector3(-196.85, 3.35, -2.3)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W2"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W2"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; W3：螺旋塔 3/8
 [node name="W3" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 4.15, -4.9)
+position = Vector3(-199.45, 4.15, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W3"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W3"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; W4：螺旋塔 4/8
 [node name="W4" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.7, 4.95, -7.5)
+position = Vector3(-196.85, 4.95, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W4"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W4"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; W5：螺旋塔 5/8（回到 1 正上方）
 [node name="W5" type="StaticBody3D" parent="Route"]
-position = Vector3(-197.1, 5.75, -4.9)
+position = Vector3(-194.25, 5.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W5"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W5"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; W6：螺旋塔 6/8
 [node name="W6" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.7, 6.55, -2.3)
+position = Vector3(-196.85, 6.55, -2.3)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W6"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W6"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; W7：螺旋塔 7/8
 [node name="W7" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 7.35, -4.9)
+position = Vector3(-199.45, 7.35, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W7"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W7"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.2, 0.5, 2.2)
 shape = SubResource("Shape_unit")
 
 ; C4：★ 段 4 终点：螺旋塔顶（y = 8.40）
 [node name="C4" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.7, 8.15, -7.5)
+position = Vector3(-196.85, 8.15, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C4"]
-scale = Vector3(2.2, 0.5, 2.2)
+scale = Vector3(2.4, 0.5, 2.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/C4"]
-scale = Vector3(2.2, 0.5, 2.2)
+scale = Vector3(2.4, 0.5, 2.4)
 shape = SubResource("Shape_unit")
 
 ; E1：机关区入口
 [node name="E1" type="StaticBody3D" parent="Route"]
-position = Vector3(-205.65, 8.15, -7.5)
+position = Vector3(-202.9, 8.15, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/E1"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -707,7 +707,7 @@ shape = SubResource("Shape_unit")
 
 ; Q1：★ 弹跳板 1（贴着上一块板，**别跳、直接跑上去**）
 [node name="Q1" type="StaticBody3D" parent="Route"]
-position = Vector3(-207.5, 8.15, -7.5)
+position = Vector3(-204.75, 8.15, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/Q1"]
 scale = Vector3(1.2, 0.5, 2.5)
@@ -730,7 +730,7 @@ shape = SubResource("Shape_unit")
 
 ; H1：★ 弹跳落点：+4.40 m 高台
 [node name="H1" type="StaticBody3D" parent="Route"]
-position = Vector3(-212.7, 12.55, -7.5)
+position = Vector3(-209.95, 12.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/H1"]
 scale = Vector3(4, 0.5, 4)
@@ -743,7 +743,7 @@ shape = SubResource("Shape_unit")
 
 ; V1：★ 消失方块 1（踩上 0.6 s 塌，2.5 s 回）
 [node name="V1" type="StaticBody3D" parent="Route"]
-position = Vector3(-219.7, 12.6, -7.5)
+position = Vector3(-216.95, 12.6, -7.5)
 script = ExtResource("3_vanish")
 delay = 0.6
 respawn_delay = 2.5
@@ -766,7 +766,7 @@ shape = SubResource("Shape_unit")
 
 ; V2：★ 消失方块 2
 [node name="V2" type="StaticBody3D" parent="Route"]
-position = Vector3(-225.5, 12.6, -7.5)
+position = Vector3(-222.75, 12.6, -7.5)
 script = ExtResource("3_vanish")
 delay = 0.6
 respawn_delay = 2.5
@@ -789,7 +789,7 @@ shape = SubResource("Shape_unit")
 
 ; V3：★ 消失方块 3
 [node name="V3" type="StaticBody3D" parent="Route"]
-position = Vector3(-231.3, 12.6, -7.5)
+position = Vector3(-228.55, 12.6, -7.5)
 script = ExtResource("3_vanish")
 delay = 0.6
 respawn_delay = 2.5
@@ -812,7 +812,7 @@ shape = SubResource("Shape_unit")
 
 ; V4：★ 消失方块 4
 [node name="V4" type="StaticBody3D" parent="Route"]
-position = Vector3(-237.1, 12.6, -7.5)
+position = Vector3(-234.35, 12.6, -7.5)
 script = ExtResource("3_vanish")
 delay = 0.6
 respawn_delay = 2.5
@@ -835,7 +835,7 @@ shape = SubResource("Shape_unit")
 
 ; L1：消失方块串联的落脚台
 [node name="L1" type="StaticBody3D" parent="Route"]
-position = Vector3(-243.35, 12.55, -7.5)
+position = Vector3(-240.6, 12.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/L1"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -848,7 +848,7 @@ shape = SubResource("Shape_unit")
 
 ; U1：上升气流柱底座（贴住落脚台）
 [node name="U1" type="StaticBody3D" parent="Route"]
-position = Vector3(-245.85, 12.55, -7.5)
+position = Vector3(-243.1, 12.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/U1"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -861,7 +861,7 @@ shape = SubResource("Shape_unit")
 
 ; U2：★ 上升气流出口台：+5.00 m（要按住方向键横移才出得来）
 [node name="U2" type="StaticBody3D" parent="Route"]
-position = Vector3(-248.35, 17.55, -7.5)
+position = Vector3(-245.6, 17.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/U2"]
 scale = Vector3(2.5, 0.5, 2.5)
@@ -874,7 +874,7 @@ shape = SubResource("Shape_unit")
 
 ; Q2：★ 弹跳板 2（贴着出口台）
 [node name="Q2" type="StaticBody3D" parent="Route"]
-position = Vector3(-250.2, 17.55, -7.5)
+position = Vector3(-247.45, 17.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/Q2"]
 scale = Vector3(1.2, 0.5, 2.5)
@@ -897,7 +897,7 @@ shape = SubResource("Shape_unit")
 
 ; H2：★ 弹跳落点 2：+4.40 m 高台（传送门在这块板西缘）
 [node name="H2" type="StaticBody3D" parent="Route"]
-position = Vector3(-255.4, 21.95, -7.5)
+position = Vector3(-252.65, 21.95, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/H2"]
 scale = Vector3(4, 0.5, 4)
@@ -910,7 +910,7 @@ shape = SubResource("Shape_unit")
 
 ; C5：★ 段 5 终点：**传送门跨过 12.0 m 大缺口**
 [node name="C5" type="StaticBody3D" parent="Route"]
-position = Vector3(-271.4, 21.95, -7.5)
+position = Vector3(-268.65, 21.95, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C5"]
 scale = Vector3(4, 0.5, 4)
@@ -923,7 +923,7 @@ shape = SubResource("Shape_unit")
 
 ; R1：螺旋下降 1/5（−1.40，绕柱 90°；全速长跳）
 [node name="R1" type="StaticBody3D" parent="Route"]
-position = Vector3(-280, 20.55, -7.5)
+position = Vector3(-277.25, 20.55, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R1"]
 scale = Vector3(1.8, 0.5, 1.8)
@@ -936,7 +936,7 @@ shape = SubResource("Shape_unit")
 
 ; R2：螺旋下降 2/5
 [node name="R2" type="StaticBody3D" parent="Route"]
-position = Vector3(-285, 19.15, -2.5)
+position = Vector3(-282.25, 19.15, -2.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R2"]
 scale = Vector3(1.8, 0.5, 1.8)
@@ -949,7 +949,7 @@ shape = SubResource("Shape_unit")
 
 ; R3：螺旋下降 3/5
 [node name="R3" type="StaticBody3D" parent="Route"]
-position = Vector3(-290, 17.75, -7.5)
+position = Vector3(-287.25, 17.75, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R3"]
 scale = Vector3(1.8, 0.5, 1.8)
@@ -962,7 +962,7 @@ shape = SubResource("Shape_unit")
 
 ; R4：螺旋下降 4/5
 [node name="R4" type="StaticBody3D" parent="Route"]
-position = Vector3(-285, 16.35, -12.5)
+position = Vector3(-282.25, 16.35, -12.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R4"]
 scale = Vector3(1.8, 0.5, 1.8)
@@ -975,7 +975,7 @@ shape = SubResource("Shape_unit")
 
 ; R5：螺旋下降 5/5
 [node name="R5" type="StaticBody3D" parent="Route"]
-position = Vector3(-280, 14.95, -7.5)
+position = Vector3(-277.25, 14.95, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R5"]
 scale = Vector3(1.8, 0.5, 1.8)
@@ -988,7 +988,7 @@ shape = SubResource("Shape_unit")
 
 ; J1：★ 竖井 1（开口错开 +1.6）
 [node name="J1" type="StaticBody3D" parent="Route"]
-position = Vector3(-286.9, 13.55, -5.9)
+position = Vector3(-284.15, 13.55, -5.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J1"]
 scale = Vector3(2, 0.5, 1.8)
@@ -1001,7 +1001,7 @@ shape = SubResource("Shape_unit")
 
 ; J2：★ 竖井 2（−3.2）
 [node name="J2" type="StaticBody3D" parent="Route"]
-position = Vector3(-293.7, 12.15, -9.1)
+position = Vector3(-290.95, 12.15, -9.1)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J2"]
 scale = Vector3(2, 0.5, 1.8)
@@ -1014,7 +1014,7 @@ shape = SubResource("Shape_unit")
 
 ; J3：★ 竖井 3（+3.2）
 [node name="J3" type="StaticBody3D" parent="Route"]
-position = Vector3(-300.5, 10.75, -5.9)
+position = Vector3(-297.75, 10.75, -5.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J3"]
 scale = Vector3(2, 0.5, 1.8)
@@ -1027,7 +1027,7 @@ shape = SubResource("Shape_unit")
 
 ; J4：★ 竖井 4（−3.2）
 [node name="J4" type="StaticBody3D" parent="Route"]
-position = Vector3(-307.3, 9.35, -9.1)
+position = Vector3(-304.55, 9.35, -9.1)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J4"]
 scale = Vector3(2, 0.5, 1.8)
@@ -1043,11 +1043,11 @@ shape = SubResource("Shape_unit")
 
 ; 载人跨过 7.0 m 缺口（F1 ⇄ F2）
 [node name="MoverA" type="AnimatableBody3D" parent="Movers"]
-position = Vector3(-172.95, 1.75, -4.9)
+position = Vector3(-170.1, 1.75, -4.9)
 sync_to_physics = true
 script = ExtResource("6_mover")
-point_a = Vector3(-172.95, 1.75, -4.9)
-point_b = Vector3(-178.05, 1.75, -4.9)
+point_a = Vector3(-170.1, 1.75, -4.9)
+point_b = Vector3(-175.2, 1.75, -4.9)
 speed = 1.8
 wait_time = 0.8
 
@@ -1062,11 +1062,11 @@ shape = SubResource("Shape_unit")
 
 ; 载人跨过 7.0 m 缺口（F2 ⇄ C3）
 [node name="MoverB" type="AnimatableBody3D" parent="Movers"]
-position = Vector3(-182.45, 1.75, -4.9)
+position = Vector3(-179.6, 1.75, -4.9)
 sync_to_physics = true
 script = ExtResource("6_mover")
-point_a = Vector3(-182.45, 1.75, -4.9)
-point_b = Vector3(-187.55, 1.75, -4.9)
+point_a = Vector3(-179.6, 1.75, -4.9)
+point_b = Vector3(-184.7, 1.75, -4.9)
 speed = 1.8
 wait_time = 0.8
 
@@ -1084,7 +1084,7 @@ shape = SubResource("Shape_unit")
 
 ; 把 U1 上的人托到 U2（+5.00 m）
 [node name="Updraft" type="Area3D" parent="Mechanics"]
-position = Vector3(-245.85, 12.85, -7.5)
+position = Vector3(-243.1, 12.85, -7.5)
 script = ExtResource("5_updraft")
 accel = 30
 max_rise_speed = 8
@@ -1103,7 +1103,7 @@ shape = SubResource("Shape_unit")
 ; ══ 传送门 ×2（走进去就到对面；落点偏移 + 0.6 s 冷却防乒乓）══
 ; H2 西缘的入口门（落点回 H2 板内）
 [node name="PortalIn" type="Area3D" parent="Mechanics"]
-position = Vector3(-256.8, 22.2, -7.5)
+position = Vector3(-254.05, 22.2, -7.5)
 script = ExtResource("4_portal")
 target_path = NodePath("../PortalOut")
 exit_offset = Vector3(1.2, 0.1, 0)
@@ -1128,7 +1128,7 @@ shape = SubResource("Shape_unit")
 
 ; C5 东缘的出口门（落点在 C5 板内，跨 13.2 m）
 [node name="PortalOut" type="Area3D" parent="Mechanics"]
-position = Vector3(-270, 22.2, -7.5)
+position = Vector3(-267.25, 22.2, -7.5)
 script = ExtResource("4_portal")
 target_path = NodePath("../PortalIn")
 exit_offset = Vector3(-1.2, 0.1, 0)
@@ -1156,7 +1156,7 @@ shape = SubResource("Shape_unit")
 
 ; W1 那圈螺旋的中央柱
 [node name="PillarUp" type="StaticBody3D" parent="Pillars"]
-position = Vector3(-199.7, 5.7, -4.9)
+position = Vector3(-196.85, 5.7, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Pillars/PillarUp"]
 scale = Vector3(1, 7.8, 1)
@@ -1169,7 +1169,7 @@ shape = SubResource("Shape_pillar")
 
 ; R1 那圈螺旋的中央柱
 [node name="PillarDown" type="StaticBody3D" parent="Pillars"]
-position = Vector3(-285, 18.1, -7.5)
+position = Vector3(-282.25, 18.1, -7.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Pillars/PillarDown"]
 scale = Vector3(1.5, 7.8, 1.5)
@@ -1234,7 +1234,7 @@ outline_size = 14
 pixel_size = 0.01
 
 [node name="Beacon_C3" type="StaticBody3D" parent="Route"]
-position = Vector3(-191.9, 2, -6.3)
+position = Vector3(-189.05, 2, -6.3)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C3"]
 position = Vector3(0, 2.5, 0)
@@ -1260,7 +1260,7 @@ outline_size = 14
 pixel_size = 0.01
 
 [node name="Beacon_C4" type="StaticBody3D" parent="Route"]
-position = Vector3(-200.2, 8.4, -8)
+position = Vector3(-197.45, 8.4, -8.1)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C4"]
 position = Vector3(0, 2.5, 0)
@@ -1286,7 +1286,7 @@ outline_size = 14
 pixel_size = 0.01
 
 [node name="Beacon_C5" type="StaticBody3D" parent="Route"]
-position = Vector3(-272.8, 22.2, -8.9)
+position = Vector3(-270.05, 22.2, -8.9)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C5"]
 position = Vector3(0, 2.5, 0)
@@ -1322,7 +1322,7 @@ outline_size = 12
 pixel_size = 0.01
 
 [node name="Island" type="StaticBody3D" parent="."]
-position = Vector3(-321.9, 7.4, -9.1)
+position = Vector3(-319.15, 7.4, -9.1)
 
 [node name="Mesh" type="MeshInstance3D" parent="Island"]
 scale = Vector3(16, 1.2, 16)

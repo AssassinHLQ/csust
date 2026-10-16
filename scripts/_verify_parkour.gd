@@ -50,6 +50,9 @@ var _m := {}
 var _t0 := 0
 ## 套件开跑前备份的「最好成绩」存档 —— 测完原样还回去
 var _best_backup := ""
+## 「这一节真的跑完了」的章（见收尾处那段注释：运行时错误不会记成 FAIL）
+var _done_hops := false
+var _done_chain := false
 
 
 func _initialize() -> void:
@@ -87,6 +90,16 @@ func _run() -> void:
 	await _wait(2)
 
 	print("\n================ 结果 ================")
+	# ⚠️ **运行时错误不会记成 FAIL**：GDScript 里一个 `await` 协程中途报错（比如对
+	#    `null` 取 `.resource_path`）只会让**那一节悄悄不跑**，断言一条都不记 ——
+	#    于是「133 项 0 失败」看着全绿，其实「连续通关」整节没执行。
+	#    v3 第一版就是这样：日志里躺着一条 SCRIPT ERROR，而汇总里写着「连续通关用时
+	#    0.00 s」—— 计时器根本没启动。所以每一节跑完都盖一个章，收尾核对。
+	for stamp in [["逐跳回放", _done_hops], ["连续通关", _done_chain]]:
+		_check(bool(stamp[1]), "%s那一节**真的跑到了**（防运行时错误静默跳过）" % stamp[0])
+	# 兜底：任何一节静默跳过，断言总数都会掉下来（当前 135 条）
+	_check(_pass + _fail >= 130,
+		"断言总数 ≥ 130（实测 %d 条）—— 哪一节没跑完这里会先变红" % (_pass + _fail))
 	print("通过 %d 项" % _pass)
 	_print_table()
 	_quit()
@@ -129,10 +142,11 @@ func _test_structure(game: Node) -> void:
 		% str(Array(range(0, 6)).map(func(s): return "%s[%d]" % [
 			_pk.segment_name(s), _pk.segment_start(s)])))
 	# 机关清单也要跟着对：6 处机关跳、12 处减速短跳（螺旋塔 8 + 塔顶 1 + 下降… 由场景给）
-	_check(_pk.special_hops.size() == 6 and _pk.short_hops.size() >= 6,
-		"机关跳 %d 处（期望 6）、减速短跳 %d 处（螺旋塔）：%s / %s"
-		% [_pk.special_hops.size(), _pk.short_hops.size(),
-			str(_pk.special_hops), str(_pk.short_hops)])
+	# 螺旋塔现在是**全速跳**（R=3.4、板 3.0，实测射程正好落在板里），
+	# 所以「减速短跳」可以为 0 —— 这里只钉住六处机关必须都在。
+	_check(_pk.special_hops.size() == 6,
+		"机关跳 %d 处（期望 6）：%s（减速短跳 %d 处）"
+		% [_pk.special_hops.size(), str(_pk.special_hops), _pk.short_hops.size()])
 
 	# 网格与碰撞必须指着同一块体积
 	var worst := 0.0
@@ -349,7 +363,10 @@ func _test_calibration() -> void:
 		# 入板：沿行进方向前后 ≥ 0.40、侧向 ≥ 0.20
 		var b := _pk.box_at(i)
 		var t: Vector3 = h["takeoff"]
-		var dir := _hop_dir(h, b)
+		# **按玩家实际瞄的方向（下一块板中心）算落点**，不是瞄最近点：斜跳（横跳区 3.2 m
+		# 侧移）两者差很多，用最近点会把「擦着板侧边落下」误判成设计不合格
+		var _c2 := b.position + b.size * 0.5
+		var dir := Vector2(_c2.x - t.x, _c2.z - t.z).normalized()
 		var reach := Parkour.air_hop_reach(float(h["rise"])) if _pk.is_short_hop(i) \
 			else float(h["reach"]) * k
 		var lx := t.x + dir.x * reach
@@ -497,9 +514,9 @@ func _test_hops() -> void:
 			# 容差 1.30：逐跳回放里「起跳点在边缘前 0.15 m 内触发」+ 固定初始朝向，
 			# 斜跳时落地会差个 ~1 m —— 这条查的是**模型有没有大错**（真错会差 3 m 以上），
 			# 不是逐毫米复现弹道。实测绝大多数在 0.05~0.20 m。
-			_check(d <= (1.20 if short else 1.30),
-				"    预测落点与实际相差 %.2f m（≤ %.2f；短跳靠空中操控走弧线）"
-				% [d, 1.20 if short else 1.30])
+			_check(d <= (1.20 if short else 1.60),
+				"    预测落点与实际相差 %.2f m（≤ %.2f；起跳点会在「边缘」与「投影面」之间浮动）"
+				% [d, 1.20 if short else 1.60])
 	_check(fails == 0, "逐跳真输入回放全部通过（真跑 %d 站，跳过 %d 站，失败 %d）"
 		% [isolated, skipped.size(), fails])
 	print("\n  " + "\n  ".join(PackedStringArray(rows)))
@@ -514,10 +531,11 @@ func _test_hops() -> void:
 	_pk.reset_run()
 	var chain_ok := true
 	var chain_log: Array[String] = []
-	var special_kind := {}
-	for idx in _pk.special_hops:
-		special_kind[int(idx)] = String(_pk.get_node_or_null(
-			NodePath(String(_pk.route[int(idx)]))).get_script().resource_path.get_file())
+	# ⚠️ 这里原来有一段 `special_kind[...] = route[idx].get_script().resource_path...`：
+	#    移动平台的落点（F2 / C3）是**普通板、没有脚本**，`get_script()` 返回 null，
+	#    `.resource_path` 当场抛 SCRIPT ERROR ⇒ **整节连续通关静默不跑**（而汇总仍全绿）。
+	#    而且那个字典后面根本没被用过 —— 删掉。要认「这一站是什么机关」，看
+	#    `_drive_special()` 里的分支就够。
 	for i in range(1, _pk.node_count()):
 		var short := _pk.is_short_hop(i)
 		var walk := float(_hop(i - 1, i)["required"]) < 0.5
@@ -540,6 +558,9 @@ func _test_hops() -> void:
 		% [_pk.elapsed_seconds(), _pk.best_seconds()])
 	_m["run_seconds"] = _pk.elapsed_seconds()
 	_release_all()
+	# 这一节（含连续通关）跑到底了才盖章 —— 中途抛运行时错误会跳过这一行
+	_done_chain = true
+	_done_hops = true
 
 
 ## 跑一站：把玩家摆到上一站、镜头对准下一站，按住 W+Shift 冲过去。
@@ -558,11 +579,21 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 	var takeoff: Vector3 = h["takeoff"]
 	var center := b.position + b.size * 0.5
 	var dir := Vector2(center.x - takeoff.x, center.z - takeoff.z).normalized()
-	if place and standstill:
+	if standstill:
 		_release_all()
-		_p.global_position = Vector3(takeoff.x - dir.x * 0.10, _pk.top_at(from_i) + 0.05,
-			takeoff.z - dir.y * 0.10)
-		_p.velocity = Vector3.ZERO
+		if place:
+			_p.global_position = Vector3(takeoff.x - dir.x * 0.10, _pk.top_at(from_i) + 0.05,
+				takeoff.z - dir.y * 0.10)
+			_p.velocity = Vector3.ZERO
+		else:
+			# 连续通关里也要「**先站住再跳**」：螺旋塔的弦长 3.68 m 比全速射程 3.87 m 还短，
+			# 带着上一跳的冲量起跳必然飞过头。松键吃 30 m/s² 摩擦，0.23 s 就停住。
+			var ts0 := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - ts0 < 450:
+				await process_frame
+				if _p.is_on_floor() \
+						and Vector2(_p.velocity.x, _p.velocity.z).length() < 1.0:
+					break
 		_aim(dir)
 		await _wait(3)
 		await _jump()
@@ -628,6 +659,13 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 				_aim(d)
 			var remain := (takeoff.x - pp.x) * d.x + (takeoff.z - pp.z) * d.y
 			if remain <= JUMP_LEAD and _p.is_on_floor():
+				await _jump()
+				jumped = true
+				break
+			# **跑到板边就跳**的兜底：连续通关要去够下一块板，转向时 `remain` 的投影
+			# 会卡在正值上（人已经贴着边缘了、投影还没到 0.15）—— 真人这时直接起跳，
+			# 自检照做。少了这条，横跳区那种「边跑边转 60°」的站会一直等到掉下去。
+			elif _p.is_on_floor() and _exit_dist(a, pp, d) <= 0.35:
 				await _jump()
 				jumped = true
 				break
