@@ -53,6 +53,8 @@ var _best_backup := ""
 ## 「这一节真的跑完了」的章（见收尾处那段注释：运行时错误不会记成 FAIL）
 var _done_hops := false
 var _done_chain := false
+## 起跳有没有用到「直接写 velocity.y」的兜底（正常应当 0）
+var _jump_assisted := 0
 
 
 func _initialize() -> void:
@@ -97,6 +99,9 @@ func _run() -> void:
 	#    0.00 s」—— 计时器根本没启动。所以每一节跑完都盖一个章，收尾核对。
 	for stamp in [["逐跳回放", _done_hops], ["连续通关", _done_chain]]:
 		_check(bool(stamp[1]), "%s那一节**真的跑到了**（防运行时错误静默跳过）" % stamp[0])
+	_check(_jump_assisted == 0,
+		"所有起跳都是**靠输入按出来**的（兜底用了 %d 次；>0 说明跳键脉冲又被微弹吃掉了）"
+		% _jump_assisted)
 	# 兜底：任何一节静默跳过，断言总数都会掉下来（当前 135 条）
 	_check(_pass + _fail >= 130,
 		"断言总数 ≥ 130（实测 %d 条）—— 哪一节没跑完这里会先变红" % (_pass + _fail))
@@ -1286,12 +1291,33 @@ func _aim(dir: Vector2) -> void:
 	_p.model_root.rotation.y = _p._facing_yaw
 
 
-## 按一次跳（两帧），和玩家真按键的时序一致
-func _jump() -> void:
-	Input.action_press("jump")
+## 按一次跳 —— **按住不放、确认真的跳起来了才算**。
+##
+## ⚠️ 为什么不能照抄别处的「按两帧就松」：`player.gd` 的跳跃条件是
+##    「`is_on_floor()` **且** `Input.is_action_just_pressed("jump")`」，而后者是
+##    **单帧脉冲**。跑酷板上站着的身体会**穿透微弹**（`is_on_floor()` 逐帧 true/false
+##    交替 —— 实测 y 在「台面」与「台面 + 0.04」之间来回，见 `_probe_tower_hop.gd`），
+##    脉冲正好落在 false 那帧就整个丢掉。更坑的是**同一个按法相位是锁死的**：
+##    探针里重按 10 次全丢、A~E 五种按法（空闲帧 / 物理帧 / 合成事件 / 合成键盘）都不行，
+##    而站在平台地面上同样一句 `Input.action_press` 一次就成（峰值 1.271 m）。
+##    所以：每轮**多等 1 帧打散相位** + 逐帧确认 `velocity.y`，确认到了才松手。
+##    返回 `true` = 真的靠输入按起来的。
+func _jump() -> bool:
+	for attempt in 14:
+		Input.action_press("jump")
+		for _i in 4:
+			await process_frame
+			if _p.velocity.y > 1.0:
+				Input.action_release("jump")
+				return true
+		Input.action_release("jump")
+		for _i in 1 + attempt % 3:
+			await process_frame
+	# 兜底（正常不该走到这里）：直接写竖直速度，让自检跑得完，同时把次数**暴露**出来
+	_jump_assisted += 1
+	_p.velocity.y = Player.JUMP_VELOCITY
 	await process_frame
-	await process_frame
-	Input.action_release("jump")
+	return false
 
 
 ## 从 `from` 沿 `d`（水平）走多远离开盒子 —— 用来算「这块板上还能退多远助跑」
