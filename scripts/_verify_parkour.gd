@@ -110,11 +110,11 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 59, "路线有 %d 站（期望 59：跑道 + 47 块落脚板 + 5 段「走过去」的接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 63, "路线有 %d 站（期望 63：跑道 + 50 块落脚板 + 6 段「走过去」的接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
-		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
+		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
 		"R1", "R2", "R3", "R4", "R5", "J1", "J2", "J3", "J4", "Island"]
 	var got: Array[String] = []
@@ -345,7 +345,7 @@ func _test_calibration() -> void:
 		if _pk.is_special_hop(i):
 			continue                       # 机关跳不按弹道算（第 5b 节另有真物理断言）
 		var h := _hop(i - 1, i)
-		if float(h["required"]) < 0.5:
+		if float(h["required"]) < 0.5 and absf(float(h["rise"])) < 0.35:
 			continue                       # 走过去（独木桥 / 机关接口板）
 		jumps += 1
 		gap_sum += float(h["required"])
@@ -476,7 +476,7 @@ func _test_hops() -> void:
 			skipped.append("%s（机关）" % _pk.label_at(i))
 			continue                       # 机关跳在第 5b 节逐条真物理验
 		var h := _hop(i - 1, i)
-		var walk := float(h["required"]) < 0.5
+		var walk := float(h["required"]) < 0.5 and absf(float(h["rise"])) < 0.35
 		var short := _pk.is_short_hop(i)
 		var reach := Parkour.air_hop_reach(float(h["rise"])) if short \
 			else float(h["reach"]) * K_REF
@@ -538,7 +538,8 @@ func _test_hops() -> void:
 	#    `_drive_special()` 里的分支就够。
 	for i in range(1, _pk.node_count()):
 		var short := _pk.is_short_hop(i)
-		var walk := float(_hop(i - 1, i)["required"]) < 0.5
+		var walk := float(_hop(i - 1, i)["required"]) < 0.5 \
+			and absf(float(_hop(i - 1, i)["rise"])) < 0.35
 		var res: Dictionary
 		if _pk.is_special_hop(i):
 			res = await _drive_special(i)
@@ -595,7 +596,13 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 						and Vector2(_p.velocity.x, _p.velocity.z).length() < 1.0:
 					break
 		_aim(dir)
-		await _wait(3)
+		# ⚠️ **必须等到真的落地再按跳**：摆人的 y 是「台面 + 0.05」，前几帧人是离地的，
+		#    而 `player.gd` 的 `jump` 只在 `is_on_floor()` 时才写入 velocity —— 等 3 帧就跳
+		#    会被整个忽略，塔里每一跳都会原地掉（v3 塔改成 11 跳后就是这么红的）。
+		var tw := Time.get_ticks_msec()
+		while not _p.is_on_floor() and Time.get_ticks_msec() - tw < 400:
+			await process_frame
+		await _wait(2)
 		await _jump()
 		Input.action_press("move_forward")
 		Input.action_press("sprint")
@@ -888,7 +895,7 @@ func _test_mechanics() -> void:
 	_pk.enabled = false            # 这一节自己摆人，别让「回本段起点」把人捞走
 
 	# ① 弹跳板 ×2：**峰值 ≥ 4.5 m** 且最终落在 +4.40 的高台上
-	for to_i in [38, 47]:
+	for to_i in [42, 51]:
 		var res := await _drive_bounce(to_i - 1, to_i)
 		var peak := float(res.get("peak", 0.0))
 		_check(bool(res["ok"]) and peak >= 4.5,
@@ -958,20 +965,20 @@ func _test_mechanics() -> void:
 			% float(back_at))
 
 	# ④ 上升气流：进去之后**到过 +5.0**，并且站上出口台
-	var res_ud := await _drive_updraft(44, 45)
+	var res_ud := await _drive_updraft(48, 49)
 	_check(bool(res_ud["ok"]) and float(res_ud.get("peak", 0.0)) >= 5.0,
 		"上升气流 U1→U2：柱子里被托到 **+%.2f m**（需求 +5.0）、从出口台出来（y = %.2f）"
 		% [float(res_ud.get("peak", 0.0)), float(res_ud["pos"].y)])
 
 	# ⑤ 传送门：真的到了对岸那台（跨 16 m），而且没卡进墙里
-	var res_pt := await _drive_portal(47, 48)
+	var res_pt := await _drive_portal(51, 52)
 	var pi := _pk.get_node_or_null("Mechanics/PortalIn") as ParkourPortal
 	var span := 0.0
 	if pi != null and pi.target() != null:
 		span = pi.global_position.distance_to(pi.target().global_position)
 	_check(bool(res_pt["ok"]) and span >= 10.0,
 		"传送门 %s→%s：跨 **%.2f m**（需求 ≥ 10 m）后 global_position 真的落在对岸 %s 上"
-		% ["PortalIn", "PortalOut", span, _pk.label_at(48)])
+		% ["PortalIn", "PortalOut", span, _pk.label_at(52)])
 	_check(float(res_pt.get("dist", 0.0)) >= 1.0,
 		"传送门至少触发过 1 次（计数器 = %.0f，防乒乓冷却生效）" % float(res_pt.get("dist", 0.0)))
 	_pk.enabled = true
@@ -1018,8 +1025,8 @@ func _test_negative() -> void:
 		{"station": 13, "seg": 1, "what": "第 2 段中段（T1 转身台）"},
 		{"station": 24, "seg": 2, "what": "第 3 段中段（X4 窄板）"},
 		{"station": 31, "seg": 3, "what": "第 4 段中段（W4 螺旋塔）"},
-		{"station": 44, "seg": 4, "what": "第 5 段中段（L1 机关区）"},
-		{"station": 53, "seg": 5, "what": "第 6 段中段（J1 竖井）"},
+		{"station": 47, "seg": 4, "what": "第 5 段中段（L1 机关区）"},
+		{"station": 56, "seg": 5, "what": "第 6 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()
@@ -1264,7 +1271,7 @@ func _worst_jump() -> Dictionary:
 	var best := {"from": 1, "to": 2, "margin": INF}
 	for i in range(1, _pk.node_count()):
 		var h := _hop(i - 1, i)
-		if float(h["required"]) < 0.5:
+		if float(h["required"]) < 0.5 and absf(float(h["rise"])) < 0.35:
 			continue
 		var m := float(h["reach"]) * K_REF - float(h["required"])
 		if m < float(best["margin"]):

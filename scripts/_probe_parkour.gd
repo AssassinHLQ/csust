@@ -27,7 +27,7 @@ const MARGIN_MIN := 0.40
 ## `解析射程 − 必须跨`，真正要守的是**实测余量**；这条只兜「别落在板沿上」。
 const EDGE_MIN := 0.12
 ## 图的范围（米）与格子大小（v2 横跨 206 m，1 m 一格就太宽了）
-const X0 := -300.0
+const X0 := -340.0
 const X1 := -4.0
 const Z0 := -24.0
 const Z1 := 14.0
@@ -113,7 +113,7 @@ func _run() -> void:
 			_fail += 1
 			continue
 		var req := float(h["required"])
-		if req < 0.5:
+		if req < 0.5 and absf(float(h["rise"])) < 0.35:
 			walks += 1
 			print("%-13s %4s  走过去 / 贴着（相邻同高）" % [pair, "走"])
 			continue
