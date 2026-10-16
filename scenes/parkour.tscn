@@ -1,42 +1,39 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
-; ── 跑酷路线：「记忆平台 →（西）→ 信号塔岛」────────────────────────────────
+; ── 跑酷 v2：「记忆平台 →（西，206 m）→ 信号塔岛」─────────────────────────
 ;
-; 从平台**西边缘**（x = −20）跳出去，10 跳 + 1 段窄梁，最终落到一座
-; 16 × 16 m 的悬浮岛（顶面 y = +4.70），岛上有信号塔、掩体、货箱和
-; 一台「回平台」的传送台 —— 那就是「下一个区域」。
+; **4 段 / 33 站 / 30 跳 + 2 段 0.80 m 独木桥**。从平台西边缘（x = −20）跳出去，
+; 一路向西 206 m，最后落到「信号塔岛」（16 × 16 m，台面 y = 0.00）—— 终点。
 ;
-; ── 怎么读这个文件 ──
-;   1. **坐标系 = 世界坐标**：根节点不带偏移，所以下面所有 `position` 都是
-;      世界坐标（小屋 mesh_hut.tscn 用的是「自己的原点 + 摆在场景里」，
-;      那是**道具**的写法；这一份是**关卡几何**，直接对着平台写更好核对）。
-;      唯一的例外是 `Island/Props`：它被抬到岛面（局部 y = 0），
-;      所以岛上那些东西的坐标是**相对岛面**的（y = 0 就是地面）。
-;   2. 整份场景只用**6 个网格资源**，平台一律 `Box_unit`（1×1×1）+ 节点的
-;      `scale` 拉伸 —— 所以「一块板多大」写在 scale 里。
-;   3. **所有位置与尺寸都落在 0.05 m 网格上**（自检 `_verify_parkour.gd` 会逐个核对）。
-;   4. 落脚板 = `StaticBody3D` + `Mesh` + `Col`，**碰撞形状共用同一个
-;      1×1×1 的 `Shape_unit`、靠节点 scale 拉伸**（实测可行：探针量到
-;      正中和内沿都精确站在台面 +0.000；见 README §1.16）。
-;      好处是「板多大」只有 scale 这一处真相，网格和碰撞不可能走散。
+; ── 四段（每段终点一块 4 m 见方的休息台 + 一根信号桅杆当地标）──
+;   第 1 段「起跳・极限跳」：Launch → C1
+;   第 2 段「独木桥・绕角・台阶链」：B1 → C2
+;   第 3 段「上升塔 + 5 m 长跳」：U1 → C3
+;   第 4 段「下降链 → 终点岛」：D1 → Island
 ;
-; ── 尺寸是怎么定出来的（每一跳都留了余量）──
-;   实测（`_verify_parkour.gd` 第 3 节每次都会重量）：按住 Shift 跑满 6.8 m/s、
-;   起跳 7.1 m/s、重力 20 —— 于是
-;       平跳最远 6.8 × 0.71 = 4.83 m     +0.8 m 抬升只剩 3.87 m
-;                                        −1.0 m 落差能到 5.65 m
-;   另外实测**挂在板边上**还能站住，容差 +0.20 m（胶囊半径 0.30）。
-;   本文件里最长的一跳是 H3 = 4.00 m 平跳（余量 0.83 m），其余都在 2.2~3.5 m。
-;   ⚠️ **改了 `player.gd` 的速度/跳跃/重力，这条路线要重新量一遍** ——
-;      `_verify_parkour.gd` 第 3 节会把「实测最远」和「本关最远一跳」摆在一起，
-;      余量不够就直接红。
+; ── Minecraft 跑酷的七个套路，各来了一处（都在注释里标了 ★）──
+;   · 4 格极限跳（冲刺跳）………… 起跳段 Launch→P1（4.20 m）、P1→P2（4.55 m）
+;   · 1 格宽独木桥中间断开 ……… BA（0.80 宽）--4.30 m--> S1 石台 --> BB
+;   · 绕角跳 / neo（90°）…………… T1→T2（西转北）、T2→T3（北转西）
+;   · 单块台阶上升链（每级 +0.40）… T2→T3→T4→T5→T6（4 级，每级要助跑）
+;   · 上升塔（+0.80 × 6，接近实测极限）… C2→U1→…→U6
+;   · 下降链（−1.0 ~ −1.2，落 1.6 m 小石台）… C3→D1→…→D5→岛
+;   · 长助跑 + 贴边起跳的 5 m 级跳 …… U6→C3（4.60 m = 实测上限的 90.4%）
 ;
-; ── 视觉上的两处刻意选择 ──
-;   · 起跳跑道（`Launch`）是**画在平台地面上的标记，故意没有碰撞** ——
-;     2.5 cm 的坎就能把 CharacterBody3D 挡在门外（README §1.13 量过 10 cm 坎
-;     让 cast_motion 的 safe 从 1.000 掉到 0.387）。有碰撞 = 玩家上不去跑道。
-;   · 只有 2 盏灯（岛上信号塔顶 1 + 掩体 1），都关阴影 ——
-;     本项目对功耗敏感，跑酷这条线本来就在大太阳底下，跑道起点不另加灯。
+; ── 难度（`scripts/_probe_parkour.gd` 会重算全部数字）──
+;   每跳**实测余量**（= 解析射程 × 1.054 − 必须跨）在 **0.48 ~ 2.09 m**，
+;   其中 **21/30 = 70%** 落在 0.40~0.90 的紧张区间（v1 最紧的一跳还有 1.09 m）——
+;   但刻意留了 6 处「喘息跳」（1.0 m 以上余量）当节奏，不是一路贴脸。
+;
+; ── 坐标系与三块物理红线（和 v1 一样，别踩）──
+;   1. **世界坐标**：根节点不带偏移（关卡几何，不是道具）；`Island/Props`
+;      是唯一例外 —— 它的局部 y = 0 就是岛面。
+;   2. 落脚板 = `StaticBody3D` + `Mesh` + `Col`，**共用 1×1×1 的 `Shape_unit`**
+;      靠节点 scale 拉伸（实测可行）；所有 position / scale 落在 0.05 m 网格。
+;   3. **CharacterBody3D 不会迈台阶**：同一段里相邻台面要么等平、要么真的跳过去。
+;      跑道标记、传送台贴面**故意没有碰撞**（2.5 cm 的坎就能挡人，README §1.13）。
+;   4. **掉下去回「本段起点」**（见 `scripts/parkour.gd` 的 segments），段之间才是检查点。
+;   5. 只有 **2 盏灯**（岛上塔顶 + 掩体），都关阴影 —— 本项目对功耗敏感。
 
 [ext_resource type="Script" path="res://scripts/parkour.gd" id="1_parkour"]
 
@@ -76,6 +73,10 @@ radius = 0.5
 height = 1.0
 radial_segments = 16
 rings = 8
+
+[sub_resource type="CylinderShape3D" id="Shape_mast"]
+radius = 0.1
+height = 5.0
 
 [sub_resource type="BoxShape3D" id="Shape_unit"]
 size = Vector3(1, 1, 1)
@@ -149,7 +150,9 @@ emission_energy_multiplier = 2.6
 
 [node name="Parkour" type="Node3D"]
 script = ExtResource("1_parkour")
-route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/Beam"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/P8"), NodePath("Route/P9"), NodePath("Island")]
+route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/U3"), NodePath("Route/U4"), NodePath("Route/U5"), NodePath("Route/U6"), NodePath("Route/C3"), NodePath("Route/D1"), NodePath("Route/D2"), NodePath("Route/D3"), NodePath("Route/D4"), NodePath("Route/D5"), NodePath("Island")]
+segments = [0, 9, 20, 27]
+seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "上升塔 + 5 m 长跳", "下降链 → 终点岛"]
 
 ; ══ 起跳段：平台西边缘的跑道（10 × 3 m），只有外观、没有碰撞 ══
 [node name="Launch" type="MeshInstance3D" parent="."]
@@ -182,154 +185,508 @@ shape = SubResource("Shape_post")
 position = Vector3(0, 2.2, 0)
 billboard = 1
 alpha_cut = 1
-text = "跑酷 → 信号塔"
+text = "跑酷 · 4 段 206 m →"
 font_size = 64
 outline_size = 14
 pixel_size = 0.008
 
-; ══ 十块落脚板 + 一段窄梁 ══
-; 每块的 `position.y` 都等于「台面高 − 0.25」（板厚 0.5），台面高见每段注释。
+; ══ 落脚板（33 站按顺序；台面高差与间距见每行注释）══
 [node name="Route" type="Node3D" parent="."]
 
-; H1：平台边缘 → 3.50 m 平跳，抬升 +0.40。台面 0.40
+; P1：极限跳 1（冲刺跳）
 [node name="P1" type="StaticBody3D" parent="Route"]
-position = Vector3(-24.8, 0.15, 4)
+position = Vector3(-25.7, 0.15, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P1"]
-scale = Vector3(2.6, 0.5, 3)
+scale = Vector3(3, 0.5, 3)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P1"]
-scale = Vector3(2.6, 0.5, 3)
+scale = Vector3(3, 0.5, 3)
 shape = SubResource("Shape_unit")
 
-; H2：3.00 m，抬升 +0.50（同时往南错 0.40 m，路线开始有味道）。台面 0.90
+; P2：极限跳 2
 [node name="P2" type="StaticBody3D" parent="Route"]
-position = Vector3(-30.3, 0.65, 4.4)
+position = Vector3(-33.25, 0.15, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P2"]
-scale = Vector3(2.4, 0.5, 2.6)
+scale = Vector3(3, 0.5, 3)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P2"]
-scale = Vector3(2.4, 0.5, 2.6)
+scale = Vector3(3, 0.5, 3)
 shape = SubResource("Shape_unit")
 
-; H3：**全线最难的一跳** —— 4.00 m 平跳（实测最远 4.83 m，余量 0.83 m）。
-; 板也给得最大（3 × 3），因为这一跳的落点误差最大。台面 0.90
+; P3：+0.40 上坡（喘息）
 [node name="P3" type="StaticBody3D" parent="Route"]
-position = Vector3(-37, 0.65, 4.4)
+position = Vector3(-39.65, 0.55, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P3"]
-scale = Vector3(3, 0.5, 3)
+scale = Vector3(2.6, 0.5, 2.6)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P3"]
-scale = Vector3(3, 0.5, 3)
+scale = Vector3(2.6, 0.5, 2.6)
 shape = SubResource("Shape_unit")
 
-; 窄梁：5.00 m 长、**只有 0.80 m 宽**（站得住的横向余量 ±0.7 m，见自检第 2 节）。
-; 它与 P3 的台面同高、且紧贴着 P3 的西边缘（x = −38.50），所以是**走**过去不是跳过去。
-; 放在最难的 H3 之后：这一段是全程唯一能喘口气的地方，也是唯一的平衡考验。
-[node name="Beam" type="StaticBody3D" parent="Route"]
-position = Vector3(-41, 0.65, 4.4)
-
-[node name="Mesh" type="MeshInstance3D" parent="Route/Beam"]
-scale = Vector3(5, 0.5, 0.8)
-mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_beam")
-
-[node name="Col" type="CollisionShape3D" parent="Route/Beam"]
-scale = Vector3(5, 0.5, 0.8)
-shape = SubResource("Shape_unit")
-
-; H4：窄梁西端 → 2.50 m，抬升 +0.80。台面 1.70
+; P4：+0.40 上坡（喘息）
 [node name="P4" type="StaticBody3D" parent="Route"]
-position = Vector3(-47, 1.45, 4.4)
+position = Vector3(-45.85, 0.95, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P4"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.6, 0.5, 2.6)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P4"]
-scale = Vector3(2, 0.5, 2)
+scale = Vector3(2.6, 0.5, 2.6)
 shape = SubResource("Shape_unit")
 
-; H5：2.80 m，抬升 +0.80。台面 2.50
+; P5：−0.40 下坡（喘息）
 [node name="P5" type="StaticBody3D" parent="Route"]
-position = Vector3(-52.1, 2.25, 4.4)
+position = Vector3(-52.75, 0.55, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P5"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.4, 0.5, 2.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P5"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.4, 0.5, 2.4)
 shape = SubResource("Shape_unit")
 
-; H6：2.80 m +0.80，从这里开始往北收（z 4.40 → 3.60 → 3.00），
-; 斜跳的**三维距离** 2.91 m（自检按三维距离算余量）。台面 3.30
+; P6：−0.40 下坡（喘息）
 [node name="P6" type="StaticBody3D" parent="Route"]
-position = Vector3(-57.5, 3.05, 3.6)
+position = Vector3(-59.55, 0.15, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P6"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.4, 0.5, 2.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P6"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.4, 0.5, 2.4)
 shape = SubResource("Shape_unit")
 
-; H7：2.40 m（三维 2.47）+0.80。台面 4.10
+; P7：平跳（喘息）
 [node name="P7" type="StaticBody3D" parent="Route"]
-position = Vector3(-62.3, 3.85, 3)
+position = Vector3(-65.95, 0.15, 4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/P7"]
-scale = Vector3(2.2, 0.5, 2.2)
+scale = Vector3(2.6, 0.5, 2.6)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/P7"]
-scale = Vector3(2.2, 0.5, 2.2)
+scale = Vector3(2.6, 0.5, 2.6)
 shape = SubResource("Shape_unit")
 
-; H8：2.20 m +0.80。台面 4.90
-[node name="P8" type="StaticBody3D" parent="Route"]
-position = Vector3(-66.7, 4.65, 3)
+; ★ C1：★ 段 1 终点 / 休息台
+[node name="C1" type="StaticBody3D" parent="Route"]
+position = Vector3(-72.25, 0.15, 4)
 
-[node name="Mesh" type="MeshInstance3D" parent="Route/P8"]
-scale = Vector3(2.2, 0.5, 2.2)
+[node name="Mesh" type="MeshInstance3D" parent="Route/C1"]
+scale = Vector3(4, 0.5, 4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
-[node name="Col" type="CollisionShape3D" parent="Route/P8"]
-scale = Vector3(2.2, 0.5, 2.2)
+[node name="Col" type="CollisionShape3D" parent="Route/C1"]
+scale = Vector3(4, 0.5, 4)
 shape = SubResource("Shape_unit")
 
-; H9：2.20 m +0.80（全程最高点）。台面 5.70
-[node name="P9" type="StaticBody3D" parent="Route"]
-position = Vector3(-71.1, 5.45, 3)
+; B1：独木桥入口
+[node name="B1" type="StaticBody3D" parent="Route"]
+position = Vector3(-79.15, 0.15, 4)
 
-[node name="Mesh" type="MeshInstance3D" parent="Route/P9"]
-scale = Vector3(2.2, 0.5, 2.2)
+[node name="Mesh" type="MeshInstance3D" parent="Route/B1"]
+scale = Vector3(2, 0.5, 2)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
-[node name="Col" type="CollisionShape3D" parent="Route/P9"]
-scale = Vector3(2.2, 0.5, 2.2)
+[node name="Col" type="CollisionShape3D" parent="Route/B1"]
+scale = Vector3(2, 0.5, 2)
 shape = SubResource("Shape_unit")
 
-; ══ 终点：信号塔岛（16 × 16 m，台面 y = +4.70）══
-; H10：P9 西缘 → 4.00 m 的**下跳**（落差 −1.00 m，实测能到 5.65 m，余量 1.65 m）。
-; 落点在世界 x ≈ −77.9、z = 3.0，所以岛面东侧那一块是净空的（见自检第 5 节）。
+; BA：独木桥前段（0.80 宽，走过去）
+[node name="BA" type="StaticBody3D" parent="Route"]
+position = Vector3(-81.9, 0.15, 4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/BA"]
+scale = Vector3(3.5, 0.5, 0.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_beam")
+
+[node name="Col" type="CollisionShape3D" parent="Route/BA"]
+scale = Vector3(3.5, 0.5, 0.8)
+shape = SubResource("Shape_unit")
+
+; S1：★ 桥中间断开：跳过去落石台
+[node name="S1" type="StaticBody3D" parent="Route"]
+position = Vector3(-88.55, 0.15, 4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/S1"]
+scale = Vector3(1.2, 0.5, 1.2)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/S1"]
+scale = Vector3(1.2, 0.5, 1.2)
+shape = SubResource("Shape_unit")
+
+; BB：独木桥后段
+[node name="BB" type="StaticBody3D" parent="Route"]
+position = Vector3(-90.9, 0.15, 4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/BB"]
+scale = Vector3(3.5, 0.5, 0.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_beam")
+
+[node name="Col" type="CollisionShape3D" parent="Route/BB"]
+scale = Vector3(3.5, 0.5, 0.8)
+shape = SubResource("Shape_unit")
+
+; T1：绕角前的转身台（喘息）
+[node name="T1" type="StaticBody3D" parent="Route"]
+position = Vector3(-99.05, 0.15, 4)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T1"]
+scale = Vector3(5, 0.5, 5)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T1"]
+scale = Vector3(5, 0.5, 5)
+shape = SubResource("Shape_unit")
+
+; T2：★ 绕角跳（90°：西→北）
+[node name="T2" type="StaticBody3D" parent="Route"]
+position = Vector3(-99.05, 0.15, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T2"]
+scale = Vector3(4, 0.5, 4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T2"]
+scale = Vector3(4, 0.5, 4)
+shape = SubResource("Shape_unit")
+
+; T3：★ 绕角跳（北→西）
+[node name="T3" type="StaticBody3D" parent="Route"]
+position = Vector3(-106.9, 0.55, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T3"]
+scale = Vector3(3.6, 0.5, 3.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T3"]
+scale = Vector3(3.6, 0.5, 3.6)
+shape = SubResource("Shape_unit")
+
+; T4：台阶链 1（+0.40）
+[node name="T4" type="StaticBody3D" parent="Route"]
+position = Vector3(-113.95, 0.95, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T4"]
+scale = Vector3(2.4, 0.5, 2.4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T4"]
+scale = Vector3(2.4, 0.5, 2.4)
+shape = SubResource("Shape_unit")
+
+; T5：台阶链 2（+0.40）
+[node name="T5" type="StaticBody3D" parent="Route"]
+position = Vector3(-120.4, 1.35, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T5"]
+scale = Vector3(2.4, 0.5, 2.4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T5"]
+scale = Vector3(2.4, 0.5, 2.4)
+shape = SubResource("Shape_unit")
+
+; T6：台阶链 3（+0.40）
+[node name="T6" type="StaticBody3D" parent="Route"]
+position = Vector3(-126.85, 1.75, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/T6"]
+scale = Vector3(2.4, 0.5, 2.4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/T6"]
+scale = Vector3(2.4, 0.5, 2.4)
+shape = SubResource("Shape_unit")
+
+; ★ C2：★ 段 2 终点 / 休息台
+[node name="C2" type="StaticBody3D" parent="Route"]
+position = Vector3(-133.25, 1.75, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/C2"]
+scale = Vector3(4, 0.5, 4)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/C2"]
+scale = Vector3(4, 0.5, 4)
+shape = SubResource("Shape_unit")
+
+; U1：上升塔 1（+0.80）
+[node name="U1" type="StaticBody3D" parent="Route"]
+position = Vector3(-140.25, 2.55, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U1"]
+scale = Vector3(2.8, 0.5, 2.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U1"]
+scale = Vector3(2.8, 0.5, 2.8)
+shape = SubResource("Shape_unit")
+
+; U2：上升塔 2
+[node name="U2" type="StaticBody3D" parent="Route"]
+position = Vector3(-146.65, 3.35, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U2"]
+scale = Vector3(2.8, 0.5, 2.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U2"]
+scale = Vector3(2.8, 0.5, 2.8)
+shape = SubResource("Shape_unit")
+
+; U3：上升塔 3
+[node name="U3" type="StaticBody3D" parent="Route"]
+position = Vector3(-153.05, 4.15, -4.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U3"]
+scale = Vector3(2.8, 0.5, 2.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U3"]
+scale = Vector3(2.8, 0.5, 2.8)
+shape = SubResource("Shape_unit")
+
+; U4：上升塔 4（拐一下，斜塔）
+[node name="U4" type="StaticBody3D" parent="Route"]
+position = Vector3(-153.05, 4.95, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U4"]
+scale = Vector3(3.6, 0.5, 3.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U4"]
+scale = Vector3(3.6, 0.5, 3.6)
+shape = SubResource("Shape_unit")
+
+; U5：上升塔 5
+[node name="U5" type="StaticBody3D" parent="Route"]
+position = Vector3(-159.85, 5.75, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U5"]
+scale = Vector3(2.8, 0.5, 2.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U5"]
+scale = Vector3(2.8, 0.5, 2.8)
+shape = SubResource("Shape_unit")
+
+; U6：上升塔 6（最高点）
+[node name="U6" type="StaticBody3D" parent="Route"]
+position = Vector3(-166.25, 6.55, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/U6"]
+scale = Vector3(2.8, 0.5, 2.8)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/U6"]
+scale = Vector3(2.8, 0.5, 2.8)
+shape = SubResource("Shape_unit")
+
+; ★ C3：★ 段 3 终点：5 m 级长跳 + 长助跑
+[node name="C3" type="StaticBody3D" parent="Route"]
+position = Vector3(-174.5, 6.55, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/C3"]
+scale = Vector3(4.5, 0.5, 4.5)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/C3"]
+scale = Vector3(4.5, 0.5, 4.5)
+shape = SubResource("Shape_unit")
+
+; D1：下降链 1（−1.20）
+[node name="D1" type="StaticBody3D" parent="Route"]
+position = Vector3(-183.15, 5.35, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/D1"]
+scale = Vector3(1.6, 0.5, 1.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/D1"]
+scale = Vector3(1.6, 0.5, 1.6)
+shape = SubResource("Shape_unit")
+
+; D2：下降链 2（−1.20）
+[node name="D2" type="StaticBody3D" parent="Route"]
+position = Vector3(-190.35, 4.15, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/D2"]
+scale = Vector3(1.6, 0.5, 1.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/D2"]
+scale = Vector3(1.6, 0.5, 1.6)
+shape = SubResource("Shape_unit")
+
+; D3：下降链 3（−1.20）
+[node name="D3" type="StaticBody3D" parent="Route"]
+position = Vector3(-197.55, 2.95, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/D3"]
+scale = Vector3(1.6, 0.5, 1.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/D3"]
+scale = Vector3(1.6, 0.5, 1.6)
+shape = SubResource("Shape_unit")
+
+; D4：下降链 4（−1.20）
+[node name="D4" type="StaticBody3D" parent="Route"]
+position = Vector3(-204.75, 1.75, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/D4"]
+scale = Vector3(1.6, 0.5, 1.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/D4"]
+scale = Vector3(1.6, 0.5, 1.6)
+shape = SubResource("Shape_unit")
+
+; D5：下降链 5（−1.00）
+[node name="D5" type="StaticBody3D" parent="Route"]
+position = Vector3(-211.8, 0.75, -11.7)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/D5"]
+scale = Vector3(1.6, 0.5, 1.6)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_pad")
+
+[node name="Col" type="CollisionShape3D" parent="Route/D5"]
+scale = Vector3(1.6, 0.5, 1.6)
+shape = SubResource("Shape_unit")
+
+; ══ 段终点的地标：一根 5 m 桅杆 + 信标（只有自发光材质，**不占灯**）══
+[node name="Beacon_C1" type="StaticBody3D" parent="Route"]
+position = Vector3(-73.65, 0.4, 2.6)
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C1"]
+position = Vector3(0, 2.5, 0)
+mesh = SubResource("Cyl_mast")
+material_override = SubResource("Mat_tower")
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_C1"]
+position = Vector3(0, 2.5, 0)
+shape = SubResource("Shape_mast")
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_C1"]
+position = Vector3(0, 5.3, 0)
+mesh = SubResource("Sphere_beacon")
+material_override = SubResource("Mat_beacon")
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_C1"]
+position = Vector3(0, 3.2, 0)
+billboard = 1
+alpha_cut = 1
+text = "第 1 段 · 终点"
+font_size = 64
+outline_size = 14
+pixel_size = 0.01
+
+[node name="Beacon_C2" type="StaticBody3D" parent="Route"]
+position = Vector3(-134.65, 2, -6.3)
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C2"]
+position = Vector3(0, 2.5, 0)
+mesh = SubResource("Cyl_mast")
+material_override = SubResource("Mat_tower")
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_C2"]
+position = Vector3(0, 2.5, 0)
+shape = SubResource("Shape_mast")
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_C2"]
+position = Vector3(0, 5.3, 0)
+mesh = SubResource("Sphere_beacon")
+material_override = SubResource("Mat_beacon")
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_C2"]
+position = Vector3(0, 3.2, 0)
+billboard = 1
+alpha_cut = 1
+text = "第 2 段 · 终点"
+font_size = 64
+outline_size = 14
+pixel_size = 0.01
+
+[node name="Beacon_C3" type="StaticBody3D" parent="Route"]
+position = Vector3(-176.15, 6.8, -13.35)
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C3"]
+position = Vector3(0, 2.5, 0)
+mesh = SubResource("Cyl_mast")
+material_override = SubResource("Mat_tower")
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_C3"]
+position = Vector3(0, 2.5, 0)
+shape = SubResource("Shape_mast")
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_C3"]
+position = Vector3(0, 5.3, 0)
+mesh = SubResource("Sphere_beacon")
+material_override = SubResource("Mat_beacon")
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_C3"]
+position = Vector3(0, 3.2, 0)
+billboard = 1
+alpha_cut = 1
+text = "第 3 段 · 终点"
+font_size = 64
+outline_size = 14
+pixel_size = 0.01
+
+; 第 1 段的起点牌（立在跑道南侧，和 v1 同一根柱子）
+[node name="StartSign" type="Label3D" parent="SignPost"]
+position = Vector3(0, 1.1, 0)
+billboard = 1
+alpha_cut = 1
+text = "第 1 段 · 起点"
+font_size = 48
+outline_size = 12
+pixel_size = 0.01
+
 [node name="Island" type="StaticBody3D" parent="."]
-position = Vector3(-84.2, 4.1, 3)
+position = Vector3(-226.05, -0.6, -11.7)
 
 [node name="Mesh" type="MeshInstance3D" parent="Island"]
 scale = Vector3(16, 1.2, 16)
@@ -566,5 +923,31 @@ text = "信号塔\n跑酷终点"
 font_size = 96
 outline_size = 16
 pixel_size = 0.01
+
+; ══ 计时 HUD（**自带在跑酷场景里**，不碰 hud.gd）══
+; 文本全用 ASCII：`Label` 走的是工程主题字体，中文也能显示，但计时用数字更干净。
+[node name="ParkourHUD" type="CanvasLayer" parent="."]
+
+[node name="Timer" type="Label" parent="ParkourHUD"]
+offset_left = 28.0
+offset_top = 20.0
+offset_right = 620.0
+offset_bottom = 66.0
+theme_override_colors/font_color = Color(1, 0.96, 0.85, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 30
+text = "TIME 0.00    BEST --.--"
+
+[node name="Seg" type="Label" parent="ParkourHUD"]
+offset_left = 30.0
+offset_top = 60.0
+offset_right = 620.0
+offset_bottom = 92.0
+theme_override_colors/font_color = Color(0.85, 0.92, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 22
+text = "SEG 1/4   --"
 
 [connection signal="body_entered" from="Island/Props/ReturnPad/Trigger" to="." method="_on_return_pad_entered"]

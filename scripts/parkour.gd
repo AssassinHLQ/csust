@@ -1,41 +1,48 @@
 class_name Parkour
 extends Node3D
-## 跑酷路线总控：「记忆平台 → 信号塔岛」这条线的**顺序**与**摔落惩罚**。
+## 跑酷路线总控（v2：**4 段 / 33 站 / 30 跳 + 2 段独木桥 / 206 m**）。
 ##
-## ── 这一份只干两件事 ──
-##   1. 报出路线顺序（`route` 里按顺序排的落脚点）—— 自检、探针、文档都拿它当真相；
-##   2. 摔下去时把人送回**最近踩过的那个落脚点**，而不是送回出生点。
+## ── 这一份干四件事 ──
+##   1. 报出路线顺序（`route`）与**分段**（`segments`）—— 自检、探针、文档都拿它当真相；
+##   2. 摔下去送回**本段起点**（不是全程起点，也不是最近踩过的落脚点）；
+##   3. 段内计时 + 最好成绩（存 `user://`），终点停表；
+##   4. 岛上的「回平台」传送台。
 ##
-## ── 为什么第 2 条是必需的，不是「贴心」 ──
-## 路线一共 10 跳。`game.gd` 的兜底只有一条：掉到 y < −60 就送回出生点。
-## 那意味着**每摔一次都要从出生点重新跑 70 m**（穿过画室、绕过两位 Boss、
-## 再从平台西边跳一遍前 5 跳）—— 跑酷地图没有检查点根本没法玩。
-## 所以这里把兜底线抬到 `FALL_Y`（路线上最低的落脚点在 y = +0.40，
-## 所以 −12 只可能意味着「真的掉出路线了」），并记住最后一个踩过的落脚点。
+## ── 为什么惩罚是「回本段起点」而不是「回最近落脚点」──
+## v1 是「回最近踩过的落脚点」，对 10 跳的短图刚好；v2 有 30 跳，那样等于**没有惩罚**：
+## 每一块板都能当检查点，摔一次只亏一跳，「难」就白设计了。
+## 现在检查点只落在**段的交界**（4 段 = 3 个中途检查点 + 起点），摔一次要重跑整段
+## （最长的一段 11 站 ≈ 45 m）。这正是 Minecraft 跑酷地图的常见做法。
 ##
 ## ── 什么时候**解除**武装 ──
-## 站在主平台上、且脚下不是路线上的落脚点 → 视为「离开跑酷去干别的了」，
-## 清空检查点。否则一个只是在平台边上失足的路人会被凭空塞到跑酷中段。
+## 站在主平台上、且脚下不是路线上的落脚点 → 视为「离开跑酷去干别的了」：
+## 检查点清空、计时归零。否则一个只是在平台边上失足的路人会被凭空塞到跑酷中段。
 ##
 ## ── 判据为什么用「网格的世界 AABB」而不是碰撞形状 ──
 ## 路线第 0 站（`Launch`）是**画在平台地面上的跑道标记，故意没有碰撞**
 ## （2.5 cm 的坎就足以把 CharacterBody3D 挡在门外，见 README §1.13）。
 ## 拿碰撞形状当判据会把这一站漏掉，所以统一读 `Mesh` 的世界包围盒。
 
-## 低于这个高度就判定「摔出路线」，送回最近踩过的落脚点。
+## 低于这个高度就判定「摔出路线」，送回本段起点。
 ## 比 `game.gd` 的 FALL_LIMIT（−60）高得多 —— 就是要**抢在它前面**出手，
-## 否则人要看着天空下坠 2.5 s 才被送回出生点。
+## 否则人要看着天空下坠 2.5 s 才被送回平台出生点。v2 最低的落脚点是岛面 y = 0.00。
 const FALL_Y := -12.0
 
 ## 脚底离台面多近算「站在这一站上」
 const ON_TOP := 0.40
 ## 水平方向的外扩。实测：胶囊半径 0.30，**站到板外 +0.20 m 还能被边缘托住**
-## （+0.25 m 就滑下去，见 `_verify_parkour.gd` 第 2 节量出来的那张表）——
-## 所以站位判定要跟着放宽，不然「挂在边上」会被误判成没踩到。
+## （+0.25 m 就滑下去，见 `_verify_parkour.gd` 第 2 节量出来的那张表）。
 const EDGE_MARGIN := 0.30
+
+## 最好成绩存这儿（`user://`，跨启动保留）
+const BEST_PATH := "user://parkour_best.cfg"
 
 ## 按顺序排的落脚点节点路径（相对本节点）。**顺序就是路线顺序**。
 @export var route: Array = []
+## **段起点**的站号（升序）。掉下去回这里；段与段之间才是检查点。
+@export var segments: Array = [0]
+## 段名（HUD 用），长度应与 `segments` 一致
+@export var seg_names: Array = []
 ## 关掉就完全不干预（自检里想单独测 game.gd 的兜底时会用）
 @export var enabled := true
 ## 岛上那台「回平台」传送台把人送到哪儿（主平台西侧、跑道口旁边的一块空地）
@@ -43,23 +50,42 @@ const EDGE_MARGIN := 0.30
 
 ## 前进到新的一站（只在往后推进时发，退回旧站不发）
 signal checkpoint_reached(index: int, label: String)
-## 摔了，被送回第 index 站
+## 摔了，被送回第 index 站（= 本段起点）
 signal rescued(index: int, label: String)
+## 离开起跳跑道、开始计时
+signal run_started()
+## 撞到终点：本次用时 + 历史最好
+signal run_finished(seconds: float, best: float)
 
-## 当前检查点（−1 = 没上路线）
+## 当前检查点（−1 = 没上路线）。**只是进度**，不是复活点 —— 复活点见 `respawn_station()`
 var checkpoint := -1
 var rescues := 0
+## 计时中 / 已通关
+var timer_running := false
+var finished := false
 
+var _elapsed := 0.0
+var _started_at := 0
+var _best := 0.0
 ## 每一站的世界包围盒 + 台面高度 + 名字
 var _boxes: Array[AABB] = []
 var _tops: PackedFloat32Array = []
 var _labels: PackedStringArray = []
 var _player: Player
+var _hud_timer: Label
+var _hud_seg: Label
+var _hud_cache := ""
 
 
 func _ready() -> void:
 	_build_route()
+	_hud_timer = get_node_or_null("ParkourHUD/Timer") as Label
+	_hud_seg = get_node_or_null("ParkourHUD/Seg") as Label
+	_load_best()
+	_update_hud(true)
 
+
+# --- 路线 ---------------------------------------------------------------------
 
 ## 把 `route` 里的节点路径解析成世界包围盒。自检可以直接调它核对。
 func _build_route() -> void:
@@ -85,6 +111,10 @@ func node_count() -> int:
 	return _boxes.size()
 
 
+func segment_count() -> int:
+	return maxi(segments.size(), 1)
+
+
 func label_at(i: int) -> String:
 	return _labels[i] if i >= 0 and i < _labels.size() else ""
 
@@ -97,12 +127,121 @@ func box_at(i: int) -> AABB:
 	return _boxes[i] if i >= 0 and i < _boxes.size() else AABB()
 
 
+func segment_name(seg: int) -> String:
+	return String(seg_names[seg]) if seg >= 0 and seg < seg_names.size() else ""
+
+
+## 第 i 站属于哪一段（−1 站的 → −1）
+func segment_of(station: int) -> int:
+	if station < 0 or segments.is_empty():
+		return -1
+	var seg := 0
+	for k in segments.size():
+		if station >= int(segments[k]):
+			seg = k
+	return seg
+
+
+## 第 seg 段的**起点站号**
+func segment_start(seg: int) -> int:
+	if segments.is_empty():
+		return 0
+	return int(segments[clampi(seg, 0, segments.size() - 1)])
+
+
+## 摔下去该回哪一站 —— **本段起点**（这就是「惩罚」的全部）
+func respawn_station() -> int:
+	if checkpoint < 0:
+		return 0
+	return segment_start(segment_of(checkpoint))
+
+
 ## 站在第 i 站的台面上时，人应该被放在哪儿（台面正中、抬高 5 cm 免得嵌进去）
 func respawn_point(i: int) -> Vector3:
 	var b := box_at(i)
 	return Vector3(b.position.x + b.size.x * 0.5, top_at(i) + 0.05,
 		b.position.z + b.size.z * 0.5)
 
+
+# --- 计时 / 最好成绩 ------------------------------------------------------------
+
+func elapsed_seconds() -> float:
+	if timer_running:
+		return (Time.get_ticks_msec() - _started_at) / 1000.0
+	return _elapsed
+
+
+func best_seconds() -> float:
+	return _best
+
+
+func is_finished() -> bool:
+	return finished
+
+
+## 开始/重置一次跑动（自检也用；玩家在跑道上站住时也会自动走这条路）
+func reset_run() -> void:
+	timer_running = false
+	finished = false
+	_elapsed = 0.0
+	_started_at = Time.get_ticks_msec()
+	checkpoint = -1
+	_update_hud(true)
+
+
+func _start_timer() -> void:
+	timer_running = true
+	finished = false
+	_elapsed = 0.0
+	_started_at = Time.get_ticks_msec()
+	run_started.emit()
+	print("[Parkour] 起跑：计时开始")
+
+
+func _stop_timer() -> void:
+	if not timer_running:
+		return
+	_elapsed = (Time.get_ticks_msec() - _started_at) / 1000.0
+	timer_running = false
+	finished = true
+	var is_best := _best <= 0.0 or _elapsed < _best
+	if is_best:
+		_best = _elapsed
+		_save_best()
+	run_finished.emit(_elapsed, _best)
+	print("[Parkour] 通关：%.2f s%s" % [_elapsed, "（新纪录）" if is_best else
+		"（最好 %.2f s）" % _best])
+
+
+func _load_best() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(BEST_PATH) == OK:
+		_best = maxf(0.0, float(cf.get_value("parkour", "best", 0.0)))
+
+
+func _save_best() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("parkour", "best", _best)
+	cf.save(BEST_PATH)
+
+
+func _update_hud(force := false) -> void:
+	if _hud_timer == null:
+		return
+	var seg := segment_of(checkpoint)
+	var head := "TIME %05.2f    BEST %s" % [_elapsed if not timer_running else elapsed_seconds(),
+		"--.--" if _best <= 0.0 else "%05.2f" % _best]
+	var state := "CLEAR!" if finished else ("RUN" if timer_running else "--")
+	var sub := "SEG %d/%d  %s   %s" % [seg + 1 if seg >= 0 else 1, segment_count(),
+		segment_name(maxi(seg, 0)), state]
+	var key := head + "|" + sub
+	if force or key != _hud_cache:
+		_hud_cache = key
+		_hud_timer.text = head
+		_hud_seg.text = sub
+
+
+# --- 每帧 ---------------------------------------------------------------------
 
 func _physics_process(_delta: float) -> void:
 	if not enabled:
@@ -113,19 +252,33 @@ func _physics_process(_delta: float) -> void:
 			return
 	var p := _player.global_position
 	var here := _station_at(p)
+
 	if here > checkpoint:
 		checkpoint = here
 		checkpoint_reached.emit(here, label_at(here))
-		print("[Parkour] 检查点 %d/%d：%s（y = %.2f）"
-			% [here + 1, node_count(), label_at(here), p.y])
+		if timer_running and here == node_count() - 1:
+			_stop_timer()
+		print("[Parkour] 第 %d/%d 站：%s（第 %d 段，y = %.2f）"
+			% [here + 1, node_count(), label_at(here), segment_of(here) + 1, p.y])
+
+	# 起跑：上过跑道（checkpoint ≥ 0）之后**离开第 0 站**就开始计时
+	if checkpoint >= 0 and not timer_running and not finished and here != 0:
+		_start_timer()
+
 	if checkpoint >= 0 and p.y < FALL_Y:
 		_rescue()
 		return
-	# 回到主平台（且脚下不是路线上的落脚点）→ 收工，检查点清空
-	if checkpoint >= 0 and here < 0 and p.y > -0.5 \
-			and absf(p.x) <= 20.0 and absf(p.z) <= 20.0:
-		print("[Parkour] 回到主平台，检查点清空（上一站 %s）" % label_at(checkpoint))
-		checkpoint = -1
+
+	# 回到主平台（且脚下不是路线上的落脚点）→ 收工：检查点清空 + 计时归零
+	if here < 0 and p.y > -0.5 and absf(p.x) <= 20.0 and absf(p.z) <= 20.0 \
+			and (checkpoint >= 0 or timer_running or finished):
+		print("[Parkour] 回到主平台：检查点清空、计时归零（上一站 %s）" % label_at(checkpoint))
+		reset_run()
+
+
+func _process(_delta: float) -> void:
+	if enabled:
+		_update_hud()
 
 
 ## 脚下是第几站（不在任何一站上 → −1）。有重叠时取**靠后**的那一站。
@@ -152,18 +305,19 @@ func _station_at(p: Vector3) -> int:
 
 func _rescue() -> void:
 	rescues += 1
-	_player.global_position = respawn_point(checkpoint)
+	var back := respawn_station()
+	_player.global_position = respawn_point(back)
 	_player.velocity = Vector3.ZERO
-	rescued.emit(checkpoint, label_at(checkpoint))
+	rescued.emit(back, label_at(back))
 	Sfx.play("ui_open")
-	print("[Parkour] 第 %d 次摔落 → 送回第 %d 站 %s"
-		% [rescues, checkpoint + 1, label_at(checkpoint)])
+	print("[Parkour] 第 %d 次摔落 → 回**本段起点**（第 %d 段）第 %d 站 %s"
+		% [rescues, segment_of(back) + 1, back + 1, label_at(back)])
 
 
 ## 岛上的传送台：踏上去回主平台。
 ##
-## ⚠️ 没有它就是个死局：整条路线是**上坡**的（0 → +4.70），回头跳不上去；
-##    而检查点又会把摔下去的人送回岛上 —— 玩家到了终点就再也回不来了。
+## ⚠️ 没有它就是个死局：检查点会把摔下去的人送回**本段起点**（第 4 段起点在
+##    下降链之前、200 m 外），而终点岛四周是真的真空，走不回去。
 func _on_return_pad_entered(body: Node3D) -> void:
 	if not enabled:
 		return
@@ -173,9 +327,9 @@ func _on_return_pad_entered(body: Node3D) -> void:
 		return
 	_player.global_position = return_target
 	_player.velocity = Vector3.ZERO
-	checkpoint = -1
+	reset_run()
 	Sfx.play("ui_toggle")
-	print("[Parkour] 传送台 → 送回主平台 %s，检查点清空" % str(return_target))
+	print("[Parkour] 传送台 → 送回主平台 %s，检查点/计时清空" % str(return_target))
 
 
 ## 一个节点的世界包围盒：节点**自己**是网格就用它（跑道标记没有碰撞，只有网格），
@@ -214,6 +368,7 @@ func _world_aabb(node: Node) -> AABB:
 ##
 ## ⚠️ 「reach − required」就是**落进板里的深度**。这一列的上下界都要管：
 ##    太小说明余量不够（跳不到），太大说明会**跳过板**（板太短/射程太远）。
+## ⚠️ 真正的余量要拿**实测**射程算：`reach × 1.054`（v1 二分法量的系数）。
 static func hop_analysis(from_box: AABB, to_box: AABB,
 		jump_v: float, gravity: float, run_speed: float) -> Dictionary:
 	var from_top := from_box.position.y + from_box.size.y
