@@ -468,9 +468,9 @@ func _first(node: Node, cls: String) -> Node:
 
 ## 找**基础层**那个 `AnimationPlayer`（要认得出 `Normal_Idle`）。
 ##
-## ⚠️ 不能再用「找到的第一个 AnimationPlayer」：§1.18 之后每个模型里都有**两个**
-##    播放器 —— 基础层 + 只写上半身的叠加层 `UpperBody`（它只有开火 / 换弹两条，
-##    没有 `Normal_Idle`）。`_all()` 是**栈式**遍历，返回顺序不保证，所以
+## ⚠️ 不能再用「找到的第一个 AnimationPlayer」：§1.18 / §1.20 之后每个模型里都有**三个**
+##    播放器 —— 基础层 + 两层叠加（`UpperBody` 静止 / `UpperBodyMove` 移动，它们只有
+##    开火 / 换弹，没有 `Normal_Idle`）。`_all()` 是**栈式**遍历，返回顺序不保证，所以
 ##    「第一个」随时可能是叠加层 —— 加了叠加层之后这里 7 只同伴集体变红就是这么来的。
 func _first_player(node: Node) -> AnimationPlayer:
 	for n in _all(node, "AnimationPlayer"):

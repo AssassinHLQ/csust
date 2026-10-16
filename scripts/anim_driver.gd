@@ -464,9 +464,9 @@ func _find_first(n: Node, cls: String) -> Node:
 
 ## 找**基础层**的播放器。
 ##
-## ⚠️ 不能再用「第一个 `AnimationPlayer`」：§1.18 之后每个模型里有**两个** ——
-##    基础层 + 只写上半身的叠加层 `UpperBody`（它只有开火 / 换弹，没有 `Normal_Idle`）。
-##    按「有 `Normal_Idle`」来认，就不怕遍历顺序（也不怕将来再多一层）。
+## ⚠️ 不能再用「第一个 `AnimationPlayer`」：§1.18 / §1.20 之后每个模型里有**三个** ——
+##    基础层 + 两层叠加（`UpperBody` 静止 / `UpperBodyMove` 移动，它们只有开火 / 换弹、
+##    没有 `Normal_Idle`）。按「有 `Normal_Idle`」来认，就不怕遍历顺序（也不怕将来再多一层）。
 func _find_player(root_node: Node) -> AnimationPlayer:
 	if root_node == null:
 		return null
