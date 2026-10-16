@@ -38,7 +38,7 @@ func _run() -> void:
 	_check(list.size() == 7, "场景里有 7 名同伴")
 	for c in list:
 		var skel := _best_skeleton(c)
-		var ap := _first(c, "AnimationPlayer") as AnimationPlayer
+		var ap := _first_player(c)
 		var h := _local_height(c)
 		print("  %-4s 模型 %-12s 骨架 %3d 骨  动画 %2d 个  layer=%d mask=%d  身高 %.2f m" % [
 			c.display_name, c.model_path.get_file(),
@@ -464,6 +464,20 @@ func _all(node: Node, cls: String) -> Array[Node]:
 func _first(node: Node, cls: String) -> Node:
 	var r := _all(node, cls)
 	return r[0] if not r.is_empty() else null
+
+
+## 找**基础层**那个 `AnimationPlayer`（要认得出 `Normal_Idle`）。
+##
+## ⚠️ 不能再用「找到的第一个 AnimationPlayer」：§1.18 之后每个模型里都有**两个**
+##    播放器 —— 基础层 + 只写上半身的叠加层 `UpperBody`（它只有开火 / 换弹两条，
+##    没有 `Normal_Idle`）。`_all()` 是**栈式**遍历，返回顺序不保证，所以
+##    「第一个」随时可能是叠加层 —— 加了叠加层之后这里 7 只同伴集体变红就是这么来的。
+func _first_player(node: Node) -> AnimationPlayer:
+	for n in _all(node, "AnimationPlayer"):
+		var a := n as AnimationPlayer
+		if a != null and a.has_animation("Normal_Idle"):
+			return a
+	return null
 
 
 func _check(cond: bool, label: String) -> void:

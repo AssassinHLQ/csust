@@ -1,0 +1,307 @@
+extends SceneTree
+## 验「**边跑边打时腿还在跑**」——把「脚动没动」量成厘米。
+##
+## 用户报：
+##   「开枪跑打时为什么角色脚不动，需要静止开枪不动，但是跑步开枪脚还是要动」
+##
+## 根因：`request_fire()` 原来把**整个** `AnimationPlayer` 切到 `Normal_Attack_Ing`，
+## 而这条动作是**全骨架**的（实测爱丽丝 228 条轨道、下半身 48 条），于是开火期间
+## 腿也被定格，人在地上滑。
+##
+## 修法：开火 / 换弹改成**只叠上半身** —— 复制一份动作、**把下半身轨道全删掉**，
+## 挂到第二个 `AnimationPlayer`（`process_priority` 更大 ⇒ 后写、赢）；
+## 基础层照旧每帧写整体（`Normal_Idle` / `Move_Ing`），所以腿一直在跑。
+##
+## 这一套的核心判据只有两条，但它们正好是用户那句话的两半：
+##   · **站定开火**：脚骨位移 < 0.03 m（不动）、手骨位移 ≥ 0.08 m（上半身在演开火）
+##   · **跑动开火**：脚骨位移 ≥ 0.15 m（**腿在跑**）、基础层仍是 `Move_Ing`
+##
+## 用法：
+##   godot --path <工程> --script res://scripts/_verify_attack_move.gd -- --splat=off
+
+const SPAWN := Vector3(0, 0.05, 6)
+## 采样窗口（真实毫秒）
+const WINDOW_MS := 500
+## 跑动时脚的往返幅度（`Move_Ing` 脚摆 ±0.16 m，一个周期必然超过这个数）
+const FOOT_MOVING := 0.15
+## 站定时脚允许的漂移（待机的呼吸感）
+const FOOT_STILL := 0.03
+## 开火动作里手要比**待机基线**多挪这么多，才算「上半身真的在演开火」。
+## ⚠️ 用小差值而不是绝对值：手的位移跟「采样窗口落在动作的哪一段」有关，
+##    卡绝对值会在全量回归里擦边（第一版卡 0.08 m，实测 0.079 就红了）。
+const HAND_ACTING := 0.03
+
+var _fail := 0
+var _pass := 0
+var _p: Player
+var _anim: AnimDriver
+var _m := {}
+
+
+func _initialize() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	root.size = Vector2i(1280, 720)
+	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
+	root.add_child(game)
+	await _wait(10)
+	_p = game.get_node_or_null("Player") as Player
+	if _p == null:
+		print("!! 场景里没有 Player")
+		quit(1)
+		return
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_anim = _p.anim as AnimDriver
+
+	await _test_structure(game)
+	await _test_standing_fire()
+	await _test_running_fire()
+	await _test_running_reload()
+	await _test_recover()
+	await _test_weapon_path()
+	await _wait(2)
+
+	print("\n================ 结果 ================")
+	print("通过 %d 项" % _pass)
+	_print_table()
+	_quit()
+
+
+# --- 1. 叠加层本身搭对了吗 -----------------------------------------------------
+
+func _test_structure(game: Node) -> void:
+	print("\n========== 1. 上半身叠加层 ==========")
+	_check(_anim != null and _anim.has_upper_layer(), "主角的驱动有叠加层（UpperBody）")
+	if _anim == null or not _anim.has_upper_layer():
+		return
+	_check(_anim.upper.root_node == _anim.player.root_node,
+		"两层的 root_node 相同（轨道路径才对得上）：%s" % str(_anim.upper.root_node))
+	_check(_anim.upper.process_priority > _anim.player.process_priority,
+		"叠加层 process_priority=%d > 基础层 %d（**后写、赢**）"
+		% [_anim.upper.process_priority, _anim.player.process_priority])
+
+	var full := _anim.player.get_animation("Normal_Attack_Ing").get_track_count()
+	var upper_tracks := _anim.upper_track_count()
+	_check(upper_tracks > 0 and upper_tracks < full,
+		"开火动作被复制成上半身版：%d → %d 条轨道（原动作是全骨架的）"
+		% [full, upper_tracks])
+	_check(_anim.upper_lower_track_count() == 0,
+		"上半身版里**下半身轨道 0 条**（滤掉 %d 条）" % _anim.lower_tracks_removed)
+	_check(_anim.upper.has_animation("Normal_Reload")
+		and _anim.upper_track_count("Normal_Reload") > 0,
+		"换弹动作也做了上半身版（%d 条轨道）" % _anim.upper_track_count("Normal_Reload"))
+
+	# 七名同伴
+	var mates := 0
+	var bad: Array[String] = []
+	for child in game.get_children():
+		if not (child is Companion):
+			continue
+		var c := child as Companion
+		var a := c.anim as AnimDriver
+		mates += 1
+		if a == null or not a.has_upper_layer() or a.upper_lower_track_count() != 0:
+			bad.append(c.display_name)
+	_check(mates == 7 and bad.is_empty(),
+		"%d 名同伴也都搭上了叠加层、下半身轨道为 0%s"
+		% [mates, "" if bad.is_empty() else "（有问题：%s）" % str(bad)])
+
+
+# --- 2. 站定开火：脚不动、上半身在动 -------------------------------------------
+
+func _test_standing_fire() -> void:
+	print("\n========== 2. 站定开火：脚不动，上半身在演 ==========")
+	await _reset()
+	var t0 := await _travel(["Bip001 L Foot", "Bip001 R Hand"], WINDOW_MS)
+	var foot_still: float = t0["Bip001 L Foot"]
+	var hand_idle: float = t0["Bip001 R Hand"]
+	_m["foot_idle"] = foot_still
+	_m["hand_idle"] = hand_idle
+	_check(foot_still < FOOT_STILL, "（对照）站定时脚本来就不动：%.3f m" % foot_still)
+
+	_anim.request_fire()
+	_check(_anim.current_state_name() == "Fire" and _anim.upper_clip() == "Normal_Attack_Ing",
+		"开火：状态 %s、叠加层在播「%s」"
+		% [_anim.current_state_name(), _anim.upper_clip()])
+	# ⚠️ 脚和手必须在**同一个窗口**里量：开火动作只有 1.07 s，分两次量会跨出动作之外。
+	#    判据也**不用绝对值**：手的位移跟「采样窗口落在动作的哪一段」有关，
+	#    第一版卡了个 0.08 m，全量回归里量到 0.079 就红了（擦边）。
+	#    改成跟**同长度窗口的待机基线**比 —— 自校准，不靠魔数。
+	var t := await _travel(["Bip001 L Foot", "Bip001 R Hand"], WINDOW_MS)
+	var foot_firing: float = t["Bip001 L Foot"]
+	var hand_firing: float = t["Bip001 R Hand"]
+	_m["foot_fire_still"] = foot_firing
+	_m["hand_fire"] = hand_firing
+	_check(foot_firing < FOOT_STILL,
+		"**站定开火时脚仍然不动**：%.3f m（< %.2f）—— 这就是用户要的那一半"
+		% [foot_firing, FOOT_STILL])
+	_check(hand_firing > hand_idle + HAND_ACTING,
+		"同时上半身在演：右手 %.3f m vs 待机基线 %.3f m（多 %.3f ≥ %.2f）"
+		% [hand_firing, hand_idle, hand_firing - hand_idle, HAND_ACTING])
+
+
+# --- 3. 跑动开火：腿还在跑（核心）----------------------------------------------
+
+func _test_running_fire() -> void:
+	print("\n========== 3. 跑动开火：腿还在跑？ ==========")
+	await _reset()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(600)
+	_check(_anim.current_clip() == "Move_Ing",
+		"跑起来了：基础层 %s（速度 %.2f m/s）"
+		% [_anim.current_clip(), _speed()])
+	var foot_run := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_m["foot_run"] = foot_run
+	_check(foot_run >= FOOT_MOVING, "（对照）只跑不打：脚往返 %.3f m（≥ %.2f）"
+		% [foot_run, FOOT_MOVING])
+
+	# 开火
+	_anim.request_fire()
+	await _wait_ms(120)          # 让叠加层开始写
+	var foot_run_fire := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_m["foot_run_fire"] = foot_run_fire
+	_check(_anim.current_clip() == "Move_Ing",
+		"**开火期间基础层仍然是 %s**（不再被整体顶掉）" % _anim.current_clip())
+	_check(_anim.upper_clip() == "Normal_Attack_Ing",
+		"叠加层在播开火动作（%s）" % _anim.upper_clip())
+	_check(foot_run_fire >= FOOT_MOVING,
+		"**跑动开火时脚还在跑**：%.3f m（≥ %.2f）—— 用户要的另一半"
+		% [foot_run_fire, FOOT_MOVING])
+	_release_all()
+	await _wait(2)
+
+
+# --- 4. 跑动换弹：同一套逻辑 ---------------------------------------------------
+
+func _test_running_reload() -> void:
+	print("\n========== 4. 跑动换弹（同一个毛病，同一套修法）==========")
+	await _reset()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(600)
+	_anim.request_reload()
+	await _wait_ms(120)
+	var foot := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_m["foot_reload"] = foot
+	_check(_anim.current_clip() == "Move_Ing" and _anim.upper_clip() == "Normal_Reload",
+		"换弹期间：基础层 %s、叠加层 %s" % [_anim.current_clip(), _anim.upper_clip()])
+	_check(foot >= FOOT_MOVING, "跑动换弹时脚还在跑：%.3f m（≥ %.2f）" % [foot, FOOT_MOVING])
+	_release_all()
+	await _wait(2)
+
+
+# --- 5. 收尾：叠加层要收干净 ---------------------------------------------------
+
+func _test_recover() -> void:
+	print("\n========== 5. 一次性动作播完之后 ==========")
+	await _reset()
+	_anim.request_fire()
+	await _wait_ms(1400)         # Normal_Attack_Ing 2.667 s / 2.5 倍 ≈ 1.07 s
+	_check(_anim.current_state_name() == "Locomotion" and _anim.upper_clip() == "",
+		"开火播完：状态回到 %s、叠加层已停（%s）"
+		% [_anim.current_state_name(), "无" if _anim.upper_clip() == "" else _anim.upper_clip()])
+	var foot := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_check(foot < FOOT_STILL, "停下之后脚也停了：%.3f m" % foot)
+
+
+# --- 6. 真·扳机那条路也走一遍 --------------------------------------------------
+
+func _test_weapon_path() -> void:
+	print("\n========== 6. 从武器（真扳机）走一遍 ==========")
+	await _reset()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(600)
+	_p.weapon.trigger_down()
+	await _wait_ms(200)
+	var clip := _anim.upper_clip()
+	var v := _speed()
+	_p.weapon.trigger_up()
+	_check(clip == "Normal_Attack_Ing",
+		"按住左键跑动：叠加层自己播起了开火动作（%s）" % clip)
+	_check(absf(v - Player.SPEED_RUN) < 0.3,
+		"而且**跑速没被开火打断**：%.2f m/s（期望 %.2f）" % [v, Player.SPEED_RUN])
+	_release_all()
+	await _wait(2)
+
+
+# --- 工具 ---------------------------------------------------------------------
+
+## 若干根骨在 `ms` 毫秒里**各自相对自己的最大位移**（骨架局部空间 ——
+## 不算角色自身往前跑，只算动画把人摆成什么样）。
+func _travel(bones: Array, ms: int) -> Dictionary:
+	var origin := {}
+	var worst := {}
+	for b in bones:
+		origin[b] = _anim.bone_local_origin(String(b))
+		worst[b] = 0.0
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		await process_frame
+		for b in bones:
+			worst[b] = maxf(worst[b],
+				_anim.bone_local_origin(String(b)).distance_to(origin[b]))
+	return worst
+
+
+func _bone_travel(bone: String, ms: int) -> float:
+	var t := await _travel([bone], ms)
+	return float(t[bone])
+
+
+func _speed() -> float:
+	return Vector2(_p.velocity.x, _p.velocity.z).length()
+
+
+func _release_all() -> void:
+	for a in ["move_forward", "move_back", "move_left", "move_right",
+			"sprint", "crouch", "jump"]:
+		Input.action_release(a)
+
+
+func _reset() -> void:
+	_release_all()
+	_p.velocity = Vector3.ZERO
+	_p.global_position = SPAWN
+	_p._yaw = 0.0
+	_p._facing_yaw = PI
+	_p.model_root.rotation.y = PI
+	_anim.state = AnimDriver.State.LOCOMOTION
+	_anim.stop_upper_layer()
+	await _wait(6)
+
+
+func _print_table() -> void:
+	print("\n================ 脚动没动（骨架局部位移，米）================")
+	print("  站定（对照）      %.3f" % float(_m.get("foot_idle", 0.0)))
+	print("  站定 + 开火       %.3f   ← 用户要的：不动" % float(_m.get("foot_fire_still", 0.0)))
+	print("  跑（对照）        %.3f" % float(_m.get("foot_run", 0.0)))
+	print("  跑 + 开火         %.3f   ← 用户要的：还在跑" % float(_m.get("foot_run_fire", 0.0)))
+	print("  跑 + 换弹         %.3f" % float(_m.get("foot_reload", 0.0)))
+
+
+func _check(cond: bool, label: String) -> void:
+	print("  [%s] %s" % ["PASS" if cond else "FAIL", label])
+	if cond:
+		_pass += 1
+	else:
+		_fail += 1
+
+
+func _quit() -> void:
+	print("失败 %d 项" % _fail)
+	quit(1 if _fail > 0 else 0)
+
+
+func _wait(n: int) -> void:
+	for _i in maxi(n, 1):
+		await process_frame
+
+
+func _wait_ms(ms: int) -> void:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		await process_frame

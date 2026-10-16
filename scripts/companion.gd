@@ -46,11 +46,14 @@ const TURN_SMOOTH := 9.0
 ##    自检里有一条「同伴不能出现在画面中心区域」就是守这条约束的。
 @export var slot := Vector3(-2.0, 0.0, 0.9)
 @export var player_path := NodePath("../Player")
-## 走过去的速度。**刻意压在 2.4 以下**：AnimDriver 在 2.4 m/s 才切到 Move_Ing，
-## 高于这个值的话，站位差 1 m 的微调也会播「跑步」，看起来像在打滑。
+## 走过去的速度
 @export var walk_speed := 2.2
-## 差得远时改用这个速度追（超过 2.4 → 播 Move_Ing，速度感才对）
+## 差得远时改用这个速度追
 @export var run_speed := 6.4
+##
+## ⚠️ 两个速度**播的是同一条 `Move_Ing`**，只靠 `speed_scale` 区分（0.42 / 1.23 倍）。
+##    以前这里写的是「`walk_speed` 要压在走路动画阈值（2.4）以下」，那套「按速度切
+##    `Cafe_Walk`」的逻辑已经删掉了 —— BA 的咖啡厅动画**不拿武器**（§1.17）。
 ## 离站位近于这个距离就停下（免得在目标点上来回抖）
 @export var stop_distance := 0.45
 ## 差得比这个远就改跑

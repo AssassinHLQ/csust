@@ -174,6 +174,19 @@ func _run() -> void:
 
 
 func _shot(path: String) -> void:
+	# ⚠️ 这里原来是**无界**的 `await RenderingServer.frame_post_draw`。
+	#    窗口没画出新帧时（被最小化 / 被别的窗口遮住 / GPU 被另一个 Godot 抢着），
+	#    这一帧**可能永远不来** —— 2026-10 的全量回归就这么卡死过一次：
+	#    卡在 `_verify_boss` 第 4 节 19 分钟没动，而当时机器上还开着用户的 Godot 编辑器。
+	#    改成先等**帧计数**（`Engine.get_frames_drawn()`）动一格，2 s 等不到就跳过这张图 ——
+	#    截图是给人看的，**绝不能让它把一套自检挂死**。
+	var before := Engine.get_frames_drawn()
+	var t0 := Time.get_ticks_msec()
+	while Engine.get_frames_drawn() == before and Time.get_ticks_msec() - t0 < 2000:
+		await process_frame
+	if Engine.get_frames_drawn() == before:
+		print("  [img] 跳过 %s（窗口 2 s 内没有画出新帧）" % path.get_file())
+		return
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png(path)
 	print("  [img] %s" % path)

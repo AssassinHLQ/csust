@@ -462,14 +462,22 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 & $g --path $p --script res://scripts/_verify_story.gd      # 88 项：剧本解析/报错/编码/排版 + 对话框播放与暂停交接 + **角色表/场景表**（第九节）
 & $g --path $p --script res://scripts/_verify_sfx.gd        # 44 项：音效库/素材/调用点对账 + 真场景接线（§1.14）
 & $g --path $p --script res://scripts/_verify_move_feel.gd  # 19 项：移动手感（四方向速度/加速/跳跃/空中机动/转向，§1.15）
+& $g --path $p --script res://scripts/_verify_attack_move.gd # 22 项：开火/换弹只叠上半身 —— 站定开火脚不动、跑动开火脚还在跑（§1.18）
 & $g --path $p --script res://scripts/_verify_parkour.gd    # 58 项：跑酷路线（结构/胶囊/实测跳跃能力/逐跳回放/反例/不打架/终点，§1.16）
 & $g --path $p --script res://scripts/_verify_mesh_hut.gd   # 31 项：手工网格小屋（门洞能走/墙能挡/网格纪律/不撞既有东西，§1.13）
 & $g --path $p --script res://scripts/_probe_view.gd         # 诊断：打印视线/朝向数值，并从四方位渲图
 ```
 
-合计 **587 项**（全量实测：**587 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
+合计 **609 项**（全量实测：**609 PASS / 3 FAIL**）。那 3 项 FAIL **全部**来自
 `_verify_room` 的门洞那三条，是**已知、且与本次改动无关**的既有失败（§6.8）；
-其余 17 套一律 0 失败。
+其余 18 套一律 0 失败。
+
+> ⚠️ **截图那一步曾经把一套自检挂死过**：`await RenderingServer.frame_post_draw`
+> 是**无界**的 —— 窗口没画出新帧时它永远不返回（被最小化 / 被别的窗口遮住 /
+> GPU 被另一个 Godot 抢着）。2026-10 的全量回归就这么卡在 `_verify_boss` 第 4 节
+> 19 分钟。现在两头都堵：脚本里先等 `Engine.get_frames_drawn()` 动一格、2 s 等不到
+> 就跳过那张图（`_verify_boss`），运行器再给每套加 6 分钟进程级看门狗（超时强杀、
+> 记 exit 124、后面的套件照跑）。
 
 逐套件的实测 PASS 数（合计数以这张表为准）：
 
@@ -483,9 +491,10 @@ $env:APPDATA = "$data\Roaming"; $env:LOCALAPPDATA = "$data\Local"
 | `_verify_settings` | 29 | `_verify_splat` | 24 |
 | `_verify_boss` | 19 | `_verify_mesh_hut` | 31（§1.13） |
 | `_verify_boss_pig` | 40 | `_verify_move_feel` | 19（§1.15） |
+| | | `_verify_attack_move` | 22（§1.18） |
 | | | `_verify_parkour` | 58（§1.16） |
 | | | `_verify_room` | 49（另 3 FAIL） |
-| | | **合计** | **587** |
+| | | **合计** | **609** |
 
 > ⚠️ 上面命令行注释里写的项数是**各套件自己标的**（比如 `_verify_room` 标 54、
 > 实测 52 条断言），和实测对不上时**以实测为准** —— 旧版本的合计数写成过 352，
@@ -1192,6 +1201,73 @@ const IDLE_SPEED := 0.15
 - `scripts/_probe_companion_anim.gd`（量 clip 与道具骨）与
   `scripts/_probe_armed_walk_shot.gd`（四种候选的对照图）都留在仓库里，
   换模型（再加同伴）时先跑前者。
+
+---
+
+## 1.18 ⚠️ 开火 / 换弹只叠**上半身**（跑打时腿要还在跑）
+
+用户报：「开枪跑打时为什么角色脚不动，需要**静止开枪不动**，但是**跑步开枪脚还是要动**」。
+
+### 病根：一次性动作是**整身**切的
+
+`request_fire()` 原来把**整个** `AnimationPlayer` 切到 `Normal_Attack_Ing`，而这条动作是
+**全骨架**的 —— 实测（`scripts/_probe_attack_clip.gd`）：
+
+| 模型 | `Normal_Attack_Ing` 轨道 | 其中下半身（thigh/calf/foot/toe/pelvis/skirt…） | 「移动有、攻击没有」的骨 |
+|---|---|---|---|
+| 爱丽丝（主角） | 228 | **48 根** | 0 根 |
+| 小桃 | 220 | **46 根** | 0 根 |
+| 优香 | 155 | **26 根** | 0 根 |
+
+⇒ 开火那一秒腿也被它按住，人在地上滑。**两条动作覆盖的骨完全一样**，所以也不能靠
+「谁的轨道少」来偷懒。
+
+### 修法：第二个 `AnimationPlayer` + 滤掉下半身轨道
+
+```
+基础层 player  ：Normal_Idle / Move_Ing  —— 每帧写**全部**骨（包括腿）
+叠加层 upper   ：开火 / 换弹的副本，**下半身轨道全删掉**  —— 只写上半身
+                 process_priority = 1 ⇒ **后写、赢**（上半身以它为准）
+```
+
+三条都是量出来的：
+
+1. **不能用 `AnimationTree`** —— 它在这份骨架上根本不驱动骨骼（§1.7，逐帧截图 0 像素差异），
+   所以官方那条「Blend2 + 骨骼遮罩」的路走不通；
+2. `AnimationPlayer` **没有逐轨道遮罩**，但**两个播放器写同一具骨架时后写的赢** ——
+   于是「下半身只有基础层写、上半身两层都写，叠加层后处理」正好拼出想要的叠加；
+3. 因为动作是全骨架的，**必须先滤掉下半身**（实测爱丽丝一条动作滤掉 57 条轨道：
+   228 → 171，滤完下半身轨道 **0 条**）。
+
+`set_locomotion()` 里那句 `or state != State.LOCOMOTION` 也一并删了 —— 就是它让
+「开火期间基础层停止更新」的（兜底路径仍然保留互斥，否则会把正在播的一次性动作顶掉）。
+
+### 实测（`_verify_attack_move.gd`，量的是一只脚在**骨架局部空间**里的往返，米）
+
+| | 脚往返 | 说明 |
+|---|---|---|
+| 站定（对照） | 0.014 | 本来就不动 |
+| **站定 + 开火** | **0.013** | 用户要的那一半：**不动** ✓ |
+| 跑（对照） | 0.228 | |
+| **跑 + 开火** | **0.418** | 用户要的另一半：**还在跑** ✓ |
+| 跑 + 换弹 | 0.402 | 同一个毛病，同一套修法 ✓ |
+
+同一窗口里右手挪了 **0.094 m**（≥ 0.08）—— 证明站定开火时叠加层**真的在写上半身**，
+不是「什么都没播」。另外：跑动开火时基础层仍是 `Move_Ing`、跑速仍是 6.80 m/s。
+
+### 两个坑
+
+1. **`_ready()` 里 `add_child()` 会失败，而且是静默的。**
+   父节点那一刻「正忙」（`Parent node is busy setting up children`）⇒ 叠加层**没进树**
+   ⇒ 它一帧都不更新 ⇒ 上半身根本没叠上去，而且 `animation_finished` 永远不来
+   （状态卡在 `Fire`，**再也开不了下一枪**）。本喵第一版就是这样：7 条结构断言全绿，
+   只有「站定开火时右手在不在动」那条红了才露馅。
+   修法：库先装好、`host.add_child.call_deferred(upper)`；`_play_once()` 再要求
+   `upper.is_inside_tree()`，没进树就走兜底（整体播），**状态机永远能往前走**。
+   > 同一个坑 `companion_gun.gd` 的文件头也记着（特效根节点那一段），是这个工程的常客。
+2. **别用 `get_animation_library("")` 去拿「默认库」**：新建的 `AnimationPlayer`
+   **没有**默认库，那句会返回 null 并连报 9 条 ERROR。直接
+   `AnimationLibrary.new()` + `add_animation_library(&"", lib)` 才对。
 
 ---
 
