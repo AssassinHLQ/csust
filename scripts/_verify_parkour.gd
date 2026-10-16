@@ -191,6 +191,21 @@ func _test_structure(game: Node) -> void:
 	_check(st["labels"] >= 6 and _pk.get_node_or_null("ParkourHUD/Timer") != null
 		and _pk.get_node_or_null("ParkourHUD/Seg") != null,
 		"指路牌 %d 块 + 计时 HUD 两个 Label 都在" % st["labels"])
+	# ⚠️ 计时 HUD **不许压在玩家血量面板上**（本喵验收时抓到的）：
+	#    左上角 (24,20)–(368,112) 是 `hud.gd` 的 `HP_PANEL_POS` / `HP_PANEL_SIZE`，
+	#    而 `Parkour` 在 `game.tscn` 里排在 `HUD` **前面** —— 两个 CanvasLayer
+	#    同为 layer 1 时按树序画，HUD 会盖在上面、计时文字被整个挡掉。
+	#    两个都是挂在 `game.tscn` 下的 CanvasLayer，`get_global_rect()` 同一套画布坐标，
+	#    所以可以直接比矩形。探针：`_probe_parkour_hud.gd`（还会出一张真机图）。
+	var hp := Rect2(Vector2(24.0, 20.0), Vector2(344.0, 92.0))
+	for hud_name in ["ParkourHUD/Timer", "ParkourHUD/Seg"]:
+		var lb := _pk.get_node_or_null(hud_name) as Label
+		if lb == null:
+			continue
+		var r := lb.get_global_rect()
+		_check(not r.intersects(hp) and r.position.x > 800.0,
+			"%s 在右上角、与血量面板不相交（x = %.0f，重叠 %.0f px²）"
+			% [hud_name, r.position.x, r.intersection(hp).get_area()])
 	print("  小结：%d 个节点，%d 个网格，%d 个碰撞形状，%d 盏灯，%d 个 Label3D"
 		% [st["nodes"], st["meshes"], st["shapes"], st["lights"], st["labels"]])
 

@@ -926,13 +926,24 @@ pixel_size = 0.01
 
 ; ══ 计时 HUD（**自带在跑酷场景里**，不碰 hud.gd）══
 ; 文本全用 ASCII：`Label` 走的是工程主题字体，中文也能显示，但计时用数字更干净。
+;
+; ⚠️ 位置必须是**右上角**：左上角 (24,20)–(368,112) 是玩家血量面板（`hud.gd` 的
+;    `HP_PANEL_POS` / `HP_PANEL_SIZE`），而且本节点在 `game.tscn` 里排在 `HUD`
+;    **前面** —— 两个 CanvasLayer 同为 layer 1 时按树序画，HUD 会盖在上面，
+;    计时文字会被血量面板整个挡掉（第一版就是这么摆的）。
+;    右上角是空的：Boss 血条组在顶部**居中**（x 527–1073），弹药面板在右下。
 [node name="ParkourHUD" type="CanvasLayer" parent="."]
 
 [node name="Timer" type="Label" parent="ParkourHUD"]
-offset_left = 28.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -620.0
 offset_top = 20.0
-offset_right = 620.0
+offset_right = -28.0
 offset_bottom = 66.0
+grow_horizontal = 0
+horizontal_alignment = 2
 theme_override_colors/font_color = Color(1, 0.96, 0.85, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
 theme_override_constants/outline_size = 8
@@ -940,10 +951,15 @@ theme_override_font_sizes/font_size = 30
 text = "TIME 0.00    BEST --.--"
 
 [node name="Seg" type="Label" parent="ParkourHUD"]
-offset_left = 30.0
-offset_top = 60.0
-offset_right = 620.0
-offset_bottom = 92.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -620.0
+offset_top = 62.0
+offset_right = -28.0
+offset_bottom = 94.0
+grow_horizontal = 0
+horizontal_alignment = 2
 theme_override_colors/font_color = Color(0.85, 0.92, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
 theme_override_constants/outline_size = 6
