@@ -27,10 +27,10 @@ const MARGIN_MIN := 0.40
 ## `解析射程 − 必须跨`，真正要守的是**实测余量**；这条只兜「别落在板沿上」。
 const EDGE_MIN := 0.12
 ## 图的范围（米）与格子大小（v2 横跨 206 m，1 m 一格就太宽了）
-const X0 := -240.0
+const X0 := -300.0
 const X1 := -4.0
-const Z0 := -20.0
-const Z1 := 10.0
+const Z0 := -24.0
+const Z1 := 14.0
 const CELL := 2.0
 
 var _fail := 0
@@ -85,11 +85,13 @@ func _run() -> void:
 			b.position.z, b.position.z + b.size.z, pk.top_at(i), b.size.x, b.size.z])
 
 	# ── 2. 每一跳 ─────────────────────────────────────────────────────────
-	print("\n========== 2. 每一跳（余量 = 解析射程 × %.3f − 必须跨）==========" % K)
-	print("%-13s %8s %7s %7s %7s %8s %8s %s" % [
-		"这一跳", "必须跨", "抬升", "解析", "实测", "余量", "入板深度", "落点"])
+	print("\n========== 2. 每一跳（余量 = 射程 − 必须跨；射程按跳跃方式选）==========")
+	print("%-13s %4s %8s %7s %7s %7s %8s %s" % [
+		"这一跳", "方式", "必须跨", "抬升", "解析", "射程", "余量", "入板（前/后/侧）"])
 	var tight := 0
 	var jumps := 0
+	var walks := 0
+	var specials := 0
 	var gap_sum := 0.0
 	var rows: Array = []
 	for i in range(1, n):
@@ -100,34 +102,53 @@ func _run() -> void:
 			print("%-13s （节点缺失）" % pair)
 			_fail += 1
 			continue
+		# 机关跳（弹跳板 / 气流 / 移动平台 / 传送门）不按弹道算 —— 各自的机关自检负责
+		if pk.is_special_hop(i):
+			specials += 1
+			print("%-13s %4s  ** 机关跳，弹道核算跳过 **" % [pair, "机关"])
+			continue
 		var h := Parkour.hop_analysis(a, b, Player.JUMP_VELOCITY, Player.GRAVITY, Player.SPEED_RUN)
 		if not bool(h["reachable"]):
-			print("%-13s ** 抬升 %+.2f 超过跳跃高度，无解 **" % [pair, h["rise"]])
+			print("%-13s %4s ** 抬升 %+.2f 超过跳跃高度，无解 **" % [pair, "跳", h["rise"]])
 			_fail += 1
 			continue
-		if float(h["required"]) < 0.5:
-			print("%-13s %8s  走过去（相邻同高：独木桥）" % [pair, "0.00"])
+		var req := float(h["required"])
+		if req < 0.5:
+			walks += 1
+			print("%-13s %4s  走过去 / 贴着（相邻同高）" % [pair, "走"])
 			continue
+		# 射程：减速短跳（绕柱螺旋塔）用空中操控模型，其余用「解析 × 实测系数」
+		var short := pk.is_short_hop(i)
+		var reach := Parkour.air_hop_reach(float(h["rise"])) if short else float(h["reach"]) * K
 		jumps += 1
-		gap_sum += float(h["required"])
-		var margin := float(h["reach"]) * K - float(h["required"])
-		var land: Vector3 = h["landing"]
+		gap_sum += req
+		var takeoff: Vector3 = h["takeoff"]
+		var dir := _hop_dir(h, b)
+		var lx := takeoff.x + dir.x * reach
+		var lz := takeoff.z + dir.y * reach
+		var box4 := PackedFloat32Array([b.position.x, b.position.x + b.size.x,
+			b.position.z, b.position.z + b.size.z])
+		var back := _exit(box4, lx, lz, -dir.x, -dir.y)
+		var fwd := _exit(box4, lx, lz, dir.x, dir.y)
+		var side := minf(_exit(box4, lx, lz, -dir.y, dir.x), _exit(box4, lx, lz, dir.y, -dir.x))
+		var margin := reach - req
 		var is_tight := margin <= 0.90
 		if is_tight:
 			tight += 1
-		rows.append({"pair": pair, "req": float(h["required"]), "rise": float(h["rise"]),
-			"margin": margin, "edge": float(h["edge_dist"])})
-		print("%-13s %8.2f %+7.2f %7.2f %7.2f %8.2f %8.2f  (%.2f, %.2f) %s" % [
-			pair, h["required"], h["rise"], h["reach"], float(h["reach"]) * K, margin,
-			float(h["edge_dist"]), land.x, land.z,
-			"★紧张" if is_tight else ("✓" if bool(h["inside"]) else "**过头**")])
+		rows.append({"pair": pair, "req": req, "rise": float(h["rise"]),
+			"margin": margin, "edge": minf(minf(back, fwd), side), "short": short})
+		print("%-13s %4s %8.2f %+7.2f %7.2f %7.2f %8.2f   前%.2f / 后%.2f / 侧%.2f %s" % [
+			pair, "短跳" if short else "跳", req, h["rise"], h["reach"], reach, margin,
+			fwd, back, side, "★紧张" if is_tight else "✓"])
 		if margin < MARGIN_MIN:
 			_fail += 1
-		if not bool(h["inside"]) or float(h["edge_dist"]) < EDGE_MIN:
+		# 入板判据：沿行进方向**前后都要 ≥ 0.40**（需求），侧向 ≥ 0.20（实测挂边容忍）
+		if back < 0.40 or fwd < 0.40 or side < 0.20:
 			_fail += 1
 
 	rows.sort_custom(func(x, y): return float(x["margin"]) < float(y["margin"]))
-	print("\n  ★ 跳 %d 个（另有 2 段独木桥是走的）  跳距合计 %.1f m" % [jumps, gap_sum])
+	print("\n  ★ 跳 %d 个 + 走过去 %d 处 + 机关跳 %d 处（机关见下）  跳距合计 %.1f m"
+		% [jumps, walks, specials, gap_sum])
 	print("  ★ 紧张区间（实测余量 0.40~0.90）：**%d/%d = %.0f%%**（要求 ≥ 1/3）"
 		% [tight, jumps, 100.0 * tight / maxf(jumps, 1)])
 	if not rows.is_empty():
@@ -141,6 +162,35 @@ func _run() -> void:
 		_max_rise(pk, n), Player.JUMP_VELOCITY * Player.JUMP_VELOCITY / (2.0 * Player.GRAVITY),
 		_min_rise(pk, n)])
 	print("  ★ 高度剖面：" + _profile(pk, n))
+
+	# ── 2b. 机关 ─────────────────────────────────────────────────────────
+	print("\n========== 2b. 机关（左右 / 上下 / 交互 靠它们）==========")
+	for c in (pk.get_node_or_null("Movers") as Node3D).get_children() if \
+			pk.get_node_or_null("Movers") != null else []:
+		var mv := c as ParkourMover
+		if mv != null:
+			print("  移动平台 %-7s 单程 %.2f m、%.2f m/s、端点停 %.2f s（%s）"
+				% [mv.name, mv.travel(), mv.speed, mv.wait_time, str(mv.point_a), ])
+	var ud := pk.get_node_or_null("Mechanics/Updraft") as ParkourUpdraft
+	if ud != null:
+		var col := ud.get_node_or_null("Col") as CollisionShape3D
+		var hh := ((col.shape as BoxShape3D).size.y * col.scale.y) if col != null else 0.0
+		print("  上升气流 %-7s 托举 %.2f m、+%.1f m/s²、封顶 %.1f m/s"
+			% [ud.name, hh, ud.accel, ud.max_rise_speed])
+	for nm in ["Mechanics/PortalIn", "Mechanics/PortalOut"]:
+		var pt := pk.get_node_or_null(nm) as ParkourPortal
+		if pt != null:
+			print("  传送门   %-9s → %-9s 落点 %s（跨 %.2f m）"
+				% [pt.name, pt.target().name if pt.target() != null else "?",
+					str(pt.exit_point().snappedf(0.01)),
+					pt.global_position.distance_to(pt.exit_point())])
+	var bounces := 0
+	var vanishes := 0
+	for c in pk.get_node("Route").get_children():
+		bounces += 1 if c.get_node_or_null("Bounce") != null else 0
+		vanishes += 1 if c is ParkourVanisher else 0
+	print("  弹跳板 %d 块（峰值 %.2f m）、消失方块 %d 块（0.6 s 塌 / 2.5 s 回）"
+		% [bounces, 13.5 * 13.5 / (2.0 * Player.GRAVITY), vanishes])
 
 	# ── 3. 俯视图 ─────────────────────────────────────────────────────────
 	print("\n========== 3. 俯视图（一格 %.0f m，x → 右、z ↓；*板 -=独木桥 S=段起点 T=终点岛 _=平台）==========" % CELL)
@@ -172,6 +222,27 @@ func _run() -> void:
 func _hop(pk: Parkour, a: int, b: int) -> Dictionary:
 	return Parkour.hop_analysis(pk.box_at(a), pk.box_at(b),
 		Player.JUMP_VELOCITY, Player.GRAVITY, Player.SPEED_RUN)
+
+
+## 这一跳的水平前进方向（起跳点 → 目标板最近点；退化时朝目标板中心）
+func _hop_dir(h: Dictionary, b: AABB) -> Vector2:
+	var t: Vector3 = h["takeoff"]
+	var n: Vector3 = h["near"]
+	var v := Vector2(n.x - t.x, n.z - t.z)
+	if v.length() < 0.001:
+		var c := b.position + b.size * 0.5
+		v = Vector2(c.x - t.x, c.z - t.z)
+	return v.normalized()
+
+
+## 从 (fx,fz) 沿 (dx,dz) 走多远离开盒子 —— 用来把「入板余量」拆成沿行进方向与侧向
+func _exit(box4: PackedFloat32Array, fx: float, fz: float, dx: float, dz: float) -> float:
+	var t := INF
+	if absf(dx) > 1e-9:
+		t = minf(t, ((box4[1] - fx) / dx) if dx > 0.0 else ((box4[0] - fx) / dx))
+	if absf(dz) > 1e-9:
+		t = minf(t, ((box4[3] - fz) / dz) if dz > 0.0 else ((box4[2] - fz) / dz))
+	return maxf(t, 0.0)
 
 
 func _max_rise(pk: Parkour, n: int) -> float:

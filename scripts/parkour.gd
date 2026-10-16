@@ -43,6 +43,12 @@ const BEST_PATH := "user://parkour_best.cfg"
 @export var segments: Array = [0]
 ## 段名（HUD 用），长度应与 `segments` 一致
 @export var seg_names: Array = []
+## **不是弹道跳**的站号（弹跳板抛射 / 上升气流托举 / 移动平台摆渡 / 传送门）。
+## 探针与自检会**跳过这些跳的弹道核算**，改由各自的机关真物理自检负责。
+@export var special_hops: Array = []
+## **减速短跳**的站号（绕柱螺旋塔）：弦长比全速射程短得多，必须**站定起跳**、
+## 靠空中操控过去 —— 核算要用 `air_hop_reach()` 而不是全速射程，自检也得换一套输入。
+@export var short_hops: Array = []
 ## 关掉就完全不干预（自检里想单独测 game.gd 的兜底时会用）
 @export var enabled := true
 ## 岛上那台「回平台」传送台把人送到哪儿（主平台西侧、跑道口旁边的一块空地）
@@ -109,6 +115,16 @@ func _build_route() -> void:
 
 func node_count() -> int:
 	return _boxes.size()
+
+
+## 第 i 站是不是「机关跳」（不按弹道算）
+func is_special_hop(i: int) -> bool:
+	return special_hops.has(i)
+
+
+## 第 i 站是不是「减速短跳」（螺旋塔）
+func is_short_hop(i: int) -> bool:
+	return short_hops.has(i)
 
 
 func segment_count() -> int:
@@ -408,3 +424,20 @@ static func hop_analysis(from_box: AABB, to_box: AABB,
 		minf(landing.x - to_box.position.x, to_box.position.x + to_box.size.x - landing.x),
 		minf(landing.z - to_box.position.z, to_box.position.z + to_box.size.z - landing.z))
 	return out
+
+
+## **减速短跳**（绕柱螺旋塔那种）能走多远：站定起跳 + 空中一直按住方向键。
+##
+## 空中 `ACCEL_AIR` 推着走、上限 `SPEED_RUN`：先匀加速再匀速，滞空时间与
+## `hop_analysis()` 同源。**为什么需要这一份**：螺旋塔一步的水平弦长只有 3.68 m，
+## 而 +0.80 的全速射程是 3.87 m —— 全速起跳会直接飞过那块 2.0 m 的板，
+## 玩家必须**减速**起跳（起跳前把速度收下来），落点才落在板上。
+static func air_hop_reach(rise: float) -> float:
+	var disc := Player.JUMP_VELOCITY * Player.JUMP_VELOCITY - 2.0 * Player.GRAVITY * rise
+	if disc < 0.0:
+		return -1.0
+	var t := (Player.JUMP_VELOCITY + sqrt(disc)) / Player.GRAVITY
+	var t_acc := Player.SPEED_RUN / Player.ACCEL_AIR
+	if t <= t_acc:
+		return 0.5 * Player.ACCEL_AIR * t * t
+	return 0.5 * Player.ACCEL_AIR * t_acc * t_acc + Player.SPEED_RUN * (t - t_acc)
