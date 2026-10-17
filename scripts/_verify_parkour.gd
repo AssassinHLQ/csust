@@ -1044,10 +1044,12 @@ func _test_negative() -> void:
 		_p.global_position = Vector3(_p.global_position.x, -13.0, _p.global_position.z)
 		await _wait(4)
 		var back := _p.global_position
-		var want := _pk.respawn_point(_pk.segment_start(int(probe["seg"])))
+		# 用户反馈「太难」之后复活点改成**最近踩过的那一站**（不再是本段起点），
+		# 段起点只当视觉地标 —— 所以这里按 `checkpoint` 核对
+		var want := _pk.respawn_point(_pk.checkpoint)
 		_check(seg == int(probe["seg"]) and _pk.rescues == 1 and back.distance_to(want) < 0.30,
-			"%s（第 %d 站）摔到 y = −13 → 送回**本段起点** %s（实落 %.2f,%.2f vs 期望 %.2f,%.2f，第 %d 次）"
-			% [probe["what"], idx + 1, _pk.label_at(_pk.segment_start(int(probe["seg"]))),
+			"%s（第 %d 站）摔到 y = −13 → 送回**最近踩过的** %s（实落 %.2f,%.2f vs 期望 %.2f,%.2f，第 %d 次）"
+			% [probe["what"], idx + 1, _pk.label_at(_pk.checkpoint),
 				back.x, back.z, want.x, want.z, _pk.rescues])
 	_check(_pk.FALL_Y > -60.0 and _pk.FALL_Y < -5.0,
 		"跑酷的兜底线 %.0f m **高于** game.gd 的 −60 m，所以抢在它前面出手" % _pk.FALL_Y)
@@ -1056,8 +1058,10 @@ func _test_negative() -> void:
 	_p.global_position = SPAWN
 	_p.velocity = Vector3.ZERO
 	await _wait(4)
-	_check(_pk.checkpoint == -1 and not _pk.timer_running and _pk.elapsed_seconds() == 0.0,
-		"站在主平台上 → 检查点清空、计时归零（免得路人被塞进跑酷中段）")
+	# 用户反馈「存档不了」：回平台**不再清检查点**（进度保留），只停表
+	var kept := _pk.checkpoint
+	_check(not _pk.timer_running and _pk.elapsed_seconds() == 0.0 and kept >= 0,
+		"站在主平台上 → 停表、**检查点保留**在第 %d 站（用户要的「进度不丢」）" % (kept + 1))
 	_p.global_position = Vector3(0, -59.5, 6)
 	await _wait_ms(400)
 	_check(_p.global_position.distance_to(SPAWN) < 0.30,

@@ -334,7 +334,7 @@ func _physics_process(_delta: float) -> void:
 	# 回到主平台（且脚下不是路线上的落脚点）→ **只停表，不清检查点**：
 	# 用户回平台拿个东西、或者只是摔回来，进度不该丢（「存档不了」的另一半）。
 	# 只有**通关之后**再回平台才把进度清空（下一次从跑道重新开始）。
-	if here < 0 and _on_platform(p) and (timer_running or finished):
+	if here < 0 and _standing_on_platform(p) and (timer_running or finished):
 		if finished:
 			print("[Parkour] 通关后回到主平台：进度清空，下次从跑道重来")
 			reset_run()
@@ -373,8 +373,15 @@ func _station_at(p: Vector3) -> int:
 
 ## 人是不是站在主平台上。跑酷自己的兜底（`FALL_Y`）和 game.gd 的全局保险（−60 m）
 ## 靠这一条分工：在平台上摔下去归 game.gd 送回出生点，出了平台就归跑酷救回落脚点。
+## ⚠️ 只看 **xz**：一个人掉到 −59 m 时 y 已经说明不了「他是从哪儿掉下去的」，
+##    但 xz 能 —— 在平台范围内掉下去交给 game.gd（它送出生点），出了平台就是跑酷的路线。
 func _on_platform(p: Vector3) -> bool:
-	return p.y > -0.5 and p.y < 3.0 and absf(p.x) <= 20.0 and absf(p.z) <= 20.0
+	return absf(p.x) <= 20.0 and absf(p.z) <= 20.0
+
+
+## 站在平台**地面上**（收工判定用；和上面那条分开，免得下坠途中就把表停了）
+func _standing_on_platform(p: Vector3) -> bool:
+	return p.y > -0.5 and p.y < 3.0 and _on_platform(p)
 
 
 ## 收工但**保留进度**：只停表、不清检查点（玩家回平台拿东西不该丢进度）
