@@ -47,10 +47,16 @@ const MAX_3D := 8
 ## `_verify_sfx.gd` 会核对「表里写的文件在不在」和「调用点写的名字在不在表里」。
 const SPEC := {
 	# ── 武器 ──
+	# ⚠️ 原来是 Kenney 的 `laserSmall_*.ogg`（**激光音**）—— 用户报「音效不像枪」。
+	#    现在是本工程**自己合成**的枪声（配方见 `..\_godot_editor_data\gen_gunshot.py`）：
+	#    机械瞬态 + 低通宽带爆响 + 低频膛音（正弦扫频 175→70 Hz）+ 房间尾音，最后 soft-clip。
+	#    五条变体（步枪 3 + 手枪 2）避免连发听起来像复读机。
+	#    客观指标：起振 ~1 ms、谱质心 3.3~3.8 kHz、低频(50~250 Hz)占 36~42%、
+	#    衰到 −20 dB 约 70~100 ms。（激光音是**扫频正弦**：低频≈0、没有瞬态爆响。）
 	"fire": {
-		"files": ["laserSmall_000.ogg", "laserSmall_001.ogg", "laserSmall_002.ogg",
-			"laserSmall_003.ogg", "laserSmall_004.ogg"],
-		"db": -7.0, "pitch": 0.08, "gap_ms": 25,
+		"files": ["gunshot_000.wav", "gunshot_001.wav", "gunshot_002.wav",
+			"gunshot_003.wav", "gunshot_004.wav"],
+		"db": -6.0, "pitch": 0.06, "gap_ms": 25,
 	},
 	"empty": {"files": ["click_001.ogg"], "db": -5.0, "pitch": 0.20, "gap_ms": 150},
 	"reload_out": {"files": ["metalLatch.ogg"], "db": -4.0, "pitch": 0.04, "gap_ms": 0},
