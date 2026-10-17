@@ -426,7 +426,53 @@ func _play_opening() -> void:
 			return
 		print("[Game] %s 不存在，改用目录里排序第一份：%s" % [OPENING_STORY, alt])
 		path = alt
+	# 别在这一帧就开演 —— 等画面真的出来（见 `_wait_world_then_play()`）
+	_wait_world_then_play(box, path)
+
+
+## 等「画面真的出来了」再开演。
+##
+## 用户 2026-10-18：「语音在刚开游戏就开始播放了，应该等到看见游戏画面才播放」。
+## 病根：`_play_opening()` 是在 `_ready()` 里直接调的，而那一刻**第一帧还没画出来**
+## —— 房间泼溅要解码 2.1 s（缓存命中）、着色器还在编译，屏幕上可能只有代理网格
+## 甚至黑色；配音却已经从第 0 秒开始放了，等玩家看见画面时第一句已经过半。
+##
+## 所以这里等两件事，然后才 `play_file()`：
+##   ① 泼溅就绪（`--splat=off` 或没有泼溅时直接算就绪）；
+##   ② 至少画过几帧（`frame_post_draw` 保证这一帧真的上了屏）。
+## 上限 `OPENING_WAIT_MAX` 秒：冷缓存解 615 万点要 50 s，不能让开场一直等下去
+## —— 超时就照常开演，最多回到「边加载边念」的老样子，不会卡死。
+const OPENING_WAIT_MAX := 10.0
+
+func _wait_world_then_play(box: Node, path: String) -> void:
+	var t0 := Time.get_ticks_msec()
+	var frames := 0
+	while true:
+		await get_tree().process_frame
+		frames += 1
+		var waited := float(Time.get_ticks_msec() - t0) / 1000.0
+		if frames >= 3 and (_splats_ready() or waited >= OPENING_WAIT_MAX):
+			break
+		if frames >= 3000:
+			break
+	var waited := float(Time.get_ticks_msec() - t0) / 1000.0
+	# 再等一帧**真的画完**：这时屏幕上一定已经有世界了。
+	await RenderingServer.frame_post_draw
+	print("[Game] 开场剧情：等画面 %.1f s / %d 帧（泼溅 %s）→ 开演" % [
+		waited, frames, "就绪" if _splats_ready() else "还没就绪（等超时了）"])
 	box.call("play_file", path)
+
+
+## 场上所有泼溅都**解码完了**？（没有泼溅 / `--splat=off` / 解码失败也算）
+##
+## 用 `loading` 而不是 `is_ready()`：`--splat=off` 时 SplatScene 在 `_ready()` 里
+## 提前返回、永远不 `is_ready()`，用它当判据会让每一次 `--splat=off` 的启动都白等
+## 满 `OPENING_WAIT_MAX` 秒。
+func _splats_ready() -> bool:
+	for s in _splats:
+		if s != null and s.loading:
+			return false
+	return true
 
 
 func _process(_delta: float) -> void:
@@ -588,14 +634,25 @@ func _on_splat_loaded(_info: Dictionary, scene: SplatScene) -> void:
 		return
 	_room_scene = scene
 	_carve_fallback_floor()
+	# ⚠️ 立刻换一次代理/泼溅：开场剧情一开就 `get_tree().paused = true`，
+	#    `_process` 里的 `_update_room_swap()` **不会跑** —— 而房间这份泼溅
+	#    是 2.1 s 才解码完、往往正好落在剧情里。不在这里换，代理网格（米色墙 +
+	#    深色顶板）会一直盖在泼溅上面，用户看到的就是「高斯泼溅根本没加载」。
+	_update_room_swap()
 
 
 ## 把 `Floor/Mesh` 这块方盒地板挖掉房间那一块：房间用扫描地面，四周照旧是平台。
 ## 见 FLOOR_MESH_PATH 上方那段长注释。
 ##
-## 为什么用 CSG 而不是手摆四块盒子：房间是**斜的**（`yaw_degrees = 248.6`），
-## 手摆的盒子只能轴对齐，洞会退化成世界包围盒（比房间大一圈，四角露真空）。
-## CSG 布尔减法吃任意朝向，洞就是房间自己的旋转矩形。
+## ── 洞的形状：**房间自己的矩形**，不是泼溅的内容盒（2026-10-18 订正）──
+## 第一版拿 `content_min/max`（源坐标系的内容盒）当洞，被 yaw 一旋就成了
+## 22.34 × 16.50 m 的斜矩形。而那个内容盒里**装的不只是房间**：从窗户看出去的
+## 校园、拍摄时的离群点都在里面，房间本身只有 10.7 × 20.6 m。于是平台中间被
+## 挖掉一大圈**没有地板、也没有扫描地面**的真空 —— 用户报的「地板中间没填满」。
+##
+## 现在直接量 `Room609/RoomCollision`（= 房间四面墙）的世界包围盒来挖：
+## 洞里只剩房间本身（扫描地面铺满它），洞外一直到平台边沿全是地砖。
+## 墙根的 15 cm 重叠靠 `FLOOR_HOLE_MARGIN`（负数 = 洞略小）保证，那里被墙挡着看不见。
 func _carve_fallback_floor() -> void:
 	if _floor_carved:
 		return
@@ -612,23 +669,16 @@ func _carve_fallback_floor() -> void:
 		push_warning("[Game] 方盒地板不是 BoxMesh 或房间未就绪，跳过挖洞")
 		return
 
-	# 房间内容的世界变换（含 world_scale / yaw / 锚点偏移）—— 洞要跟着它走。
-	var xf := _room_scene.global_transform * splat_node.transform
-	var src_min := _room_scene.content_min
-	var src_max := _room_scene.content_max
-	var src_size := src_max - src_min
-	if src_size.x <= 0.0 or src_size.z <= 0.0:
-		push_warning("[Game] 房间内容盒是空的，跳过挖洞")
+	# 洞 = 房间墙体的世界矩形（`_build_room_proxy()` 里量好的那个）。
+	var hole := _room_box
+	if hole.size.x <= 0.01 or hole.size.z <= 0.01:
+		push_warning("[Game] 房间矩形是空的（代理网格没建出来），跳过挖洞")
 		return
-	var world_scale := maxf(xf.basis.get_scale().y, 1e-4)
-	# 洞的尺寸按**源坐标**给，缩放由 xf 承担，所以外扩量要除掉 world_scale。
-	var margin_src := FLOOR_HOLE_MARGIN / world_scale
-	# 厚度给世界 4 m，足够穿透这块 1 m 厚的平台板。
-	var thickness_src := 4.0 / world_scale
-	# 洞的竖向中心必须落在**平台顶面那一层**（世界 y = 0），否则切不到板子。
-	var src_zero_y := (xf.affine_inverse() * Vector3.ZERO).y
-	var center_src := Vector3(
-		(src_min.x + src_max.x) * 0.5, src_zero_y, (src_min.z + src_max.z) * 0.5)
+	# 厚度给世界 4 m，足够穿透这块 1 m 厚的平台板；竖向中心压在平台顶面（y = 0）。
+	var hole_size := Vector3(
+		hole.size.x + FLOOR_HOLE_MARGIN * 2.0, 4.0, hole.size.z + FLOOR_HOLE_MARGIN * 2.0)
+	var hole_center := Vector3(
+		hole.position.x + hole.size.x * 0.5, 0.0, hole.position.z + hole.size.z * 0.5)
 
 	var mat := mesh.get_active_material(0)
 	var combiner := CSGCombiner3D.new()
@@ -636,24 +686,24 @@ func _carve_fallback_floor() -> void:
 	var slab := CSGBox3D.new()
 	slab.name = "Slab"
 	slab.size = box.size
-	slab.position = mesh.position
 	if mat != null:
 		slab.material = mat
 	combiner.add_child(slab)
 	var cutter := CSGBox3D.new()
 	cutter.name = "RoomHole"
 	cutter.operation = CSGShape3D.OPERATION_SUBTRACTION
-	cutter.size = Vector3(
-		src_size.x + margin_src * 2.0, thickness_src, src_size.z + margin_src * 2.0)
-	cutter.transform = xf * Transform3D(Basis.IDENTITY, center_src)
+	cutter.size = hole_size
 	combiner.add_child(cutter)
 	mesh.get_parent().add_child(combiner)
+	# ⚠️ 先进树再写 global_transform：不在树里时 global == local，
+	#    而这里要的是「跟 `Floor/Mesh` 在同一处、同一朝向」。
+	slab.global_transform = mesh.global_transform
+	cutter.global_transform = Transform3D(Basis.IDENTITY, hole_center)
 	mesh.visible = false
-	print("[Game] 房间泼溅就位：方盒地板挖掉房间那一块（CSG 减法，跟房间朝向对齐）；Floor/Collision 不动")
-	print("[Game]   洞 世界尺寸 %.2f × %.2f m，外扩 %.2f m；板子 %s" % [
-		(src_size.x + margin_src * 2.0) * world_scale,
-		(src_size.z + margin_src * 2.0) * world_scale,
-		FLOOR_HOLE_MARGIN, str(box.size)])
+	print("[Game] 房间泼溅就位：方盒地板挖掉房间那一块（CSG 减法，洞 = 房间墙体矩形）；Floor/Collision 不动")
+	print("[Game]   洞 世界尺寸 %.2f × %.2f m（房间 %.2f × %.2f m，外扩 %.2f m），中心 %s；板子 %s" % [
+		hole_size.x, hole_size.z, hole.size.x, hole.size.z,
+		FLOOR_HOLE_MARGIN, str(hole_center.snappedf(0.01)), str(box.size)])
 
 
 func stats() -> Dictionary:

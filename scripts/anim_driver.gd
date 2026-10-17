@@ -246,10 +246,29 @@ func _ready() -> void:
 			push_warning("[AnimDriver] 跑打动作没并进来：%s" % str(runfire.get("error", "")))
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)
+	_keep_alive_when_paused()
 	player.animation_finished.connect(_on_finished)
 	for l in [upper, upper_move]:
 		if l != null:
 			l.animation_finished.connect(_on_finished)
+
+
+## 暂停期间（开场剧情 / Esc 设置菜单）**仍然播动画**。
+##
+## 用户 2026-10-18：「一开始为什么他们没有待机动画就是光站着」。
+## 病根不在动作库，而在暂停：开场剧情一开就 `get_tree().paused = true`
+## （见 `dialogue_box.gd` 文件头），而 `AnimationPlayer` 默认是
+## `PROCESS_MODE_INHERIT` —— 整棵树的动画当场冻在**第 0 帧**，于是主角和七名
+## 同伴全变成站桩，用户看到的就是「光站着」。
+##
+## 这里只把**播放器**（基础层 + 两个叠加层）改成 `ALWAYS`，`AnimDriver` 自己
+## 仍是继承：状态机不推进（暂停期间没人调 `set_locomotion`，也就不可能切动作），
+## 但已经播上的循环动作继续播 —— 呼吸、眨眼（已停用）、待机的身体摆动都在。
+## 代价：Esc 菜单开着时背后的角色也会动。这才是正常的观感，不是 bug。
+func _keep_alive_when_paused() -> void:
+	for p in [player, upper, upper_move]:
+		if p != null:
+			(p as AnimationPlayer).process_mode = Node.PROCESS_MODE_ALWAYS
 
 
 ## 检查「嘴巴还在不在」。
