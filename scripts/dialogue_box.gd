@@ -25,6 +25,16 @@ extends CanvasLayer
 ##      会把用户正在看的设置界面解除暂停 —— 表现是剧情和菜单都开着、世界却在跑。
 ##      见 `_resume()`。
 ##
+## ── 语音（`@voice`）──
+## 每句话可以带一条配音。播放器只做三件事：**显示这句时开播、翻页时停、结束时不响**。
+## 用的是本节点自己的一个 `AudioStreamPlayer`（不走 `Sfx` 的池子）—— 池子会按
+## 「最早的那个」抢占，配音被抢掉正是最不能被容忍的一种失败。
+##
+## 三条取舍：
+##   · 文件缺失**不报错**、不中断演出，只在控制台 warning 一次（配音是锦上添花）；
+##   · 翻页时**立刻停**上一条，不让人听着两句话重叠；
+##   · 走 `Master` 总线，所以设置界面的主音量管得到它。
+##
 ## ── 正文用哪套字体 ──
 ## 走 `UiSkin.ui_font()`，**不用皮肤字体**。两套皮肤的 `font.ttf` 都没有汉字
 ## （`assets/ui_sprout/font.ttf` 实测 cmap 只覆盖 80 个拉丁字形、**0 个汉字**），
@@ -65,6 +75,9 @@ const HINT_TEXT := "空格 / 回车 / 左键　继续"
 ## 打字速度（字/秒）。剧本里 `@speed` 可以中途改。30 大致是「比默读稍快」。
 const CHARS_PER_SEC := 30.0
 
+## 配音音量（分贝）。0 = 原样；设置界面的主音量在 Master 总线上再乘一次。
+const VOICE_DB := 0.0
+
 ## 设置界面节点（和本节点同为 Game 的子节点）。见文件头「交接规则」。
 const SETTINGS_MENU_PATH := ^"../SettingsMenu"
 
@@ -79,6 +92,10 @@ var _name_plate: Panel
 var _name_label: Label
 var _body: Label
 var _hint: Label
+## 配音播放器（见文件头「语音」）。**单独一个**，不走 `Sfx` 的池子。
+var _voice: AudioStreamPlayer
+## 当前这句配音的**实际文件路径**（没有配音 / 找不到 = 空串）。自检与探针用它。
+var _voice_path := ""
 
 ## 正在播的步骤表与游标
 var _steps: Array = []
@@ -128,8 +145,17 @@ func play_file(path: String) -> bool:
 		print("[Dialogue] %s 里一句台词都没有，跳过" % path)
 		return false
 	var sum := StoryScript.summary(res)
-	print("[Dialogue] 播 %s：%d 步 / %d 字 / 说话人 %s" % [
-		path, sum["steps"], sum["chars"], str(sum["speakers"])])
+	print("[Dialogue] 播 %s：%d 步 / %d 字 / 配音 %d 条 / 说话人 %s" % [
+		path, sum["steps"], sum["chars"], int(sum["voiced"]), str(sum["speakers"])])
+	# 点名的语音文件**提前查一遍**：缺了不该让演出失败（配音是锦上添花），
+	# 但一次性全列出来比「演到那一句才静音」清楚得多。
+	var named: Array[String] = []
+	for s in steps:
+		var v := String(s.get("voice", ""))
+		if not v.is_empty():
+			named.append(v)
+	for m in StoryVoice.missing(named):
+		push_warning("[Dialogue] %s" % StoryVoice.missing_hint(m))
 	# 说话人校验：名字打错**不会**让剧本失败（照样能播），但名字牌上会出现一个
 	# 游戏里不存在的角色 —— 这是写剧本时最容易犯、又最难自己发现的错，所以每次
 	# 都按 `story/设定.md` 的角色表查一遍。设定表读不到就静默跳过（导出的包
@@ -153,6 +179,7 @@ func play_steps(steps: Array, source := "") -> void:
 	_active = true
 	_root.visible = true
 	set_process(true)
+	_stop_voice()
 	_body.text = ""
 	_body.visible_characters = 0
 	_name_label.text = ""
@@ -174,6 +201,7 @@ func finish() -> void:
 	_body_text = ""
 	_shown = 0.0
 	_hold = 0.0
+	_stop_voice()
 	_root.visible = false
 	set_process(false)
 	_resume()
@@ -204,6 +232,16 @@ func visible_text() -> String:
 
 func current_who() -> String:
 	return _name_label.text
+
+
+## 当前这句配音的文件路径。没有配音、或点了名但文件找不到 → 空串。
+func current_voice_path() -> String:
+	return _voice_path
+
+
+## 现在有没有配音在响（自检 / 探针用）
+func is_voice_playing() -> bool:
+	return _voice != null and _voice.playing
 
 
 ## 当前步骤在 steps 里的下标（-1 = 没在播）
@@ -280,10 +318,11 @@ func _run_current() -> void:
 		var s: Dictionary = _steps[_index]
 		match String(s.get("kind", "")):
 			StoryScript.K_SAY:
-				_set_line(String(s.get("who", "")), String(s.get("text", "")))
+				_set_line(String(s.get("who", "")), String(s.get("text", "")),
+					String(s.get("voice", "")))
 				return
 			StoryScript.K_NARRATE:
-				_set_line("", String(s.get("text", "")))
+				_set_line("", String(s.get("text", "")), String(s.get("voice", "")))
 				return
 			StoryScript.K_WAIT:
 				# 「停一拍」= 画面**保持不动**等 N 秒（不清空）。
@@ -440,6 +479,15 @@ func _build() -> void:
 	_box.add_child(_hint)
 	_layout_name_plate("")
 
+	# 配音播放器。**单独一个**（不走 `Sfx` 的池子），理由见文件头「语音」。
+	_voice = AudioStreamPlayer.new()
+	_voice.name = "Voice"
+	_voice.bus = &"Master"
+	_voice.volume_db = VOICE_DB
+	# 播放时世界是暂停的，本节点也是 ALWAYS；子节点会继承，这里写死是为了明确。
+	_voice.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_voice)
+
 
 ## 钉在画布**下沿**居中：`anchor_bottom = 1.0` + 负偏移，
 ## 所以设计分辨率或窗口怎么变，它都贴着底边（不用写死「900 − …」）。
@@ -473,14 +521,47 @@ func _layout_name_plate(who: String) -> void:
 	_name_plate.offset_bottom = NAME_PLATE_HEIGHT * 0.5
 
 
-func _set_line(who: String, text: String) -> void:
+func _set_line(who: String, text: String, voice_name := "") -> void:
 	_name_label.text = who
 	_layout_name_plate(who)
 	_body_text = text
 	_shown = 0.0
 	_body.text = text
 	_body.visible_characters = 0
+	_play_voice(voice_name)
 	_update_hint()
+
+
+## 播这句的配音。空名字 / 文件缺失 / 读不出来 → **只停掉上一条，不报错**。
+##
+## 「找不到」每个名字只 warning 一次（`StoryVoice.note_missing()`）：
+## 一句一句往回翻的时候，同一个缺文件会被触发很多次，刷屏就没法看别的日志了。
+func _play_voice(name: String) -> void:
+	if _voice == null:
+		return
+	_voice.stop()
+	_voice_path = ""
+	if name.is_empty():
+		return
+	var path := StoryVoice.find(name)
+	if path.is_empty():
+		if StoryVoice.note_missing(name):
+			push_warning("[Dialogue] %s" % StoryVoice.missing_hint(name))
+		return
+	var stream := StoryVoice.load_stream(path)
+	if stream == null:
+		if StoryVoice.note_missing(name):
+			push_warning("[Dialogue] 语音「%s」读不出来（%s），这一句静音" % [name, path])
+		return
+	_voice_path = path
+	_voice.stream = stream
+	_voice.play()
+
+
+func _stop_voice() -> void:
+	if _voice != null:
+		_voice.stop()
+	_voice_path = ""
 
 
 # --- 给探针 / 自检用的量法 ---------------------------------------------------

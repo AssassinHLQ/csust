@@ -17,12 +17,16 @@ extends RefCounted
 ##     * 夕阳把栏杆染成橙色。              以 * 开头 → 没有名字的旁白
 ##     @wait 1.2                          以 @ 开头 → 指令
 ##
-## 四个指令（`StoryScript.COMMANDS` 是唯一真相来源，报错时直接列给用户看）：
+## 五个指令（`StoryScript.COMMANDS` 是唯一真相来源，报错时直接列给用户看）：
 ##
-##     @wait <秒>       停一拍（浮点，> 0）
-##     @clear           清空对话框、停 `CLEAR_SECONDS` 秒
-##     @speed <字/秒>   改之后的打字速度（> 0）
-##     @end             到此为止，后面的内容不播
+##     @wait <秒>         停一拍（浮点，> 0）
+##     @clear             清空对话框、停 `CLEAR_SECONDS` 秒
+##     @speed <字/秒>     改之后的打字速度（> 0）
+##     @voice <文件名>    给**下一句**配语音，例如 @voice 开场_01（见 `story_voice.gd`）
+##     @end               到此为止，后面的内容不播
+##
+## `@voice` 是**折叠进下一句**的：解析完它就不见了，那一句的 step 多出一个
+## `"voice"` 字段。理由见 `parse()` 里那一段注释。
 ##
 ## ── 四个刻意的取舍（都是「写剧本的人不该操心的事」） ──
 ## 1. **一行 = 一句**，不做 `\n` 转义。要换行就多写几行 —— 写剧本的人不该和
@@ -34,8 +38,9 @@ extends RefCounted
 ## 4. 正文**不能以 `*` 或 `@` 开头**（那是语法）。真要用就前面加一个全角空格。
 ##
 ## ── steps 里每一项的字段 ──
-##     {"kind": "say",     "who": String, "text": String, "line": int}
-##     {"kind": "narrate", "text": String, "line": int}
+##     {"kind": "say",     "who": String, "text": String, "line": int,
+##      "voice": String}                      ← voice 是可选的，没有配音就没有这个键
+##     {"kind": "narrate", "text": String, "line": int, "voice": String?}
 ##     {"kind": "wait",    "seconds": float, "line": int}
 ##     {"kind": "clear",   "line": int}
 ##     {"kind": "speed",   "cps": float, "line": int}
@@ -48,6 +53,7 @@ const K_NARRATE := "narrate"
 const K_WAIT := "wait"
 const K_CLEAR := "clear"
 const K_SPEED := "speed"
+const K_VOICE := "voice"
 const K_END := "end"
 
 ## `@clear` 的空档时长（秒）。解析器只负责认这个词，时长归播放器用；
@@ -61,10 +67,11 @@ const CPS_WARN_ABOVE := 240.0
 ## 已知指令 → 报错时列给人看的说明。**加一条新指令要动两处**：
 ## 这里 + `_parse_command()` 的 `match`。
 const COMMANDS := {
-	"wait": "@wait <秒>        停一拍，例如 @wait 1.2",
-	"clear": "@clear            清空对话框，停一个空档（CLEAR_SECONDS）",
-	"speed": "@speed <字/秒>    改打字速度，例如 @speed 45",
-	"end": "@end              到此为止，后面的内容不播",
+	"wait": "@wait <秒>            停一拍，例如 @wait 1.2",
+	"clear": "@clear                清空对话框，停一个空档（CLEAR_SECONDS）",
+	"speed": "@speed <字/秒>        改打字速度，例如 @speed 45",
+	"voice": "@voice <文件名>       给下一句配语音（story/voice/ 里，后缀可省）",
+	"end": "@end                  到此为止，后面的内容不播",
 }
 
 ## 剧本文件的后缀（`list_txt()` 用）
@@ -190,6 +197,31 @@ static func parse(text: String) -> Dictionary:
 			steps.append({"kind": K_SAY, "who": who, "text": what, "line": n})
 			chars += what.length()
 
+	# ── 把 `@voice` 折叠到**下一句**台词上 ──
+	# 折叠而不是留成一个步骤，是为了让播放器**不需要游标**：它显示一句话的时候
+	# 顺手看一眼这句有没有配音，不用再维护「上一条 @voice 是什么、用掉了没有」。
+	# 那两种状态（还没用掉 / 已经用掉）正是最容易写错、又最难在演出里看出来的东西。
+	var pending := {}
+	var folded: Array = []
+	for s in steps:
+		var kind := String(s.get("kind", ""))
+		if kind == K_VOICE:
+			if not pending.is_empty():
+				warnings.append("第 %d 行：这一句配了两个 @voice，前一个「%s」被覆盖"
+					% [int(s.get("line", 0)), String(pending.get("name", ""))])
+			pending = s
+			continue
+		if not pending.is_empty() and (kind == K_SAY or kind == K_NARRATE):
+			# `@wait` / `@clear` 夹在中间也算「下一句」—— 配音是对那句话说的，
+			# 中间停多久不影响它属于哪一句。
+			s["voice"] = String(pending.get("name", ""))
+			pending = {}
+		folded.append(s)
+	if not pending.is_empty():
+		warnings.append("第 %d 行：@voice「%s」后面没有台词，它没用上"
+			% [int(pending.get("line", 0)), String(pending.get("name", ""))])
+	steps = folded
+
 	return {
 		"ok": errors.is_empty(),
 		"steps": steps,
@@ -245,11 +277,14 @@ static func first_in_dir(dir_path: String) -> String:
 static func summary(res: Dictionary) -> Dictionary:
 	var kinds := {}
 	var speakers := {}
+	var voiced := 0
 	for s in res.get("steps", []):
 		var k := String(s.get("kind", "?"))
 		kinds[k] = int(kinds.get(k, 0)) + 1
 		if k == K_SAY:
 			speakers[String(s.get("who", ""))] = true
+		if not String(s.get("voice", "")).is_empty():
+			voiced += 1
 	var names := speakers.keys()
 	names.sort()
 	return {
@@ -258,6 +293,7 @@ static func summary(res: Dictionary) -> Dictionary:
 		"chars": int(res.get("chars", 0)),
 		"kinds": kinds,
 		"speakers": names,
+		"voiced": voiced,
 		"errors": res.get("errors", []).size(),
 		"warnings": res.get("warnings", []).size(),
 	}
@@ -549,6 +585,14 @@ static func _parse_command(line: String, n: int, steps: Array,
 						"@speed %.0f 太快了（> %.0f），会变成整句瞬间出现"
 						% [cps, CPS_WARN_ABOVE]))
 				steps.append({"kind": K_SPEED, "cps": cps, "line": n})
+		"voice":
+			# 名字规则放在 `StoryVoice` 里：**一处定义**，播放器和报错都用它，
+			# 免得「解析时放行、运行时不认」这种两边不一致。
+			var bad := StoryVoice.name_error(arg)
+			if bad.is_empty():
+				steps.append({"kind": K_VOICE, "name": arg, "line": n})
+			else:
+				errors.append(_at(n, line, bad))
 		"end":
 			if not arg.is_empty():
 				warnings.append(_at(n, line, "@end 不吃参数，「%s」被忽略" % arg))
@@ -559,5 +603,5 @@ static func _parse_command(line: String, n: int, steps: Array,
 			for k in COMMANDS:
 				known += "\n        " + String(COMMANDS[k])
 			errors.append(_at(n, line,
-				"不认识的指令 `@%s`。现在只有这四个：%s" % [cmd, known]))
+				"不认识的指令 `@%s`。现在只有这 %d 个：%s" % [cmd, COMMANDS.size(), known]))
 	return false

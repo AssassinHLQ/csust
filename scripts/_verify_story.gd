@@ -8,6 +8,8 @@ extends SceneTree
 ##   6. 和 Esc 设置界面的交接：菜单开着时剧情不抢输入、播完不解暂停
 ##   7. 设定表（`story/设定.md`）：角色表 / 场景表能解析，说话人校验能给建议，
 ##      表里写的节点与场景实际状态一致
+##   8. 语音（`@voice`）：名字规则、**没导入的文件也能解码**、开播 / 翻页停 /
+##      缺文件静音 / 播完停 —— 造一段真 wav 播一遍（见 `_test_voice`）
 ##
 ## 用法：godot --path <工程> --script res://scripts/_verify_story.gd -- --splat=off
 ##
@@ -49,6 +51,7 @@ func _run() -> void:
 	_test_template_file()
 	await _test_playback(game)
 	_test_bible(game)
+	await _test_voice(game)
 
 	_cleanup()
 	print("\n================ 结果 ================")
@@ -129,6 +132,31 @@ func _test_parse() -> void:
 	var res4 := StoryScript.parse("# 只有注释\n\n")
 	_check(res4["ok"] and res4["steps"].is_empty(), "只有注释的剧本：无错、零步骤")
 
+	# ── @voice：折叠进下一句，自己**不会**变成一步 ──
+	var res5 := StoryScript.parse("@voice 开场_01\n优香: 一\n@voice 开场_02\n* 二\n")
+	_check(res5["ok"] and res5["steps"].size() == 2,
+		"@voice 折叠进下一句 → %d 步（指令本身不占一步）" % res5["steps"].size())
+	if res5["steps"].size() == 2:
+		_check(String(res5["steps"][0].get("voice", "")) == "开场_01" \
+			and String(res5["steps"][1].get("voice", "")) == "开场_02",
+			"每句拿到的配音名字对得上（%s / %s）" % [
+				res5["steps"][0].get("voice", ""), res5["steps"][1].get("voice", "")])
+	# 中间夹 @wait 也还算「下一句」
+	var res6 := StoryScript.parse("@voice a\n@wait 1\n优香: 一\n")
+	_check(res6["ok"] and res6["steps"].size() == 2 \
+		and String(res6["steps"][1].get("voice", "")) == "a",
+		"@voice 与台词之间隔着 @wait，配音仍挂在那一句上")
+	# 悬空的 @voice 要提醒，不能静默丢掉
+	var res7 := StoryScript.parse("@voice a\n@end\n")
+	_check(res7["steps"].size() == 1 and res7["warnings"].size() == 1,
+		"悬空的 @voice → %d 条提醒：%s" % [
+			res7["warnings"].size(), _join(res7["warnings"])])
+	# 同一句配两条：后一条胜，但要提醒前面那条被覆盖
+	var res8 := StoryScript.parse("@voice a\n@voice b\n优香: 一\n")
+	_check(res8["ok"] and String(res8["steps"][0].get("voice", "")) == "b" \
+		and res8["warnings"].size() == 1,
+		"同一句两个 @voice → 用「b」并提醒一次：%s" % _join(res8["warnings"]))
+
 
 # --- 2. 报错 -----------------------------------------------------------------
 
@@ -143,6 +171,10 @@ func _test_errors() -> void:
 		{"src": "优香:\n", "line": 1, "key": "没有正文"},
 		{"src": "*\n", "line": 1, "key": "没写内容"},
 		{"src": ": 冒号前面是空的\n", "line": 1, "key": "没有名字"},
+		# @voice 的三个反例：没写名字 / 想跑到目录外面 / 直接写 res://
+		{"src": "优香: 一\n@voice\n", "line": 2, "key": "@voice"},
+		{"src": "@voice ../外面\n", "line": 1, "key": "@voice"},
+		{"src": "@voice res://story/voice/x.ogg\n", "line": 1, "key": "@voice"},
 	]
 	for c in cases:
 		var res := StoryScript.parse(String(c["src"]))
@@ -228,6 +260,20 @@ func _test_template_file() -> void:
 	var sum := StoryScript.summary(res)
 	_check(int(sum["steps"]) > 0, "共 %d 步 / %d 字 / 说话人 %s" % [
 		int(sum["steps"]), int(sum["chars"]), str(sum["speakers"])])
+
+	# 配音：剧本点名了哪些、缺哪些。**缺了不算失败** —— 用户是一句一句录的，
+	# 别让「还没录完」变成红灯；但必须列出来，否则「演到那句突然没声」最难查。
+	var named: Array[String] = []
+	for s in res["steps"]:
+		var v := String(s.get("voice", ""))
+		if not v.is_empty():
+			named.append(v)
+	if named.is_empty():
+		print("      剧本还没点名任何语音（在台词上面加 `@voice 名字` 就能配）")
+	else:
+		var gone := StoryVoice.missing(named)
+		print("      点名 %d 条语音 / 缺 %d 条%s" % [named.size(), gone.size(),
+			"" if gone.is_empty() else "：%s" % str(gone)])
 
 	# 目录扫描：`game.gd` 在指定文件缺失时靠它兜底
 	var listed := StoryScript.list_in_dir("res://story/")
@@ -493,6 +539,100 @@ func _row_by(rows: Array, key: String, value: String) -> Dictionary:
 	return {}
 
 
+# --- 8. 语音（@voice） --------------------------------------------------------
+
+## 配音这一段**真造文件、真播、真断言**。
+##
+## 为什么要造：工程里还没有任何语音素材（用户还没录），而「`@voice` 到底会不会响」
+## 只靠读代码是验不出来的。造的是一段 0.2 秒的 wav，落在 `res://story/voice/`，
+## 它**没有 `.import`** —— 正好把「用户刚把文件丢进目录、编辑器还没导入」那条
+## 兜底路径（`StoryVoice.load_stream()` 的第二条分支）一起验了。
+func _test_voice(game: Node) -> void:
+	print("\n========== 8. 语音 @voice ==========")
+	var box := game.get_node_or_null("DialogueBox")
+	_check(box != null, "game.tscn 里有 DialogueBox（配音挂在它身上）")
+	if box == null:
+		return
+
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(StoryVoice.DIR))
+	var wav_path := StoryVoice.DIR + "_selftest.wav"
+	var made := _make_wav(wav_path, 0.2)
+	_check(made, "造一段 0.2 秒的测试拼音 %s（**故意**不导入）" % wav_path)
+	if not made:
+		return
+
+	# ── 8a. 名字 → 文件 ──
+	_check(StoryVoice.find("_selftest") == wav_path,
+		"不写后缀也能找到（%s）" % StoryVoice.find("_selftest"))
+	_check(StoryVoice.find("_selftest.wav") == wav_path, "写了后缀 → 精确定位")
+	_check(StoryVoice.find("_selftest.ogg").is_empty(),
+		"写了 .ogg 就**不**回退到 .wav（改格式时不会被旧文件顶掉）")
+	_check(StoryVoice.find("_根本不存在").is_empty(), "不存在的名字 → 空串")
+	_check(StoryVoice.name_error("../外面").contains(".."), "名字里带 `..` 被拒绝")
+	_check(StoryVoice.name_error("res://x.ogg").contains("@voice"),
+		"名字里带 `res://` 被拒绝")
+
+	# ── 8b. 没导入也能解码（这条就是那条兜底路径）──
+	var stream := StoryVoice.load_stream("_selftest")
+	_check(stream != null, "**没有 .import** 的 wav 也能读成 AudioStream")
+	if stream != null:
+		_check(absf(stream.get_length() - 0.2) < 0.03,
+			"读到 %.3f 秒（造的 0.20 秒）" % stream.get_length())
+	_check(StoryVoice.load_stream("_根本不存在") == null, "找不到 → null（调用方静音）")
+
+	# ── 8c. 真播一遍：开播 / 翻页停 / 缺文件静音 / 结束停 ──
+	var steps := [
+		{"kind": StoryScript.K_SAY, "who": "优香", "text": "带配音的一句。",
+			"line": 1, "voice": "_selftest"},
+		{"kind": StoryScript.K_NARRATE, "text": "没有配音的一句。", "line": 2},
+		{"kind": StoryScript.K_SAY, "who": "凯伊", "text": "点名了但文件不在。",
+			"line": 3, "voice": "_根本不存在"},
+		{"kind": StoryScript.K_END, "line": 4},
+	]
+	StoryVoice.reset_reported()
+	box.call("set_cps", 1000.0)
+	box.call("play_steps", steps, "")
+	_check(bool(box.call("is_voice_playing")), "第一句一出来 → 配音在响")
+	_check(String(box.call("current_voice_path")) == wav_path,
+		"current_voice_path = %s" % box.call("current_voice_path"))
+
+	await _wait(8)          # 8 字 / 1000 字每秒，早就打完了
+	box.call("advance")     # → 第二句（没有配音）
+	_check(String(box.call("current_text")) == "没有配音的一句。",
+		"翻到第二句（%s）" % box.call("current_text"))
+	_check(not bool(box.call("is_voice_playing")), "翻页 → 上一条配音**立刻停**（不叠音）")
+	_check(String(box.call("current_voice_path")).is_empty(), "没有配音 → 路径是空串")
+
+	await _wait(2)
+	box.call("advance")     # → 第三句（点了名但没文件）
+	_check(String(box.call("current_text")) == "点名了但文件不在。",
+		"翻到第三句（%s）" % box.call("current_text"))
+	_check(not bool(box.call("is_voice_playing")), "文件缺失 → 静音，不崩、不中断")
+	_check(StoryVoice.missing_reported().has("_根本不存在"),
+		"缺文件记了一次 warning（不会每帧刷屏）")
+
+	await _wait(2)
+	box.call("advance")     # → @end
+	_check(not bool(box.call("is_active")), "@end → 播完")
+	_check(not bool(box.call("is_voice_playing")), "播完 → 配音停")
+
+	# ── 8d. 上一段没播完就被新的 play_steps 顶掉：不能留着上一句的声音 ──
+	box.call("play_steps", [
+		{"kind": StoryScript.K_SAY, "who": "优香", "text": "又一句。",
+			"line": 1, "voice": "_selftest"},
+	], "")
+	_check(bool(box.call("is_voice_playing")), "重新开播 → 配音又响了")
+	box.call("play_steps", [{"kind": StoryScript.K_END, "line": 1}], "")
+	_check(not bool(box.call("is_voice_playing")), "新的一段剧本开播 → 上一句的声音先停掉")
+	box.call("finish")
+
+	# 清理：连可能被编辑器顺手导入出来的 .import 一起删
+	for p in [wav_path, wav_path + ".import"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	_check(not FileAccess.file_exists(wav_path), "测试拼音已清理")
+
+
 # --- 工具 -------------------------------------------------------------------
 
 ## 走**真实输入路径**按一下空格（和 `_verify_settings.gd` 按 Esc 同一套），
@@ -511,9 +651,26 @@ func _join(errs: Array) -> String:
 
 
 func _cleanup() -> void:
-	for p in [GBK_FILE, BOM_FILE]:
+	for p in [GBK_FILE, BOM_FILE, StoryVoice.DIR + "_selftest.wav"]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+
+## 造一段 16 位单声道 wav。**故意用 `save_to_wav()` 写裸文件、不经过导入**，
+## 这样第 8 节验到的就是「用户刚把文件丢进目录、编辑器还没导入」的那条路径。
+func _make_wav(path: String, seconds: float) -> bool:
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = 22050
+	w.stereo = false
+	var rate := int(w.mix_rate)
+	var frames := maxi(1, int(float(rate) * seconds))
+	var data := PackedByteArray()
+	data.resize(frames * 2)
+	for i in frames:
+		data.encode_s16(i * 2, int(sin(TAU * 440.0 * float(i) / float(rate)) * 6000.0))
+	w.data = data
+	return w.save_to_wav(path) == OK
 
 
 func _check(cond: bool, label: String) -> void:
