@@ -47,7 +47,15 @@ const TEXTURES := {
 @export var body_name_prefix := "Tyrannosaurus"
 ## 碰撞盒 = 归一化尺寸 × 这三个系数。
 ## 霸王龙这套（0.55/0.85/0.62）是量出来的：身体约占全长的六成，剩下是尾巴。
+## ⚠️ 只在 `complex_collision = false`、或三角面数超上限时才用。
 @export var collision_factors := Vector3(0.55, 0.85, 0.62)
+## **复杂碰撞（三角网格）**：默认开。把模型可见网格的三角形直接做成
+## `ConcavePolygonShape3D`，子弹打在哪儿命中哪儿。
+## 用户报「boss 怎么都是简单碰撞不是复杂碰撞」就是它 —— 以前一律是一个大方盒子。
+@export var complex_collision := true
+## 三角面数上限。超了就退回盒子形状：碰撞树是**静态**的，面越多
+## 射线查询越慢，没必要为了 10 万面的高模把每发子弹都拖慢。
+@export var max_trimesh_tris := 60000
 ## 目标身高（m）。Arisu 约 1.7、靶子柱 1.15；木桩默认 4.5（约 2.6 个 Arisu）
 @export var height := 4.5
 @export var max_health := 3000.0
@@ -240,6 +248,70 @@ func _mesh_box() -> AABB:
 func _build_collision() -> void:
 	if visual_size == Vector3.ZERO:
 		return
+	if complex_collision and _build_trimesh_collision():
+		return
+	_build_box_collision()
+
+
+## 复杂碰撞：把模型**可见**网格的三角形原样做成 `ConcavePolygonShape3D`。
+## 子弹打在哪儿就命中哪儿，不再是「一个大方盒子把尾巴 / 空隙都算进去」。
+##
+## 为什么不用 `create_trimesh_collision()` / `create_convex_collision()`：
+## 那两个是给编辑器用的辅助函数，会**多挂一个 StaticBody3D 子节点**，
+## 而这里 boss 自己就是 StaticBody3D，`_die()` / `_respawn()` 还要统一开关
+## `_collision.disabled` —— 多一层节点会让「倒下后碰撞体关闭」那条自检失效。
+func _build_trimesh_collision() -> bool:
+	# 顶点要换到**本节点**的局部空间：CollisionShape3D 的 shape 是局部坐标
+	var to_body := global_transform.affine_inverse()
+	var faces := PackedVector3Array()
+	var tris := 0
+	for m in _all(model, "MeshInstance3D"):
+		var mi := m as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		var xf := to_body * mi.global_transform
+		for s in mi.mesh.get_surface_count():
+			var arr := mi.mesh.surface_get_arrays(s)
+			var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			if verts.is_empty():
+				continue
+			var idx = arr[Mesh.ARRAY_INDEX]
+			var indices: PackedInt32Array
+			if idx == null or (idx as PackedInt32Array).is_empty():
+				indices = PackedInt32Array()
+				for i in verts.size():
+					indices.append(i)
+			else:
+				indices = idx
+			var n := (indices.size() / 3) * 3
+			if (tris + n / 3) > max_trimesh_tris:
+				print("[Boss] 三角面将超过上限 %d → 退回盒子形状" % max_trimesh_tris)
+				return false
+			for i in range(0, n, 3):
+				faces.append(xf * verts[indices[i]])
+				faces.append(xf * verts[indices[i + 1]])
+				faces.append(xf * verts[indices[i + 2]])
+			tris += n / 3
+	if faces.is_empty():
+		return false
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(faces)
+	# ⚠️ 必须开双面：`ConcavePolygonShape3D` 默认只认**正面**，
+	#    而模型一旦带负缩放（镜像）或法线朝里，整张网就全是背面 ——
+	#    射线会直接穿过去（第一版就是这样，自检报「子弹射线能打到 Boss 本体」红）。
+	shape.backface_collision = true
+	_collision = CollisionShape3D.new()
+	_collision.name = "Collision"
+	_collision.shape = shape
+	_collision.position = Vector3.ZERO
+	add_child(_collision)
+	collision_layer = 1
+	collision_mask = 0
+	print("[Boss] 复杂碰撞：%d 个三角面（三角网格，不再是盒子）" % tris)
+	return true
+
+
+func _build_box_collision() -> void:
 	_collision_shape = BoxShape3D.new()
 	# 身体占全长约 6 成（剩下是尾巴，不细究）；盒子稍微往上抬一点，避开脚
 	_collision_shape.size = Vector3(

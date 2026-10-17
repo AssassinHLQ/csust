@@ -91,8 +91,13 @@ func _run() -> void:
 
 	print("\n========== 3. 碰撞与射线 ==========")
 	var shape := pig.get_node_or_null("Collision") as CollisionShape3D
-	_check(shape != null and shape.shape is BoxShape3D, "存在盒型碰撞体")
-	if shape and shape.shape is BoxShape3D:
+	_check(shape != null and (shape.shape is ConcavePolygonShape3D or shape.shape is BoxShape3D),
+		"存在碰撞体（复杂三角网格 / 兜底盒子）")
+	if shape and shape.shape is ConcavePolygonShape3D:
+		print("  复杂碰撞：%d 个三角面  位置 %s" % [
+			(shape.shape as ConcavePolygonShape3D).get_faces().size() / 3,
+			str(shape.position.snappedf(0.01))])
+	elif shape and shape.shape is BoxShape3D:
 		print("  碰撞盒 size = %s  位置 %s" % [
 			str((shape.shape as BoxShape3D).size.snappedf(0.01)),
 			str(shape.position.snappedf(0.01))])
