@@ -143,6 +143,13 @@ func trigger_down() -> void:
 
 func trigger_up() -> void:
 	_trigger = false
+	# 松开扳机 → 让动画知道「这一发打完了」。
+	# ⚠️ 不通知的话，整身跑打动作要一直播到片子结束：`RunFire_Ing` 2.667 s、
+	#    走路时倍速 0.46 ⇒ **点一下鼠标，攻击姿势演 5.8 秒**，人还在往前走 ——
+	#    用户报的「攻击一下后再开始走路会变成右转螃蟹平移」就是这个
+	#    （实测见 `anim_driver.gd` 的 `FIRE_RELEASE_GRACE`）。
+	if _driver:
+		_driver.cancel_fire()
 
 
 func shoot() -> bool:

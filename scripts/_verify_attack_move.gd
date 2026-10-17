@@ -253,6 +253,30 @@ func _test_walking_fire() -> void:
 	_check(walk_fire >= walk_base * 0.7,
 		"走打开火时脚还在走：%.3f m（走基线 %.3f 的 70%% = %.3f）"
 		% [walk_fire, walk_base, walk_base * 0.7])
+
+	# ── 第三轮补的两条（2026-10-18 用户报「右倾还在」+「右转螃蟹平移」）──
+	#
+	# ① 掰枪的**旋转半径**必须小：枪骨 `Bip001_Weapon` 是根级骨，离手很远，
+	#    绕它转 42° 会把整把枪平移出去（上一版就是「枪歪到身子右边」）。
+	#    现在中心取在握枪的手上，半径 = 枪骨原点到两手的距离，必须 ≤ 0.25 m。
+	var radius := _gun_pivot_radius()
+	_m["gun_pivot_radius"] = radius
+	_check(radius <= 0.25,
+		"掰枪的旋转中心在手上：枪骨离握枪的手 %.3f m（≤ 0.25 —— 否则一掰就甩出去）"
+		% radius)
+	#
+	# ② 松开扳机之后**不许继续演攻击**：`RunFire_Ing` 2.667 s、走路倍速 0.46
+	#    ⇒ 一次点击会演 5.8 s（实测 `_probe_crab.gd`：第 300 帧才回 `Cafe_Walk`）。
+	#    那 5.8 秒里脚轴在 48°~115° 之间摆（正常走路 70°~87°）= 用户说的「螃蟹平移」。
+	_anim.cancel_fire()
+	await _wait_ms(350)
+	var st := _anim.current_state_name()
+	var clip_after := _anim.current_clip()
+	_m["release_state"] = st
+	_m["release_clip"] = clip_after
+	_check(st == "Locomotion" and clip_after == "Cafe_Walk",
+		"松开扳机 0.35 s 内交回走路：state=%s clip=%s（改前要等 5.8 s）"
+		% [st, clip_after])
 	_release_all()
 	await _wait(2)
 
@@ -488,6 +512,31 @@ func _muzzle_marker_gap() -> float:
 			var at: Vector3 = sk.global_transform * sk.get_bone_global_pose(i).origin
 			return wpn.muzzle.global_position.distance_to(at)
 	return 999.0
+
+
+## 掰枪的旋转半径：枪骨原点到「最近那只手」的距离（米）。
+##
+## 用户 2026-10-18：「右倾还在」。上一版转锁骨（手臂 + 枪当刚体）把肩膀拧走 42°，
+## 剪影就是右倾；而更早那版绕**枪骨自己的原点**转，因为枪骨是根级骨、离手很远，
+## 一掰就把整把枪**平移**出去（「枪歪到身子右边」）。
+## 现在中心取在两手连线上，半径就是这条判据 —— 半径小 ⇒ 掰 42° 只挪
+## `2 · r · sin(21°) ≈ 0.7 r`，枪还在手里。
+func _gun_pivot_radius() -> float:
+	var sk := _anim.skeleton
+	if sk == null:
+		return 999.0
+	var wi := sk.find_bone(AnimDriver.GUN_BONE)
+	if wi < 0:
+		return 999.0
+	var g: Vector3 = sk.global_transform * sk.get_bone_global_pose(wi).origin
+	var best := 999.0
+	for b in [AnimDriver.HAND_L_BONE, AnimDriver.HAND_R_BONE]:
+		var i := sk.find_bone(b)
+		if i < 0:
+			continue
+		var h: Vector3 = sk.global_transform * sk.get_bone_global_pose(i).origin
+		best = minf(best, g.distance_to(h))
+	return best
 
 
 func _release_all() -> void:

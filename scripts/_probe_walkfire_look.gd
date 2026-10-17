@@ -6,6 +6,11 @@ extends SceneTree
 ##   ② 枪管有没有**侧倾**（枪的「上」方向与世界竖直的夹角）
 ##   ③ 躯干有没有**右倾**（胸椎 up 轴在角色右方向上的分量）—— 用户：「走打还是很奇怪，右倾了一点」
 ##
+## ⚠️ 2026-10-18 补：**必须 `paused = false`**。开场剧情会把整棵树暂停，而
+##    `AnimDriver._process` 是 `INHERIT` —— 暂停时 `_aim_gun()` 根本不跑，
+##    第一版拍出来的「走打」其实是**没有瞄准修正**的素材姿势（白拍了一轮）。
+##    另外把 HUD / 对话框藏掉，免得挡住人。
+##
 ## 用法（要真渲染；`--splat=off` 省显存）：
 ##   godot --path <工程> --script res://scripts/_probe_walkfire_look.gd -- --splat=off
 ## 输出：`_arisu_captures/_walklook/`
@@ -38,6 +43,11 @@ func _run() -> void:
 	var wpn := game.get_node_or_null("Player/Weapon") as Weapon
 	p.set_physics_process(false)
 	p.global_position = SPOT
+	# 解除暂停（见文件头 ⚠️）：不解除的话瞄准修正不跑
+	paused = false
+	# 藏掉 HUD 与开场对话框
+	for n in game.find_children("*", "CanvasLayer", true, false):
+		(n as CanvasLayer).visible = false
 	await _wait(4)
 
 	for c in [["1_walk_fire", 2.4], ["2_run_fire", 6.8]]:
@@ -58,6 +68,22 @@ func _run() -> void:
 		await _shot(out.path_join("%s_cam.png" % tag))
 		# 侧面 / 背后俯视（另开一台相机，看枪和身体的相对关系）
 		await _side_shots(p, out, tag)
+		# 松开扳机之后：验证「不再把攻击姿势演 5.8 秒」
+		anim.cancel_fire()
+		for _i in 30:
+			anim.set_locomotion(spd, true, 0.0)
+			await process_frame
+		print("[look] %s 松手后：%s" % [tag, _fmt(p, anim, wpn)])
+		await _side_shots(p, out, tag + "_released")
+
+	# 只走（对照：正常走路不该有任何变化）
+	anim.reset_state()
+	anim.set_locomotion(2.4, true, 0.0)
+	for _i in 40:
+		await process_frame
+	print("[look] 3_walk：%s" % _fmt(p, anim, wpn))
+	await _shot(out.path_join("3_walk_cam.png"))
+	await _side_shots(p, out, "3_walk")
 
 	print("[look] 输出目录 %s" % out)
 	quit(0)
@@ -105,9 +131,11 @@ func _side_shots(p: Player, out: String, tag: String) -> void:
 	var eye: Vector3 = p.global_position + Vector3(0.0, 1.15, 0.0)
 	var fwd: Vector3 = p.model_root.global_transform.basis.z.normalized()
 	var right: Vector3 = p.model_root.global_transform.basis.x.normalized()
+	# 四机位：正侧 / 后 3/4（最像玩家看到的剪影）/ 正前（看枪口朝哪）/ 俯视
 	var shots := [
-		["side", eye + right * 2.4],
-		["back", eye - fwd * 2.2 + Vector3.UP * 1.4],
+		["side", eye + right * 2.6],
+		["q", eye - fwd * 2.6 + right * 1.7 + Vector3.UP * 0.35],
+		["front", eye + fwd * 3.0],
 	]
 	for sh in shots:
 		cam.global_position = sh[1]

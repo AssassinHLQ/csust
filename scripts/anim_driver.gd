@@ -196,9 +196,16 @@ var runfire := {}
 ##
 ## 也就是说素材的「持枪跑」是**斜抱在身前**的搬枪姿势，本来就不是瞄准姿势 ——
 ## 这不是哪一版动错了。素材里没有任何「跑着瞄准」的手臂动作（§README 记过），
-## 所以只能在骨架上补：每帧把**枪骨绕它自己的原点（握把）**转一个最小旋转，
-## 让枪管指向相机前向。枪留在手里、手臂姿势不动 —— 手臂是素材给的那套跑步姿势，
-## 一改就成了另一个动作。
+## 所以只能在骨架上补：每帧把**枪**绕**握枪的手**转一个最小旋转，让枪管指向相机前向。
+##
+## ── 掰枪掰出过两次事故，两条都得记住（2026-10-18，用户连报三轮）──
+##  ① **绕枪骨自己的原点转** → 枪骨 `Bip001_Weapon` 是**根级骨**（父骨 = −1，
+##     实测 index 147），原点是美术摆的、离手有几十厘米，绕它转 42° 等于把
+##     整把枪**平移**出去。用户：「枪歪到身子右边」「子弹发射点偏右」。
+##  ② **转锁骨、手臂 + 枪当刚体** → 肩膀被拧走 42°，剪影整个右倾（枪还被抬到
+##     肩高）。用户：「走打还是很奇怪，右倾了一点」「右倾还在」。
+##  ⇒ 正确做法是 ③：**只转枪，但旋转中心取在「握枪的手」上**（见 `_gun_pivot()`）。
+##     中心在握把上，枪就只是「在手里转向」，位置不动、肩膀不动。
 ##
 ## ⚠️ 只在 `state == State.FIRE` 时生效。用户另一条要求是「正常走路不变」，
 ##    所以只跑 / 只走时枪保持素材的抱枪姿势，只在扣着扳机的那几帧掰正。
@@ -207,10 +214,9 @@ var runfire := {}
 const GUN_BONE := "Bip001_Weapon"
 const GUN_MUZZLE_BONE := "bone_Railgun_Muzzle_01"
 const GUN_BREECH_BONE := "bone_magazine"
-## 拿枪的那只手 + 两根锁骨：手臂 + 枪作为一个刚体一起摆（见 `_aim_gun()`）
-const HAND_BONE := "Bip001 L Hand"
-const CLAVICLE_L_BONE := "Bip001 L Clavicle"
-const CLAVICLE_R_BONE := "Bip001 R Clavicle"
+## 两只手：旋转中心取「两手中点」，只有一只手时就取那只手（见 `_gun_pivot()`）
+const HAND_L_BONE := "Bip001 L Hand"
+const HAND_R_BONE := "Bip001 R Hand"
 ## 每秒收敛速度（1/s）：14 ≈ 0.07 s 掰到位。扣扳机那一瞬间不要「啪」地跳过去。
 @export var gun_aim_speed := 14.0
 ## 当前枪管离准星差多少度（掰之前量的；探针 / 自检读数）
@@ -218,6 +224,23 @@ var gun_aim_deg := 0.0
 ## 当前实际掰了多少度（探针 / 自检读数；0 = 没掰）
 var gun_aim_applied_deg := 0.0
 var _gun_aim_weight := 0.0
+
+## ── 松手之后**别再把跑打动作播完**（2026-10-18，用户报「右转螃蟹平移」）──
+##
+## 病根是**时长**，不是姿势：`RunFire_Ing` 长 2.667 s（4 个跑步周期拼的），
+## 走路时 `speed_scale = 2.4 / 5.2 = 0.46` ⇒ **点一下鼠标，攻击姿势要演 5.8 秒**。
+## 实测（`_probe_crab.gd`，松手后继续走）：
+##   50 / 100 / 150 / 200 / 250 帧都还是 `RunFire_Ing` + `state = Fire`，
+##   到第 **300 帧（5 s）** 才回到 `Cafe_Walk`；
+##   而这 5.8 秒里两只脚的轴在 **48°~115°** 之间摆（正常走路只有 70°~87°）。
+## 慢动作的攻击姿势横向平移 —— 用户看到的就是「右转 + 螃蟹走」。
+## 所以：**松开扳机后最多再演 FIRE_RELEASE_GRACE 秒**，然后立刻交回移动动画。
+##
+## ⚠️ 只对**整身跑打**那条生效。站定开火走叠加层，那条 1.07 s 本来就短，
+##    砍到 0.25 s 会变成「抖一下」，用户没报过它，别动。
+const FIRE_RELEASE_GRACE := 0.25
+## 距离松手还剩多少秒（> 0 = 正在收招余韵里）
+var _release_left := 0.0
 
 
 func _ready() -> void:
@@ -277,6 +300,13 @@ func _ready() -> void:
 			if not miss.is_empty():
 				push_warning("[AnimDriver] 跑打动作有 %d 根骨在这具骨架上找不到（%s…）" % [
 					miss.size(), str(miss.slice(0, 5))])
+			# ⚠️ 这条动作是**在冻结眼睑之后**才并进来的，它自己带着一整套眼睑轨道
+			#    （实测 7 条：`eye_L`/`eye_L_1`… 都有）—— 不补冻的话眼皮又会动。
+			#    已经冻过的动作带 meta，会被跳过，这里只动这一条。
+			var reblink := PoseFix.freeze_eyelids(skeleton, player)
+			if int(reblink.get("tracks", 0)) > 0:
+				print("[AnimDriver] 跑打动作补冻眼睑：%d 条" % int(reblink["tracks"]))
+				blink_fix["tracks"] = int(blink_fix.get("tracks", 0)) + int(reblink["tracks"])
 			# 这条动作是用**未修正的** Move_Ing 在 Blender 里拼的，得补上同样的前倾修正
 			var lean := PoseFix.fix_extra_run_clip(skeleton, player, extra_clip)
 			if bool(lean.get("applied", false)):
@@ -315,6 +345,7 @@ func _keep_alive_when_paused() -> void:
 ## 不在开火 → 权重平滑退回 0，枪马上回到素材的抱枪姿势（下一帧动画就覆盖回去了）。
 func _process(delta: float) -> void:
 	_aim_gun(delta)
+	_tick_release(delta)
 
 
 func _aim_gun(delta: float) -> void:
@@ -354,26 +385,13 @@ func _aim_gun(delta: float) -> void:
 		q = Quaternion.IDENTITY.slerp(q, _gun_aim_weight)
 	gun_aim_applied_deg = rad_to_deg(q.get_angle())
 
-	# ── 手臂 + 枪**一起**转 q ──
-	# 只转枪骨会有一个用户看得见的后果：「枪歪到身子右边」（2026-10-18
-	# 「走打还是很奇怪，右倾了一点」—— 枪是根级骨，转它等于让它在手里自转，
-	# 手还留在素材的抱枪位）。所以先把两只锁骨按同一个世界旋转转过去
-	# （整条手臂跟着摆，肘/腕/指全在素材的姿势里不动），再把枪**按「转完之后
-	# 那只手」重新挂上**、朝向另外用 q 旋一次。等于「手臂 + 枪」作为一个刚体
-	# 绕肩转 q：枪管对齐准星，而枪和手的相对位姿和素材里一模一样。
-	var hand := skeleton.find_bone(HAND_BONE)
-	var hand_before := _bone_world(hand) if hand >= 0 else Transform3D.IDENTITY
+	# ── 只转**枪**，绕**握枪的手**转 q（见 `GUN_BONE` 上面「两次事故」③）──
+	# 朝向 = q × 原朝向；位置 = 绕握把点转，握把点不动 ⇒ 枪不出手、肩膀不拧。
 	var gun_before := _bone_world(wi)
-	var rel := Transform3D.IDENTITY
-	if hand >= 0:
-		rel = hand_before.affine_inverse() * gun_before
-	for b in [CLAVICLE_L_BONE, CLAVICLE_R_BONE]:
-		_rotate_bone_world(b, q)
-	# 朝向 = q × 原朝向；位置 = 转完之后那只手 × 素材里的相对位姿
+	var pivot := _gun_pivot(gun_before.origin)
 	var want_xf := gun_before
 	want_xf.basis = Basis(q) * gun_before.basis
-	if hand >= 0:
-		want_xf.origin = (_bone_world(hand) * rel).origin
+	want_xf.origin = pivot + q * (gun_before.origin - pivot)
 	var parent_xf := _parent_world(wi)
 	var pose := parent_xf.affine_inverse() * want_xf
 	skeleton.set_bone_pose_position(wi, pose.origin)
@@ -394,14 +412,41 @@ func _parent_world(i: int) -> Transform3D:
 	return skeleton.global_transform if p < 0 else _bone_world(p)
 
 
-## 把 `q`（世界空间旋转）乘到某根骨的姿势上 —— 绕它自己的旋转中心转。
-func _rotate_bone_world(bone: String, q: Quaternion) -> void:
-	var i := skeleton.find_bone(bone)
-	if i < 0:
+## 松开扳机：给跑打动作留一点点收招余韵，然后由 `_tick_release()` 收掉。
+func cancel_fire() -> void:
+	if state != State.FIRE or not _runfire_playing:
 		return
-	var pq := _parent_world(i).basis.get_rotation_quaternion()
-	var local_q := pq.inverse() * q * pq
-	skeleton.set_bone_pose_rotation(i, local_q * skeleton.get_bone_pose_rotation(i))
+	_release_left = FIRE_RELEASE_GRACE
+
+
+func _tick_release(delta: float) -> void:
+	if _release_left <= 0.0:
+		return
+	_release_left = maxf(_release_left - delta, 0.0)
+	if _release_left <= 0.0 and state == State.FIRE and _runfire_playing:
+		_return_from_runfire()
+
+
+## 枪的**旋转中心**：落在「握枪的手」上（见 `GUN_BONE` 上面「两次事故」）。
+##
+## 两只手都在时，取**两手连线**上离枪骨原点最近的那个点（夹在两手之间）——
+## 双手持枪时握把就在两手中点附近，这样中心既在手上、又尽量贴着枪骨原点；
+## 只有一只手找得到时退回那只手；两只都没有就退回枪骨原点（= 旧行为）。
+func _gun_pivot(gun_origin: Vector3) -> Vector3:
+	var hl := skeleton.find_bone(HAND_L_BONE)
+	var hr := skeleton.find_bone(HAND_R_BONE)
+	if hl >= 0 and hr >= 0:
+		var a := _bone_world(hl).origin
+		var b := _bone_world(hr).origin
+		var ab := b - a
+		if ab.length_squared() > 1e-8:
+			return a + ab * clampf((gun_origin - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		return (a + b) * 0.5
+	if hl >= 0:
+		return _bone_world(hl).origin
+	if hr >= 0:
+		return _bone_world(hr).origin
+	return gun_origin
 
 
 ## 检查「嘴巴还在不在」。
@@ -654,6 +699,7 @@ func _start_runfire() -> void:
 	state = State.FIRE
 	_auto_return = true
 	_runfire_playing = true
+	_release_left = 0.0              # 新的一发：收招余韵作废
 	stop_upper_layer()               # 这条动作是整身的，叠加层必须让开
 	var cyc := runfire_cycle()
 	var pos := 0.0
@@ -674,6 +720,7 @@ func _return_from_runfire() -> void:
 	_runfire_playing = false
 	state = State.LOCOMOTION
 	_auto_return = false
+	_release_left = 0.0
 	_update_locomotion()
 	if player != null and player.current_animation == "Move_Ing":
 		player.seek(fmod(pos, cyc), true)
@@ -795,6 +842,7 @@ func reset_state() -> void:
 	stop_upper_layer()
 	_runfire_playing = false
 	_auto_return = false
+	_release_left = 0.0
 	state = State.LOCOMOTION
 
 

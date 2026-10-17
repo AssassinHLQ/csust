@@ -217,8 +217,37 @@ static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer,
 ##
 ## 连 `_2`（下睑）一起删：上下睑是联动眨的，只留一边会变成「只有下眼皮在动」。
 ## 上一版 `fix_eyelid_sync()` 保留着不删（还有探针在拿它做 A/B）。
+##
+## ── 2026-10-18 扩表：上一版**只删了四根**，眼皮照样在动 ──
+## 用户：「最后为什么眼皮还在动，之前不是都删眼睛那儿的动画了吗」。
+##
+## 量出来的（`_probe_face_motion.gd`：每根骨相对头骨的最大旋转，播 150 帧）：
+##   | 骨 | Normal_Idle |
+##   |---|---|
+##   | `Xtra_eyeblowL1` / `R1` | **19.71° / 19.70°** ← 四根里最大，正是还看得见的那一下 |
+##   | `Xtra_eyeblowL2` / `R2` | 4.14° / 4.16° |
+##   | `bone_eye_D_L/R`、`bone_eye_D_*_01/02` | ≤ 3.1° |
+##   | `bone_Eyering_*` / `Xtra_eyeR/L` | ≤ 0.81° |
+##   | `eye_L_1` / `eye_R_1`（上一版删掉的） | 0.87°（噪声级，已经不动了）✓ |
+## 也就是说：素材里**眨眼的主轨道挂在 `Xtra_eyeblow*` 上**（名字像眉毛，实际带着
+## 上睑那一圈；`eye_L_1/2` 只是眼球的附件），删了四根等于没删到点上。
+##
+## 所以整张「脸」一起冻：眼睑 + 眉/睫毛圈 + 眼周装饰。它们是纯装饰骨，
+## 冻掉之后脸上只剩头骨自己在动（说话口型走的是形态键，不受影响）。
 const BLINK_BONES := [
+	# 眼睑（2026-10-17 那版）
 	"Bip001 eye_L_1", "Bip001 eye_L_2", "Bip001 eye_R_1", "Bip001 eye_R_2",
+	# 眉 / 上睑圈 —— **真正在动的那几根**
+	"Bip001 Xtra_eyeblowL1", "Bip001 Xtra_eyeblowL2",
+	"Bip001 Xtra_eyeblowR1", "Bip001 Xtra_eyeblowR2",
+	# 眼周装饰（睫毛圈 / 眼影）
+	# ⚠️ 这六根**没有 `Bip001 ` 前缀**（实测骨名就是 `bone_Eyering_R_03`），
+	#    写成带前缀的查不到、`missing` 里会点名 —— 上一版就这么漏了 7 条轨道。
+	"Bip001 Xtra_eyeL", "Bip001 Xtra_eyeR",
+	"bone_Eyering_L_01", "bone_Eyering_L_02", "bone_Eyering_L_03",
+	"bone_Eyering_R_01", "bone_Eyering_R_02", "bone_Eyering_R_03",
+	"Bip001 bone_eye_D_L", "Bip001 bone_eye_D_L_01", "Bip001 bone_eye_D_L_02",
+	"Bip001 bone_eye_D_R", "Bip001 bone_eye_D_R_01", "Bip001 bone_eye_D_R_02",
 ]
 const META_BLINK := "pose_fix_blink"
 
