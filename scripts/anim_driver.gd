@@ -182,7 +182,43 @@ var runfire := {}
 @export var extra_clip := "RunFire_Ing"
 
 
+## ── 开火时把枪管掰向准星（2026-10-18）──
+##
+## 用户：「跑打攻击时武器还是歪着的，没对齐准星」。
+##
+## 先量清楚（`_probe_aim_cross.gd`；枪管 = `muzzle − magazine`，比的是**相机前向**
+## = 准星方向；「角色前向」= `model_root.basis.z`，实测它与准星 0°）：
+##
+## | 状态 | 基础层 | 枪管偏航 | 枪管俯仰 |
+## |---|---|---|---|
+## | 只跑 | `Move_Ing` | **30°** | −11° |
+## | 跑打 | `RunFire_Ing` | **42°** | −20° |
+##
+## 也就是说素材的「持枪跑」是**斜抱在身前**的搬枪姿势，本来就不是瞄准姿势 ——
+## 这不是哪一版动错了。素材里没有任何「跑着瞄准」的手臂动作（§README 记过），
+## 所以只能在骨架上补：每帧把**枪骨绕它自己的原点（握把）**转一个最小旋转，
+## 让枪管指向相机前向。枪留在手里、手臂姿势不动 —— 手臂是素材给的那套跑步姿势，
+## 一改就成了另一个动作。
+##
+## ⚠️ 只在 `state == State.FIRE` 时生效。用户另一条要求是「正常走路不变」，
+##    所以只跑 / 只走时枪保持素材的抱枪姿势，只在扣着扳机的那几帧掰正。
+## ⚠️ `process_priority` 必须比两个叠加层还大：三层都是「后写赢」，
+##    要等动画写完才能掰这一下（见 `_ready()`）。
+const GUN_BONE := "Bip001_Weapon"
+const GUN_MUZZLE_BONE := "bone_Railgun_Muzzle_01"
+const GUN_BREECH_BONE := "bone_magazine"
+## 每秒收敛速度（1/s）：14 ≈ 0.07 s 掰到位。扣扳机那一瞬间不要「啪」地跳过去。
+@export var gun_aim_speed := 14.0
+## 当前枪管离准星差多少度（掰之前量的；探针 / 自检读数）
+var gun_aim_deg := 0.0
+## 当前实际掰了多少度（探针 / 自检读数；0 = 没掰）
+var gun_aim_applied_deg := 0.0
+var _gun_aim_weight := 0.0
+
+
 func _ready() -> void:
+	# 比两个叠加层的 `player.process_priority + 1` 更大 ⇒ 最后跑，掰枪这一下才留得住
+	process_priority = 100
 	player = get_node_or_null(animation_player_path) as AnimationPlayer
 	skeleton = get_node_or_null(skeleton_path) as Skeleton3D
 	# 两个 NodePath 都留空时，先在**自己所在的模型子树**里找，再退回整棵树。
@@ -269,6 +305,57 @@ func _keep_alive_when_paused() -> void:
 	for p in [player, upper, upper_move]:
 		if p != null:
 			(p as AnimationPlayer).process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+## 每帧：开火时把枪管掰到准星方向（见 `GUN_BONE` 上面那张表）。
+## 不在开火 → 权重平滑退回 0，枪马上回到素材的抱枪姿势（下一帧动画就覆盖回去了）。
+func _process(delta: float) -> void:
+	_aim_gun(delta)
+
+
+func _aim_gun(delta: float) -> void:
+	if skeleton == null or not skeleton.is_inside_tree():
+		return
+	var wi := skeleton.find_bone(GUN_BONE)
+	var mi := skeleton.find_bone(GUN_MUZZLE_BONE)
+	var gi := skeleton.find_bone(GUN_BREECH_BONE)
+	if wi < 0 or mi < 0 or gi < 0:
+		return
+	# ⚠️ 只在**整身跑打那条动作**在播时掰（跑打 / 走打）。
+	#    站定开火走的是叠加层，素材那套站桩开火姿势把枪抱在胸前 70~98°，
+	#    硬掰成朝向准星会让两只手整个离开枪 —— 那个动作本来就是风格化的，
+	#    用户也没提过它，所以不动（探针里量得到它仍然是斜的）。
+	var want := 1.0 if (state == State.FIRE and _runfire_playing) else 0.0
+	_gun_aim_weight = move_toward(_gun_aim_weight, want, maxf(gun_aim_speed, 0.001) * delta)
+	if _gun_aim_weight <= 0.0001:
+		_gun_aim_weight = 0.0
+		gun_aim_deg = 0.0
+		gun_aim_applied_deg = 0.0
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var skb := skeleton.global_transform.basis
+	var muzzle: Vector3 = skb * skeleton.get_bone_global_pose(mi).origin
+	var breech: Vector3 = skb * skeleton.get_bone_global_pose(gi).origin
+	var cur := muzzle - breech
+	var target := -cam.global_transform.basis.z
+	if cur.length_squared() < 1e-10 or target.length_squared() < 1e-10:
+		return
+	cur = cur.normalized()
+	target = target.normalized()
+	gun_aim_deg = rad_to_deg(acos(clampf(cur.dot(target), -1.0, 1.0)))
+	var q := Quaternion(cur, target)
+	if _gun_aim_weight < 0.9999:
+		q = Quaternion.IDENTITY.slerp(q, _gun_aim_weight)
+	gun_aim_applied_deg = rad_to_deg(q.get_angle())
+	# 世界空间的最小旋转 → 这根骨的父坐标系（骨架空间 / 父骨旋转）
+	var parent := skeleton.get_bone_parent(wi)
+	var pw := skb if parent < 0 else skb * skeleton.get_bone_global_pose(parent).basis
+	var pq := pw.get_rotation_quaternion()
+	var local_q := pq.inverse() * q * pq
+	var rest := skeleton.get_bone_pose_rotation(wi)
+	skeleton.set_bone_pose_rotation(wi, local_q * rest)
 
 
 ## 检查「嘴巴还在不在」。
@@ -458,10 +545,10 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	# 整身跑打动作在播：腿是它自带的，只跟着速度调倍速，别让 `_update_locomotion()`
 	# 把动作切回 `Move_Ing`（那样这一枪就只剩「站着开火」了）。
 	if _runfire_playing:
-		# 速度掉回走路 / 站住 → 这条「跑步姿势」的整身动作就不该继续了，交回普通移动。
-		# （门槛和 `request_fire()` 那边同一根线：`WALK_THRESHOLD`）
-		if _speed < WALK_THRESHOLD:
-			_return_from_runfire()   # 走起来 / 停下来了，交回普通移动
+		# 速度掉回站住 / 怠速 → 这条「跑步姿势」的整身动作就不该继续了，交回普通移动。
+		# （门槛和 `request_fire()` 那边同一根线：`IDLE_SPEED`）
+		if _speed < IDLE_SPEED:
+			_return_from_runfire()   # 停下来了，交回普通移动
 		else:
 			player.speed_scale = clampf(_speed / CYCLE_SPEED.get("Move_Ing", 5.2),
 				SPEED_SCALE_MIN, SPEED_SCALE_MAX)
@@ -485,12 +572,16 @@ func is_aiming() -> bool:
 
 
 func request_fire() -> void:
-	# **跑**着开火 + 有「单条跑打动作」→ 整身播那一条（腿是它自带的，不再叠两层）。
-	# ⚠️ 门槛用 `WALK_THRESHOLD` 而不是 `IDLE_SPEED`：那条动作的腿是**跑步**的
-	#    （标称 5.2 m/s）。走路 2.4 也进去的话会被压到 0.46 倍，看起来就是
-	#    「用跑步的前倾姿势慢慢挪」—— 用户 2026-10-18 报的「走打又出问题了」。
-	#    走 / 蹲行走老路：基础层 `Cafe_Walk` + 叠加层。
-	if state == State.LOCOMOTION and has_runfire() and _speed >= WALK_THRESHOLD:
+	# **走 / 跑**着开火 + 有「单条跑打动作」→ 整身播那一条（腿是它自带的，不再叠两层）。
+	#
+	# 2026-10-18 第三轮：门槛从 `WALK_THRESHOLD` 降到 `IDLE_SPEED`。
+	# 用户原话：「走路攻击时改一下，把走路改成慢速的跑动画，这样子走打就有枪了」。
+	# 上一轮把门槛抬到 2.8 是因为 0.46 倍播跑步动作看着「蹲着挪」；但走打走老路
+	# （基础层 `Cafe_Walk` + 叠加层）的代价是**枪被素材缩成了 0**（`Cafe_Walk` 里
+	# `Bip001_Weapon` 的缩放 ≈ 0.04，实测），等于走打没枪。用户选了前者。
+	# 现在：≥ `IDLE_SPEED` 全部走这条整身动作，慢速时靠 `speed_scale` 放慢
+	# （2.4 m/s → 0.46 倍），步幅仍然对得上地面，不会脚底打滑。
+	if state == State.LOCOMOTION and has_runfire() and _speed >= IDLE_SPEED:
 		_start_runfire()
 		return
 	_play_once("Normal_Attack_Ing", State.FIRE)

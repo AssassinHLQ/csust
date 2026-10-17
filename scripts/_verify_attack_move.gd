@@ -192,34 +192,57 @@ func _test_running_fire() -> void:
 	_check(foot_run_fire >= FOOT_MOVING,
 		"**跑动开火时脚还在跑**：%.3f m（≥ %.2f）—— 用户要的另一半"
 		% [foot_run_fire, FOOT_MOVING])
+	# 枪要对准准星（用户：「跑打攻击时武器还是歪着的，没对齐准星」）。
+	# 素材的持枪跑本身斜 30°、跑打动作斜 42°（`_probe_aim_cross.gd`），
+	# 靠 `AnimDriver._aim_gun()` 每帧把枪骨绕握把掰正。
+	var gun := await _gun_vs_crosshair()
+	_m["run_fire_gun_deg"] = gun
+	_check(gun < 8.0, "跑打时枪管离准星 %.1f°（判据 < 8°，改前 42°）" % gun)
 	_release_all()
 	await _wait(2)
 
 
-# --- 3b. 走着开火：不许用「跑步」那条整身动作 ---------------------------------
+# --- 3b. 走着开火：改成「慢速跑打」整身动作（走打也要有枪）---------------------
 #
-# 用户 2026-10-18：「跑打修好了，但是走打又出问题了」。
-# 根因：`request_fire()` 原来只按 `_speed > IDLE_SPEED`(0.15) 就整身切 `RunFire_Ing`，
-# 而那条动作的腿是**跑步**的（标称 5.2 m/s）。走 2.4 进去后被压到 0.46 倍 →
-# 「用跑步的前倾姿势慢慢挪」。门槛改成 `WALK_THRESHOLD`(2.8)：
-# 走 / 蹲行走老路（基础层 `Cafe_Walk` / `Move_Ing` + 叠加层）。
+# 第三轮（2026-10-18，用户：「走路攻击时改一下，把走路改成慢速的跑动画，
+# 这样子走打就有枪了」）。
+#
+# 第二轮把门槛抬到 `WALK_THRESHOLD` 之后，走打开火走的是老路
+# （基础层 `Cafe_Walk` + 叠加层 `Normal_Attack_Ing`），代价是**没枪**：
+# `Cafe_Walk` 素材把 `Bip001_Weapon` 的世界缩放写成 ≈0.04（实测），枪直接看不见。
+# 现在门槛降到 `IDLE_SPEED`：只要在移动就整身播 `RunFire_Ing`，慢速时靠
+# `speed_scale` 放慢（2.4 m/s → 0.46 倍），步幅对得上地面。
+#
+# 只走（不开火）**仍然**是 `Cafe_Walk` —— 用户的另一条要求是「正常走路不变」。
 func _test_walking_fire() -> void:
-	print("\n========== 3b. 走着开火：不许用跑步那条整身动作 ==========")
+	print("\n========== 3b. 走着开火：改成慢速跑打（走打也要有枪）==========")
 	await _reset()
 	Input.action_press("move_forward")            # 不按 sprint → 走
 	await _wait_ms(700)
 	_check(_anim.current_clip() == "Cafe_Walk",
-		"走起来了：基础层 %s（速度 %.2f m/s）" % [_anim.current_clip(), _speed()])
+		"只走：仍是 %s（速度 %.2f m/s）—— 正常走路不变"
+		% [_anim.current_clip(), _speed()])
 	var walk_base := await _bone_travel("Bip001 L Foot", WINDOW_MS)
 	_m["foot_walk"] = walk_base
+	_m["walk_weapon_scale"] = _weapon_scale()
 
 	_anim.request_fire()
-	await _wait_ms(150)
-	_check(_anim.current_clip() != _anim.extra_clip,
-		"走打开火**没有**整身切到 %s（基础层 %s）"
+	await _wait_ms(200)
+	_check(_anim.current_clip() == _anim.extra_clip,
+		"走打开火：整身切到 %s（基础层 %s）"
 		% [_anim.extra_clip, _anim.current_clip()])
-	_check(_anim.upper_clip() == "Normal_Attack_Ing",
-		"走打开火走的是叠加层（%s）" % _anim.upper_clip())
+	var sc := _anim.player.speed_scale
+	_m["walk_fire_speed_scale"] = sc
+	_check(sc >= 0.3 and sc <= 0.7,
+		"按实际速度放慢：speed_scale %.2f（走 %.2f m/s / 标称 5.20）" % [sc, _speed()])
+	var ws := _weapon_scale()
+	_m["walk_fire_weapon_scale"] = ws
+	_check(ws > 0.5,
+		"走打时枪骨没被压没：世界缩放 %.2f（只走时是 %.2f）"
+		% [ws, float(_m.get("walk_weapon_scale", 0.0))])
+	var gun := await _gun_vs_crosshair()
+	_m["walk_fire_gun_deg"] = gun
+	_check(gun < 8.0, "走打时枪管离准星 %.1f°（判据 < 8°）" % gun)
 	var walk_fire := await _bone_travel("Bip001 L Foot", WINDOW_MS)
 	_m["foot_walk_fire"] = walk_fire
 	# 走的速度比跑慢，脚往返幅度也小；判据用「不低于走基线的 70%」而不是绝对值
@@ -413,6 +436,40 @@ func _speed() -> float:
 	return Vector2(_p.velocity.x, _p.velocity.z).length()
 
 
+## 武器骨的世界缩放（√ 三轴之积）：素材 `Cafe_Walk` 把它写成 ≈0.04 ⇒ 枪被压没。
+func _weapon_scale() -> float:
+	var sk := _anim.skeleton
+	if sk == null:
+		return 0.0
+	var i := sk.find_bone(AnimDriver.GUN_BONE)
+	if i < 0:
+		return 0.0
+	var b: Basis = (sk.global_transform * sk.get_bone_global_pose(i)).basis
+	return (b.get_scale().length() / sqrt(3.0))
+
+
+## 枪管（muzzle − magazine）离**准星**（相机前向）多少度。角色前向与相机前向实测 0°，
+## 所以相机不在时退回「模型 +Z」（`_probe_aim_cross.gd` 量过这一条）。
+func _gun_vs_crosshair() -> float:
+	var sk := _anim.skeleton
+	if sk == null:
+		return 999.0
+	var mi := sk.find_bone(AnimDriver.GUN_MUZZLE_BONE)
+	var gi := sk.find_bone(AnimDriver.GUN_BREECH_BONE)
+	if mi < 0 or gi < 0:
+		return 999.0
+	var skb := sk.global_transform.basis
+	var d: Vector3 = (skb * sk.get_bone_global_pose(mi).origin
+		- skb * sk.get_bone_global_pose(gi).origin)
+	if d.length_squared() < 1e-10:
+		return 999.0
+	var target: Vector3 = _p.model_root.global_transform.basis.z
+	var cam: Camera3D = root.get_camera_3d() if root != null else null
+	if cam != null:
+		target = -cam.global_transform.basis.z
+	return rad_to_deg((d.normalized()).angle_to(target.normalized()))
+
+
 func _release_all() -> void:
 	for a in ["move_forward", "move_back", "move_left", "move_right",
 			"sprint", "crouch", "jump"]:
@@ -438,8 +495,14 @@ func _print_table() -> void:
 	print("  跑（对照）        %.3f" % float(_m.get("foot_run", 0.0)))
 	print("  跑 + 开火         %.3f   ← 用户要的：还在跑" % float(_m.get("foot_run_fire", 0.0)))
 	print("  走（对照）        %.3f" % float(_m.get("foot_walk", 0.0)))
-	print("  走 + 开火         %.3f   ← 不许用跑步那条整身动作" % float(_m.get("foot_walk_fire", 0.0)))
+	print("  走 + 开火         %.3f   ← 慢速跑打整身动作，腿还得走"
+		% float(_m.get("foot_walk_fire", 0.0)))
 	print("  跑 + 换弹         %.3f" % float(_m.get("foot_reload", 0.0)))
+	print("\n================ 枪管离准星（度，越小越好）================")
+	print("  跑打开火          %.1f   ← 改前 42°" % float(_m.get("run_fire_gun_deg", -1.0)))
+	print("  走打开火          %.1f   ← 改前没枪（武器骨缩放 %.2f）" % [
+		float(_m.get("walk_fire_gun_deg", -1.0)),
+		float(_m.get("walk_fire_weapon_scale", -1.0))])
 	print("\n================ 跑打开火时胸椎的偏离（度，越小越好）================")
 	print("  改后（移动层滤掉躯干）  %.1f" % float(_m.get("trunk_deg", -1.0)))
 	print("  改前（只滤下半身）      %.1f   ← 用户报的「身体倾斜了好多」"

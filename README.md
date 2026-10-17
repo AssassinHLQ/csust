@@ -1383,6 +1383,14 @@ const IDLE_SPEED := 0.15
   1.3/5.2 = 0.25，卡在 0.35 会让脚比地面快 40%；
 - 这也正是 BA 自己的做法：战斗里只有 `Move_Ing`，`Cafe_*` 只在咖啡厅界面出现。
 
+> **⚠️ 这一条后来被推翻了两次，当前状态看这里（2026-10-18）：**
+> 用户看过「走路 = 跑步姿势放慢 0.46 倍」之后要求换回真正的走路动作，于是
+> `_update_locomotion()` 现在是 `Normal_Idle` / `Cafe_Walk`（< `WALK_THRESHOLD` 2.8）/
+> `Move_Ing` 三档，代价是**只走时看不到枪**（`Cafe_Walk` 把武器骨缩到 0，上表）。
+> 但 **走打开火**在第三轮又改回「慢速跑打整身动作」（`RunFire_Ing`，0.46 倍）——
+> 因为走打要有枪。两条要求并不冲突：**只走不变，走打有枪**。
+> 详见 §1.20「第四轮 / 第五轮」与下面「门槛」那条注。
+
 ### 守着它的断言
 
 - `_verify_move_feel.gd` 第 1 节：**「走路 2.40 m/s 播的是 `Move_Ing`、播放速率
@@ -1738,6 +1746,40 @@ godot --headless --path _arisu_learn --import        # 生成 .import
 
 脚本跑完会打印自检：「枪管离正前方最远 X°（判据 < 20°）」。
 
+#### 第五轮：**在游戏里**把枪管掰到准星（2026-10-18）
+
+第四轮之后仍然不对，用户：「跑打攻击时武器还是歪着的，没对齐准星」。
+用 `_probe_aim_cross.gd` 在**游戏里**量（枪管 = `muzzle − magazine`，比的是
+**相机前向** = 准星；角色前向 `model_root.basis.z` 与准星实测 **0°**）：
+
+| 状态 | 基础层 | 枪管偏航 | 枪管俯仰 |
+|---|---|---|---|
+| 只跑 | `Move_Ing` | 30° | −11° |
+| 跑打 | `RunFire_Ing` | **42°** | −20° |
+| 只走 | `Cafe_Walk` | 127°（**枪被缩到 0**，数字没意义） | −29° |
+| 走打（改前） | `Cafe_Walk` + 叠加层 | 31°（**枪被缩到 0.04 = 看不见**） | −29° |
+
+Blender 那边量的是「离骨架 `+X` 5.1°」，在游戏里却是 42° —— 因为
+**骨架 `+X` 本身就不是角色的视觉前向**（实测它离准星 35~41°，每个动作还不一样：
+根骨 `Bip001` 是**世界空间动画**，它把骨架节点那 180° 反过来写了一遍，武器骨是
+根级骨、不跟着这条链走）。所以**只在 Blender 里对准是不够的，必须在游戏里量、在
+游戏里掰**。
+
+修法：`AnimDriver._aim_gun()` —— 每帧把 `Bip001_Weapon` **绕它自己的原点（握把）**
+转一个最小旋转，让枪管指向相机前向；`process_priority = 100`（比两个叠加层还大，
+等动画写完再掰），权重用 `gun_aim_speed = 14`（≈0.07 s）平滑。
+**只在整身跑打那条动作在播时掰**（跑打 / 走打）：站定开火是叠加层，素材那套姿势
+把枪抱在胸前 70~98°，硬掰会让两只手整个离开枪，所以不动它。
+
+改后（`_verify_attack_move.gd` §3 / §3b，全 PASS）：
+
+| | 枪管离准星 |
+|---|---|
+| 跑打 | **0.0°**（改前 42°） |
+| 走打 | **0.0°**（改前没枪） |
+
+出图：`_arisu_captures/_aimcross/`（四种状态的用户视角 + 三个侧面机位）。
+
 游戏侧：`player.tscn` 的 `AnimDriver` 填 `extra_glb = "res://models/RunFire.glb"`，
 `AnimDriver._ready()` 用 `AnimExtra.merge_glb()` 把这条动作搬进角色自己的
 `AnimationPlayer`（**轨道路径前缀要改**：`Bip001/Skeleton3D` →
@@ -1758,14 +1800,19 @@ godot --headless --path _arisu_learn --import        # 生成 .import
 
 对照图：`_arisu_captures/_runfireclip/`（`run_*` 只跑 / `clip_*` 单条跑打 / `stand_*` 站桩）。
 
-> ⚠️ **这条整身动作只给「跑」用。** 2026-10-18 用户报「跑打修好了，但是走打又出问题了」：
-> 第一版门槛写成 `_speed > IDLE_SPEED`(0.15)，于是走（2.4）和蹲行（1.3）也整身切到
-> `RunFire_Ing` —— 那条动作的腿是跑步的（标称 5.2 m/s），被压到 0.46 倍之后就是
-> 「用跑步的前倾姿势慢慢挪」。门槛改成 **`WALK_THRESHOLD`(2.8)**，走 / 蹲行走老路
-> （基础层 `Cafe_Walk` / `Move_Ing` + 叠加层）；播着的时候速度掉回 2.8 以下也会
-> `_return_from_runfire()` 交回普通移动。判据：`_verify_attack_move.gd` §3b
-> （走打开火时基础层仍是 `Cafe_Walk`、叠加层在演 `Normal_Attack_Ing`、脚还在走 0.298 m）。
-> 复现探针：`_probe_walkfire.gd`（站 / 走 / 跑三档各拍一张并打实际 clip）。
+> ⚠️ **门槛在第三轮又降回 `IDLE_SPEED`**（2026-10-18，用户：「走路攻击时改一下，
+> 把走路改成慢速的跑动画，这样子走打就有枪了」）。第二轮抬到 `WALK_THRESHOLD`(2.8)
+> 之后，走打走的是老路（`Cafe_Walk` + 叠加层），代价是**没枪** —— `Cafe_Walk` 素材把
+> `Bip001_Weapon` 的世界缩放写成 ≈0.04（`_verify_attack_move.gd` 量的），枪直接看不见。
+> 用户在这两条之间选了「走打要有枪」。现在只要 `_speed ≥ IDLE_SPEED`（0.15）就整身播
+> `RunFire_Ing`，慢速靠 `speed_scale` 放慢（走 2.4 m/s → **0.46 倍**，步幅对得上地面，
+> 不走样成「滑步」）；速度掉回 0.15 以下才 `_return_from_runfire()`。
+> **只走（不开火）仍然是 `Cafe_Walk`** —— 用户同一句里说了「正常走路不变」。
+> 判据（`_verify_attack_move.gd` §3b，全 PASS）：
+> 只走仍是 `Cafe_Walk` / 走打整身切 `RunFire_Ing` / `speed_scale` 0.46 /
+> 枪骨世界缩放 1.00（只走时 0.04）/ 枪管离准星 0.0° / 脚还在走 0.336 m（基线 0.206）。
+> 复现探针：`_probe_walkfire.gd`（站 / 走 / 跑三档各拍一张并打实际 clip）、
+> `_probe_aim_cross.gd`（四种状态量枪管与准星的夹角 + 出图）。
 
 ### ⚠️ 量这个必须**冻结相位**
 
@@ -2034,6 +2081,7 @@ _arisu_learn/
 │  ├─ _probe_splat_perf.gd   [工具] **可信的**帧率表（关垂直同步 + 预热 + 交错重复 3 轮），§6.6/§6.11
 │  ├─ _probe_splat_backend.gd [工具] Raster vs Compute 后端同视角出图 + 深度剔除偏置扫描，§6.11
 │  ├─ _probe_startup.gd     [工具] 开局四症状（站桩 / 泼溅没出来 / 配音太早 / 地板中间空），§9.5 坑 7-8
+│  ├─ _probe_aim_cross.gd   [工具] 四种状态量「枪管 vs 准星」+ 出图（跑打 / 走打 / 只跑 / 只走），§1.20
 │  ├─ splat_compositor.gd    autoload：给当前相机自动挂 CompositorEffect（Compute 后端必需），§6.11
 │  └─ _probe_*.gd           [工具] 一次性探针（口型/枪口/时间线/泼溅渲染/FPS）
 ├─ tools/
