@@ -1648,6 +1648,9 @@ UpperBodyMove  再滤 spine/chest  → **跑打开火**用：躯干保持 Move_I
 | 骨盆 / 腿 / 裙摆 / 头发 / 眼 / **脊椎 / 颈 / 头** | `Move_Ing` | `f % 16` |
 | 锁骨 / 上臂 / 前臂 / 手 / 手指 / 领带 / **整把枪** | `Normal_Attack_Ing` | `f` |
 
+> ⚠️ 上面第二行是**第一版**的拼法。2026-10-18 之后默认改成**也取 `Move_Ing`**
+> （`--arms=run`），因为素材那套开火姿势的枪是斜的 —— 见下面「第四轮」。
+
 `Move_Ing` 16 帧、`Normal_Attack_Ing` 64 帧，**64 = 4 × 16**，所以 0~64 帧的新动作
 正好是「四个跑步周期里开完一枪」，长度 2.667 s。
 
@@ -1667,6 +1670,34 @@ UpperBodyMove  再滤 spine/chest  → **跑打开火**用：躯干保持 Move_I
 所以并进动作库之后要补同一批 delta（`PoseFix.fix_extra_run_clip()`，5 根骨 380 帧）——
 不补的话跑打开火时胸椎离「只跑」的姿势集 **15.6°**，补完 **1.7°**。
 
+#### 第四轮：枪**不能朝前**——因为素材里的「开火」姿势本来就不朝前
+
+用户 2026-10-18：「跑打时怎枪不是朝前的」。
+
+先把「枪管朝向」定义成两个点的连线（`bone_Railgun_Muzzle_01` − `bone_magazine`），
+再和**角色前方**比。角色前方在骨架空间是 `+X`（`build_anim.py` 里 `FWD = (1,0,0)`）。
+用 `..\_blender_arisu\probe_gun_aim.py` 逐帧打表：
+
+| 动作 | 枪管离正前方 |
+|---|---|
+| `Move_Ing`（跑） | **3.0° ~ 13°**，俯仰 ≈ 0° |
+| `Normal_Attack_Ing`（开火） | **67° ~ 98°** —— 斜抱在胸前，枪口指向她的左前方 |
+| `Normal_Idle`（待机） | 85° ~ 87°（就是横抱在身前） |
+
+也就是说：**拼错不是原因，素材里根本没有「举枪朝前」的姿势**。前一轮按「手臂取开火」
+拼出来的跑打，自然把那个斜抱姿势一起搬过去了。
+
+修法：`seed_runfire.py` 加 `--arms=run`，**手臂 / 手 / 枪全部取 `Move_Ing`**（默认为此）。
+量到的结果（`_probe_gun_clip_angle.gd`，同一个 `AnimationPlayer` 里逐帧 seek）：
+
+| | 枪管离正前方 |
+|---|---|
+| 跑打 `RunFire_Ing` | **3.5° ~ 10.3°** ✓ |
+| 对照：开火动作本身 | 70° ~ 79°（素材如此） |
+
+代价说清楚：这条动作的**上半身就是跑步姿势**（端枪跑），没有「扣扳机的开火动作」——
+因为素材里没有一套朝前开枪的手臂。想要更帅的话，得在 Blender 里手 K 一段。
+
 管线（glb 不进 git，`.gitignore` 里本来就有 `/models/*.glb`）：
 
 ```
@@ -1674,6 +1705,19 @@ blender -b --factory-startup --python _blender_arisu/seed_runfire.py -- --export
     → models/RunFire.glb      只有骨架 + 一条动作（0 网格，1 MB）
 godot --headless --path _arisu_learn --import        # 生成 .import
 ```
+
+参数（都放在 `--` 之后）：
+
+| 参数 | 作用 |
+|---|---|
+| `--export` | 导出 `models/RunFire.glb` |
+| `--arms=attack` | 手臂/枪改回「取开火动作」（= 斜抱枪，仅作 A/B） |
+| `--arms=run`（默认） | 手臂/枪取跑步动作（**枪朝前**） |
+| `--trunk=attack` | 脊椎/颈/头也取开火（A/B） |
+| `--aim=free` | 不锁锁骨世界朝向 |
+| `--lock=head` | 头也锁世界朝向 |
+
+脚本跑完会打印自检：「枪管离正前方最远 X°（判据 < 20°）」。
 
 游戏侧：`player.tscn` 的 `AnimDriver` 填 `extra_glb = "res://models/RunFire.glb"`，
 `AnimDriver._ready()` 用 `AnimExtra.merge_glb()` 把这条动作搬进角色自己的

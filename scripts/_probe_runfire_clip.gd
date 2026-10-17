@@ -80,12 +80,19 @@ func _run() -> void:
 	for i in 4:
 		await _shot(cam, out.path_join("run_%d.png" % i), "Move_Ing", mv_len * 0.25 * i, "只跑")
 
-	# ---- 单条跑打动作 ----
-	# ⚠️ 采样点**不能**取 1/4 等分：这条动作是 4 个跑步周期拼起来的，
+	# ---- 单条跑打动作 ----	# ⚠️ 采样点**不能**取 1/4 等分：这条动作是 4 个跑步周期拼起来的，
 	#    每 0.667 s 一个循环，按 1/4 取正好每张都落在同一相位（量出来脚一动不动，
 	#    第一版就是这么误判的）。改成 4 个互不重合的相位。
 	for f in [0, 5, 10, 15]:
 		await _shot(cam, out.path_join("clip_%02d.png" % f), CLIP, float(f) / 24.0, "跑打(单条)")
+
+	# ---- 四向环拍：从四个方向看枪口到底朝哪（不猜前向，四张一起看）----
+	for spec in [["xpos", Vector3(1, 0, 0)], ["zpos", Vector3(0, 0, 1)],
+			["xneg", Vector3(-1, 0, 0)], ["zneg", Vector3(0, 0, -1)]]:
+		var d: Vector3 = spec[1]
+		cam.global_position = center + d * dist + Vector3.UP * height * 0.35
+		cam.look_at(center + Vector3.UP * height * 0.08, Vector3.UP)
+		await _shot(cam, out.path_join("dir_%s.png" % spec[0]), CLIP, 5.0 / 24.0, "四向")
 
 	# ---- 站桩开火（对照）----
 	var at_len: float = _ap.get_animation("Normal_Attack_Ing").length
