@@ -107,11 +107,22 @@ func facing() -> Vector3:
 # --- 建模型 ---
 
 func _build_model() -> void:
-	var packed: PackedScene = load(model_path)
-	if packed == null:
+	var res := load(model_path)
+	if res == null:
 		push_error("[Boss] 找不到模型：%s" % model_path)
 		return
-	model = packed.instantiate()
+	# ⚠️ **FBX 导入成 `PackedScene`，OBJ 导入成 `Mesh`** —— 两种都要接。
+	#    （倭瓜优香就是 .obj：`wavefront_obj` 导入器的 `type="Mesh"`，
+	#    直接 `as PackedScene` 会拿到 null，模型整个不出现。）
+	if res is PackedScene:
+		model = (res as PackedScene).instantiate() as Node3D
+	else:
+		model = Node3D.new()
+		model.name = "ObjModel"
+		var mi := MeshInstance3D.new()
+		mi.name = "%s_mesh" % model_path.get_file().get_basename()
+		mi.mesh = res as Mesh
+		model.add_child(mi)
 	add_child(model)
 
 	# 1. 可选：隐藏挂件（**默认不隐藏**——它们是合理的，见文件头注释）

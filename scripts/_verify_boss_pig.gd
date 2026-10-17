@@ -159,8 +159,10 @@ func _run() -> void:
 	#    误判成了游戏的 bug。按名字取既明确又顺便验了命名约定。
 	var bar0 := hud.get_node_or_null("BossBar0") as ProgressBar
 	var bar1 := hud.get_node_or_null("BossBar1") as ProgressBar
+	var bar2 := hud.get_node_or_null("BossBar2") as ProgressBar
 	var n0 := hud.get_node_or_null("BossName0") as Label
 	var n1 := hud.get_node_or_null("BossName1") as Label
+	var n2 := hud.get_node_or_null("BossName2") as Label
 	var bar_count := 0
 	for n in _all(hud, "ProgressBar"):
 		if (n as ProgressBar).name.begins_with("BossBar"):
@@ -168,8 +170,16 @@ func _run() -> void:
 	print("  BossBar 数量 = %d" % bar_count)
 	print("  第 1 行「%s」→ %.2f" % [n0.text if n0 else "（无）", bar0.value if bar0 else -1.0])
 	print("  第 2 行「%s」→ %.2f" % [n1.text if n1 else "（无）", bar1.value if bar1 else -1.0])
-	_check(bar_count == 2 and bar0 != null and bar1 != null,
-		"HUD 上正好有 BossBar0 / BossBar1 两条血条")
+	print("  第 3 行「%s」→ %.2f" % [n2.text if n2 else "（无）", bar2.value if bar2 else -1.0])
+	# ⚠️ 第三位 Boss（倭瓜优香）加进来之后就是三条了。这里按「数量 = 场上 Boss 数」判，
+	#    不再写死 2 —— 以后再加一位只要改 `_bosses` 就自动对得上。
+	var want := 0
+	for ch in game.get_children():
+		if ch is Boss:
+			want += 1
+	_check(bar_count == want and bar0 != null and n2 != null,
+		"HUD 上正好有 %d 条血条（BossBar0/1/2），和场上 Boss 数一致" % want)
+	_check(n2 != null and n2.text == "倭瓜优香", "第 3 行是倭瓜优香")
 	_check(n0 != null and n0.text == "霸王龙优香", "第 1 行是霸王龙优香（名字行只写名字，不带血量数字）")
 	_check(n1 != null and n1.text == "飞猪优香", "第 2 行是飞猪优香")
 	_check(absf(bar1.value - 1.0) < 0.001,

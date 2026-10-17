@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://scenes/companion.tscn" id="7_companion"]
 [ext_resource type="Script" uid="uid://lt6sqg4ubp6x" path="res://scripts/trex_boss.gd" id="8_trex"]
 [ext_resource type="Script" uid="uid://dgrtxafrb2nat" path="res://scripts/pig_boss.gd" id="9_pig"]
+[ext_resource type="Script" uid="uid://dcs7o6hf6flnc" path="res://scripts/squash_boss.gd" id="14_squash"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
 [ext_resource type="PackedScene" path="res://scenes/mesh_hut.tscn" id="12_hut"]
@@ -183,6 +184,21 @@ texture_map = {
 collision_factors = Vector3(0.85, 0.8, 0.75)
 height = 2.6
 max_health = 1800.0
+
+[node name="BossSquash" type="StaticBody3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 14)
+script = ExtResource("14_squash")
+display_name = "倭瓜优香"
+model_path = "res://models/boss_squash/倭瓜优香.obj"
+texture_map = {
+"Yuuka_Original_Body.001": "res://models/boss_squash/textures/Yuuka_Original_Body.jpeg",
+"Yuuka_Original_Hair.001": "res://models/boss_squash/textures/Yuuka_Original_Hair.jpeg",
+"Yuuka_Original_Halo.001": "res://models/boss_squash/textures/Yuuka_Original_Halo.jpeg",
+"材质": "res://models/boss_squash/textures/材质 Base Color.png"
+}
+collision_factors = Vector3(0.9, 0.95, 0.9)
+height = 3.0
+max_health = 2200.0
 
 [node name="Pillar1" type="StaticBody3D" parent="." unique_id=260400481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.4, -10)

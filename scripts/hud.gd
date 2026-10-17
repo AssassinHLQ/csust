@@ -89,8 +89,10 @@ const BOSS_TOP := 30.0
 
 # --- 左上角泼溅加载状态行 ---
 ## **一份场地一行**，贴在血量面板下沿（不挡住血量）。
+## ⚠️ 现在是**三位 Boss**（霸王龙 / 飞猪 / 倭瓜），Boss 条组占到 y ≈ 149
+##    （30 + 2×46 + 条高 27），原来的 128 会跟第三行叠在一起 —— 所以整体下移到 162。
 const SPLAT_ROW_HEIGHT := 20.0
-const SPLAT_ROW_TOP := 128.0
+const SPLAT_ROW_TOP := 162.0
 
 var _player: Player
 var _weapon: Weapon
