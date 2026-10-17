@@ -63,6 +63,7 @@ func _run() -> void:
 	await _test_structure(game)
 	await _test_standing_fire()
 	await _test_running_fire()
+	await _test_walking_fire()
 	await _test_running_reload()
 	await _test_recover()
 	await _test_weapon_path()
@@ -191,6 +192,40 @@ func _test_running_fire() -> void:
 	_check(foot_run_fire >= FOOT_MOVING,
 		"**跑动开火时脚还在跑**：%.3f m（≥ %.2f）—— 用户要的另一半"
 		% [foot_run_fire, FOOT_MOVING])
+	_release_all()
+	await _wait(2)
+
+
+# --- 3b. 走着开火：不许用「跑步」那条整身动作 ---------------------------------
+#
+# 用户 2026-10-18：「跑打修好了，但是走打又出问题了」。
+# 根因：`request_fire()` 原来只按 `_speed > IDLE_SPEED`(0.15) 就整身切 `RunFire_Ing`，
+# 而那条动作的腿是**跑步**的（标称 5.2 m/s）。走 2.4 进去后被压到 0.46 倍 →
+# 「用跑步的前倾姿势慢慢挪」。门槛改成 `WALK_THRESHOLD`(2.8)：
+# 走 / 蹲行走老路（基础层 `Cafe_Walk` / `Move_Ing` + 叠加层）。
+func _test_walking_fire() -> void:
+	print("\n========== 3b. 走着开火：不许用跑步那条整身动作 ==========")
+	await _reset()
+	Input.action_press("move_forward")            # 不按 sprint → 走
+	await _wait_ms(700)
+	_check(_anim.current_clip() == "Cafe_Walk",
+		"走起来了：基础层 %s（速度 %.2f m/s）" % [_anim.current_clip(), _speed()])
+	var walk_base := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_m["foot_walk"] = walk_base
+
+	_anim.request_fire()
+	await _wait_ms(150)
+	_check(_anim.current_clip() != _anim.extra_clip,
+		"走打开火**没有**整身切到 %s（基础层 %s）"
+		% [_anim.extra_clip, _anim.current_clip()])
+	_check(_anim.upper_clip() == "Normal_Attack_Ing",
+		"走打开火走的是叠加层（%s）" % _anim.upper_clip())
+	var walk_fire := await _bone_travel("Bip001 L Foot", WINDOW_MS)
+	_m["foot_walk_fire"] = walk_fire
+	# 走的速度比跑慢，脚往返幅度也小；判据用「不低于走基线的 70%」而不是绝对值
+	_check(walk_fire >= walk_base * 0.7,
+		"走打开火时脚还在走：%.3f m（走基线 %.3f 的 70%% = %.3f）"
+		% [walk_fire, walk_base, walk_base * 0.7])
 	_release_all()
 	await _wait(2)
 
@@ -402,6 +437,8 @@ func _print_table() -> void:
 	print("  站定 + 开火       %.3f   ← 用户要的：不动" % float(_m.get("foot_fire_still", 0.0)))
 	print("  跑（对照）        %.3f" % float(_m.get("foot_run", 0.0)))
 	print("  跑 + 开火         %.3f   ← 用户要的：还在跑" % float(_m.get("foot_run_fire", 0.0)))
+	print("  走（对照）        %.3f" % float(_m.get("foot_walk", 0.0)))
+	print("  走 + 开火         %.3f   ← 不许用跑步那条整身动作" % float(_m.get("foot_walk_fire", 0.0)))
 	print("  跑 + 换弹         %.3f" % float(_m.get("foot_reload", 0.0)))
 	print("\n================ 跑打开火时胸椎的偏离（度，越小越好）================")
 	print("  改后（移动层滤掉躯干）  %.1f" % float(_m.get("trunk_deg", -1.0)))

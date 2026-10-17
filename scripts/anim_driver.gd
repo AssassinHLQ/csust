@@ -439,8 +439,10 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	# 整身跑打动作在播：腿是它自带的，只跟着速度调倍速，别让 `_update_locomotion()`
 	# 把动作切回 `Move_Ing`（那样这一枪就只剩「站着开火」了）。
 	if _runfire_playing:
-		if _speed <= IDLE_SPEED:
-			_return_from_runfire()   # 停下来了，交回普通移动
+		# 速度掉回走路 / 站住 → 这条「跑步姿势」的整身动作就不该继续了，交回普通移动。
+		# （门槛和 `request_fire()` 那边同一根线：`WALK_THRESHOLD`）
+		if _speed < WALK_THRESHOLD:
+			_return_from_runfire()   # 走起来 / 停下来了，交回普通移动
 		else:
 			player.speed_scale = clampf(_speed / CYCLE_SPEED.get("Move_Ing", 5.2),
 				SPEED_SCALE_MIN, SPEED_SCALE_MAX)
@@ -464,8 +466,12 @@ func is_aiming() -> bool:
 
 
 func request_fire() -> void:
-	# 跑着开火 + 有「单条跑打动作」→ 整身播那一条（腿是它自带的，不再叠两层）
-	if state == State.LOCOMOTION and has_runfire() and _speed > IDLE_SPEED:
+	# **跑**着开火 + 有「单条跑打动作」→ 整身播那一条（腿是它自带的，不再叠两层）。
+	# ⚠️ 门槛用 `WALK_THRESHOLD` 而不是 `IDLE_SPEED`：那条动作的腿是**跑步**的
+	#    （标称 5.2 m/s）。走路 2.4 也进去的话会被压到 0.46 倍，看起来就是
+	#    「用跑步的前倾姿势慢慢挪」—— 用户 2026-10-18 报的「走打又出问题了」。
+	#    走 / 蹲行走老路：基础层 `Cafe_Walk` + 叠加层。
+	if state == State.LOCOMOTION and has_runfire() and _speed >= WALK_THRESHOLD:
 		_start_runfire()
 		return
 	_play_once("Normal_Attack_Ing", State.FIRE)

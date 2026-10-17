@@ -1695,6 +1695,15 @@ godot --headless --path _arisu_learn --import        # 生成 .import
 
 对照图：`_arisu_captures/_runfireclip/`（`run_*` 只跑 / `clip_*` 单条跑打 / `stand_*` 站桩）。
 
+> ⚠️ **这条整身动作只给「跑」用。** 2026-10-18 用户报「跑打修好了，但是走打又出问题了」：
+> 第一版门槛写成 `_speed > IDLE_SPEED`(0.15)，于是走（2.4）和蹲行（1.3）也整身切到
+> `RunFire_Ing` —— 那条动作的腿是跑步的（标称 5.2 m/s），被压到 0.46 倍之后就是
+> 「用跑步的前倾姿势慢慢挪」。门槛改成 **`WALK_THRESHOLD`(2.8)**，走 / 蹲行走老路
+> （基础层 `Cafe_Walk` / `Move_Ing` + 叠加层）；播着的时候速度掉回 2.8 以下也会
+> `_return_from_runfire()` 交回普通移动。判据：`_verify_attack_move.gd` §3b
+> （走打开火时基础层仍是 `Cafe_Walk`、叠加层在演 `Normal_Attack_Ing`、脚还在走 0.298 m）。
+> 复现探针：`_probe_walkfire.gd`（站 / 走 / 跑三档各拍一张并打实际 clip）。
+
 ### ⚠️ 量这个必须**冻结相位**
 
 第一版探针是「真跑起来再抓拍」，四档的**跑步相位各不相同**（`Move_Ing` 一个循环
