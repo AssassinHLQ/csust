@@ -39,7 +39,7 @@ const RUNUP_MIN := 0.9
 const RIG := Vector3(200, 0, 0)
 ## 实测系数：`实测射程 / 解析射程`（v1 二分法量的 1.054）。第 3 节会重新量一遍。
 const K_REF := 1.054
-const MARGIN_MIN := 0.40
+const MARGIN_MIN := 0.80
 
 var _fail := 0
 var _pass := 0
@@ -391,8 +391,9 @@ func _test_calibration() -> void:
 	_check(bad.is_empty(), "按**实测**能力核对每一跳：跳 %d 个、跳距合计 %.1f m，最紧的是 %s，"
 		% [jumps, gap_sum, worst_name] + "余量 %.2f m（要求 ≥ %.2f）%s"
 		% [worst, MARGIN_MIN, "" if bad.is_empty() else str(bad)])
-	_check(tight >= int(ceil(jumps / 3.0)),
-		"紧张区间（余量 0.40~0.90）：**%d/%d = %.0f%%** ≥ 1/3（v2 的难度指标）"
+	# 用户反馈「太难」之后闸门反过来了：紧张区（0.80~0.90）占比必须 **≤ 1/4**
+	_check(tight * 4 <= jumps,
+		"紧张区间（余量 0.80~0.90）：%d/%d = %.0f%% ≤ 1/4（降难度后的闸门）"
 		% [tight, jumps, 100.0 * tight / maxf(jumps, 1)])
 
 

@@ -22,7 +22,7 @@ extends SceneTree
 
 ## 实测系数：v1 二分法量的「实测射程 / 解析射程」（平地解析 4.83 → 实测 5.09）
 const K := 1.054
-const MARGIN_MIN := 0.40
+const MARGIN_MIN := 0.80
 ## 解析落点距板边的下限。对直跳来说「解析落点入板深度」恒等于
 ## `解析射程 − 必须跨`，真正要守的是**实测余量**；这条只兜「别落在板沿上」。
 const EDGE_MIN := 0.12
@@ -149,8 +149,11 @@ func _run() -> void:
 	rows.sort_custom(func(x, y): return float(x["margin"]) < float(y["margin"]))
 	print("\n  ★ 跳 %d 个 + 走过去 %d 处 + 机关跳 %d 处（机关见下）  跳距合计 %.1f m"
 		% [jumps, walks, specials, gap_sum])
-	print("  ★ 紧张区间（实测余量 0.40~0.90）：**%d/%d = %.0f%%**（要求 ≥ 1/3）"
+	print("  ★ 紧张区间（实测余量 0.80~0.90）：%d/%d = %.0f%%（要求 **≤ 1/4**）"
 		% [tight, jumps, 100.0 * tight / maxf(jumps, 1)])
+	if tight * 4 > jumps:
+		print("  !! 紧张区占比超 1/4：用户反馈「太难」，这一条是闸门")
+		_fail += 1
 	if not rows.is_empty():
 		print("  ★ 余量范围 %.2f ~ %.2f m（要求全部 ≥ %.2f）" % [
 			float(rows[0]["margin"]), float(rows[rows.size() - 1]["margin"]), MARGIN_MIN])

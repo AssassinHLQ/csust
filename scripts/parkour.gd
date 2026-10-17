@@ -36,6 +36,11 @@ const EDGE_MARGIN := 0.30
 
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
+## **进度存档**：最近踩过的站号（+ 一份最好成绩）。
+##
+## 用户反馈「存档不了」—— 原来进度只活在内存里，一退出就没了。现在每推进一站就落盘，
+## 启动时读回来，人一回到主平台就把他送回那一站接着跑（`_resume_pending`）。
+const RUN_PATH := "user://parkour_run.cfg"
 
 ## 按顺序排的落脚点节点路径（相对本节点）。**顺序就是路线顺序**。
 @export var route: Array = []
@@ -81,6 +86,8 @@ var _player: Player
 var _hud_timer: Label
 var _hud_seg: Label
 var _hud_cache := ""
+## 读档续跑：启动时若存档停在第 N 站（N>0），人一回到主平台就送他过去
+var _resume_pending := false
 
 
 func _ready() -> void:
@@ -88,6 +95,7 @@ func _ready() -> void:
 	_hud_timer = get_node_or_null("ParkourHUD/Timer") as Label
 	_hud_seg = get_node_or_null("ParkourHUD/Seg") as Label
 	_load_best()
+	_load_run()
 	_update_hud(true)
 
 
@@ -165,11 +173,14 @@ func segment_start(seg: int) -> int:
 	return int(segments[clampi(seg, 0, segments.size() - 1)])
 
 
-## 摔下去该回哪一站 —— **本段起点**（这就是「惩罚」的全部）
+## 摔下去该回哪一站 —— **最近踩过的那一站**（= `checkpoint`）。
+##
+## ⚠️ 这里曾经是「回本段起点」，用户玩过之后反馈**太难**（摔一次要重跑整段，最长 45 m），
+##    所以改回「回最近踩过的落脚点」。检查点仍然只在段交界推进（HUD 的 SEG 计数照旧），
+##    但复活点就是你最后踩住的那一站。段起点（`segments`）继续当**视觉地标**：
+##    那儿有 4 m 休息台 + 5 m 信号桅杆，只是不再当复活点。
 func respawn_station() -> int:
-	if checkpoint < 0:
-		return 0
-	return segment_start(segment_of(checkpoint))
+	return maxi(checkpoint, 0)
 
 
 ## 站在第 i 站的台面上时，人应该被放在哪儿（台面正中、抬高 5 cm 免得嵌进去）
@@ -229,6 +240,29 @@ func _stop_timer() -> void:
 		"（最好 %.2f s）" % _best])
 
 
+## 读进度存档。站号照旧校验一遍（免得改了路线之后旧存档把人送到空里）
+func _load_run() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(RUN_PATH) != OK:
+		return
+	var idx := int(cf.get_value("parkour", "checkpoint", -1))
+	if idx >= 0 and idx < node_count():
+		checkpoint = idx
+		_resume_pending = checkpoint > 0
+	if _best <= 0.0:
+		_best = maxf(0.0, float(cf.get_value("parkour", "best", 0.0)))
+	print("[Parkour] 读档：最近踩过第 %d 站 %s（最好 %s）"
+		% [checkpoint + 1, label_at(checkpoint), "—" if _best <= 0.0 else "%.2f s" % _best])
+
+
+## 落盘：进一站就写一次（用户要的「能存档」）
+func _save_run() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("parkour", "checkpoint", checkpoint)
+	cf.set_value("parkour", "best", _best)
+	cf.save(RUN_PATH)
+
+
 func _load_best() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(BEST_PATH) == OK:
@@ -269,9 +303,18 @@ func _physics_process(_delta: float) -> void:
 	var p := _player.global_position
 	var here := _station_at(p)
 
+	# 读档续跑（用户要的「从最近踩过的那一站继续，而不是从第 0 站重来」）
+	if _resume_pending and checkpoint > 0 and _on_platform(p):
+		_resume_pending = false
+		_player.global_position = respawn_point(checkpoint)
+		_player.velocity = Vector3.ZERO
+		print("[Parkour] 读档续跑：送回第 %d 站 %s" % [checkpoint + 1, label_at(checkpoint)])
+		return
+
 	if here > checkpoint:
 		checkpoint = here
 		checkpoint_reached.emit(here, label_at(here))
+		_save_run()          # 进一站就落盘（存档）
 		if timer_running and here == node_count() - 1:
 			_stop_timer()
 		print("[Parkour] 第 %d/%d 站：%s（第 %d 段，y = %.2f）"
@@ -281,15 +324,24 @@ func _physics_process(_delta: float) -> void:
 	if checkpoint >= 0 and not timer_running and not finished and here != 0:
 		_start_timer()
 
-	if checkpoint >= 0 and p.y < FALL_Y:
+	# 摔下去就救 —— **不再要求 `checkpoint >= 0`**：还没踩到第一站的人从跑道或第一跳掉下去，
+	# 旧写法会漏掉他，于是他一掉到 −60 就被 game.gd 的全局保险送回**初始出生点**
+	# （用户报的「总是被拉回初始出生点」就是这个）。现在只要「不在主平台上」就归跑酷管。
+	if p.y < FALL_Y and not _on_platform(p):
 		_rescue()
 		return
 
-	# 回到主平台（且脚下不是路线上的落脚点）→ 收工：检查点清空 + 计时归零
-	if here < 0 and p.y > -0.5 and absf(p.x) <= 20.0 and absf(p.z) <= 20.0 \
-			and (checkpoint >= 0 or timer_running or finished):
-		print("[Parkour] 回到主平台：检查点清空、计时归零（上一站 %s）" % label_at(checkpoint))
-		reset_run()
+	# 回到主平台（且脚下不是路线上的落脚点）→ **只停表，不清检查点**：
+	# 用户回平台拿个东西、或者只是摔回来，进度不该丢（「存档不了」的另一半）。
+	# 只有**通关之后**再回平台才把进度清空（下一次从跑道重新开始）。
+	if here < 0 and _on_platform(p) and (timer_running or finished):
+		if finished:
+			print("[Parkour] 通关后回到主平台：进度清空，下次从跑道重来")
+			reset_run()
+		else:
+			print("[Parkour] 回到主平台：停表、**保留进度**（最近踩过第 %d 站 %s）"
+				% [checkpoint + 1, label_at(checkpoint)])
+			_disarm()
 
 
 func _process(_delta: float) -> void:
@@ -319,6 +371,21 @@ func _station_at(p: Vector3) -> int:
 	return best
 
 
+## 人是不是站在主平台上。跑酷自己的兜底（`FALL_Y`）和 game.gd 的全局保险（−60 m）
+## 靠这一条分工：在平台上摔下去归 game.gd 送回出生点，出了平台就归跑酷救回落脚点。
+func _on_platform(p: Vector3) -> bool:
+	return p.y > -0.5 and p.y < 3.0 and absf(p.x) <= 20.0 and absf(p.z) <= 20.0
+
+
+## 收工但**保留进度**：只停表、不清检查点（玩家回平台拿东西不该丢进度）
+func _disarm() -> void:
+	timer_running = false
+	finished = false
+	_elapsed = 0.0
+	_update_hud(true)
+
+
+## 第 i 站那台「回平台」传送台 —— 见 `_on_return_pad_entered`（岛上是唯一的回头路）
 func _rescue() -> void:
 	rescues += 1
 	var back := respawn_station()
@@ -326,8 +393,8 @@ func _rescue() -> void:
 	_player.velocity = Vector3.ZERO
 	rescued.emit(back, label_at(back))
 	Sfx.play("ui_open")
-	print("[Parkour] 第 %d 次摔落 → 回**本段起点**（第 %d 段）第 %d 站 %s"
-		% [rescues, segment_of(back) + 1, back + 1, label_at(back)])
+	print("[Parkour] 第 %d 次摔落 → 回**最近踩过的落脚点**第 %d 站 %s（第 %d 段）"
+		% [rescues, back + 1, label_at(back), segment_of(back) + 1])
 
 
 ## 岛上的传送台：踏上去回主平台。
