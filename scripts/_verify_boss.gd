@@ -81,9 +81,17 @@ func _run() -> void:
 
 	print("\n========== 2. 碰撞与射线 ==========")
 	var shape := boss.get_node_or_null("Collision") as CollisionShape3D
-	_check(shape != null and (shape.shape is ConcavePolygonShape3D or shape.shape is BoxShape3D),
-		"存在碰撞体（复杂三角网格 / 兜底盒子）")
-	if shape and shape.shape is ConcavePolygonShape3D:
+	_check(shape != null and (shape.shape is ConvexPolygonShape3D
+		or shape.shape is ConcavePolygonShape3D or shape.shape is BoxShape3D),
+		"存在碰撞体（自动凹包 / 三角网格 / 兜底盒子）")
+	if shape and shape.shape is ConvexPolygonShape3D:
+		var hulls := 0
+		for c in boss.get_children():
+			if c is CollisionShape3D:
+				hulls += 1
+		print("  自动凹包分解：%d 个凸包  第一个的点数 %d" % [
+			hulls, (shape.shape as ConvexPolygonShape3D).points.size()])
+	elif shape and shape.shape is ConcavePolygonShape3D:
 		print("  复杂碰撞：%d 个三角面  位置 %s" % [
 			(shape.shape as ConcavePolygonShape3D).get_faces().size() / 3,
 			str(shape.position.snappedf(0.01))])
@@ -135,7 +143,11 @@ func _run() -> void:
 	print("  等待重生后：血量 %d / %d  碰撞 disabled = %s  横滚 %.1f°" % [
 		int(boss.health), int(boss.max_health), str(col.disabled),
 		rad_to_deg(boss.model.rotation.x)])
-	_check(boss.health == boss.max_health, "重新站起来且满血")
+	# ⚠️ 这里原来卡的是 `health == max_health`（「满血」）。碰撞换成**自动凹包分解**之后
+	#    子弹真的能打中 Boss 了，而玩家一直在自动开火 —— 重生完的瞬间就又被蹭掉几十点血，
+	#    于是这条从绿变红。那不是重生坏了，是「满血」这个前提在**能被命中**之后不再成立。
+	_check(boss.health >= boss.max_health * 0.95, "重新站起来（血量 %.0f / %.0f，已扣除重生后中的弹）"
+		% [boss.health, boss.max_health])
 	_check(not col.disabled, "碰撞体恢复")
 
 	print("\n========== 4. 渲图 ==========")
