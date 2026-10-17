@@ -59,6 +59,42 @@ func _run() -> void:
 			"%s：在朋友层（layer=%d mask=%d）" % [c.display_name, c.collision_layer, c.collision_mask])
 		_check(h > 1.0 and h < 1.9, "%s：身高 %.2f m 在合理区间" % [c.display_name, h])
 
+	# ── 嘴部形态键：每个角色都有 4~14 块 `Mouth_*`，靠 `target_0` 把自己挪走藏起来，
+	#    同一时刻**只有一块**露在脸上。谁重建了这些网格（`add_surface_from_arrays()`
+	#    不搬 blend shape），嘴就会全部贴回脸上 —— 2026-10-17 真出过（README §2.3.1）。
+	var models: Array = [player]
+	models.append_array(list)
+	var bad_mouth: Array[String] = []
+	var total_mouths := 0
+	for m in models:
+		var mouths: Array[MeshInstance3D] = []
+		var stack: Array[Node] = [m]
+		while not stack.is_empty():
+			var x: Node = stack.pop_back()
+			if x is MeshInstance3D and String(x.name).begins_with("Mouth_"):
+				mouths.append(x as MeshInstance3D)
+			for c2 in x.get_children():
+				stack.append(c2)
+		if mouths.is_empty():
+			continue
+		var lost := 0
+		var shown := 0
+		for mi in mouths:
+			var bs: int = 0
+			if mi.mesh != null:
+				bs = mi.mesh.get_blend_shape_count()
+			if bs <= 0:
+				lost += 1
+			elif mi.get_blend_shape_value(0) < 0.01:
+				shown += 1
+		total_mouths += mouths.size()
+		if lost > 0 or shown != 1:
+			bad_mouth.append("%s（%d 块：丢形态键 %d、露出 %d）"
+				% [m.name, mouths.size(), lost, shown])
+	_check(bad_mouth.is_empty() and total_mouths > 50,
+		"8 个角色共 %d 块 Mouth_*：形态键都在、每个角色**只有一张嘴**露出%s" % [
+			total_mouths, "" if bad_mouth.is_empty() else "（%s）" % str(bad_mouth)])
+
 	print("\n========== 2. 子弹穿透同伴 ==========")
 	# 把优香搬到「玩家 → Target1」的弹道正中间，从玩家眼高打一条射线过去
 	var target: Target = game.get_node("Target1")

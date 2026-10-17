@@ -165,12 +165,18 @@ func _ready() -> void:
 	lean_fix = PoseFix.fix_run_lean(skeleton, player)
 	# 跑步时头往左偏：绕标定轴补 −18.6°，实测 roll 从 −18.0° 压到 +0.26°（见 pose_fix.gd）
 	roll_fix = PoseFix.fix_head_roll(skeleton, player)
+	# 眼睑镜像：把右眼的数据镜像给左眼。
+	# 用户说过「眼睛先不要动了」—— 这里**保持原状、没有新动作**；之所以没关掉：
+	# 关掉之后右眼上眼睑会掉下来半遮瞳孔（`_probe_face_shot.gd` 出过 A/B 对照图，
+	# `facefix.png` 半闭 / `facefix_lid.png` 对称全开）。想彻底不碰眼睛就把这行删掉。
 	lid_fix = PoseFix.fix_eyelid_sync(skeleton, player)
 	# 脸皮 / 眼睛两层共面 → z-fighting（用户报「双眼皮打架」）。把上面那层沿法线推开 0.14 mm。
+	# 只推**不带形态键**的网格（嘴那 10 块必须留着形态键，见 `face_fix.gd` 文件头）。
 	face_fix = FaceFix.separate_face_layers(get_parent())
 	if int(face_fix.get("surfaces", 0)) > 0:
-		print("[AnimDriver] 脸部层错开：%d 个 surface / %d 个顶点" % [
-			int(face_fix["surfaces"]), int(face_fix["verts"])])
+		print("[AnimDriver] 脸部层错开：%d 个 surface / %d 个顶点（跳过 %d 个带形态键的网格）" % [
+			int(face_fix["surfaces"]), int(face_fix["verts"]), int(face_fix.get("skipped", 0))])
+	_check_face_morphs()
 	_setup_upper_layer()
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)
@@ -178,6 +184,36 @@ func _ready() -> void:
 	for l in [upper, upper_move]:
 		if l != null:
 			l.animation_finished.connect(_on_finished)
+
+
+## 检查「嘴巴还在不在」。
+##
+## 爱丽丝有 **10 块** `Mouth_*` 网格，每块带一个 `target_0` 形态键，靠它把自己
+## 整体挪走 0.6 m 藏进看不见的地方；同一时刻只有一块的权重是 0（露在脸上）。
+## 谁要是重建了这些网格的 `ArrayMesh`，**blend shape 会一起没掉** → 10 张嘴
+## 全贴回脸上（用户报的「多个嘴巴网格重叠」）。这条断言就是为了让这种回归
+## **当场出声**，而不是等用户截图来报。
+func _check_face_morphs() -> void:
+	var mouths := 0
+	var broken: Array[String] = []
+	var stack: Array[Node] = [get_parent()]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and String(n.name).begins_with("Mouth_"):
+			var mi := n as MeshInstance3D
+			mouths += 1
+			if mi.mesh == null or mi.mesh.get_blend_shape_count() == 0:
+				broken.append(String(n.name))
+		for c in n.get_children():
+			stack.append(c)
+	if mouths == 0:
+		return      # 同伴模型没有嘴部网格，正常
+	if broken.is_empty():
+		print("[AnimDriver] 嘴部形态键完好：%d 块 Mouth_* 都能靠形变藏起来" % mouths)
+	else:
+		push_error("[AnimDriver] %d / %d 块 Mouth_* **丢了形态键**：%s"
+			% [broken.size(), mouths, ", ".join(broken)]
+			+ " —— 这些嘴会同时贴在脸上（原因见 face_fix.gd 文件头）")
 
 
 ## 搭「上半身叠加层」：**两层**，把开火 / 换弹各复制一份、滤掉不该写的轨道。

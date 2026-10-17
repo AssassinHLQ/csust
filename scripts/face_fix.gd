@@ -17,19 +17,31 @@ extends RefCounted
 ##
 ## 用法：
 ##   FaceFix.separate_face_layers(model_root)   # 载入模型之后调一次
+##
+## ⚠️ **带形态键（blend shape）的网格一律跳过。**
+##    爱丽丝那 10 块 `Mouth_*` 用的是 `Aris_Original_EyeMouth_Mouth_70x` 材质，
+##    名字里带 `EyeMouth`，会被下面的关键字命中；而它们正是靠 `target_0`
+##    把自己**整体挪走 0.6 m** 藏起来的（探针实测位移长度 0.6033 m）。
+##    `add_surface_from_arrays()` 只搬顶点/法线/UV，**不搬 blend shape** ——
+##    重建一次，形态键就没了，10 张嘴会全部贴回脸上。用户报的「多个嘴巴网格重叠」
+##    就是这个（实测：FaceFix 之后 10 块 Mouth_* 的 `blend_shapes` 全变 0）。
 
 ## 这些材质算「贴在脸上的层」，要往前推
 const LAYER_KEYWORDS := ["EyeMouth", "Eyebrow"]
 
 
-## 返回 {surfaces:int, verts:int, meshes:int} 报告，自检可以读。
+## 返回 {surfaces:int, verts:int, meshes:int, skipped:int} 报告，自检可以读。
 static func separate_face_layers(root: Node, ratio := 0.0008) -> Dictionary:
-	var report := {"surfaces": 0, "verts": 0, "meshes": 0}
+	var report := {"surfaces": 0, "verts": 0, "meshes": 0, "skipped": 0}
 	if root == null:
 		return report
 	for mi in _all_meshes(root):
 		var m := mi.mesh
 		if not (m is ArrayMesh):
+			continue
+		# ⚠️ 见文件头：形态键搬不过去，带形态键的网格**绝不能**重建
+		if m.get_blend_shape_count() > 0:
+			report["skipped"] = int(report["skipped"]) + 1
 			continue
 		var box := mi.get_aabb()
 		var push := maxf(box.size.y * ratio, 0.00001)

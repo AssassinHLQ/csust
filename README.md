@@ -1672,6 +1672,16 @@ Arisu                       Node3D      ← 180° 旋转节点
   每张就是**一个完整口型**画在透明底上，自己做一张同规格的就能加。
 - **注意顺序**：14 块是**共面叠在同一处**的，靠 morph 藏掉 13 块。所以任何时候都必须保证
   「只有一块权重为 0」，否则会叠出多张嘴。
+- **⚠️ 别重建这些网格**（2026-10-17 踩过，用户报「多个嘴巴网格重叠」）：
+  `add_surface_from_arrays()` 只搬顶点 / 法线 / UV，**不搬 blend shape**。
+  `FaceFix.separate_face_layers()` 当初为了修「双眼皮打架」把 `EyeMouth` 材质的网格整体重建，
+  而嘴的材质名是 `Aris_Original_EyeMouth_Mouth_70x` —— **命中同一个关键字**，于是 10 块嘴
+  的形态键一起被丢掉（`graph` 探针：FaceFix 之后 `blend_shapes` 全变 0）→ 权重形同虚设 →
+  **10 张嘴同时贴回脸上**。现在 `FaceFix` 跳过一切 `get_blend_shape_count() > 0` 的网格
+  （实测跳过 10 块、只推身体的 2 个面 / 569 顶点），`anim_driver.gd` 里还钉了
+  `_check_face_morphs()`：一旦有嘴丢了形态键就 `push_error`。
+  以后要做类似的「沿法线推开」，必须把形态键一起搬（`surface_get_blend_shape_arrays()`），
+  或者干脆别碰这类网格。对照图见 `_arisu_captures/_face/`（`raw` / `facefix` / `mouth`）。
 - **眉毛 / 眼型不是贴图切换，是骨骼**：凯伊有 25 根 `bone_eye_*` / `eye_L/R(_1/_2)` /
   `Xtra_eyebrowL1/L2` / `Xtra_eyebrowR1/R2` / `Xtra_eyeL/R` / `bone_Eyering_L/R_01..03` /
   `bone_Mouth`。几何长在身体网格里（`Mouth_*` 之外没有单独的眼/眉网格），
