@@ -89,27 +89,28 @@ func _test_speeds() -> void:
 		_m["walk_" + String(a[0])] = r["speed"]
 		_check(absf(float(r["speed"]) - Player.SPEED_WALK) < SPEED_TOL,
 			"%s（不按 Shift）：速度 %.2f（期望 %.2f）" % [a[1], r["speed"], Player.SPEED_WALK])
-	# **走路也必须是战斗动画（手里有枪）。**
+	# **走路必须是真正的走路动作（`Cafe_Walk`），不是「跑步姿势放慢」。**
 	#
-	# 这里原来断言的是「走路速度 < 动画阈值（否则会播跑步动画）」—— 反了：
-	# 用户要的正是「走路也拿枪」，而 BA 的 `Cafe_Walk`（咖啡厅漫步）**不拿武器**
-	# （素材把武器骨的 scale 缩到 ≈0），小桃/小绿在那个姿势里手里是游戏机。
-	# 现在驱动只切 `Normal_Idle` / `Move_Ing` 两条，所以正确的断言是
-	# 「走路的 clip 就是 `Move_Ing`，而且播放速率按实际速度降下来了（步幅吻合）」。
+	# 这条断言翻过两次，历史要留清楚：
+	#   ① 原来断言「走路速度 < 动画阈值（否则会播跑步动画）」—— 反了；
+	#   ② 中途因为「走路也要拿枪」全改用 `Move_Ing`，断言变成「走路播 Move_Ing、速率 0.46」，
+	#      但用户嫌「走路是跑步姿势放慢」（上身前倾是跑步那一下），要求改回来；
+	#   ③ 现在回到三分支：`Normal_Idle` / `Cafe_Walk`（低于 `WALK_THRESHOLD`）/ `Move_Ing`。
+	#      代价是 `Cafe_Walk` 里武器骨被素材缩到 ≈0，**走路时看不到枪**（§1.17 有实测表）。
 	#
 	# ⚠️ 必须**当场读、不 await**：一旦让过一个物理帧，`player.gd` 会用**真实速度**
 	#    再调一次 `set_locomotion()`，注入的那个数就被冲掉了（第一版量到 0.25 ——
-	#    那是人已经停下、速度掉到 1.3 时的速率，不是走路的 0.46）。
+	#    那是人已经停下、速度掉到 1.3 时的速率）。
 	_p.velocity = Vector3.ZERO
 	var anim: AnimDriver = _p.anim
-	var nominal: float = AnimDriver.CYCLE_SPEED["Move_Ing"]
+	var nominal: float = AnimDriver.CYCLE_SPEED["Cafe_Walk"]
 	anim.set_locomotion(Player.SPEED_WALK, true, 0.0)
 	var walk_clip := anim.current_clip()
 	var walk_scale := anim.player.speed_scale if anim.player != null else 0.0
-	_check(walk_clip == "Move_Ing" and absf(walk_scale - Player.SPEED_WALK / nominal) < 0.02,
-		"走路 %.2f m/s 播的是「%s」、播放速率 %.2f（期望 %.2f）—— 战斗动画、**手上有枪**；"
+	_check(walk_clip == "Cafe_Walk" and absf(walk_scale - Player.SPEED_WALK / nominal) < 0.02,
+		"走路 %.2f m/s 播的是「%s」、播放速率 %.2f（期望 %.2f）—— 真正的走路动作；"
 		% [Player.SPEED_WALK, walk_clip, walk_scale, Player.SPEED_WALK / nominal]
-		+ "以前这里切到 Cafe_Walk 就不拿了（§1.17）")
+		+ "代价是 Cafe_Walk 里武器被素材缩没了（§1.17）")
 
 
 # --- 2. 加速度 / 刹车 ---------------------------------------------------------

@@ -48,10 +48,12 @@ func _run() -> void:
 		_check(c.model != null, "%s：模型已实例化" % c.display_name)
 		_check(skel != null and skel.get_bone_count() > 50,
 			"%s：骨架找对了（%d 骨）" % [c.display_name, skel.get_bone_count() if skel else 0])
-		# ⚠️ 这里查的必须是**本工程真的会播**的两条：驱动只用 `Normal_Idle` /
-		#    `Move_Ing`（`Cafe_Walk` 是咖啡厅动画、不拿武器，§1.17）。
-		_check(ap != null and ap.has_animation("Normal_Idle") and ap.has_animation("Move_Ing"),
-			"%s：动画找到 Normal_Idle + Move_Ing（战斗待机 + 战斗移动，都拿枪）"
+		# ⚠️ 这里查的必须是**本工程真的会播**的三条：驱动按速度在 `Normal_Idle` /
+		#    `Cafe_Walk`（走路）/ `Move_Ing`（跑）之间切。
+		#    `Cafe_Walk` 里武器骨被素材缩到 ≈0（走路不拿枪），但它是用户要的走路姿势，§1.17。
+		_check(ap != null and ap.has_animation("Normal_Idle")
+			and ap.has_animation("Cafe_Walk") and ap.has_animation("Move_Ing"),
+			"%s：动画找到 Normal_Idle / Cafe_Walk / Move_Ing（待机 / 走 / 跑）"
 			% c.display_name)
 		_check(c.collision_layer == Companion.LAYER and c.collision_mask == 1,
 			"%s：在朋友层（layer=%d mask=%d）" % [c.display_name, c.collision_layer, c.collision_mask])

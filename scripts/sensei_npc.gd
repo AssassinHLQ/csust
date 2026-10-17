@@ -36,10 +36,23 @@ extends Node3D
 ## 手臂下垂角度（度）。素材是 **T-pose**，不放下来像个木偶。
 @export var arm_down_deg := 58.0
 @export var elbow_deg := 10.0
-## 平面色（卡通）着色：把材质改成 **unshaded**，不吃场景光照。
-## 这份素材是靠顶点色画出来的，材质本身几乎全黑（`baseColorFactor = (0,0,0,1)`），
-## 放在画室这种昏暗场景里会黑成一团剪影（渲图实测）。
-@export var flat_shading := true
+## 皮肤色 / 头发色。
+## ── 为什么要在代码里上色 ──
+## 这份素材**顶点色全是纯白**（GLB 里 COLOR_0/COLOR_1 两个 accessor 解出来
+## 1394 + 27552 个顶点都是 (1,1,1)），**没有贴图**，真实的颜色本来是 Blender 里
+## 那套 toon 节点（`Shader to RGB` + `Color Ramp`）算出来的 —— 导出成 glTF 后
+## 只剩两个被压扁的 `baseColorFactor`：皮肤那块是橄榄绿 (0.38, 0.45, 0.27)，
+## 头那块是黑的，头发真正的颜色藏在 `emission = (1.00, 0.44, 0.38)` 里。
+## 所以光看导出的颜色是「绿皮肤 + 黑头发」，和源文件里的「白皮肤 + 棕头发」对不上。
+## 这里按源文件的意图重新上色：**有 emission 的那块是头发**，另一块是皮肤。
+@export var skin_color := Color(1.0, 1.0, 1.0)
+@export var hair_color := Color(1.0, 0.4407, 0.3797)
+## 平面色（unshaded）。默认 **关** —— 颜色修对之后正常打光反而有形体；
+## 开着他就是个纯色贴纸，白皮肤会糊成一片看不出手脚。
+@export var flat_shading := false
+## 自发光强度（0~1）。画室的环境光是偏蓝的，纯白皮肤被照成蓝灰；
+## 给材质补一点「自己发自己颜色的光」能把它拉回白，同时保留一点明暗。
+@export var self_lit := 0.55
 ## 呼吸幅度（度）与频率（次/秒）
 @export var breath_deg := 1.5
 @export var breath_hz := 0.2
@@ -85,10 +98,9 @@ func _ready() -> void:
 	add_child(inst)
 	if stripped > 0:
 		print("[Sensei] 摘掉 %d 个骨架控制方块（%s*）" % [stripped, CONTROL_PREFIX])
-	if flat_shading:
-		var flattened := _flatten(inst)
-		if flattened > 0:
-			print("[Sensei] %d 个材质改成 unshaded（卡通平面色）" % flattened)
+	var recolored := _recolor(inst)
+	if recolored > 0:
+		print("[Sensei] %d 个材质重新上色完成" % recolored)
 	_fit(inst)
 	_skel = _find_skel(inst)
 	_relax_arms(inst)
@@ -126,19 +138,33 @@ func _strip_control_shapes(inst: Node) -> int:
 	return hits.size()
 
 
-## 把角色材质改成 unshaded，保留顶点色。
-## 用 `surface_override_material` 而不是改原材质 —— `mesh` 是 **glb 里共享的资源**，
-## 直接改会把同一份材质的其它东西一起改掉。
-func _flatten(inst: Node) -> int:
+## 按源文件的意图重新上色（见 `skin_color` 那段注释）。
+## 用 `surface_override_material` 复制材质，而不是改 glb 里共享的原材质。
+func _recolor(inst: Node) -> int:
 	var n := 0
 	for mi in _all_meshes(inst):
 		for s in mi.mesh.get_surface_count():
 			var mat := mi.mesh.surface_get_material(s)
-			if mat is StandardMaterial3D:
-				var m := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+			if not (mat is StandardMaterial3D):
+				continue
+			var m := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+			# 头发那块的特征：身上还留着 emission（导出器把 toon 的颜色塞进了 emission）
+			var is_hair: bool = m.emission_enabled and m.emission != Color.BLACK
+			m.albedo_color = hair_color if is_hair else skin_color
+			m.vertex_color_use_as_albedo = false
+			m.metallic = 0.0
+			m.roughness = 0.85
+			# 原材质的 emission 是导出器塞进去的「头发真色」，已经拿来当 albedo 了，
+			# 先关掉，再按 self_lit 换成「自己发自己的颜色」。
+			m.emission_enabled = self_lit > 0.0
+			m.emission = m.albedo_color
+			m.emission_energy_multiplier = self_lit
+			if flat_shading:
 				m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-				mi.set_surface_override_material(s, m)
-				n += 1
+			mi.set_surface_override_material(s, m)
+			print("[Sensei] 上色 surf %d → %s %s" % [
+				s, "头发" if is_hair else "皮肤", str(m.albedo_color)])
+			n += 1
 	return n
 
 
