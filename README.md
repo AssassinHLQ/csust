@@ -1634,6 +1634,67 @@ UpperBodyMove  再滤 spine/chest  → **跑打开火**用：躯干保持 Move_I
 判据探针：`scripts/_probe_upper_freeze.gd`（冻结 `Move_Ing` 在同一帧，只接叠加层，
 按 躯干/手臂/武器/头发/脸/其它 六组各自报最大夹角）。
 
+### 第三轮：**别叠了，做一条整身动作**（2026-10-17 定案）
+
+两轮都修完，用户还是「跑打只能这样子了」——于是改成：
+
+> **「单独做一个跑步加开火的动画，而不是叠加动画」**
+
+生成脚本 `..\_blender_arisu\seed_runfire.py`（Blender 5.0，无头跑）把两条现成动作
+拼成一条 `RunFire_Ing`：
+
+| 部分 | 来自 | 帧映射 |
+|---|---|---|
+| 骨盆 / 腿 / 裙摆 / 头发 / 眼 / **脊椎 / 颈 / 头** | `Move_Ing` | `f % 16` |
+| 锁骨 / 上臂 / 前臂 / 手 / 手指 / 领带 / **整把枪** | `Normal_Attack_Ing` | `f` |
+
+`Move_Ing` 16 帧、`Normal_Attack_Ing` 64 帧，**64 = 4 × 16**，所以 0~64 帧的新动作
+正好是「四个跑步周期里开完一枪」，长度 2.667 s。
+
+三个坑，都是量出来的：
+
+1. **脊椎不能跟开火走**。开火是站桩的，脊椎带上身后仰；跑步本身前倾，两个一叠就是
+   第一轮那个「后仰」。所以脊椎/颈/头留在跑步那边 —— 拼完躯干与 `Move_Ing` 同向。
+2. **手臂只搬局部旋转会让枪口往下扎**。手臂是锁骨的子骨，躯干前倾之后局部旋转照抄
+   → 枪跟着低头。修法：只把**两根锁骨**的世界朝向锁回开火那一帧（`--aim=lock`，默认开），
+   整条手臂靠父子关系一起回到「枪指前方」。
+3. **`Bip001_Weapon` 是根级骨**（世界坐标动画）。直接把开火那几帧的世界矩阵搬过来，
+   人一前倾枪就留在原地跟手脱开（第一版渲染：枪飘在镜头前面 1 m）。改成
+   「跟着持枪手走、保留开火时的相对位姿」——持枪手由此判定：握把骨
+   `bone_Railgunup_Hand` 到左手 **0.074 m** / 到右手 **0.439 m** → 左手。
+
+另外这条动作是用**未修正的** `Move_Ing` 拼的（前倾修正在 Godot 加载时才做），
+所以并进动作库之后要补同一批 delta（`PoseFix.fix_extra_run_clip()`，5 根骨 380 帧）——
+不补的话跑打开火时胸椎离「只跑」的姿势集 **15.6°**，补完 **1.7°**。
+
+管线（glb 不进 git，`.gitignore` 里本来就有 `/models/*.glb`）：
+
+```
+blender -b --factory-startup --python _blender_arisu/seed_runfire.py -- --export
+    → models/RunFire.glb      只有骨架 + 一条动作（0 网格，1 MB）
+godot --headless --path _arisu_learn --import        # 生成 .import
+```
+
+游戏侧：`player.tscn` 的 `AnimDriver` 填 `extra_glb = "res://models/RunFire.glb"`，
+`AnimDriver._ready()` 用 `AnimExtra.merge_glb()` 把这条动作搬进角色自己的
+`AnimationPlayer`（**轨道路径前缀要改**：`Bip001/Skeleton3D` →
+`Aris_Original_Mesh/bone_root/Bip001/Skeleton3D`，不改就「加载成功但一根骨都不动」）。
+跑起来扣扳机时 `request_fire()` 走 `_start_runfire()`：整身播这一条、两个叠加层让开，
+`_runfire_playing` 期间 `_update_locomotion()` 不许插手；进出都按
+`seek(当前位置 % 0.667)` 对齐跑步相位。同伴留空 `extra_glb`，不并。
+
+验证（`_verify_attack_move.gd`，已改成两条路都认）：
+
+| 判据 | 结果 |
+|---|---|
+| 跑打开火时基础层换成 `RunFire_Ing` | PASS |
+| 叠加层不参与这一发 | PASS（无） |
+| 跑动开火时脚还在跑 | **0.411 m**（≥ 0.15） |
+| 胸椎离「只跑」姿势集 | **1.7°**（< 8°，反向对照 40.1°） |
+| 跑速没被开火打断 | 6.80 m/s（期望 6.80） |
+
+对照图：`_arisu_captures/_runfireclip/`（`run_*` 只跑 / `clip_*` 单条跑打 / `stand_*` 站桩）。
+
 ### ⚠️ 量这个必须**冻结相位**
 
 第一版探针是「真跑起来再抓拍」，四档的**跑步相位各不相同**（`Move_Ing` 一个循环

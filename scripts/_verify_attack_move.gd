@@ -172,13 +172,22 @@ func _test_running_fire() -> void:
 
 	# 开火
 	_anim.request_fire()
-	await _wait_ms(120)          # 让叠加层开始写
+	await _wait_ms(120)          # 让叠加层 / 整身动作开始写
 	var foot_run_fire := await _bone_travel("Bip001 L Foot", WINDOW_MS)
 	_m["foot_run_fire"] = foot_run_fire
-	_check(_anim.current_clip() == "Move_Ing",
-		"**开火期间基础层仍然是 %s**（不再被整体顶掉）" % _anim.current_clip())
-	_check(_anim.upper_clip() == "Normal_Attack_Ing",
-		"叠加层在播开火动作（%s）" % _anim.upper_clip())
+	if _anim.has_runfire():
+		# 2026-10-17 之后的**主路径**：整身一条「跑打开火」动作，两个叠加层都不出场。
+		# 腿是这条动作自带的，所以「脚还在跑」这条判据照旧有意义。
+		_check(_anim.current_clip() == _anim.extra_clip,
+			"**开火期间基础层换成单条跑打动作 %s**（不再叠两层）" % _anim.current_clip())
+		_check(_anim.upper_clip() == "",
+			"叠加层不参与这一发（%s）"
+			% ("无" if _anim.upper_clip() == "" else _anim.upper_clip()))
+	else:
+		_check(_anim.current_clip() == "Move_Ing",
+			"**开火期间基础层仍然是 %s**（不再被整体顶掉）" % _anim.current_clip())
+		_check(_anim.upper_clip() == "Normal_Attack_Ing",
+			"叠加层在播开火动作（%s）" % _anim.upper_clip())
 	_check(foot_run_fire >= FOOT_MOVING,
 		"**跑动开火时脚还在跑**：%.3f m（≥ %.2f）—— 用户要的另一半"
 		% [foot_run_fire, FOOT_MOVING])
@@ -230,10 +239,15 @@ func _test_weapon_path() -> void:
 	_p.weapon.trigger_down()
 	await _wait_ms(200)
 	var clip := _anim.upper_clip()
+	var whole := _anim.current_clip()
 	var v := _speed()
 	_p.weapon.trigger_up()
-	_check(clip == "Normal_Attack_Ing",
-		"按住左键跑动：叠加层自己播起了开火动作（%s）" % clip)
+	if _anim.has_runfire():
+		_check(whole == _anim.extra_clip,
+			"按住左键跑动：整身切到单条跑打动作（%s）" % whole)
+	else:
+		_check(clip == "Normal_Attack_Ing",
+			"按住左键跑动：叠加层自己播起了开火动作（%s）" % clip)
 	_check(absf(v - Player.SPEED_RUN) < 0.3,
 		"而且**跑速没被开火打断**：%.2f m/s（期望 %.2f）" % [v, Player.SPEED_RUN])
 	_release_all()
@@ -280,8 +294,12 @@ func _test_trunk_kept() -> void:
 		% [worst, TRUNK_TOL])
 
 	# 反向对照：把移动层摘掉（= 改前的行为）必须量到大角度
+	# ⚠️ 同时要把「单条跑打动作」关掉，否则跑打开火根本不走叠加层，这个对照量的是
+	#    同一个东西（不会红）。
 	var keep := _anim.upper_move
+	var keep_clip := _anim.extra_clip
 	_anim.upper_move = null
+	_anim.extra_clip = ""
 	await _reset()
 	Input.action_press("move_forward")
 	Input.action_press("sprint")
@@ -291,6 +309,7 @@ func _test_trunk_kept() -> void:
 	var old_set := await _sample_axis(CHEST, 500)
 	var old_deg := _dist_to_set(old_set, run_set)
 	_anim.upper_move = keep
+	_anim.extra_clip = keep_clip
 	_m["trunk_deg_old"] = old_deg
 	_check(old_deg > 20.0,
 		"反向对照：只滤下半身时同一个量是 %.1f° —— 这就是用户看到的「身体倾斜」" % old_deg)
@@ -373,7 +392,7 @@ func _reset() -> void:
 	_p._facing_yaw = PI
 	_p.model_root.rotation.y = PI
 	_anim.state = AnimDriver.State.LOCOMOTION
-	_anim.stop_upper_layer()
+	_anim.reset_state()
 	await _wait(6)
 
 

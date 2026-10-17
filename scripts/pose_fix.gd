@@ -251,6 +251,39 @@ static func freeze_eyelids(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 	return report
 
 
+## ── 也给「单条跑打动作」补上同样的前倾 / 侧倾修正 ──
+## 那条动作是在 Blender 里用**未修正的** `Move_Ing` 拼出来的（修正发生在 Godot 加载时），
+## 所以不补的话它比 `Move_Ing` 多趴一截：实测跑打开火时胸椎离「只跑」的姿势集 **15.6°**
+## （`_verify_attack_move.gd` §7，判据 8°）。补完 < 1°。
+##
+## 用的 delta 和 `fix_run_lean()` / `fix_head_roll()` 完全一样，只是作用在另一条动作上。
+static func fix_extra_run_clip(sk: Skeleton3D, ap: AnimationPlayer, clip: String) -> Dictionary:
+	var report := {"applied": false, "bones": [], "keys": 0}
+	if sk == null or ap == null or not ap.has_animation(clip):
+		return report
+	var a := ap.get_animation(clip)
+	var meta := META_KEY + "_x_" + clip
+	if a.has_meta(meta):
+		return report
+	var total := 0
+	for bone_name in LEAN_DEG:
+		var idx := sk.find_bone(String(bone_name))
+		if idx < 0:
+			continue
+		total += _apply_delta(a, String(bone_name), _pitch_delta(sk, idx, float(LEAN_DEG[bone_name])))
+		report["bones"].append(String(bone_name))
+	for bone_name in ROLL_DEG:
+		var idx2 := sk.find_bone(String(bone_name))
+		if idx2 < 0:
+			continue
+		total += _apply_delta(a, String(bone_name),
+			_axis_delta(sk, idx2, FWD_AXIS, float(ROLL_DEG[bone_name])))
+	a.set_meta(meta, true)
+	report["applied"] = total > 0
+	report["keys"] = total
+	return report
+
+
 ## 左右两根骨的 rest 基是否互为镜像（x 轴反向即为镜像）
 static func _rest_mirrored(sk: Skeleton3D, left: int, right: int) -> bool:
 	var bl := sk.get_bone_global_rest(left).basis.orthonormalized()

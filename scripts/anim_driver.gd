@@ -149,6 +149,8 @@ var skeleton: Skeleton3D
 var _speed := 0.0
 var _aiming := false
 var _auto_return := false
+## 这一发正在播「单条跑打动作」（整身，自带腿）—— 此时 `_update_locomotion()` 不许插手
+var _runfire_playing := false
 ## 滤掉的下半身轨道条数（自检用）
 var lower_tracks_removed := 0
 ## 移动层额外滤掉的躯干轨道条数（自检用）
@@ -165,6 +167,19 @@ var roll_fix := {}
 var blink_fix := {}
 ## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
 var face_fix := {}
+## 「单独一条跑打开火动作」的并入报告（`AnimExtra.merge_glb()`）
+var runfire := {}
+
+## ── 跑打开火：**一条**动作，不再叠两层 ──
+## 用户 2026-10-17：「跑打只能这样子了，单独做一个跑步加开火的动画，而不是叠加动画」。
+## 生成脚本 `..\_blender_arisu\seed_runfire.py`（Blender 里把 `Move_Ing` 的下半身 +
+## `Normal_Attack_Ing` 的手臂/枪拼成 64 帧 = 4 个跑步周期，正好等于一次开火的 2.667 s）。
+## 它导出的 `models/RunFire.glb` **只有骨架 + 这一条动作**（0 网格），启动时并进动作库。
+##
+## ⚠️ 只有**主角**要在 `player.tscn` 里填 `extra_glb` —— 同伴也是 `AnimDriver`，
+##    留空就不并，否则七只同伴各自把 1 MB 的 glb 读一遍、还会刷一堆「骨找不到」。
+@export var extra_glb := ""
+@export var extra_clip := "RunFire_Ing"
 
 
 func _ready() -> void:
@@ -209,6 +224,26 @@ func _ready() -> void:
 			int(face_fix["surfaces"]), int(face_fix["verts"]), int(face_fix.get("skipped", 0))])
 	_check_face_morphs()
 	_setup_upper_layer()
+	# 跑打开火：把 Blender 拼好的**单条**动作并进动作库（见 `extra_glb` 上面那段）。
+	# 只并进基础层，两个叠加层不复制它 —— 它本来就是整身动作。
+	if not extra_glb.is_empty():
+		runfire = AnimExtra.merge_glb(player, extra_glb, extra_clip, skeleton)
+		if bool(runfire.get("ok", false)):
+			print("[AnimDriver] 并入跑打动作「%s」：%.3f s，%d 条轨道（前缀 %s → %s，骨架 %s/%d 骨）" % [
+				extra_clip, float(runfire["seconds"]), int(runfire["tracks"]),
+				str(runfire["head_from"]), str(runfire["head_to"]),
+				str(runfire.get("sk_name", "")), int(runfire.get("sk_bones", 0))])
+			var miss: Array = runfire["missing"]
+			if not miss.is_empty():
+				push_warning("[AnimDriver] 跑打动作有 %d 根骨在这具骨架上找不到（%s…）" % [
+					miss.size(), str(miss.slice(0, 5))])
+			# 这条动作是用**未修正的** Move_Ing 在 Blender 里拼的，得补上同样的前倾修正
+			var lean := PoseFix.fix_extra_run_clip(skeleton, player, extra_clip)
+			if bool(lean.get("applied", false)):
+				print("[AnimDriver] 跑打动作补前倾修正：%s 共 %d 帧" % [
+					str(lean["bones"]), int(lean["keys"])])
+		else:
+			push_warning("[AnimDriver] 跑打动作没并进来：%s" % str(runfire.get("error", "")))
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)
 	player.animation_finished.connect(_on_finished)
@@ -401,6 +436,15 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	#      而「跑起来再开火」对照组  躯干 up = 0.887 / 0.901 / 0.890
 	#    前者就是用户报的「跑打身体后仰」—— 枪响时人还在站桩层里。
 	_migrate_upper_layer()
+	# 整身跑打动作在播：腿是它自带的，只跟着速度调倍速，别让 `_update_locomotion()`
+	# 把动作切回 `Move_Ing`（那样这一枪就只剩「站着开火」了）。
+	if _runfire_playing:
+		if _speed <= IDLE_SPEED:
+			_return_from_runfire()   # 停下来了，交回普通移动
+		else:
+			player.speed_scale = clampf(_speed / CYCLE_SPEED.get("Move_Ing", 5.2),
+				SPEED_SCALE_MIN, SPEED_SCALE_MAX)
+		return
 	# ⚠️ **开火 / 换弹期间也必须继续更新基础层** —— 这正是「跑打时脚不动」的根因：
 	#    原来这里有一句 `or state != State.LOCOMOTION` 就提前返回，于是开火那一秒
 	#    基础层被冻住，腿停了。现在上半身在叠加层、下半身在基础层，两层互不干扰。
@@ -420,7 +464,57 @@ func is_aiming() -> bool:
 
 
 func request_fire() -> void:
+	# 跑着开火 + 有「单条跑打动作」→ 整身播那一条（腿是它自带的，不再叠两层）
+	if state == State.LOCOMOTION and has_runfire() and _speed > IDLE_SPEED:
+		_start_runfire()
+		return
 	_play_once("Normal_Attack_Ing", State.FIRE)
+
+
+## 有没有「单条跑打动作」（`extra_glb` 并进来的那条）
+func has_runfire() -> bool:
+	return player != null and not extra_clip.is_empty() and player.has_animation(extra_clip)
+
+
+## 一个跑步周期多长（秒）。整身动作里腿也是这个节奏，切进切出时按它对齐相位。
+func runfire_cycle() -> float:
+	if player != null and player.has_animation("Move_Ing"):
+		return player.get_animation("Move_Ing").length
+	return 0.6667
+
+
+## 切进「单条跑打动作」。
+## ⚠️ 相位要**接着当前 `Move_Ing` 走**：从第 0 帧硬起会让脚在原地闪一下。
+##    动作是 4 个跑步周期拼的，所以 `seek(当前位置 % 周期)` 正好落在同一相位上。
+func _start_runfire() -> void:
+	if player == null:
+		return
+	state = State.FIRE
+	_auto_return = true
+	_runfire_playing = true
+	stop_upper_layer()               # 这条动作是整身的，叠加层必须让开
+	var cyc := runfire_cycle()
+	var pos := 0.0
+	if player.current_animation == "Move_Ing":
+		pos = player.current_animation_position
+	player.play(extra_clip, 0.06, 1.0)
+	player.seek(fmod(pos, cyc), true)
+	player.speed_scale = clampf(_speed / CYCLE_SPEED.get("Move_Ing", 5.2),
+		SPEED_SCALE_MIN, SPEED_SCALE_MAX)
+
+
+## 从「单条跑打动作」回到移动：同样按相位接回 `Move_Ing`
+func _return_from_runfire() -> void:
+	var cyc := runfire_cycle()
+	var pos := 0.0
+	if player != null:
+		pos = player.current_animation_position
+	_runfire_playing = false
+	state = State.LOCOMOTION
+	_auto_return = false
+	_update_locomotion()
+	if player != null and player.current_animation == "Move_Ing":
+		player.seek(fmod(pos, cyc), true)
 
 
 func request_reload() -> void:
@@ -508,6 +602,9 @@ func _on_finished(anim_name: StringName) -> void:
 	#    所以靠 `_auto_return` 这个闸门区分「一次性动作播完了」和「循环动画又转了一圈」。
 	if not _auto_return:
 		return
+	if state == State.FIRE and String(anim_name) == extra_clip:
+		_return_from_runfire()
+		return
 	if state == State.FIRE and anim_name == "Normal_Attack_Ing":
 		_return_to_locomotion()
 	elif state == State.RELOAD and anim_name == "Normal_Reload":
@@ -528,6 +625,15 @@ func stop_upper_layer() -> void:
 	for l in [upper, upper_move]:
 		if l != null and l.is_inside_tree():
 			l.stop()
+
+
+## 复位到「什么都没在播」的状态（自检用）。`_runfire_playing` 不清的话，
+## `set_locomotion()` 会一直以为这一发还没结束、拒绝切回 `Move_Ing`。
+func reset_state() -> void:
+	stop_upper_layer()
+	_runfire_playing = false
+	_auto_return = false
+	state = State.LOCOMOTION
 
 
 # --- 自检用的读数 ---------------------------------------------------------------
