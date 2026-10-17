@@ -1,29 +1,29 @@
 class_name Parkour
 extends Node3D
-## 跑酷路线总控（v2：**4 段 / 33 站 / 30 跳 + 2 段独木桥 / 206 m**）。
+## 跑酷路线总控（v3：**6 段 / 59 站 / 47 跳 + 6 处机关 / 164 m**）。
 ##
-## ── 这一份干四件事 ──
+## ── 这一份干五件事 ──
 ##   1. 报出路线顺序（`route`）与**分段**（`segments`）—— 自检、探针、文档都拿它当真相；
-##   2. 摔下去送回**本段起点**（不是全程起点，也不是最近踩过的落脚点）；
+##   2. 摔下去送回**最近踩过的落脚点**（`checkpoint`）；段起点只是视觉地标；
 ##   3. 段内计时 + 最好成绩（存 `user://`），终点停表；
-##   4. 岛上的「回平台」传送台。
+##   4. 岛上的「回平台」传送台；
+##   5. 进度落盘（`parkour_run.cfg`），但**启动默认不恢复** —— 重进游戏回初始位置。
 ##
-## ── 为什么惩罚是「回本段起点」而不是「回最近落脚点」──
-## v1 是「回最近踩过的落脚点」，对 10 跳的短图刚好；v2 有 30 跳，那样等于**没有惩罚**：
-## 每一块板都能当检查点，摔一次只亏一跳，「难」就白设计了。
-## 现在检查点只落在**段的交界**（4 段 = 3 个中途检查点 + 起点），摔一次要重跑整段
-## （最长的一段 11 站 ≈ 45 m）。这正是 Minecraft 跑酷地图的常见做法。
+## ── 为什么复活点是「最近踩过的落脚点」而不是「本段起点」──
+## v1 是「回最近落脚点」，v2 曾改成「回本段起点」，用户玩过之后反馈**太难**
+## （最长一段 45 m，摔一次重跑整段）。现在改回最近踩过的站；段起点保留 4 m 休息台
+## + 5 m 信号桅杆当地标。这正是 Minecraft 跑酷地图的常见做法（检查点稀疏但复活不罚）。
 ##
 ## ── 什么时候**解除**武装 ──
 ## 站在主平台上、且脚下不是路线上的落脚点 → 视为「离开跑酷去干别的了」：
-## 检查点清空、计时归零。否则一个只是在平台边上失足的路人会被凭空塞到跑酷中段。
+## **只停表、保留检查点**（用户要的「进度别丢」），下一次从跑道重新开始计时。
 ##
 ## ── 判据为什么用「网格的世界 AABB」而不是碰撞形状 ──
 ## 路线第 0 站（`Launch`）是**画在平台地面上的跑道标记，故意没有碰撞**
 ## （2.5 cm 的坎就足以把 CharacterBody3D 挡在门外，见 README §1.13）。
 ## 拿碰撞形状当判据会把这一站漏掉，所以统一读 `Mesh` 的世界包围盒。
 
-## 低于这个高度就判定「摔出路线」，送回本段起点。
+## 低于这个高度就判定「摔出路线」，送回最近踩过的落脚点。
 ## 比 `game.gd` 的 FALL_LIMIT（−60）高得多 —— 就是要**抢在它前面**出手，
 ## 否则人要看着天空下坠 2.5 s 才被送回平台出生点。v2 最低的落脚点是岛面 y = 0.00。
 const FALL_Y := -12.0
@@ -36,15 +36,20 @@ const EDGE_MARGIN := 0.30
 
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
-## **进度存档**：最近踩过的站号（+ 一份最好成绩）。
+## 进度存档：最近踩过的站号（+ 一份最好成绩）。
 ##
-## 用户反馈「存档不了」—— 原来进度只活在内存里，一退出就没了。现在每推进一站就落盘，
-## 启动时读回来，人一回到主平台就把他送回那一站接着跑（`_resume_pending`）。
+## ⚠️ 用户 2026-10-17 反馈「退出游戏重进还在之前存档位置，要改成回初始位置」：
+##    这里**仍然落盘**（方便调试/以后做「继续游戏」按钮），但启动时**不再恢复检查点**，
+##    也不再把人传送到存档站。重进游戏 = 从跑道口的初始出生点开始。
+##    `parkour_run.cfg` 里旧的 checkpoint 不会自动删除，只是被忽略。
 const RUN_PATH := "user://parkour_run.cfg"
+## 启动时要不要恢复上次的跑酷检查点。**默认 false**（用户要求重进回初始位置）。
+## 想做「继续游戏」时把它改成 true 即可，落盘的数据一直都在。
+@export var resume_on_start := false
 
 ## 按顺序排的落脚点节点路径（相对本节点）。**顺序就是路线顺序**。
 @export var route: Array = []
-## **段起点**的站号（升序）。掉下去回这里；段与段之间才是检查点。
+## **段起点**的站号（升序）。只是视觉地标；复活点用 `checkpoint`（最近踩过的站）。
 @export var segments: Array = [0]
 ## 段名（HUD 用），长度应与 `segments` 一致
 @export var seg_names: Array = []
@@ -61,7 +66,7 @@ const RUN_PATH := "user://parkour_run.cfg"
 
 ## 前进到新的一站（只在往后推进时发，退回旧站不发）
 signal checkpoint_reached(index: int, label: String)
-## 摔了，被送回第 index 站（= 本段起点）
+## 摔了，被送回最近踩过的第 index 站
 signal rescued(index: int, label: String)
 ## 离开起跳跑道、开始计时
 signal run_started()
@@ -86,7 +91,8 @@ var _player: Player
 var _hud_timer: Label
 var _hud_seg: Label
 var _hud_cache := ""
-## 读档续跑：启动时若存档停在第 N 站（N>0），人一回到主平台就送他过去
+## 读档续跑：**只有 `resume_on_start = true` 时**才会在启动后把人送回存档站。
+## 默认 false ⇒ 重进游戏从初始位置开始（用户 2026-10-17 的要求）。
 var _resume_pending := false
 
 
@@ -240,18 +246,29 @@ func _stop_timer() -> void:
 		"（最好 %.2f s）" % _best])
 
 
-## 读进度存档。站号照旧校验一遍（免得改了路线之后旧存档把人送到空里）
+## 读进度存档。
+##
+## ⚠️ 用户要求「重进游戏回到初始位置」，所以默认**不恢复 checkpoint**：
+##    只把文件里的最好成绩读回来；`checkpoint` 留在 −1（HUD 显示 SEG 1/6），
+##    人从 `game.tscn` 的初始出生点开始，不会被传送到上次的塔/机关上。
+##    需要旧行为时把 `resume_on_start` 打开（落盘数据一直都在）。
+##    站号照旧校验一遍（免得改了路线之后旧存档把人送到空里）。
 func _load_run() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(RUN_PATH) != OK:
 		return
 	var idx := int(cf.get_value("parkour", "checkpoint", -1))
+	if _best <= 0.0:
+		_best = maxf(0.0, float(cf.get_value("parkour", "best", 0.0)))
+	if not resume_on_start:
+		var shown := "无" if idx < 0 else "第 %d 站 %s" % [
+			idx + 1, label_at(clampi(idx, 0, node_count() - 1))]
+		print("[Parkour] 读档：忽略上次检查点（%s）—— 重进游戏从初始位置开始" % shown)
+		return
 	if idx >= 0 and idx < node_count():
 		checkpoint = idx
 		_resume_pending = checkpoint > 0
-	if _best <= 0.0:
-		_best = maxf(0.0, float(cf.get_value("parkour", "best", 0.0)))
-	print("[Parkour] 读档：最近踩过第 %d 站 %s（最好 %s）"
+	print("[Parkour] 读档：最近踩过第 %d 站 %s（最好 %s，续跑已开启）"
 		% [checkpoint + 1, label_at(checkpoint), "—" if _best <= 0.0 else "%.2f s" % _best])
 
 
@@ -303,7 +320,7 @@ func _physics_process(_delta: float) -> void:
 	var p := _player.global_position
 	var here := _station_at(p)
 
-	# 读档续跑（用户要的「从最近踩过的那一站继续，而不是从第 0 站重来」）
+	# 读档续跑（**仅在 `resume_on_start = true` 时**；默认关闭，重进回初始位置）
 	if _resume_pending and checkpoint > 0 and _on_platform(p):
 		_resume_pending = false
 		_player.global_position = respawn_point(checkpoint)

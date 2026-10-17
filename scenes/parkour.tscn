@@ -9,13 +9,17 @@
 ;   第 1 段「起跳・极限跳」：第 1~9 站
 ;   第 2 段「独木桥・绕角・台阶链」：第 10~20 站
 ;   第 3 段「横跳区・移动平台」：第 21~28 站
-;   第 4 段「绕柱螺旋塔」：第 29~40 站
-;   第 5 段「机关区（弹跳/消失/传送/气流）」：第 41~53 站
-;   第 6 段「螺旋下降・竖井 → 终点岛」：第 54~63 站
+;   第 4 段「绕柱螺旋塔」：第 29~36 站
+;   第 5 段「机关区（弹跳/消失/传送/气流）」：第 37~49 站
+;   第 6 段「螺旋下降・竖井 → 终点岛」：第 50~59 站
 ;
 ; ── 左右 ── 第 3 段：5 块窄板 z 方向每跳交替 3.0 m（「之」字横跳）
 ;            + **2 座移动平台**（AnimatableBody3D，1.8 m/s，单程 5.10 m）
-; ── 上下 ── 第 4 段：**绕柱螺旋塔** 8 站、每站绕中央柱 90°、每级 +0.80 m
+; ── 上下 ── 第 4 段：**绕柱螺旋塔** 7 跳 / 8 站、每站绕中央柱 90°、每级 +0.80 m
+;            ⚠️ 2026-10-17：这里**曾经扩成 11 跳（3 圈）**，每级只 +0.50 ⇒ 每 4 级又叠回
+;            同一 xz，层间只有 2.05 − 0.50 = **1.55 m** 净空；玩家 1.5 m 身高只剩 5 cm，
+;            一跳就撞头，实测 8 连摔。已退回 7 跳版：4 级 = 3.20 m 高差，板厚压到 0.30
+;            ⇒ 净空 2.90 m > 跳跃最高头顶 2.76 m，不再撞头。改塔时**先算这条**。
 ;            第 6 段：**绕柱螺旋下降** 5 站（每级 −1.40）+ **竖井** 4 层（开口错开 3.2 m）
 ; ── 交互 ── 第 5 段「机关区」：弹跳板 ×2 / 消失方块 ×4 / 上升气流 ×1 / 传送门 ×1 对
 ;
@@ -192,11 +196,11 @@ transparency = 1
 
 [node name="Parkour" type="Node3D"]
 script = ExtResource("1_parkour")
-route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/W8"), NodePath("Route/W9"), NodePath("Route/W10"), NodePath("Route/W11"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
-segments = [0, 9, 20, 28, 40, 53]
+route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
+segments = [0, 9, 20, 28, 36, 49]
 seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "横跳区・移动平台", "绕柱螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
-special_hops = [26, 27, 42, 49, 51, 52]
-short_hops = [29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
+special_hops = [26, 27, 38, 45, 47, 48]
+short_hops = [29, 30, 31, 32, 33, 34, 35]
 
 ; ══ 起跳段：平台西边缘的跑道（10 × 3 m），只有外观、没有碰撞 ══
 [node name="Launch" type="MeshInstance3D" parent="."]
@@ -580,168 +584,116 @@ shape = SubResource("Shape_unit")
 position = Vector3(-192.45, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C3"]
-scale = Vector3(4.3, 0.5, 4.3)
+scale = Vector3(4.8, 0.5, 4.8)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/C3"]
-scale = Vector3(4.3, 0.5, 4.3)
+scale = Vector3(4.8, 0.5, 4.8)
 shape = SubResource("Shape_unit")
 
-; W1：螺旋塔 1/12（+0.50，绕柱 90°；这一跳是全程进来的一跳，要助跑）
+; W1：螺旋塔 1/7（+0.80，绕柱 90°；这一跳是全程进来的一跳，要助跑）
 [node name="W1" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.3, 2.55, -4.9)
+position = Vector3(-199.25, 2.65, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W1"]
-scale = Vector3(2.9, 0.5, 2.9)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W1"]
-scale = Vector3(2.9, 0.5, 2.9)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W2：螺旋塔 2/12
+; W2：螺旋塔 2/7
 [node name="W2" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 3.05, -1.9)
+position = Vector3(-202.3, 3.45, -1.85)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W2"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W2"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W3：螺旋塔 3/12
+; W3：螺旋塔 3/7
 [node name="W3" type="StaticBody3D" parent="Route"]
-position = Vector3(-205.3, 3.55, -4.9)
+position = Vector3(-205.35, 4.25, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W3"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W3"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W4：螺旋塔 4/12（+0.55）
+; W4：螺旋塔 4/7（+0.80）
 [node name="W4" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 4.1, -7.9)
+position = Vector3(-202.3, 5.05, -7.95)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W4"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W4"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W5：螺旋塔 5/12（回到 1 正上方）
+; W5：螺旋塔 5/7（回到 1 正上方，+3.20 = 4 级）
 [node name="W5" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.3, 4.6, -4.9)
+position = Vector3(-199.25, 5.85, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W5"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W5"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W6：螺旋塔 6/12
+; W6：螺旋塔 6/7
 [node name="W6" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 5.1, -1.9)
+position = Vector3(-202.3, 6.65, -1.85)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W6"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W6"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
-; W7：螺旋塔 7/12
+; W7：螺旋塔 7/7（回到 3 正上方）
 [node name="W7" type="StaticBody3D" parent="Route"]
-position = Vector3(-205.3, 5.6, -4.9)
+position = Vector3(-205.35, 7.45, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W7"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/W7"]
-scale = Vector3(2.6, 0.5, 2.6)
-shape = SubResource("Shape_unit")
-
-; W8：螺旋塔 8/12（+0.55，回到 4 正上方）
-[node name="W8" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 6.15, -7.9)
-
-[node name="Mesh" type="MeshInstance3D" parent="Route/W8"]
-scale = Vector3(2.6, 0.5, 2.6)
-mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_pad")
-
-[node name="Col" type="CollisionShape3D" parent="Route/W8"]
-scale = Vector3(2.6, 0.5, 2.6)
-shape = SubResource("Shape_unit")
-
-; W9：螺旋塔 9/12
-[node name="W9" type="StaticBody3D" parent="Route"]
-position = Vector3(-199.3, 6.65, -4.9)
-
-[node name="Mesh" type="MeshInstance3D" parent="Route/W9"]
-scale = Vector3(2.6, 0.5, 2.6)
-mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_pad")
-
-[node name="Col" type="CollisionShape3D" parent="Route/W9"]
-scale = Vector3(2.6, 0.5, 2.6)
-shape = SubResource("Shape_unit")
-
-; W10：螺旋塔 10/12
-[node name="W10" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 7.15, -1.9)
-
-[node name="Mesh" type="MeshInstance3D" parent="Route/W10"]
-scale = Vector3(2.6, 0.5, 2.6)
-mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_pad")
-
-[node name="Col" type="CollisionShape3D" parent="Route/W10"]
-scale = Vector3(2.6, 0.5, 2.6)
-shape = SubResource("Shape_unit")
-
-; W11：螺旋塔 11/12
-[node name="W11" type="StaticBody3D" parent="Route"]
-position = Vector3(-205.3, 7.65, -4.9)
-
-[node name="Mesh" type="MeshInstance3D" parent="Route/W11"]
-scale = Vector3(2.6, 0.5, 2.6)
-mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_pad")
-
-[node name="Col" type="CollisionShape3D" parent="Route/W11"]
-scale = Vector3(2.6, 0.5, 2.6)
+scale = Vector3(2.35, 0.3, 2.35)
 shape = SubResource("Shape_unit")
 
 ; C4：★ 段 4 终点：螺旋塔顶（y = 8.40，和 7 跳版同一个角）
 [node name="C4" type="StaticBody3D" parent="Route"]
-position = Vector3(-202.3, 8.15, -7.9)
+position = Vector3(-202.3, 8.25, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C4"]
-scale = Vector3(2.4, 0.5, 2.4)
+scale = Vector3(2.4, 0.3, 2.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_pad")
 
 [node name="Col" type="CollisionShape3D" parent="Route/C4"]
-scale = Vector3(2.4, 0.5, 2.4)
+scale = Vector3(2.4, 0.3, 2.4)
 shape = SubResource("Shape_unit")
 
 ; E1：机关区入口
