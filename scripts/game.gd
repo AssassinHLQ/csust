@@ -362,7 +362,10 @@ func _spawn_standby_bosses() -> void:
 		if keep:
 			picked.append(child)
 	# ⚠️ 先摘出来再加：直接 add_child 会改 `holder.get_children()`，遍历会漏人。
+	# 另外要把 `owner` 清掉，否则 Godot 会警告「owner 不一致」（它们原本属于
+	# `BossesStandby` 这棵场景树，现在要挂到 Game 下）。
 	for child in picked:
+		child.owner = null
 		holder.remove_child(child)
 		add_child(child)
 	holder.queue_free()
