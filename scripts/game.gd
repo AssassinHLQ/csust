@@ -260,6 +260,7 @@ func _ready() -> void:
 	_weapon = $Player/Weapon
 	_hud = $HUD
 	_spawn = _player.global_position
+	_build_room_proxy()
 
 	_hud.bind(_player, _weapon)
 
@@ -413,6 +414,7 @@ func _play_opening() -> void:
 
 
 func _process(_delta: float) -> void:
+	_update_room_swap()
 	if _player and _player.global_position.y < FALL_LIMIT:
 		_player.global_position = _spawn
 		_player.velocity = Vector3.ZERO
@@ -422,6 +424,110 @@ func _process(_delta: float) -> void:
 func _on_target_died(_by: float) -> void:
 	_score += 1
 	_hits += 1
+
+
+## ── 画室609：门内看泼溅、门外看普通网格 ──
+##
+## 用户要的：「走出 609 门就隐藏高斯泼溅，外部看起来从高斯泼溅变成普通网格，
+## 走回去又隐藏普通网格、显示高斯泼溅」。**位置就是碰撞网格**（用户原话）。
+##
+## 所以代理网格的每一个盒子都**照着 `Room609/RoomCollision` 的 `CollisionShape3D`
+## 原样复制**（尺寸取 `BoxShape3D.size`、位置取它的全局变换），不估、不缩、不对齐
+## 到别的东西上 —— 碰撞在哪儿，看起来的墙就在哪儿。
+## 再补一块盖在墙顶的**顶板**：碰撞里没有顶，但站在外面从高处看，没有顶就一眼
+## 看进空房间里。
+##
+## 判定：墙体的世界包围盒（`_room_box`）收缩 `ROOM_SWAP_HYSTERESIS` 之后
+## `has_point(player)` 就是「在屋里」。进/出各用一条边界（滞回），
+## 免得贴着门框走的时候每帧来回闪。
+const ROOM_COLLISION_PATH := "Room609/RoomCollision"
+const ROOM_PROXY_NAME := "RoomProxy"
+const ROOM_SWAP_HYSTERESIS := 0.25
+## 配色照 `scenes/mesh_hut.tscn` 那间手工小屋的调子（用户说的「你之前做的这样子」）
+const ROOM_WALL_COLOR := Color(0.86, 0.83, 0.76)
+const ROOM_ROOF_COLOR := Color(0.27, 0.28, 0.30)
+const ROOM_ROOF_THICKNESS := 0.3
+
+var _room_proxy: Node3D
+## 墙体的世界包围盒（= 房间占位）。空 AABB 表示没建代理。
+var _room_box := AABB()
+var _room_inside := true
+
+
+## 照碰撞盒建出「门外看到的网格」。放在 `_ready()`，因为碰撞盒在场景里就有，
+## 不必等泼溅加载完 —— 加载那几秒里如果什么都不显示，房间就是一个黑洞。
+func _build_room_proxy() -> void:
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		return
+	var proxy := Node3D.new()
+	proxy.name = ROOM_PROXY_NAME
+	add_child(proxy)
+
+	var wall_mat := StandardMaterial3D.new()
+	wall_mat.albedo_color = ROOM_WALL_COLOR
+	wall_mat.roughness = 0.95
+
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var walls := 0
+	for c in body.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var size: Vector3 = (cs.shape as BoxShape3D).size
+		var mi := MeshInstance3D.new()
+		mi.name = "Wall%d" % walls
+		var m := BoxMesh.new()
+		m.size = size
+		mi.mesh = m
+		mi.material_override = wall_mat
+		proxy.add_child(mi)
+		# ⚠️ 先 add_child 再写 global_transform：不在树里时 global == local。
+		mi.global_transform = cs.global_transform
+		var b: AABB = cs.global_transform * AABB(-size * 0.5, size)
+		lo = lo.min(b.position)
+		hi = hi.max(b.position + b.size)
+		walls += 1
+	if walls == 0:
+		proxy.queue_free()
+		return
+
+	var roof := MeshInstance3D.new()
+	roof.name = "Roof"
+	var rm := BoxMesh.new()
+	rm.size = Vector3(hi.x - lo.x, ROOM_ROOF_THICKNESS, hi.z - lo.z)
+	roof.mesh = rm
+	var roof_mat := StandardMaterial3D.new()
+	roof_mat.albedo_color = ROOM_ROOF_COLOR
+	roof_mat.roughness = 0.9
+	roof.material_override = roof_mat
+	proxy.add_child(roof)
+	roof.global_position = Vector3((lo.x + hi.x) * 0.5,
+		hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
+
+	_room_proxy = proxy
+	_room_box = AABB(lo, hi - lo)
+	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [
+		walls, str(_room_box.size.snappedf(0.01)),
+		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 每帧：在屋里 → 泼溅显示、代理藏；出屋 → 反过来。
+## 泼溅**没就位之前**代理一直显示（宁可先看到一个实心房间，也别看到黑洞）。
+func _update_room_swap() -> void:
+	if _room_proxy == null or _player == null:
+		return
+	var p := _player.global_position
+	if _room_box.grow(-ROOM_SWAP_HYSTERESIS).has_point(p):
+		_room_inside = true
+	elif not _room_box.grow(ROOM_SWAP_HYSTERESIS).has_point(p):
+		_room_inside = false
+
+	var ready := _room_scene != null and _room_scene.is_ready()
+	_room_proxy.visible = not _room_inside or not ready
+	if _room_scene != null and _room_scene.splat_node != null:
+		_room_scene.splat_node.visible = _room_inside and ready
 
 
 ## 只有 `venue == "room"` 的场地才和方盒地板共面（校园那份在平台下方 12 m）。
