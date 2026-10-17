@@ -21,11 +21,14 @@
 | `boss_squash/倭瓜优香.obj` | 可选 | 第三位 Boss（README §7.7）。**OBJ 导入成 `Mesh` 不是 `PackedScene`** —— `boss.gd` 两条分支都接。附带 `textures/` 4 张图 |
 | `boss_hod/HOD_Original.fbx` | 可选 | 第四位 Boss（README §7.7）。164 骨、无动画、3 个材质（本体 / 光环 / 随身高塔）。`*_Mask.png` 是原作者渲染遮罩，游戏里不用 |
 | `boss_perorozilla/Perorozilla_Original.fbx` | 可选 | 第五位 Boss（README §7.7）。47 骨、无动画、6 网格共用 1 个材质；`Perorozilla_Emotion_01..05` 是**叠在同一位置**的五种表情，只留一张 |
+| `boss_binah/Binah_Original.fbx` | 可选 | 第六位 Boss（**备用**，README §7.7）。44 骨、无动画、3 个材质（本体+4 环 / 武器面 / 光环）。只有 `-- --bosses=all` 才上场 |
+| `boss_goliath/Goliath_Decagram_Vulcan.fbx` | 可选 | 第七位 Boss（**备用**，README §7.7）。34 骨、单网格单材质。同上 |
 
-同伴与 Boss 都是**可选**的：没有就把 `scenes/game.tscn` 里对应的
-`CompanionMika` / `CompanionYuuka` / `CompanionNoa` / `CompanionMomoi` /
-`CompanionMidori` / `CompanionYuzu` / `CompanionKei` / `Boss` / `BossPig` /
-`BossSquash` / `BossHod` / `BossPeroro` 节点删掉。
+同伴与 Boss 都是**可选**的。**默认场上只有飞猪优香一位**（不挤），其余六位在
+`scenes/bosses_standby.tscn` 里待命 —— 要全部上场就用 `-- --bosses=all`，
+要删某一位就从那份场景里删对应节点（`Boss` / `BossSquash` / `BossHod` /
+`BossPeroro` / `BossBina` / `BossGoliath`）；`BossPig` 在 `game.tscn` 里，
+不想要飞猪就删它。完全没有 Boss 素材时也能跑（备用场景加不进来时只打一行日志）。
 
 同伴这七份 GLB 的**贴图是内嵌的**（image 走 bufferView），所以只要拷 `.glb` 本体。
 
@@ -34,8 +37,9 @@
 `models/boss_hod/**`、`models/boss_perorozilla/**` 都已被 `.gitignore` 排除。
 
 > **署名**：`boss_pig/`（飞猪优香）、`boss_squash/`（倭瓜优香）、`boss_hod/`（霍德）、
-> `boss_perorozilla/`（佩洛洛斯拉）四个 Boss 的制作**作者是「一个睿智」**，
-> 全部派生自 Blue Archive，属专有版权。完整清单见仓库根的 [CREDITS.md](../CREDITS.md)。
+> `boss_perorozilla/`（佩洛洛斯拉）、`boss_binah/`（比纳）、`boss_goliath/`（哥利亚）
+> 六个 Boss 的制作**作者是「一个睿智」**，全部派生自 Blue Archive，属专有版权。
+> 完整清单见仓库根的 [CREDITS.md](../CREDITS.md)。
 >
 > 主角 Arisu 与七名同伴的模型**取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)**
 > （Blue Archive 官方素材的解包整理版，整理者 lihaohong6 / Peterli）——

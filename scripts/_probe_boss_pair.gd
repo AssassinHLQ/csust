@@ -9,6 +9,8 @@ extends SceneTree
 const PATHS := [
 	"res://models/boss_hod/HOD_Original.fbx",
 	"res://models/boss_perorozilla/Perorozilla_Original.fbx",
+	"res://models/boss_binah/Binah_Original.fbx",
+	"res://models/boss_goliath/Goliath_Decagram_Vulcan.fbx",
 ]
 
 

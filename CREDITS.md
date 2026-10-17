@@ -30,8 +30,13 @@
 
 ## 二、角色与 Boss 模型（**全部不随仓库分发**）
 
+> 场上默认**只有飞猪优香**一位（不挤）；其余六位在 `scenes/bosses_standby.tscn`
+> 里待命，`-- --bosses=all` 才上场。
+
 | 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
 |---|---|---|---|---|---|
+| 比纳（第六位 Boss，备用） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_binah/`，来源 `比纳_by_一个睿智.zip` | `Binah_Original.fbx`，44 骨；3 个材质（本体/环、武器面、光环）；`*_Mask.png` 同上 |
+| 哥利亚（第七位 Boss，备用） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_goliath/`，来源 `哥利亚_by_一个睿智.zip` | `Goliath_Decagram_Vulcan.fbx`，34 骨、单网格单材质 |
 | 霍德（第四位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_hod/`，来源 `霍德_by_一个睿智.zip` | `HOD_Original.fbx`，164 骨、无动画；3 个材质；`*_Mask.png` 是原作者渲染遮罩，游戏里不绑 |
 | 佩洛洛斯拉（第五位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_perorozilla/`，来源 `佩洛洛斯拉_by_一个睿智.zip` | `Perorozilla_Original.fbx`，47 骨、无动画；6 网格共用 1 材质；5 张表情变体只留 1 张 |
 | 倭瓜优香（第三位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_squash/`，来源 `倭瓜优香压缩文件_by_一个睿智.zip` | `倭瓜优香.obj`，纯静态网格、无骨架；4 个材质 |

@@ -59,6 +59,28 @@ const ENTRIES := [
 	# ---------- 角色与 Boss 模型 ----------
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/boss_binah",
+		"title": "比纳（第六位 Boss，备用）FBX + 贴图",
+		"author": "一个睿智",
+		"license": "专有版权（派生自 Blue Archive，玩家二创）",
+		"distributed": false,
+		"source": "比纳_by_一个睿智.zip",
+		"license_file": "",
+		"note": "Binah_Original.fbx，44 骨、无动画；3 个材质（本体/环、武器面、光环）；*_Mask.png 是作者渲染遮罩，游戏里不绑",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/boss_goliath",
+		"title": "哥利亚（第七位 Boss，备用）FBX + 贴图",
+		"author": "一个睿智",
+		"license": "专有版权（派生自 Blue Archive，玩家二创）",
+		"distributed": false,
+		"source": "哥利亚_by_一个睿智.zip",
+		"license_file": "",
+		"note": "Goliath_Decagram_Vulcan.fbx，34 骨、单网格单材质；*_Mask.png 同上",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/boss_hod",
 		"title": "霍德（第四位 Boss）FBX + 贴图",
 		"author": "一个睿智",

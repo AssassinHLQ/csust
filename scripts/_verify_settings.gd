@@ -79,9 +79,14 @@ func _run() -> void:
 	_check(not _guns_idle(guns), "打开后恢复开火")
 
 	var bosses := _bosses(game)
-	# ⚠️ 场上有几位就断言几位：现在（第三～第五位加进来之后）是 5 位。
-	#    写死数字的话，每加一位 Boss 这条就假红一次 —— 本喵已经踩过一次。
-	_check(bosses.size() == 5, "找到 5 位 Boss（实测 %d）" % bosses.size())
+	# ⚠️ 场上有几位就断言几位：默认只有飞猪优香（1），`-- --bosses=all` 是 7。
+	#    写死数字的话，每加一位 Boss 这条就假红一次 —— 本喵已经踩过两次。
+	var want_bosses := 0
+	for ch in game.get_children():
+		if ch is Boss:
+			want_bosses += 1
+	_check(bosses.size() == want_bosses,
+		"找到 %d 位 Boss（实测 %d）" % [want_bosses, bosses.size()])
 	GameSettings.set_value("boss_attack", false)
 	await _wait(2)
 	_check(_boss_attack_off(bosses), "关掉后 %d 位 Boss 都不主动攻击" % bosses.size())

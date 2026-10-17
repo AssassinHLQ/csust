@@ -25,6 +25,8 @@
 | 「倭瓜优香」Boss 模型（OBJ，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_squash/**`（`倭瓜优香.obj` + `textures/` 4 张贴图）。同样仅供本地学习 |
 | 「霍德」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_hod/**`（`HOD_Original.fbx` + 3 张贴图 + 2 张作者渲染遮罩） |
 | 「佩洛洛斯拉」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_perorozilla/**`（`Perorozilla_Original.fbx` + 贴图 + 表情遮罩） |
+| 「比纳」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_binah/**`（`Binah_Original.fbx` + 贴图 + 渲染遮罩） |
+| 「哥利亚」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_goliath/**`（`Goliath_Decagram_Vulcan.fbx` + 贴图 + 渲染遮罩） |
 | 高斯泼溅扫描数据（校园 / 画室 609） | **权利状态未核实** | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，其拍摄权、场地权、肖像权与再分发权均未由本项目核实 |
 | 校园碰撞网格 | 派生自上一项 | ❌ 不包含 | `models/school.collision.glb` |
 | 项目图标 `icon.png` | 待确认 | ✅ 包含 | 来源需仓库作者确认；若不是原创请替换为自有图标 |
@@ -39,7 +41,9 @@ _arisu_learn/
 │  ├─ boss_pig/         ← 可选：飞猪优香 FBX + 贴图
 │  ├─ boss_squash/      ← 可选：倭瓜优香 OBJ + 贴图
 │  ├─ boss_hod/         ← 可选：霍德 FBX + 贴图
-│  └─ boss_perorozilla/ ← 可选：佩洛洛斯拉 FBX + 贴图
+│  ├─ boss_perorozilla/ ← 可选：佩洛洛斯拉 FBX + 贴图
+│  ├─ boss_binah/       ← 可选：比纳 FBX + 贴图（备用，`-- --bosses=all` 才上场）
+│  └─ boss_goliath/     ← 可选：哥利亚 FBX + 贴图（备用，同上）
 ├─ assets/
 │  ├─ ui_font/          ← 可选：界面显示字体（现在是「Aa暗夜深渊.ttf」，商用需授权）
 │  │                       丢进来就整套 UI 换字；没有它会**自动回退**到下面的

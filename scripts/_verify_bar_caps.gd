@@ -170,8 +170,12 @@ func _test_hud() -> void:
 	if hud == null:
 		_check(false, "场景里有 HUD")
 		return
+	var boss_count := 0
+	for ch in game.get_children():
+		if ch is Boss:
+			boss_count += 1
 	var count := 0
-	for i in 2:
+	for i in 16:
 		var bar := hud.get_node_or_null("BossBar%d" % i) as ProgressBar
 		if bar == null:
 			continue
@@ -185,7 +189,9 @@ func _test_hud() -> void:
 			"BossBar%d 的槽也开了一样的九宫格（满血时两者圆角重合）" % i)
 		_check(fill != null and (fill.texture as ImageTexture).get_width() == int(BAR_W),
 			"BossBar%d 的填充贴图烘到 %.0f 宽" % [i, BAR_W])
-	_check(count == 2, "两位 Boss 的条都查到了（%d 根）" % count)
+	# ⚠️ 不写死 2：默认场上只有飞猪优香一位（`-- --bosses=all` 才是 7 位），
+	#    这里按「条数 = 场上 Boss 数」判，两种摆法都能跑。
+	_check(count == boss_count, "%d 位 Boss 的条都查到了（%d 根）" % [boss_count, count])
 
 
 # --- 工具 -----------------------------------------------------------------------

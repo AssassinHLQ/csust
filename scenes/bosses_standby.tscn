@@ -1,0 +1,95 @@
+[gd_scene format=3]
+
+; ── 备用 Boss 库 ──────────────────────────────────────────────────────────────
+; 主场景（`game.tscn`）里**只留飞猪优香**一位 —— 五、六位 Boss 同时摆上去太挤。
+; 其余的都在这里待命，需要时按整份场景加回去：
+;
+;   ① 玩的时候：命令行加 `-- --bosses=all`
+;      （也可以点名：`-- --bosses=hod,peroro`，见 `game.gd::_spawn_standby_bosses`）
+;   ② 自检 / 探针：同样加 `-- --bosses=all`，节点名与以前完全一致，
+;      所以按 `get_node("Boss")` 之类取的用例一行都不用改
+;   ③ 想永久摆回场上：把这份场景实例化进 `game.tscn`（去掉 `standby_only` 即可）
+;
+; ⚠️ 每一位的模型都不随仓库分发（`.gitignore` 排除了 `models/boss*/**`），
+;    克隆者没有素材时这份场景会**整份加不进来**，所以 `game.gd` 里对实例化失败
+;    做了兜底：只打印一行日志，不让游戏启动失败。
+
+[ext_resource type="Script" path="res://scripts/trex_boss.gd" id="1_trex"]
+[ext_resource type="Script" path="res://scripts/squash_boss.gd" id="2_squash"]
+[ext_resource type="Script" path="res://scripts/hod_boss.gd" id="3_hod"]
+[ext_resource type="Script" path="res://scripts/peroro_boss.gd" id="4_peroro"]
+[ext_resource type="Script" path="res://scripts/bina_boss.gd" id="5_bina"]
+[ext_resource type="Script" path="res://scripts/goliath_boss.gd" id="6_goliath"]
+
+[node name="BossesStandby" type="Node3D"]
+
+[node name="Boss" type="StaticBody3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 13, 0, -8)
+script = ExtResource("1_trex")
+
+[node name="BossSquash" type="StaticBody3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 14)
+script = ExtResource("2_squash")
+display_name = "倭瓜优香"
+model_path = "res://models/boss_squash/倭瓜优香.obj"
+texture_map = {
+"Yuuka_Original_Body.001": "res://models/boss_squash/textures/Yuuka_Original_Body.jpeg",
+"Yuuka_Original_Hair.001": "res://models/boss_squash/textures/Yuuka_Original_Hair.jpeg",
+"Yuuka_Original_Halo.001": "res://models/boss_squash/textures/Yuuka_Original_Halo.jpeg",
+"材质": "res://models/boss_squash/textures/材质 Base Color.png"
+}
+collision_factors = Vector3(0.9, 0.95, 0.9)
+height = 3.0
+max_health = 2200.0
+
+[node name="BossHod" type="StaticBody3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 13, 0, 10)
+script = ExtResource("3_hod")
+display_name = "霍德"
+model_path = "res://models/boss_hod/HOD_Original.fbx"
+texture_map = {
+"HOD_Original": "res://models/boss_hod/HOD_Original.png",
+"HOD_Original_Halo": "res://models/boss_hod/HOD_Original_Halo.png",
+"HOD_TemporaryTower": "res://models/boss_hod/HOD_TemporaryTower.png"
+}
+collision_factors = Vector3(0.8, 0.92, 0.8)
+height = 6.5
+max_health = 3000.0
+
+[node name="BossPeroro" type="StaticBody3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -13, 0, 10)
+script = ExtResource("4_peroro")
+display_name = "佩洛洛斯拉"
+model_path = "res://models/boss_perorozilla/Perorozilla_Original.fbx"
+texture_map = {
+"Perorozilla_Original_Body": "res://models/boss_perorozilla/Perorozilla_Original.png"
+}
+collision_factors = Vector3(0.9, 0.9, 0.9)
+height = 4.0
+max_health = 2400.0
+
+[node name="BossBina" type="StaticBody3D" parent="."]
+transform = Transform3D(0.2949, 0, -0.9555, 0, 1, 0, 0.9555, 0, 0.2949, -13, 0, 2)
+script = ExtResource("5_bina")
+display_name = "比纳"
+model_path = "res://models/boss_binah/Binah_Original.fbx"
+texture_map = {
+"Binah_Halo": "res://models/boss_binah/Binah_Halo.png",
+"Binah_Original": "res://models/boss_binah/Binah_Original.png",
+"Binah_Original_Weapon": "res://models/boss_binah/Binah_Original.png"
+}
+collision_factors = Vector3(0.9, 0.9, 0.8)
+height = 5.0
+max_health = 3200.0
+
+[node name="BossGoliath" type="StaticBody3D" parent="."]
+transform = Transform3D(0.2949, 0, 0.9555, 0, 1, 0, -0.9555, 0, 0.2949, 13, 0, 2)
+script = ExtResource("6_goliath")
+display_name = "哥利亚"
+model_path = "res://models/boss_goliath/Goliath_Decagram_Vulcan.fbx"
+texture_map = {
+"Goliath_Decagram_Vulcan": "res://models/boss_goliath/Goliath_Decagram_Vulcan.png"
+}
+collision_factors = Vector3(0.85, 0.92, 0.85)
+height = 5.5
+max_health = 3500.0

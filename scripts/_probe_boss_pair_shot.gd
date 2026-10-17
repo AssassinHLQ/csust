@@ -15,6 +15,8 @@ extends SceneTree
 const TARGETS := [
 	["BossHod", "80_hod_front.png", "81_hod_quarter.png"],
 	["BossPeroro", "82_peroro_front.png", "83_peroro_quarter.png"],
+	["BossBina", "84_bina_front.png", "85_bina_quarter.png"],
+	["BossGoliath", "86_goliath_front.png", "87_goliath_quarter.png"],
 ]
 
 var _cam: Camera3D

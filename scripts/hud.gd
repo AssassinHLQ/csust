@@ -89,12 +89,12 @@ const BOSS_TOP := 30.0
 
 # --- 左上角泼溅加载状态行 ---
 ## **一份场地一行**，贴在血量面板下沿（不挡住血量）。
-## ⚠️ 现在是**五位 Boss**（霸王龙 / 飞猪 / 倭瓜 / 霍德 / 佩洛洛斯拉），
-##    Boss 条组占到 y ≈ 226（30 + 4×46 + 名字/条高），所以整体下移到 240。
-##    `SPLAT_ROW_TOP` 必须大于「BOSS_TOP + (Boss 数 − 1) × BOSS_ROW_HEIGHT + BOSS_BAR_HEIGHT」，
-##    再加 Boss 时先算这一行；`_verify_credits.gd` 里有一条断言锁这个不变量。
+## ⚠️ 现在是**一到七位 Boss**（默认场上只有飞猪优香，其余在 `scenes/bosses_standby.tscn`
+##    里待命，`-- --bosses=all` 才会全部上场）。所以这一行不能再写死：
+##    `splat_row_top()` 会按**当时实际绑了几条 Boss 血条**往下推，
+##    `SPLAT_ROW_TOP` 只是「不许高过血量面板底边」的下限。
 const SPLAT_ROW_HEIGHT := 20.0
-const SPLAT_ROW_TOP := 240.0
+const SPLAT_ROW_TOP := 128.0
 
 var _player: Player
 var _weapon: Weapon
@@ -277,6 +277,7 @@ func bind_bosses(bosses: Array) -> void:
 		boss.health_changed.connect(_on_boss_health.bind(index))
 		_on_boss_health(boss.health, boss.max_health, index)
 		index += 1
+	_after_boss_rows_changed()
 
 
 ## 只接一位 Boss 的旧写法（保留，自检里还在用）
@@ -330,6 +331,11 @@ func _add_boss_row(index: int, title: String) -> void:
 	_boss_rows.append({"name": label, "bar": bar, "title": title})
 
 
+## Boss 条数变了：把泼溅状态行整体下推（见 `splat_row_top`）
+func _after_boss_rows_changed() -> void:
+	_layout_splat_rows()
+
+
 func _on_boss_health(current: float, maximum: float, index: int) -> void:
 	if index < 0 or index >= _boss_rows.size():
 		return
@@ -340,6 +346,25 @@ func _on_boss_health(current: float, maximum: float, index: int) -> void:
 
 
 # --- 左上角：泼溅加载状态 -----------------------------------------------------
+
+## 泼溅状态行从哪一行开始。**跟着 Boss 条组走**：1 位 Boss 时贴着血量面板下沿（128），
+## 7 位时自动挪到最后一条血条下面 —— 这样「默认一位 / 全开七位」两种摆法都不会重叠。
+func splat_row_top() -> float:
+	var n := float(_boss_rows.size())
+	if n <= 0.0:
+		return SPLAT_ROW_TOP
+	var boss_bottom := BOSS_TOP + (n - 1.0) * BOSS_ROW_HEIGHT + BOSS_BAR_HEIGHT
+	return maxf(SPLAT_ROW_TOP, boss_bottom + BOSS_NAME_GAP + 8.0)
+
+
+## Boss 条数变了以后重排泼溅状态行（`bind_bosses` / `bind_splats` 都会调）
+func _layout_splat_rows() -> void:
+	var top := splat_row_top()
+	for i in _splat_rows.size():
+		var label: Label = _splat_rows[i]["label"]
+		if is_instance_valid(label):
+			label.position = Vector2(18, top + float(i) * SPLAT_ROW_HEIGHT)
+
 
 func bind_splat(splat: SplatScene) -> void:
 	if splat == null:
@@ -374,7 +399,7 @@ func bind_splats(splats: Array) -> void:
 		label.name = "SplatStatus%d" % index
 		# ⚠️ 行距必须**正好**是 SPLAT_ROW_HEIGHT：`_verify_room.gd` 直接断言
 		#    `row1.position.y - row0.position.y == 20.0`。
-		label.position = Vector2(18, SPLAT_ROW_TOP + index * SPLAT_ROW_HEIGHT)
+		label.position = Vector2(18, splat_row_top() + index * SPLAT_ROW_HEIGHT)
 		label.add_theme_font_size_override("font_size", 14)
 		label.add_theme_color_override("font_color", Color(0.86, 0.91, 1.0, 0.92))
 		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))

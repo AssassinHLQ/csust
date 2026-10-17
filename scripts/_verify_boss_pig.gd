@@ -151,64 +151,68 @@ func _run() -> void:
 	_check(pig.health == pig.max_health, "重新站起来且满血")
 	_check(not col.disabled, "碰撞体恢复")
 
-	print("\n========== 5. HUD 双血条 ==========")
+	print("\n========== 5. HUD 血条组 ==========")
 	# ⚠️ 血条**按名字取**，不要靠遍历顺序。
 	#    `_all()` 是拿栈做的深度遍历，弹出来是**倒序**（bars[0] 会是 BossBar1）；
 	#    本喵试过 `bars.sort_custom(func(a,b): return a.name < b.name)`，
 	#    实测**没生效**（顺序照旧是反的），于是把「打霸王龙掉的是飞猪那条」
 	#    误判成了游戏的 bug。按名字取既明确又顺便验了命名约定。
-	var bar0 := hud.get_node_or_null("BossBar0") as ProgressBar
-	var bar1 := hud.get_node_or_null("BossBar1") as ProgressBar
-	var bar2 := hud.get_node_or_null("BossBar2") as ProgressBar
-	var n0 := hud.get_node_or_null("BossName0") as Label
-	var n1 := hud.get_node_or_null("BossName1") as Label
-	var n2 := hud.get_node_or_null("BossName2") as Label
+	#
+	# ⚠️ 现在**行号本身也会变**：默认场上只有飞猪优香（row 0），
+	#    `-- --bosses=all` 才是 7 位（飞猪/霸王龙/倭瓜/霍德/佩洛洛斯拉/比纳/哥利亚）。
+	#    所以这里先建「名字 → 条」的表，完全不假设行序。
+	var bars := {}
 	var bar_count := 0
-	for n in _all(hud, "ProgressBar"):
-		if (n as ProgressBar).name.begins_with("BossBar"):
-			bar_count += 1
-	print("  BossBar 数量 = %d" % bar_count)
-	print("  第 1 行「%s」→ %.2f" % [n0.text if n0 else "（无）", bar0.value if bar0 else -1.0])
-	print("  第 2 行「%s」→ %.2f" % [n1.text if n1 else "（无）", bar1.value if bar1 else -1.0])
-	print("  第 3 行「%s」→ %.2f" % [n2.text if n2 else "（无）", bar2.value if bar2 else -1.0])
-	# ⚠️ 第三位 Boss（倭瓜优香）加进来之后就是三条了。这里按「数量 = 场上 Boss 数」判，
-	#    不再写死 2 —— 以后再加一位只要改 `_bosses` 就自动对得上。
+	for i in 16:
+		var b := hud.get_node_or_null("BossBar%d" % i) as ProgressBar
+		var n := hud.get_node_or_null("BossName%d" % i) as Label
+		if b == null or n == null:
+			continue
+		bar_count += 1
+		bars[n.text] = b
+		print("  第 %d 行「%s」→ %.2f" % [i + 1, n.text, b.value])
 	var want := 0
 	for ch in game.get_children():
 		if ch is Boss:
 			want += 1
-	_check(bar_count == want and bar0 != null and n2 != null,
-		"HUD 上正好有 %d 条血条（BossBar0/1/2），和场上 Boss 数一致" % want)
-	_check(n2 != null and n2.text == "倭瓜优香", "第 3 行是倭瓜优香")
-	_check(n0 != null and n0.text == "霸王龙优香", "第 1 行是霸王龙优香（名字行只写名字，不带血量数字）")
-	_check(n1 != null and n1.text == "飞猪优香", "第 2 行是飞猪优香")
-	_check(absf(bar1.value - 1.0) < 0.001,
-		"飞猪血条在重生后回到满格（%.2f）" % bar1.value)
+	_check(bar_count == want, "HUD 上正好有 %d 条血条（BossBar0..），和场上 Boss 数一致" % want)
+	for nm in ["飞猪优香", "霸王龙优香", "倭瓜优香", "霍德", "佩洛洛斯拉"]:
+		_check(bars.has(nm), "HUD 上有「%s」那条（名字行只写名字，不带血量数字）" % nm)
+	var trex_bar: ProgressBar = bars.get("霸王龙优香")
+	var pig_bar: ProgressBar = bars.get("飞猪优香")
+	_check(pig_bar != null and absf(pig_bar.value - 1.0) < 0.001,
+		"飞猪血条在重生后回到满格（%.2f）" % (pig_bar.value if pig_bar else -1.0))
 
-	# 打霸王龙 300 → 第 1 行掉到 0.90，第 2 行纹丝不动
+	# 打霸王龙 300 → 只有它那条掉
 	var pig_hp := pig.health
 	trex.take_damage(300.0)
 	await _steps(3)
-	print("  打霸王龙 300：第 1 行 %.3f「%s」  第 2 行 %.3f「%s」" % [
-		bar0.value, n0.text, bar1.value, n1.text])
-	_check(pig.health == pig_hp and absf(bar1.value - 1.0) < 0.001, "打霸王龙完全不影响飞猪那条")
+	print("  打霸王龙 300：霸王龙条 %.3f  飞猪条 %.3f" % [
+		trex_bar.value if trex_bar else -1.0, pig_bar.value if pig_bar else -1.0])
+	_check(pig.health == pig_hp and pig_bar != null and absf(pig_bar.value - 1.0) < 0.001,
+		"打霸王龙完全不影响飞猪那条")
 	# ⚠️ 这里原先断言名字文本里带 "2700"。换成 Minecraft 风格后名字行**只写名字**、
 	#    不再显示血量数字（见 hud.gd 的 _add_boss_row），所以改成直接对着 Boss 的
 	#    真实 `health` 比 —— 不抠文本，还顺便挡住「同伴偷偷帮打」造成的数值漂移。
-	_check(bar0.value < 0.999 and absf(bar0.value - trex.health / trex.max_health) < 0.001,
-		"第 1 行血条跟着霸王龙走（%.3f，血 %d/%d）" % [
-			bar0.value, int(trex.health), int(trex.max_health)])
+	_check(trex_bar != null and trex_bar.value < 0.999
+			and absf(trex_bar.value - trex.health / trex.max_health) < 0.001,
+		"霸王龙那条血条跟着它自己走（%.3f，血 %d/%d）" % [
+			trex_bar.value if trex_bar else -1.0, int(trex.health), int(trex.max_health)])
 
-	# 再打飞猪 180 → 只动第 2 行
+	# 再打飞猪 180 → 只动飞猪那条
 	var trex_hp := trex.health
+	var trex_ratio := trex_bar.value if trex_bar else 0.0
 	pig.take_damage(180.0)
 	await _steps(3)
-	print("  再打飞猪 180：第 1 行 %.3f「%s」  第 2 行 %.3f「%s」" % [
-		bar0.value, n0.text, bar1.value, n1.text])
-	_check(trex.health == trex_hp and absf(bar0.value - 0.9) < 0.01, "打飞猪完全不影响霸王龙那条")
-	_check(bar1.value < 0.999 and absf(bar1.value - pig.health / pig.max_health) < 0.001,
-		"第 2 行血条跟着飞猪走（%.3f，血 %d/%d）" % [
-			bar1.value, int(pig.health), int(pig.max_health)])
+	print("  再打飞猪 180：霸王龙条 %.3f  飞猪条 %.3f" % [
+		trex_bar.value if trex_bar else -1.0, pig_bar.value if pig_bar else -1.0])
+	_check(trex.health == trex_hp and trex_bar != null
+			and absf(trex_bar.value - trex_ratio) < 0.001,
+		"打飞猪完全不影响霸王龙那条")
+	_check(pig_bar != null and pig_bar.value < 0.999
+			and absf(pig_bar.value - pig.health / pig.max_health) < 0.001,
+		"飞猪那条血条跟着飞猪走（%.3f，血 %d/%d）" % [
+			pig_bar.value if pig_bar else -1.0, int(pig.health), int(pig.max_health)])
 
 	print("\n========== 6. 飞猪现在也会攻击 ==========")
 	# 飞猪原来只是木桩（boss.gd），这一轮换成了 pig_boss.gd（骚扰型）。
@@ -384,6 +388,43 @@ func _run() -> void:
 			print("  退到霍德圈外：玩家 HP = %.0f" % player.health)
 			_check(is_equal_approx(player.health, player.max_health),
 				"站在霍德圈外不掉血（预警圈 = 伤害区）")
+
+	print("\n========== 9. 第六、第七位 Boss（比纳 / 哥利亚，备用库）==========")
+	# 这两位**不在主场景里**（默认场上只有飞猪优香，太挤），
+	# 躺在 `scenes/bosses_standby.tscn`，靠 `-- --bosses=all` 上场。
+	var bina := game.get_node_or_null("BossBina") as Boss
+	var goli := game.get_node_or_null("BossGoliath") as Boss
+	_check(bina != null and goli != null, "备用库里多了比纳与哥利亚")
+	if bina != null and goli != null:
+		print("  比纳：%s  身高 %.2f m  骨 %d  尺寸 %s" % [
+			bina.display_name, bina.visual_size.y, bina.bone_count,
+			str(bina.visual_size.snappedf(0.01))])
+		print("  哥利亚：%s  身高 %.2f m  骨 %d  尺寸 %s" % [
+			goli.display_name, goli.visual_size.y, goli.bone_count,
+			str(goli.visual_size.snappedf(0.01))])
+		_check(bina.display_name == "比纳" and goli.display_name == "哥利亚", "名字对上")
+		_check(bina.measure_kind == "骨架" and bina.bone_count > 30, "比纳按骨架量（44 骨）")
+		_check(goli.measure_kind == "骨架" and goli.bone_count > 20, "哥利亚按骨架量（34 骨）")
+		var bare := 0
+		var total := 0
+		for b in [bina, goli]:
+			for m in _all((b as Boss).model, "MeshInstance3D"):
+				var mi := m as MeshInstance3D
+				var am := mi.mesh as ArrayMesh
+				if am == null:
+					continue
+				for s in am.get_surface_count():
+					var smat := am.surface_get_material(s)
+					if smat is StandardMaterial3D:
+						total += 1
+						if (smat as StandardMaterial3D).albedo_texture == null:
+							bare += 1
+		_check(total > 0 and bare == 0,
+			"两位的每个材质面都绑了贴图（%d/%d）" % [total - bare, total])
+		_check(float(bina.get("attack_half_angle_degrees")) > 60.0,
+			"比纳是全场最宽的扇形（%.0f°）" % float(bina.get("attack_half_angle_degrees")))
+		_check(float(goli.get("attack_reach")) >= 10.0,
+			"哥利亚的圈落在 %.1f m 外（全场最远）" % float(goli.get("attack_reach")))
 
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)

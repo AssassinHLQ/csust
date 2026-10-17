@@ -154,13 +154,17 @@ func _run() -> void:
 		var row_h: float = consts["BOSS_ROW_HEIGHT"]
 		var top: float = consts["BOSS_TOP"]
 		var bar_h: float = consts["BOSS_BAR_HEIGHT"]
-		var splat_top: float = consts["SPLAT_ROW_TOP"]
+		var floor_top: float = consts["SPLAT_ROW_TOP"]
 		var boss_bottom := top + float(boss_count - 1) * row_h + bar_h
-		print("  Boss %d 位 → 血条组占 y = %.0f ~ %.0f；泼溅状态行从 %.0f 开始" % [
-			boss_count, top - 28.0, boss_bottom, splat_top])
-		_check(boss_count == 5, "场上正好 5 位 Boss（实测 %d）" % boss_count)
+		# 泼溅状态行的起点现在**跟着 Boss 条数走**（见 hud.gd::splat_row_top）
+		var splat_top: float = hud.call("splat_row_top")
+		print("  Boss %d 位 → 血条组占 y = %.0f ~ %.0f；泼溅状态行从 %.0f 开始（下限 %.0f）" % [
+			boss_count, top - 28.0, boss_bottom, splat_top, floor_top])
+		_check(boss_count == 7, "场上正好 7 位 Boss（--bosses=all，实测 %d）" % boss_count)
 		_check(splat_top > boss_bottom,
 			"泼溅状态行（%.0f）在最后一条 Boss 血条（%.0f）下面" % [splat_top, boss_bottom])
+		_check(splat_top >= floor_top,
+			"泼溅状态行没有高过血量面板下沿（%.0f ≥ %.0f）" % [splat_top, floor_top])
 		var status := hud.get_node_or_null("SplatStatus0") as Label
 		if status != null:
 			_check(status.position.y >= boss_bottom,

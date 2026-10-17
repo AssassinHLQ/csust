@@ -2941,9 +2941,9 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
 - **位置/朝向**：改 Boss 节点的 `transform`。模型脸朝 +Z，所以绕 Y −90° 就是朝 −X
 - **血量**：`max_health`；血条会自动跟着变（低于 25% 变红）
 
-## 7.5 Boss 的攻击（**五只都会打人了**）
+## 7.5 Boss 的攻击（**七只都会打人了**）
 
-这一节原来写的是「下一步想做行为」。现在五只 Boss 都会主动攻击：
+这一节原来写的是「下一步想做行为」。现在七位 Boss 都会主动攻击：
 
 - **霸王龙优香**（`trex_boss.gd`）—— **重击型**：圈大、伤害高、击退远
 - **飞猪优香**（`pig_boss.gd`）—— **骚扰型**：圈小、冷却短、伤害低，但逼你一直挪位置
@@ -3048,16 +3048,22 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 对照图：`_arisu_captures/_boss/94_pig_front.png`（正面）、`95_pig_three_quarter.png`
 （3/4，与作者的 `author_render_1.png` 同角度）、`93_pig_from_spawn.png`（出生点视角，两位 Boss 同框）。
 
-## 7.7 第三～第五位 Boss：倭瓜优香 / 霍德 / 佩洛洛斯拉
+## 7.7 第三～第七位 Boss：倭瓜优香 / 霍德 / 佩洛洛斯拉 / 比纳 / 哥利亚
 
-三位都是**同一个作者「一个睿智」**做的二创模型（署名见 [CREDITS.md](CREDITS.md)），
-分别用三种不同的素材形态进来 —— 也正是这一轮被迫把 `Boss._build_model()` 写得更通用的原因：
+五位都是**同一个作者「一个睿智」**做的二创模型（署名见 [CREDITS.md](CREDITS.md)），
+分别用不同的素材形态进来 —— 也正是这一轮被迫把 `Boss._build_model()` 写得更通用的原因：
+
+> ⚠️ **场上默认只有飞猪优香一位**（用户要求：全摆上去太挤）。
+> 下面这五位 + 霸王龙一起躺在 `scenes/bosses_standby.tscn` 里**备用**，
+> 用 `-- --bosses=all` 才上场（点名也行：`-- --bosses=hod,peroro`）。
 
 | Boss | 文件 | 形态 | 骨架 | 尺寸归一化 | 攻击型 |
 |---|---|---|---|---|---|
 | 倭瓜优香 | `models/boss_squash/倭瓜优香.obj` | **OBJ → `Mesh`** | 无（纯静态） | 网格盒 | 重锤型 |
 | 霍德 | `models/boss_hod/HOD_Original.fbx` | FBX → `PackedScene` | 164 骨 | 骨架盒 | 全向压制型 |
 | 佩洛洛斯拉 | `models/boss_perorozilla/Perorozilla_Original.fbx` | FBX → `PackedScene` | 47 骨 | 骨架盒 | 突进型 |
+| 比纳（备用） | `models/boss_binah/Binah_Original.fbx` | FBX → `PackedScene` | 44 骨 | 骨架盒 | 横扫型（半角 75°、击退 14） |
+| 哥利亚（备用） | `models/boss_goliath/Goliath_Decagram_Vulcan.fbx` | FBX → `PackedScene` | 34 骨 | 骨架盒 | 炮击型（圈落在 10 m 外） |
 
 ### ⚠️ 坑 1：`.obj` 导入成的是 `Mesh`，不是 `PackedScene`
 
@@ -3067,11 +3073,14 @@ z ∈ [−9.2, −6.8]，离 x = 6 有 5 m 余量。`_verify_boss_pig.gd` 现在
 
 ### ⚠️ 坑 2：贴图必须**按材质名**绑，且每只的表都不同
 
-FBX/OBJ 里没有 albedo 贴图，材质只剩一个名字。三个新 Boss 的材质名分别是：
+FBX/OBJ 里没有 albedo 贴图，材质只剩一个名字。五个新 Boss 的材质名分别是：
 
 - 倭瓜优香：`材质`（倭瓜皮）、`Yuuka_Original_Body.001` / `_Hair.001` / `_Halo.001`
 - 霍德：`HOD_Original`（本体）、`HOD_Original_Halo`（光环）、`HOD_TemporaryTower`（随身高塔）
 - 佩洛洛斯拉：`Perorozilla_Original_Body`（6 个网格**共用**同一个材质，一张图就够）
+- 比纳：`Binah_Original`（本体 + 4 个环共用）、`Binah_Original_Weapon`（武器面）、
+  `Binah_Halo`（头顶光环）。⚠️ 素材包里**没有单独的武器贴图**，武器面先复用本体那张
+- 哥利亚：`Goliath_Decagram_Vulcan`（单网格单材质）
 
 两张 `*_Mask.png` 是原作者渲染用的遮罩（`HOD_Original_Mask` / `HOD_TemporaryTower_Mask` /
 `Perorozilla_Original_Mask`），**游戏里用不到，所以不绑**。
@@ -3105,21 +3114,44 @@ FBX/OBJ 里没有 albedo 贴图，材质只剩一个名字。三个新 Boss 的�
 霍德的光环是**网格给的环形**（那张 64×64 的贴图只是橙红径向渐变，不是 alpha 遮罩），
 所以不用开透明；蓄力时把同一张贴图当 `emission_texture`、把能量从 0 点到 3.0。
 
-### HUD：五位 Boss = 五行血条
+### 备用库：默认只留一位 Boss
 
-`hud.gd` 的 Boss 条组按 `BOSS_TOP + i × BOSS_ROW_HEIGHT` 往下排，五行占到 y ≈ 226，
-所以左上角的泼溅状态行从 `162` 下移到 **`SPLAT_ROW_TOP = 240`**。
-这条不变量有断言守着（`_verify_credits.gd` §7：条组底边必须 **小于** 状态行起点）。
+`scenes/game.tscn` 里**只有 `BossPig`（飞猪优香）**。其余六位（霸王龙 / 倭瓜 / 霍德 /
+佩洛洛斯拉 / 比纳 / 哥利亚）住在 `scenes/bosses_standby.tscn`，靠命令行拉上场：
+
+```powershell
+& <godot> --path . -- --bosses=all          # 七位全上
+& <godot> --path . -- --bosses=hod,peroro   # 只上点名的那几位（按节点名包含匹配）
+```
+
+节点名与以前完全一致（`Boss` / `BossSquash` / …），所以**所有自检脚本一行都不用改**，
+只要在命令行带上 `--bosses=all`（`_run_verify_all.ps1` 已经按套件配好了）。
+备用场景整份加不进来（比如克隆者没有素材）时只打一行日志，不会让游戏启动失败。
+
+### HUD：Boss 血条行数**跟着实际数量走**
+
+`hud.gd` 的 Boss 条组按 `BOSS_TOP + i × BOSS_ROW_HEIGHT` 往下排；左上角的泼溅状态行
+不再是写死的 `240`，而是 `splat_row_top()` 现算：
+
+```
+max(SPLAT_ROW_TOP(128，血量面板下沿的下限),
+    BOSS_TOP + (Boss 数 − 1) × BOSS_ROW_HEIGHT + BOSS_BAR_HEIGHT + 间距)
+```
+
+所以默认 1 位时状态行在 128（紧贴血量面板），`--bosses=all` 七位时自动挪到 326。
+`_verify_credits.gd` §7 两条断言锁着「不许压住」和「不许高过血量面板」。
 
 ### 自检与对照图
 
-- `_verify_boss_pig.gd` §8（23 项）—— 两位新 Boss 的模型/骨架/尺寸、**每个材质面都绑了贴图**、
-  霍德「reach = 0 + 全向 + 最慢 + 最大圈」、佩洛洛斯拉「最快 + 最小圈 + 只留 1 张表情」、
+- `_verify_boss_pig.gd` §8（23 项）+ §9（12 项）—— 新 Boss 的模型/骨架/尺寸、
+  **每个材质面都绑了贴图**、霍德「reach = 0 + 全向 + 最慢 + 最大圈」、
+  佩洛洛斯拉「最快 + 最小圈 + 只留 1 张表情」、比纳「最宽扇形」、哥利亚「最远落点」，
   以及打一下的「圈内掉血 / 圈外不掉血」
 - `_probe_boss_pair.gd` —— 摸 FBX 结构（材质名 / 骨数 / 动画 clip），加新 Boss 时先跑它
 - `_probe_boss_pair_shot.gd` —— 出图 + 打印绑定情况：
   `_arisu_captures/_boss/80_hod_front.png`、`81_hod_quarter.png`、
-  `82_peroro_front.png`、`83_peroro_quarter.png`
+  `82_peroro_front.png`、`83_peroro_quarter.png`、
+  `84_bina_front.png`、`85_bina_quarter.png`、`86_goliath_front.png`、`87_goliath_quarter.png`
 - `_probe_peroro_emotion.gd` —— 五张表情逐张出图
 
 ---
@@ -3843,6 +3875,8 @@ Godot 只把「导入过的资源」和 `export_presets.cfg` 里 `include_filter
 | `models/boss_squash/`（倭瓜优香，作者：一个睿智） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `models/boss_hod/`（霍德，作者：一个睿智） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `models/boss_perorozilla/`（佩洛洛斯拉，作者：一个睿智） | 同上 | ❌ 被 `.gitignore` 排除 |
+| `models/boss_binah/`（比纳，作者：一个睿智，备用） | 同上 | ❌ 被 `.gitignore` 排除 |
+| `models/boss_goliath/`（哥利亚，作者：一个睿智，备用） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `story/`（剧情文本，本项目作者） | **MIT** | ✅ |
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
 | `icon.png` | 待仓库作者确认 | ✅（如非原创请替换） |
@@ -3856,10 +3890,12 @@ cd <仓库目录>
 #    models/Arisu_ext.glb     见 models/README.md
 # ② 可选：七名同伴（没有就删掉 game.tscn 里那七个 Companion 节点）
 #    models/companions/{Mika,Yuuka,Noa,Momoi,Midori,Yuzu,Kei}.glb
-# ③ 可选：五位 Boss（没有就删掉 Boss / BossPig / BossSquash / BossHod / BossPeroro 节点）
-#    models/boss/优香霸王龙.fbx、models/boss_pig/猪猪优香.fbx、
+# ③ 可选：七位 Boss（默认只摆飞猪优香；其余六位在 scenes/bosses_standby.tscn 里备用）
+#    models/boss_pig/猪猪优香.fbx、models/boss/优香霸王龙.fbx、
 #    models/boss_squash/倭瓜优香.obj、models/boss_hod/HOD_Original.fbx、
-#    models/boss_perorozilla/Perorozilla_Original.fbx（各带贴图）
+#    models/boss_perorozilla/Perorozilla_Original.fbx、
+#    models/boss_binah/Binah_Original.fbx、models/boss_goliath/Goliath_Decagram_Vulcan.fbx
+#    想全部上场：& <godot> --path . -- --bosses=all（见 §7.7「备用库」）
 # ④ 可选：放入泼溅数据（没有就用 --splat=off；只想留一份就用 --venue=，见 §6.8）
 #    splatdata/school_playable.sogdata、splatdata/room609.sogdata   见 splatdata/README.md
 

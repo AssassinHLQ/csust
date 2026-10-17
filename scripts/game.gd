@@ -263,6 +263,10 @@ func _ready() -> void:
 
 	_hud.bind(_player, _weapon)
 
+	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
+	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
+	_spawn_standby_bosses()
+
 	# 泼溅场地也是一场一行：两份（校园 / 画室609）同时解码时，玩家得分清
 	# 是哪一份在等。HUD 侧 bind_splats() 按传入顺序从上往下排。
 	for child in get_children():
@@ -306,8 +310,68 @@ func _ready() -> void:
 	_play_opening()
 
 
-## 播开场剧情。见 `OPENING_STORY` / `PLAY_OPENING`。
+## 备用 Boss：`scenes/bosses_standby.tscn` 里躺着 6 位（霸王龙 / 倭瓜 / 霍德 /
+## 佩洛洛斯拉 / 比纳 / 哥利亚），主场景里**只留飞猪优香** —— 全摆上去太挤。
 ##
+## 命令行（写在 `--` 之后）：
+##     -- --bosses=all            六位全部上场
+##     -- --bosses=hod,peroro     只上场点名的（按节点名做包含匹配，不分大小写）
+##     -- --bosses=off            什么都不加（等同不传）
+## 自检 / 探针也用它：节点名和以前完全一致，所以 `get_node("Boss")` 之类一行都不用改。
+const STANDBY_SCENE := "res://scenes/bosses_standby.tscn"
+
+
+## 解析 `--bosses=`：返回空数组 = 不加。
+func _wanted_standby() -> PackedStringArray:
+	for a in OS.get_cmdline_user_args():
+		if not a.begins_with("--bosses="):
+			continue
+		var v := a.substr(9).strip_edges()
+		if v.is_empty() or v == "off" or v == "none":
+			return PackedStringArray()
+		return v.split(",", false)
+	return PackedStringArray()
+
+
+func _spawn_standby_bosses() -> void:
+	var want := _wanted_standby()
+	if want.is_empty():
+		return
+	if not ResourceLoader.exists(STANDBY_SCENE):
+		push_warning("[Game] 找不到 %s，备用 Boss 不上场" % STANDBY_SCENE)
+		return
+	var ps := load(STANDBY_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] %s 不是 PackedScene" % STANDBY_SCENE)
+		return
+	var holder := ps.instantiate()
+	if holder == null:
+		push_warning("[Game] %s 实例化失败" % STANDBY_SCENE)
+		return
+	var all := want.size() == 1 and String(want[0]).to_lower() == "all"
+	var picked: Array[Node] = []
+	for child in holder.get_children():
+		var keep := all
+		if not keep:
+			var key := String(child.name).to_lower()
+			for w in want:
+				var q := String(w).strip_edges().to_lower()
+				if q != "" and key.contains(q):
+					keep = true
+					break
+		if keep:
+			picked.append(child)
+	# ⚠️ 先摘出来再加：直接 add_child 会改 `holder.get_children()`，遍历会漏人。
+	for child in picked:
+		holder.remove_child(child)
+		add_child(child)
+	holder.queue_free()
+	print("[Game] --bosses=%s：备用 Boss 上场 %d 位（%s）" % [
+		",".join(want), picked.size(),
+		", ".join(picked.map(func(n): return String(n.name)))])
+
+
+## 播开场剧情。见 `OPENING_STORY` / `PLAY_OPENING`。
 ## 命令行覆盖（都写在 `--` 之后）：
 ##     -- --story=off                不播开场，直接开打
 ##     -- --story=res://story/x.txt  改播指定的那一份（调某一段剧情用）
