@@ -102,7 +102,16 @@ const LOWER_KEYWORDS := ["thigh", "calf", "foot", "toe", "leg", "pelvis", "hip",
 ## ⚠️ 但**站定开火要留着**：那是上一轮明确要的「静止开枪不动」，素材里那套站桩
 ##    姿势比「待机躯干 + 开火手臂」好看。所以叠**两层**，按当时速度选一层
 ##    （`_setup_upper_layer()` / `active_upper_layer()`）。
-const TRUNK_KEYWORDS := ["spine", "chest"]
+##
+## ⚠️ 后来又加上了 `neck` / `head`（用户报「Shift 冲刺跑打时身体还是后倾」）：
+##    只滤 spine / chest 时，**脖子和头仍然来自站桩开火姿势**（抬头、略后仰），
+##    躯干明明和只跑一样前倾，可整条剪影看着就是往后仰 —— 头是最显眼的那一段。
+##    把颈 / 头也滤掉之后，跑打开火的 `Spine1` 与 `Neck` 上轴和「只跑」**逐位相同**：
+##      · 只跑            Spine1 (0.60, −0.65, −0.47)  Neck (0.56, −0.46, −0.69)
+##      · 只滤 spine/chest Spine1 (0.60, −0.65, −0.47)  Neck (0.52, −0.43, −0.74)
+##      · 再滤 neck/head   Spine1 (0.60, −0.65, −0.47)  Neck (0.56, −0.46, −0.69) ← 等于只跑
+##    （四种候选的对照渲染见 `_probe_run_fire_pose_shot.gd`。）
+const TRUNK_KEYWORDS := ["spine", "chest", "neck", "head"]
 
 var state := State.LOCOMOTION
 ## 基础层：整体动画（`Normal_Idle` / `Move_Ing`），一直播着，包括开火期间。

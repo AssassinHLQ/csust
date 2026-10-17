@@ -33,6 +33,12 @@ extends Node3D
 @export var target_height := 1.62
 ## 额外缩放系数（在 `target_height` 之上再乘）
 @export var model_scale := 1.0
+## 碰撞：一个普通胶囊体（用户原话「普通胶囊体就可以」）。
+## 老师站着不动、也不参战，所以 `StaticBody3D + CapsuleShape3D` 就够 ——
+## 玩家会撞到他、不会直接穿过去。关掉就只是个纯装饰。
+@export var collision_enabled := true
+## 胶囊半径占身高的比例。1.62 m × 0.16 ≈ 0.26 m，比肩窄、比腰宽，撞上去不突兀。
+@export var collision_radius_ratio := 0.16
 ## 手臂下垂角度（度）。素材是 **T-pose**，不放下来像个木偶。
 @export var arm_down_deg := 58.0
 @export var elbow_deg := 10.0
@@ -102,6 +108,7 @@ func _ready() -> void:
 	if recolored > 0:
 		print("[Sensei] %d 个材质重新上色完成" % recolored)
 	_fit(inst)
+	_build_collision()
 	_skel = _find_skel(inst)
 	_relax_arms(inst)
 	if _skel == null:
@@ -166,6 +173,32 @@ func _recolor(inst: Node) -> int:
 				s, "头发" if is_hair else "皮肤", str(m.albedo_color)])
 			n += 1
 	return n
+
+
+## 给老师挂一个**普通胶囊体**碰撞。
+##
+## `_fit()` 之后模型脚底在 y=0、身高 `target_height`，所以胶囊直接从 0 立到 h。
+## 挂在 `StaticBody3D` 上（老师不动），`collision_layer = 1`（和地面/角色同层），
+## `collision_mask = 0`（自己不主动检测，省一对查询）。
+func _build_collision() -> void:
+	if not collision_enabled:
+		return
+	var h := target_height if target_height > 0.0 else 1.62
+	var r := maxf(h * collision_radius_ratio, 0.05)
+	var body := StaticBody3D.new()
+	body.name = "Body"
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = r
+	# Godot 的 `CapsuleShape3D.height` 是**含两端半球的总高**，必须 ≥ 2r
+	cap.height = maxf(h, r * 2.0)
+	cs.shape = cap
+	cs.position.y = cap.height * 0.5
+	body.add_child(cs)
+	body.collision_layer = 1
+	body.collision_mask = 0
+	add_child(body)
+	print("[Sensei] 胶囊碰撞：半径 %.2f m、总高 %.2f m" % [r, cap.height])
 
 
 ## 按包围盒把模型缩到 `target_height`，并把**脚底**对到 y=0、水平居中。
