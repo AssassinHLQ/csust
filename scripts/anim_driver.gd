@@ -127,6 +127,8 @@ var lean_fix := {}
 var roll_fix := {}
 ## `PoseFix.fix_eyelid_sync()`：把右眼睑数据镜像给左眼的报告
 var lid_fix := {}
+## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
+var face_fix := {}
 
 
 func _ready() -> void:
@@ -152,10 +154,14 @@ func _ready() -> void:
 	# 放在 `_configure_library()` 之后、开播之前：改的是动作关键帧本身，
 	# 所以循环播放的每一帧都是修过的，不存在「被 AnimationPlayer 覆盖」。
 	lean_fix = PoseFix.fix_run_lean(skeleton, player)
-	# ⚠️ 侧倾（跑步时头往左偏）**暂不启用**：轴还没标定对，
-	#    见 `pose_fix.gd` 里 `ROLL_DEG` 那段 —— 指标能压到 0，但渲图看整个头歪得更厉害。
+	# 跑步时头往左偏：绕标定轴补 −18.6°，实测 roll 从 −18.0° 压到 +0.26°（见 pose_fix.gd）
 	roll_fix = PoseFix.fix_head_roll(skeleton, player)
 	lid_fix = PoseFix.fix_eyelid_sync(skeleton, player)
+	# 脸皮 / 眼睛两层共面 → z-fighting（用户报「双眼皮打架」）。把上面那层沿法线推开 0.14 mm。
+	face_fix = FaceFix.separate_face_layers(get_parent())
+	if int(face_fix.get("surfaces", 0)) > 0:
+		print("[AnimDriver] 脸部层错开：%d 个 surface / %d 个顶点" % [
+			int(face_fix["surfaces"]), int(face_fix["verts"])])
 	_setup_upper_layer()
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)

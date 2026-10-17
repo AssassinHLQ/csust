@@ -56,6 +56,9 @@ func _run() -> void:
 		if "--noroll" not in OS.get_cmdline_user_args():
 			PoseFix.fix_head_roll(sk, ap)
 		PoseFix.fix_eyelid_sync(sk, ap)
+		var ff := FaceFix.separate_face_layers(inst)
+		print("[face] 脸部层错开 %d 个 surface（%d 顶点）" % [
+			int(ff["surfaces"]), int(ff["verts"])])
 		print("[face] 已套 PoseFix%s" % ("（不含侧倾）" if "--noroll" in OS.get_cmdline_user_args() else ""))
 
 	var head := sk.find_bone("Bip001 Head")
