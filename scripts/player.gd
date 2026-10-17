@@ -243,17 +243,45 @@ func _set_aiming(on: bool) -> void:
 		anim.set_aiming(aiming)
 
 
+## ── 跳跃缓冲 / 土狼时间（2026-10 加，用户报「跑酷里有时候跳不起来」）──
+##
+## ⚠️ 原来是「`if not is_on_floor(): 重力 elif is_action_just_pressed("jump"): 跳`」——
+##    **单帧脉冲** 且 **必须当帧在地面**，两个条件凑一起就很脆：
+##    `is_action_just_pressed` 只在按下那一帧为真，而站在跑酷落脚板上时身体会
+##    **穿透微弹**（`is_on_floor()` 逐帧 true/false 交替，实测 y 在台面与台面+0.04
+##    之间来回，见 `_probe_tower_hop.gd`），脉冲正好落在 false 那帧就**整个丢掉**。
+##    体感就是「明明按了却没跳」。自检也栽在这上面：塔内 11 跳有 6 次按不出来。
+##
+## 修法是标准做法：**按下之后 JUMP_BUFFER_MS 内**、以及**离地之后 JUMP_COYOTE_MS 内**，
+## 跳都算数。按键不会因为「早了/晚了一帧」被吞掉，手感也更跟手。
+const JUMP_BUFFER_MS := 180.0
+const JUMP_COYOTE_MS := 100.0
+
+var _jump_at := -99999.0        ## 上次按下跳跃键的毫秒时刻
+var _air_since := -99999.0      ## 上次离地的毫秒时刻
+var _was_on_floor := true       ## 上一帧的 `is_on_floor()`
+
+
 func _physics_process(delta: float) -> void:
 	_poll_mouse_buttons()
 	# 鼠标被释放（按了 Esc）时，右键按住也要能开镜
 	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE and _aim_held and not aiming:
 		_set_aiming(true)
 
-	# --- 重力与跳跃 ---
+	# --- 重力与跳跃（带缓冲 / 土狼时间，见上面那段注释）---
+	var now_ms := float(Time.get_ticks_msec())
+	if Input.is_action_just_pressed("jump"):
+		_jump_at = now_ms
 	if not is_on_floor():
+		if _was_on_floor:
+			_air_since = now_ms
 		velocity.y -= GRAVITY * delta
-	elif Input.is_action_just_pressed("jump"):
+	_was_on_floor = is_on_floor()
+	if now_ms - _jump_at <= JUMP_BUFFER_MS \
+			and (is_on_floor() or now_ms - _air_since <= JUMP_COYOTE_MS):
 		velocity.y = JUMP_VELOCITY
+		_jump_at = -99999.0
+		_air_since = -99999.0
 
 	# --- 期望移动方向（相对相机）---
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
