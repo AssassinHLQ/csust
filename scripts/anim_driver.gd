@@ -113,6 +113,29 @@ const LOWER_KEYWORDS := ["thigh", "calf", "foot", "toe", "leg", "pelvis", "hip",
 ##    （四种候选的对照渲染见 `_probe_run_fire_pose_shot.gd`。）
 const TRUNK_KEYWORDS := ["spine", "chest", "neck", "head"]
 
+## 「手臂」的判据。移动层把这些也滤掉 —— 见 `ARM_FREEZE_WHY`。
+const ARM_KEYWORDS := ["clavicle", "shoulder", "upperarm", "forearm",
+	"deltoid", "twist", "arm", "hand", "finger"]
+
+## 「武器」的判据。移动层也滤 —— 枪骨是**挂在右手指下**的，手臂已经由 `Move_Ing`
+## 提供，若还让站桩层把武器骨再转一遍，枪就会相对新的手姿**再拧一个大角度**
+## （实测 `bone_magazine` 140.8°、`bone_Railgunup_part_04` 93.1°），
+## 那一大块白枪斜在身后，正是「后仰」剪影最显眼的那一笔。
+const WEAPON_KEYWORDS := ["weapon", "railgun", "magazine", "muzzle", "point"]
+
+## ⚠️ 为什么移动层连手臂都滤（用户第二轮报「跑打还是后仰」「还是没变呢」）：
+##
+##   前两轮修的是「躯干被站桩层掰走」（滤 spine/chest/neck/head + 中途换层），
+##   数据上跑打开火的躯干已经和只跑一致（0.902 vs 0.899）。但用户看**剪影**：
+##   跑打时枪被双臂端到胸前端平、两肘外张，从背后 / 头顶看，那条「横着一大块
+##   枪 + 张开的肘」就是「后仰」的观感来源 —— 变的是轮廓，不是脊椎。
+##
+##   所以移动层改成「**上半身整体跟跑姿**」：只剩头发 / 眼 / 领子 / 领带 / 挂饰 /
+##   武器这几簇骨随开火动（枪照抖、头发照飘），肩、臂、手全部由 `Move_Ing` 提供。
+##   判据从「躯干角度」升级成「**全骨架逐骨最大夹角**」：改后跑打开火与只跑
+##   只差武器那几根（见 `_probe_upper_freeze.gd`）。
+const ARM_FREEZE_WHY := true
+
 var state := State.LOCOMOTION
 ## 基础层：整体动画（`Normal_Idle` / `Move_Ing`），一直播着，包括开火期间。
 var player: AnimationPlayer
@@ -132,6 +155,8 @@ var lower_tracks_removed := 0
 var trunk_tracks_removed := 0
 ## 这一发中途因为速度变化而换过几次层（自检用：跑打起手一次、停步一次）
 var migrations := 0
+## 移动层额外滤掉的**手臂 + 武器**轨道条数（自检用）
+var arm_tracks_removed := 0
 ## `PoseFix.fix_run_lean()` 的报告（自检用：改了哪些骨、多少帧）
 var lean_fix := {}
 ## `PoseFix.fix_head_roll()`：跑步时头往左偏的那 13.9°，掰正的报告
@@ -237,7 +262,9 @@ func _setup_upper_layer() -> void:
 	if host == null:
 		return
 	upper = _make_overlay(host, "UpperBody", [])
-	upper_move = _make_overlay(host, "UpperBodyMove", TRUNK_KEYWORDS)
+	# 移动层：躯干 + **手臂 + 武器**都滤掉（只剩头发/眼/领子/挂饰），见 `ARM_FREEZE_WHY`
+	upper_move = _make_overlay(host, "UpperBodyMove",
+		TRUNK_KEYWORDS + ARM_KEYWORDS + WEAPON_KEYWORDS)
 
 
 ## 造一层叠加层：轨道路径是相对 `root_node` 的字符串，两层必须指向**同一个**根节点。
@@ -255,20 +282,24 @@ func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPla
 		var a: Animation = player.get_animation(clip).duplicate(true)
 		var low_n := 0
 		var trunk_n := 0
+		var arm_n := 0
 		for t in range(a.get_track_count() - 1, -1, -1):
 			var bone := _bone_of(String(a.track_get_path(t)))
 			var is_low := _in_keywords(bone, LOWER_KEYWORDS)
 			if is_low or _in_keywords(bone, extra):
 				if is_low:
 					low_n += 1
-				else:
+				elif _in_keywords(bone, TRUNK_KEYWORDS):
 					trunk_n += 1
+				else:
+					arm_n += 1
 				a.remove_track(t)
-		# 两层滤掉的下半身是同一批，只统计一次；躯干只有移动层滤
+		# 两层滤掉的下半身是同一批，只统计一次；躯干 / 手臂只有移动层滤
 		if extra.is_empty():
 			lower_tracks_removed += low_n
 		else:
 			trunk_tracks_removed += trunk_n
+			arm_tracks_removed += arm_n
 		lib.add_animation(clip, a)
 	ov.add_animation_library(&"", lib)
 	# ⚠️ **必须延后一帧加进树**：`_ready()` 期间父节点还在装自己的孩子，
