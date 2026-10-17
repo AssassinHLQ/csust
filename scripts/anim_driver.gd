@@ -161,8 +161,8 @@ var arm_tracks_removed := 0
 var lean_fix := {}
 ## `PoseFix.fix_head_roll()`：跑步时头往左偏的那 13.9°，掰正的报告
 var roll_fix := {}
-## `PoseFix.fix_eyelid_sync()`：把右眼睑数据镜像给左眼的报告
-var lid_fix := {}
+## `PoseFix.freeze_eyelids()`：停用眨眼（删掉眼睑骨轨道的报告）
+var blink_fix := {}
 ## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
 var face_fix := {}
 
@@ -192,11 +192,15 @@ func _ready() -> void:
 	lean_fix = PoseFix.fix_run_lean(skeleton, player)
 	# 跑步时头往左偏：绕标定轴补 −18.6°，实测 roll 从 −18.0° 压到 +0.26°（见 pose_fix.gd）
 	roll_fix = PoseFix.fix_head_roll(skeleton, player)
-	# 眼睑镜像：把右眼的数据镜像给左眼。
-	# 用户说过「眼睛先不要动了」—— 这里**保持原状、没有新动作**；之所以没关掉：
-	# 关掉之后右眼上眼睑会掉下来半遮瞳孔（`_probe_face_shot.gd` 出过 A/B 对照图，
-	# `facefix.png` 半闭 / `facefix_lid.png` 对称全开）。想彻底不碰眼睛就把这行删掉。
-	lid_fix = PoseFix.fix_eyelid_sync(skeleton, player)
+	# 眨眼：整条停掉。
+	# 2026-10-17 用户：「眼睛那里停止算了，不要眨眼的动画了」。
+	# 把 `eye_L/R_1`、`eye_L/R_2` 上的轨道从**每个动作**里删掉 → 没有轨道就没人写它们，
+	# 骨永远停在 rest（= 全开），进游戏之后不会再闭眼。
+	# 上一版是 `fix_eyelid_sync()`（左右镜像），留着了，`_probe_face_shot.gd` 还在用它做 A/B。
+	blink_fix = PoseFix.freeze_eyelids(skeleton, player)
+	if int(blink_fix.get("tracks", 0)) > 0:
+		print("[AnimDriver] 停用眨眼：删掉 %d 条眼睑轨道，涉及 %d 个动作" % [
+			int(blink_fix["tracks"]), (blink_fix["clips"] as Array).size()])
 	# 脸皮 / 眼睛两层共面 → z-fighting（用户报「双眼皮打架」）。把上面那层沿法线推开 0.14 mm。
 	# 只推**不带形态键**的网格（嘴那 10 块必须留着形态键，见 `face_fix.gd` 文件头）。
 	face_fix = FaceFix.separate_face_layers(get_parent())

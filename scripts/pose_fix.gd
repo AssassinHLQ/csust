@@ -208,6 +208,49 @@ static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer,
 	return report
 
 
+## ── 不眨眼了 ──
+## 2026-10-17 用户：「眼睛那里停止算了，不要眨眼的动画了」。
+##
+## 做法是把这几根骨上的**所有轨道**从每个动作里整条删掉 —— 没有轨道，
+## `AnimationPlayer` 就不写它们，骨永远停在 rest，眼睛彻底不动。
+## 比「把关键帧压成常量」彻底：压常量还得挑一个值，删轨道不会挑错。
+##
+## 连 `_2`（下睑）一起删：上下睑是联动眨的，只留一边会变成「只有下眼皮在动」。
+## 上一版 `fix_eyelid_sync()` 保留着不删（还有探针在拿它做 A/B）。
+const BLINK_BONES := [
+	"Bip001 eye_L_1", "Bip001 eye_L_2", "Bip001 eye_R_1", "Bip001 eye_R_2",
+]
+const META_BLINK := "pose_fix_blink"
+
+
+## 报告：applied / tracks（删了几条）/ clips（动过哪些动作）/ missing（骨名对不上的）
+static func freeze_eyelids(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
+	var report := {"applied": false, "tracks": 0, "clips": [] as Array, "missing": [] as Array}
+	if sk == null or ap == null:
+		return report
+	for b in BLINK_BONES:
+		if sk.find_bone(String(b)) < 0:
+			report["missing"].append(b)
+	var removed := 0
+	for clip in ap.get_animation_list():
+		var a := ap.get_animation(String(clip))
+		if a == null or a.has_meta(META_BLINK):
+			continue
+		var hit := 0
+		# 倒着删，索引才不会挪
+		for t in range(a.get_track_count() - 1, -1, -1):
+			if BLINK_BONES.has(_bone_of(String(a.track_get_path(t)))):
+				a.remove_track(t)
+				hit += 1
+		if hit > 0:
+			removed += hit
+			report["clips"].append(String(clip))
+		a.set_meta(META_BLINK, true)
+	report["applied"] = removed > 0
+	report["tracks"] = removed
+	return report
+
+
 ## 左右两根骨的 rest 基是否互为镜像（x 轴反向即为镜像）
 static func _rest_mirrored(sk: Skeleton3D, left: int, right: int) -> bool:
 	var bl := sk.get_bone_global_rest(left).basis.orthonormalized()

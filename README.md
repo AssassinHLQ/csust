@@ -1766,6 +1766,24 @@ Arisu                       Node3D      ← 180° 旋转节点
 > （0.056 / 0.067 / 0.073 / 0.10 / 0.12 / 0.22），单一规则会弄花贴图（`eye_uv_fix.gd`
 > 里留着那次实验和结论）。要根治得回 **Blender 重做右眼 UV**，或者做逐顶点配对抄 UV。
 
+> **2026-10-17 决定：右眼不修了，眨眼整条停掉。** 用户原话「眼睛那里停止算了，不要眨眼的
+> 动画了」。做法是把 `Bip001 eye_L_1` / `eye_L_2` / `eye_R_1` / `eye_R_2` 四根骨上的
+> **所有轨道**从每个动作里删掉（`PoseFix.freeze_eyelids()`）—— 没有轨道就没人写它们，
+> 骨永远停在 rest（= 眼睛全开）。实测：**27 个动作、216 条轨道**全删；基础层 + `UpperBody`
+> + `UpperBodyMove` 三层残留 **0** 条；播 `Normal_Idle` 两秒（121 帧）四根骨最大变化
+> **0.0000°**（`_verify_blink.gd`，失败 0 项）。
+>
+> - 只有这 4 根在动：`_probe_eyelid_freeze.gd` 把脸上 24 根带 `eye/lid/brow` 的骨全扫了
+>   一遍，`bone_eye_D_*`、`bone_Eyering_*`、`Xtra_eyeL/R` 的转角全程 Δ0.00°，
+>   唯一还在动的是 `Xtra_eyeblowL1/R1`（0.84°，眉毛）。所以不用「挑骨头」，删这 4 根就干净了。
+> - ⚠️ **删轨道不会把骨摆回 rest**：骨会停在删之前那一帧的姿势。`_probe_eyelid_freeze.gd`
+>   第一版就栽在这（拍出来的「冻结后」还是闭眼），必须 `stop()` + `reset_bone_poses()`
+>   模拟「刚进游戏」再看。游戏里启动时骨架本来就是 rest，所以线上没有这个问题。
+> - 左右眼都停在 rest 的全开姿势，同一动作同一帧的对照图：`_arisu_captures/_eyelid/`
+>   下 `closed.png`（冻结前，眨眼中间）、`frozen_open.png`（冻结后）、`rest.png`。
+> - 旧函数 `fix_eyelid_sync()`（左右镜像）**留着没删**，`_probe_face_shot.gd` /
+>   `_probe_anim_face.gd` / `_probe_head_roll.gd` 还在拿它做 A/B。
+
 - 14 个 MeshInstance3D：`Aris_Original_Body`(5 面)、`Weapon`(1)、`FX_Weapon`(1)、
   `Halo`(1，**无蒙皮**)、10 个 Mouth
 - 18 个材质，全部 `StandardMaterial3D`、`PER_PIXEL`、`albedo_color` 纯白（靠贴图出颜色）
