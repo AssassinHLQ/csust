@@ -123,6 +123,10 @@ var lower_tracks_removed := 0
 var trunk_tracks_removed := 0
 ## `PoseFix.fix_run_lean()` 的报告（自检用：改了哪些骨、多少帧）
 var lean_fix := {}
+## `PoseFix.fix_head_roll()`：跑步时头往左偏的那 13.9°，掰正的报告
+var roll_fix := {}
+## `PoseFix.fix_eyelid_sync()`：把右眼睑数据镜像给左眼的报告
+var lid_fix := {}
 
 
 func _ready() -> void:
@@ -148,6 +152,10 @@ func _ready() -> void:
 	# 放在 `_configure_library()` 之后、开播之前：改的是动作关键帧本身，
 	# 所以循环播放的每一帧都是修过的，不存在「被 AnimationPlayer 覆盖」。
 	lean_fix = PoseFix.fix_run_lean(skeleton, player)
+	# ⚠️ 侧倾（跑步时头往左偏）**暂不启用**：轴还没标定对，
+	#    见 `pose_fix.gd` 里 `ROLL_DEG` 那段 —— 指标能压到 0，但渲图看整个头歪得更厉害。
+	roll_fix = PoseFix.fix_head_roll(skeleton, player)
+	lid_fix = PoseFix.fix_eyelid_sync(skeleton, player)
 	_setup_upper_layer()
 	if player.has_animation("Normal_Idle"):
 		player.play("Normal_Idle", -1.0, 1.0)

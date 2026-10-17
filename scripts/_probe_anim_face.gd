@@ -51,6 +51,12 @@ func _run() -> void:
 	root.add_child(cam)
 	cam.make_current()
 
+	if "--fix" in OS.get_cmdline_user_args():
+		PoseFix.fix_run_lean(sk, ap)
+		PoseFix.fix_head_roll(sk, ap)
+		PoseFix.fix_eyelid_sync(sk, ap)
+		print("[face] 已套 PoseFix")
+
 	var head := sk.find_bone("Bip001 Head")
 	var neck := sk.find_bone("Bip001 Neck")
 	if head < 0:

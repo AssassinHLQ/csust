@@ -44,9 +44,52 @@ const CLIPS := ["Move_Ing"]
 
 ## 「向后」在骨架空间里的方向。实测模型脸朝 +Z（README §1.4），所以向后 = −Z。
 const BACK_AXIS := Vector3(0.0, 0.0, -1.0)
+## 「前进」轴 —— 绕它转才是**左右侧倾**（roll）。
+##
+## ⚠️ 不能写成 `Vector3(0,0,1)`。这是 `sk.global_transform` 里的**骨架空间**，
+##    而 glb 的根节点带一个 −90° X 旋转（Y-up ↔ Z-up），所以世界前进轴落到骨架空间里
+##    是一根斜的向量。用 `_probe_head_roll.gd -- --calib` 标出来的实测值：
+##      · 骨架 +X 转 10° → roll 变 6.6°（还掺了别的）
+##      · 骨架 +Z 转 10° → roll 变 5.9°
+##      · **本向量** 转 10° → roll 变 **9.76°**（≈1:1，干净的滚转，不掺俯仰）
+##    「模型脸朝 +Z」说的是**世界空间**，不是骨架空间 —— 这两者以内的事差一个 90°。
+const FWD_AXIS := Vector3(0.773744, 0.344725, 0.531494)
 
 ## 改过的动作在 `Animation` 上留的标记（幂等用）
 const META_KEY := "pose_fix_lean"
+const META_ROLL := "pose_fix_roll"
+const META_LID := "pose_fix_lid"
+
+## ── 跑步时头往**左**偏 ──
+## 实测（`_probe_head_roll.gd`，判据 `roll = asin((eye_R − eye_L).y)`，右耳抬高为正）：
+##     片段           roll 均值   范围
+##     Normal_Idle    −0.91°    −5.58 ~ +7.47
+##     Cafe_Walk      −0.02°    −3.96 ~ +3.93
+##     Move_Ing      **+13.87°**  +10.88 ~ +18.22   ← 只有跑起来才歪
+## ⚠️ **还没启用**：轴没标定对，硬套会把头拧成另一样子。
+## 下面这些数字是过程记录，不是结论 —— 改动前务必读完。
+##   · 原始数据（不做任何修正）Move_Ing 的 roll = **+13.87°**（右耳抬高，即往左偏）；
+##   · 可是 `fix_run_lean()` 跑完之后 roll 变成 **−18.0°** —— 也就是说
+##     **「收前倾」那一步自己就注入了约 32° 的侧倾**；
+##   · 原因是 `fix_run_lean()` 用的 `Vector3(1,0,0)` 是**骨架空间**的 X，
+##     而骨架节点带 −90° X 旋转（世界 +Z 落到骨架空间是 `(0.774,0.345,0.531)`），
+##     所以那根本不是世界的左右轴。
+##   · 用标定轴 `FWD_AXIS` 去补：`--fix` 实测每 1° 只能改约 0.97°，
+##     按 −18.6° 补出来 roll 指标确实回到 0，但**渲图看整个头歪得更厉害** —— 指标骗人。
+## ⇒ 正确的下一步是先把 `fix_run_lean()` 的轴换成「从 rest 姿势里量出来的左右轴」
+##   （`eye_R_rest − eye_L_rest`），让它别再注入侧倾，再来标 roll。在那之前本项不启用。
+const ROLL_DEG := {}
+
+## ── 待机只有**右**眼睑在动 ──
+## 实测 `Normal_Idle` 里 `Bip001 eye_R_1` 的姿势四元数 y 分量到 **−0.044**（≈5°），
+## 而 `Bip001 eye_L_1` 全程 **0.000** —— 两条眼睑线对不上，就是用户说的「双眼皮打架」。
+## 修法：按用户要求把右眼的数据**镜像**给左眼。
+const EYELID_PAIRS := [
+	["Bip001 eye_R_1", "Bip001 eye_L_1"],
+	["Bip001 eye_R_2", "Bip001 eye_L_2"],
+]
+## 眼睑同步要覆盖的动作（所有会播的循环 + 一次性）
+const LID_CLIPS := ["Normal_Idle", "Cafe_Walk", "Move_Ing"]
 
 
 ## 就地改写 `ap` 里 `CLIPS` 的关键帧。返回报告，**不做任何断言**（自检自己判）。
@@ -86,6 +129,123 @@ static func fix_run_lean(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 	report["applied"] = changed > 0
 	report["total"] = changed
 	return report
+
+
+## 把「跑步时头往左偏 13.9°」掰正。和 `fix_run_lean` 同一套机制，只是轴换成前进轴。
+static func fix_head_roll(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
+	var report := {"applied": false, "bones": {}, "total": 0, "missing": [] as Array}
+	if sk == null or ap == null or ROLL_DEG.is_empty():
+		return report
+	var changed := 0
+	for clip in CLIPS:
+		if not ap.has_animation(clip):
+			report["missing"].append(clip)
+			continue
+		var a := ap.get_animation(clip)
+		if a.has_meta(META_ROLL):
+			continue
+		for bone_name in ROLL_DEG:
+			var idx := sk.find_bone(bone_name)
+			if idx < 0:
+				report["missing"].append(bone_name)
+				continue
+			var delta := _axis_delta(sk, idx, FWD_AXIS, float(ROLL_DEG[bone_name]))
+			var keys := _apply_delta(a, bone_name, delta)
+			if keys > 0:
+				changed += keys
+				report["bones"][bone_name] = {"deg": ROLL_DEG[bone_name], "axis": "Rz", "keys": keys}
+		a.set_meta(META_ROLL, true)
+	report["applied"] = changed > 0
+	report["total"] = changed
+	return report
+
+
+## 把右眼的眼睑旋转轨道**镜像**到左眼（用户要的「按右眼的数据镜像给左眼」）。
+##
+## 镜像一个旋转（以 x=0 平面为镜）：轴 n → (−n.x, n.y, n.z) 且角度取反，
+## 合成到四元数就是 `(x, −y, −z, w)`。
+## ⚠️ 只有当左右两根骨的 rest 基**互为镜像**时这条才成立；如果两边 rest 基一样
+##    （有些 MMD 绑法左右共用同一朝向），就直接照抄 `q`。这里按 `rest.x` 的点积自动判。
+static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
+	var report := {"applied": false, "pairs": 0, "keys": 0, "missing": [] as Array}
+	if sk == null or ap == null:
+		return report
+	var total := 0
+	for clip in LID_CLIPS:
+		if not ap.has_animation(clip):
+			continue
+		var a := ap.get_animation(clip)
+		if a.has_meta(META_LID):
+			continue
+		for pair in EYELID_PAIRS:
+			var src := String(pair[0])
+			var dst := String(pair[1])
+			var li := sk.find_bone(dst)
+			var ri := sk.find_bone(src)
+			if li < 0 or ri < 0:
+				report["missing"].append(src + "/" + dst)
+				continue
+			var mirrored := _rest_mirrored(sk, li, ri)
+			var n := _copy_rotation_track(a, src, dst, mirrored)
+			if n > 0:
+				total += n
+				report["pairs"] = int(report["pairs"]) + 1
+		a.set_meta(META_LID, true)
+	report["applied"] = total > 0
+	report["keys"] = total
+	return report
+
+
+## 左右两根骨的 rest 基是否互为镜像（x 轴反向即为镜像）
+static func _rest_mirrored(sk: Skeleton3D, left: int, right: int) -> bool:
+	var bl := sk.get_bone_global_rest(left).basis.orthonormalized()
+	var br := sk.get_bone_global_rest(right).basis.orthonormalized()
+	return bl.x.dot(br.x) < 0.0
+
+
+## 把 `from_bone` 的旋转轨道复制到 `to_bone`（可选镜像），返回写了多少帧。
+## 目标轨道已存在就先清空 —— 眼睑骨的轨道帧率可能和源不一致，按帧取源更稳。
+static func _copy_rotation_track(a: Animation, from_bone: String, to_bone: String,
+		mirrored: bool) -> int:
+	var src := _find_rotation_track(a, from_bone)
+	if src < 0:
+		return 0
+	var dst := _find_rotation_track(a, to_bone)
+	var path := String(a.track_get_path(src))
+	var head := path.substr(0, path.rfind(":"))
+	var target := head + ":" + to_bone
+	if dst < 0:
+		dst = a.add_track(Animation.TYPE_ROTATION_3D)
+		a.track_set_path(dst, NodePath(target))
+	else:
+		while a.track_get_key_count(dst) > 0:
+			a.track_remove_key(dst, a.track_get_key_count(dst) - 1)
+	var n := a.track_get_key_count(src)
+	for k in n:
+		var q: Quaternion = a.track_get_key_value(src, k)
+		if mirrored:
+			q = Quaternion(q.x, -q.y, -q.z, q.w)
+		a.track_insert_key(dst, a.track_get_key_time(src, k), q.normalized())
+	return n
+
+
+static func _find_rotation_track(a: Animation, bone_name: String) -> int:
+	for t in a.get_track_count():
+		if a.track_get_type(t) != Animation.TYPE_ROTATION_3D:
+			continue
+		if _bone_of(String(a.track_get_path(t))) == bone_name:
+			return t
+	return -1
+
+
+## 骨架空间里绕任意 `axis` 转 `deg`，夹到这根骨的局部空间（夹逼基同 `_pitch_delta`）。
+static func _axis_delta(sk: Skeleton3D, idx: int, axis: Vector3, deg: float) -> Quaternion:
+	var g := Basis.IDENTITY
+	var parent := sk.get_bone_parent(idx)
+	if parent >= 0:
+		g = sk.get_bone_global_rest(parent).basis.orthonormalized()
+	var gq := g.get_rotation_quaternion()
+	return (gq.inverse() * Quaternion(axis, deg_to_rad(deg)) * gq).normalized()
 
 
 ## 标定「这根骨要往回收多少」：在**骨架空间**里构造一个绕 X 轴的旋转 R，
