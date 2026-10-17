@@ -302,12 +302,22 @@ func _build_convex_hulls_collision() -> bool:
 				var pts: PackedVector3Array = (src as ConvexPolygonShape3D).points
 				if pts.size() < 4:
 					continue
+				# ⚠️ **把缩放烘进顶点，不要挂在 CollisionShape3D 的 transform 上。**
+				#    Boss 模型是按 `height` 缩放过的，第一版写成
+				#    `cs.transform = to_body * cc.global_transform` —— 那是一个带缩放的
+				#    CollisionShape3D，Godot 对碰撞体缩放支持很差：玩家贴上去会被
+				#    「卡住动不了」（用户就是在这里卡死的）。烘进 points 之后
+				#    `cs.transform` 是单位阵，物理侧只看见「一组没缩放的凸包」。
+				var xf := to_body * (cc as CollisionShape3D).global_transform
+				var local := PackedVector3Array()
+				local.resize(pts.size())
+				for k in pts.size():
+					local[k] = xf * pts[k]
 				var hull := ConvexPolygonShape3D.new()
-				hull.points = pts
+				hull.points = local
 				var cs := CollisionShape3D.new()
 				cs.name = "Collision" if made == 0 else "Collision%d" % made
 				cs.shape = hull
-				cs.transform = to_body * (cc as CollisionShape3D).global_transform
 				add_child(cs)
 				_collisions.append(cs)
 				made += 1
