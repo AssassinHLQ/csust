@@ -72,6 +72,12 @@ var _tracer_mat: StandardMaterial3D
 
 
 func _ready() -> void:
+	# ⚠️ 必须比 `AnimDriver`（`process_priority = 100`，它每帧还会把枪骨掰向准星）
+	#    更晚跑：枪口标记是照着**枪骨当前姿势**摆的，早一步同步就跟不上那一下掰枪，
+	#    弹道起点会落在「掰之前」的旧位置 —— 用户 2026-10-18 报的
+	#    「跑打子弹发射的点不在枪口上，偏右了」就是这个一帧的滞后（摆臂 42° 时
+	#    枪口能被甩出 0.3 m 以上）。
+	process_priority = 110
 	current_ammo = magazine_size
 	_fx_root = get_tree().root if get_tree() else self
 	skeleton = get_node_or_null(skeleton_path) as Skeleton3D
@@ -180,6 +186,10 @@ func _fire_raycast() -> void:
 	var space := get_world_3d().direct_space_state
 	if _player == null:
 		return
+	# ⚠️ 开枪前**当场**再同步一次枪口：`_process` 里那一次可能早于 `AnimDriver`
+	#    掰枪骨（见 `_ready()` 里的说明）。这里同步之后，弹道起点就是**这一帧**
+	#    视觉枪口的真实位置。
+	_follow_muzzle_bone()
 
 	var cam_dir := _player.camera_forward()
 	var origin := _player.cam.global_position \

@@ -198,6 +198,10 @@ func _test_running_fire() -> void:
 	var gun := await _gun_vs_crosshair()
 	_m["run_fire_gun_deg"] = gun
 	_check(gun < 8.0, "跑打时枪管离准星 %.1f°（判据 < 8°，改前 42°）" % gun)
+	var gap := await _muzzle_marker_gap()
+	_m["run_fire_muzzle_gap"] = gap
+	_check(gap < 0.05,
+		"弹道起点（`Weapon/Muzzle` 标记）落在视觉枪口上：差 %.3f m（改前 0.3+ m，偏右）" % gap)
 	_release_all()
 	await _wait(2)
 
@@ -468,6 +472,22 @@ func _gun_vs_crosshair() -> float:
 	if cam != null:
 		target = -cam.global_transform.basis.z
 	return rad_to_deg((d.normalized()).angle_to(target.normalized()))
+
+
+## 弹道起点（`Weapon/Muzzle` 标记 = 曳光弹 / 枪口火光的起点）离**视觉枪口**多远。
+## 用户 2026-10-18：「跑打子弹发射的点不在枪口上，偏右了」——
+## 病根是 `Weapon._process` 早于 `AnimDriver` 掰枪骨，标记落在**上一帧**的枪口上。
+func _muzzle_marker_gap() -> float:
+	var wpn := _p.get_node_or_null("Weapon") as Weapon
+	var sk := _anim.skeleton
+	if wpn == null or sk == null:
+		return 999.0
+	for b in ["bone_Railgun_Muzzle_03", "bone_Railgun_Muzzle_01"]:
+		var i := sk.find_bone(b)
+		if i >= 0:
+			var at: Vector3 = sk.global_transform * sk.get_bone_global_pose(i).origin
+			return wpn.muzzle.global_position.distance_to(at)
+	return 999.0
 
 
 func _release_all() -> void:

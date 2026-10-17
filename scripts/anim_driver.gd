@@ -207,6 +207,10 @@ var runfire := {}
 const GUN_BONE := "Bip001_Weapon"
 const GUN_MUZZLE_BONE := "bone_Railgun_Muzzle_01"
 const GUN_BREECH_BONE := "bone_magazine"
+## 拿枪的那只手 + 两根锁骨：手臂 + 枪作为一个刚体一起摆（见 `_aim_gun()`）
+const HAND_BONE := "Bip001 L Hand"
+const CLAVICLE_L_BONE := "Bip001 L Clavicle"
+const CLAVICLE_R_BONE := "Bip001 R Clavicle"
 ## 每秒收敛速度（1/s）：14 ≈ 0.07 s 掰到位。扣扳机那一瞬间不要「啪」地跳过去。
 @export var gun_aim_speed := 14.0
 ## 当前枪管离准星差多少度（掰之前量的；探针 / 自检读数）
@@ -349,13 +353,55 @@ func _aim_gun(delta: float) -> void:
 	if _gun_aim_weight < 0.9999:
 		q = Quaternion.IDENTITY.slerp(q, _gun_aim_weight)
 	gun_aim_applied_deg = rad_to_deg(q.get_angle())
-	# 世界空间的最小旋转 → 这根骨的父坐标系（骨架空间 / 父骨旋转）
-	var parent := skeleton.get_bone_parent(wi)
-	var pw := skb if parent < 0 else skb * skeleton.get_bone_global_pose(parent).basis
-	var pq := pw.get_rotation_quaternion()
+
+	# ── 手臂 + 枪**一起**转 q ──
+	# 只转枪骨会有一个用户看得见的后果：「枪歪到身子右边」（2026-10-18
+	# 「走打还是很奇怪，右倾了一点」—— 枪是根级骨，转它等于让它在手里自转，
+	# 手还留在素材的抱枪位）。所以先把两只锁骨按同一个世界旋转转过去
+	# （整条手臂跟着摆，肘/腕/指全在素材的姿势里不动），再把枪**按「转完之后
+	# 那只手」重新挂上**、朝向另外用 q 旋一次。等于「手臂 + 枪」作为一个刚体
+	# 绕肩转 q：枪管对齐准星，而枪和手的相对位姿和素材里一模一样。
+	var hand := skeleton.find_bone(HAND_BONE)
+	var hand_before := _bone_world(hand) if hand >= 0 else Transform3D.IDENTITY
+	var gun_before := _bone_world(wi)
+	var rel := Transform3D.IDENTITY
+	if hand >= 0:
+		rel = hand_before.affine_inverse() * gun_before
+	for b in [CLAVICLE_L_BONE, CLAVICLE_R_BONE]:
+		_rotate_bone_world(b, q)
+	# 朝向 = q × 原朝向；位置 = 转完之后那只手 × 素材里的相对位姿
+	var want_xf := gun_before
+	want_xf.basis = Basis(q) * gun_before.basis
+	if hand >= 0:
+		want_xf.origin = (_bone_world(hand) * rel).origin
+	var parent_xf := _parent_world(wi)
+	var pose := parent_xf.affine_inverse() * want_xf
+	skeleton.set_bone_pose_position(wi, pose.origin)
+	skeleton.set_bone_pose_rotation(wi, pose.basis.get_rotation_quaternion())
+	skeleton.set_bone_pose_scale(wi, pose.basis.get_scale())
+
+
+## 一根骨的**世界**变换（含骨架节点自己的变换）。
+func _bone_world(i: int) -> Transform3D:
+	if i < 0:
+		return Transform3D.IDENTITY
+	return skeleton.global_transform * skeleton.get_bone_global_pose(i)
+
+
+## 这根骨的「父坐标系」：根级骨的父就是骨架节点本身。
+func _parent_world(i: int) -> Transform3D:
+	var p := skeleton.get_bone_parent(i)
+	return skeleton.global_transform if p < 0 else _bone_world(p)
+
+
+## 把 `q`（世界空间旋转）乘到某根骨的姿势上 —— 绕它自己的旋转中心转。
+func _rotate_bone_world(bone: String, q: Quaternion) -> void:
+	var i := skeleton.find_bone(bone)
+	if i < 0:
+		return
+	var pq := _parent_world(i).basis.get_rotation_quaternion()
 	var local_q := pq.inverse() * q * pq
-	var rest := skeleton.get_bone_pose_rotation(wi)
-	skeleton.set_bone_pose_rotation(wi, local_q * rest)
+	skeleton.set_bone_pose_rotation(i, local_q * skeleton.get_bone_pose_rotation(i))
 
 
 ## 检查「嘴巴还在不在」。
