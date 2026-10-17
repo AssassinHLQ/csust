@@ -46,6 +46,18 @@ const FLOOR_HOLE_MARGIN := -0.15
 ## 或启动时加 `-- --solid-floor`。
 const CARVE_FALLBACK_FLOOR := true
 
+## ── 「空地」铺地砖（2026-10-18）──
+## 用户：「平台中间，高斯泼溅下面很大一片空的地方」→ 又补一句
+## **「场地最外面不要填上，因为会有影响跑酷」**。
+##
+## 现场量到的是：40×40 的平台只有 `albedo_color = (0.21,0.23,0.27)` 一个纯色、
+## 没有任何贴图。所以这里**只给平台这一块换材质**，平台外一律不铺 ——
+## 掉出平台就该继续往下掉（跑酷的失败判定靠这个），别在外面加地面。
+const LOT_TEX := "res://assets/tex/lot_paver.png"
+const LOT_TEX_N := "res://assets/tex/lot_paver_n.png"
+## 平台贴图重复次数：平台 40 m ÷ 16 = 2.5 m 一次重复，图里是 2×2 块 → 一块砖 1.25 m
+const LOT_UV_SCALE := 16.0
+
 ## ── 开场剧情（第七节 `story_script.gd` / `dialogue_box.gd`）──
 ## 剧本文件。想换一段就改这里；也可以只改文件名不管这里 ——
 ## 找不到它会自动退回 `story/` 目录里**排序第一份**，并打印用了哪一份。
@@ -261,6 +273,10 @@ func _ready() -> void:
 	_hud = $HUD
 	_spawn = _player.global_position
 	_build_room_proxy()
+	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。
+	# ⚠️ 必须在房间泼溅挖洞**之前**做 —— `_carve_fallback_floor()` 会复制
+	#    `mesh.get_active_material(0)`，晚一步挖出来的洞就是没贴图的那块。
+	_dress_empty_lot()
 
 	_hud.bind(_player, _weapon)
 
@@ -511,6 +527,41 @@ func _build_room_proxy() -> void:
 	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [
 		walls, str(_room_box.size.snappedf(0.01)),
 		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 给 40×40 平台铺地砖（见 `LOT_TEX` 上面那段）。
+##
+## **只动平台本身，平台外一格都不铺**：跑酷的失败判定是「掉下去」，
+## 外面补了地面就掉不下去了（用户 2026-10-18 专门交代过）。
+##
+## ⚠️ 必须在 `_carve_fallback_floor()` 之前调用：挖洞那一步复制的是
+##    `mesh.get_active_material(0)`，晚一步挖出来的洞就是没贴图的那块。
+func _dress_empty_lot() -> void:
+	var mesh := get_node_or_null(FLOOR_MESH_PATH) as MeshInstance3D
+	if mesh == null:
+		return
+	var tex := load(LOT_TEX) as Texture2D
+	if tex == null:
+		push_warning("[Game] 没有地面贴图 %s（先跑 tools/make_lot_paver.py）" % LOT_TEX)
+		return
+	var src = mesh.get_active_material(0)
+	var m: StandardMaterial3D = (src as StandardMaterial3D).duplicate() \
+		if src is StandardMaterial3D else StandardMaterial3D.new()
+	m.albedo_texture = tex
+	# 原来的 (0.21,0.23,0.27) 会把贴图压暗一倍；但也不能全白 ——
+	# 这是黄昏/阴天的场景，铺成亮白瓷砖会跟墙、天空打架。
+	m.albedo_color = Color(0.58, 0.62, 0.68)
+	m.uv1_scale = Vector3(LOT_UV_SCALE, LOT_UV_SCALE, LOT_UV_SCALE)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var nmap := load(LOT_TEX_N) as Texture2D
+	if nmap != null:
+		m.normal_enabled = true
+		m.normal_texture = nmap
+		m.normal_scale = 0.7
+	m.roughness = 0.95
+	m.metallic = 0.0
+	mesh.set_surface_override_material(0, m)
+	print("[Game] 空地铺地砖：%s（UV %.0f×，平台 40×40 m，平台外不铺）" % [LOT_TEX, LOT_UV_SCALE])
 
 
 ## 每帧：在屋里 → 泼溅显示、代理藏；出屋 → 反过来。
