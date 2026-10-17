@@ -158,26 +158,40 @@ static func fix_head_roll(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 	return report
 
 
-## 把右眼的眼睑旋转轨道**镜像**到左眼（用户要的「按右眼的数据镜像给左眼」）。
+## 把一只眼的眼睑旋转轨道**镜像**到另一只眼。
+##
+## ── ⚠️ 方向是可以反的，而且反了会白干 ──
+## `from_right = true`（原来的默认）：右眼 → 左眼。这是用户最早要的
+##   「按右眼的数据镜像给左眼」，当时左眼在偏。
+## `from_right = false`：左眼 → 右眼。2026-10-17 用户报「右眼上眼睑掉下来半遮瞳孔，
+##   镜像开也没感觉到」之后量的结论：**这份素材的眨眼动画只驱动左眼**，
+##   右眼的眼睑轨道几乎是静止的（`_probe_eyelids.gd`，`Normal_Idle`：
+##   左眼睑尖 y 从 +0.067 抬到 +0.077，右眼一直是 +0.066~0.068）。
+##   于是「右→左」等于把左眼的动作抄成静止（用户「没感觉到」就是这么来的），
+##   该反过来抄。方向验完再定默认值，别凭直觉。
 ##
 ## 镜像一个旋转（以 x=0 平面为镜）：轴 n → (−n.x, n.y, n.z) 且角度取反，
 ## 合成到四元数就是 `(x, −y, −z, w)`。
 ## ⚠️ 只有当左右两根骨的 rest 基**互为镜像**时这条才成立；如果两边 rest 基一样
 ##    （有些 MMD 绑法左右共用同一朝向），就直接照抄 `q`。这里按 `rest.x` 的点积自动判。
-static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
-	var report := {"applied": false, "pairs": 0, "keys": 0, "missing": [] as Array}
+static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer,
+		from_right := true) -> Dictionary:
+	var report := {"applied": false, "pairs": 0, "keys": 0, "missing": [] as Array,
+		"from_right": from_right}
 	if sk == null or ap == null:
 		return report
+	# 两个方向各记各的 meta：同一条动画上跑两次不会互相挡住（A/B 对照要用）
+	var meta := META_LID if from_right else META_LID + "_l2r"
 	var total := 0
 	for clip in LID_CLIPS:
 		if not ap.has_animation(clip):
 			continue
 		var a := ap.get_animation(clip)
-		if a.has_meta(META_LID):
+		if a.has_meta(meta):
 			continue
 		for pair in EYELID_PAIRS:
-			var src := String(pair[0])
-			var dst := String(pair[1])
+			var src := String(pair[0]) if from_right else String(pair[1])
+			var dst := String(pair[1]) if from_right else String(pair[0])
 			var li := sk.find_bone(dst)
 			var ri := sk.find_bone(src)
 			if li < 0 or ri < 0:
@@ -188,7 +202,7 @@ static func fix_eyelid_sync(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 			if n > 0:
 				total += n
 				report["pairs"] = int(report["pairs"]) + 1
-		a.set_meta(META_LID, true)
+		a.set_meta(meta, true)
 	report["applied"] = total > 0
 	report["keys"] = total
 	return report
