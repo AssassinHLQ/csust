@@ -130,6 +130,8 @@ var _auto_return := false
 var lower_tracks_removed := 0
 ## 移动层额外滤掉的躯干轨道条数（自检用）
 var trunk_tracks_removed := 0
+## 这一发中途因为速度变化而换过几次层（自检用：跑打起手一次、停步一次）
+var migrations := 0
 ## `PoseFix.fix_run_lean()` 的报告（自检用：改了哪些骨、多少帧）
 var lean_fix := {}
 ## `PoseFix.fix_head_roll()`：跑步时头往左偏的那 13.9°，掰正的报告
@@ -286,6 +288,39 @@ func active_upper_layer() -> AnimationPlayer:
 	return upper
 
 
+## 把**正在播的那一发**挪到「当前速度该用的那一层」，位置和倍速都接着走。
+##
+## 为什么需要它：`_play_once()` 只在开火那一帧选一次层，选完这一发就定死了。
+## 而 `_speed` 每帧都在变 —— 「站着扣扳机、立刻冲刺」是最常见的跑打起手，
+## 恰恰是选错层的那一种：躯干会整段锁在站桩姿势（后仰）。
+##
+## 换层是**无缝**的：同一条 clip、同一个 `current_animation_position`、同一个
+## `speed_scale`，`play(..., 0.0)` 淡入时间给 0，播放器不会露出中间帧。
+func _migrate_upper_layer() -> void:
+	if state == State.LOCOMOTION or skeleton == null:
+		return
+	var want := active_upper_layer()
+	if want == null or not want.is_inside_tree():
+		return
+	# 找出「现在真在播这一发」的那一层（两层同一时刻只有一层在播）
+	var cur: AnimationPlayer = null
+	for l in [upper, upper_move]:
+		if l != null and l != want and l.is_playing():
+			cur = l
+			break
+	if cur == null:
+		return
+	var clip := String(cur.current_animation)
+	if clip.is_empty() or not want.has_animation(clip):
+		return
+	var pos := cur.current_animation_position
+	want.speed_scale = cur.speed_scale
+	cur.stop()                       # `stop()` 不会发 `animation_finished`，不会误触收招
+	want.play(clip, 0.0, 1.0)
+	want.seek(pos, true)
+	migrations += 1
+
+
 func _in_keywords(bone: String, kws: Array) -> bool:
 	if bone.is_empty():
 		return false
@@ -323,6 +358,14 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	_speed = speed
 	if player == null:
 		return
+	# ⚠️ 速度一变，**正在连射的那一发也要换层**（见 `_migrate_upper_layer()`）。
+	#    原来层是「开火那一瞬间」按 `_speed` 选死的：站着扣扳机 → 选 `upper`
+	#    （完整站桩上半身，含脊椎/颈/头）→ 这一发剩下的 1.07 s 里你就算按 Shift
+	#    跑起来，躯干仍然被站桩姿势锁着。实测「站着开火 → 第 10 帧起跑 6.8」：
+	#      跑起来 +15/+30/+45 帧  躯干 up = 0.970 / 0.958 / 0.964
+	#      而「跑起来再开火」对照组  躯干 up = 0.887 / 0.901 / 0.890
+	#    前者就是用户报的「跑打身体后仰」—— 枪响时人还在站桩层里。
+	_migrate_upper_layer()
 	# ⚠️ **开火 / 换弹期间也必须继续更新基础层** —— 这正是「跑打时脚不动」的根因：
 	#    原来这里有一句 `or state != State.LOCOMOTION` 就提前返回，于是开火那一秒
 	#    基础层被冻住，腿停了。现在上半身在叠加层、下半身在基础层，两层互不干扰。
