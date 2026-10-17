@@ -11,6 +11,7 @@
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
 [ext_resource type="PackedScene" path="res://scenes/mesh_hut.tscn" id="12_hut"]
 [ext_resource type="PackedScene" path="res://scenes/parkour.tscn" id="13_parkour"]
+[ext_resource type="Script" path="res://scripts/sensei_npc.gd" id="14_sensei"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -268,10 +269,10 @@ surface_material_override/0 = SubResource("Mat_target")
 [node name="Player" parent="." unique_id=739379284 instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6)
 
-[node name="CompanionMika" parent="." unique_id=912549288 instance=ExtResource("7_companion")]
+[node name="CompanionKoyuki" parent="." unique_id=912549288 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 0.05, 6.9)
-model_path = "res://models/companions/Mika.glb"
-display_name = "未花"
+model_path = "res://models/companions/Koyuki.glb"
+display_name = "小雪"
 
 [node name="CompanionYuuka" parent="." unique_id=743736729 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2, 0.05, 6.9)
@@ -308,6 +309,10 @@ transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -5.2, 0.05, 4.6)
 model_path = "res://models/companions/Kei_ext.glb"
 display_name = "凯伊"
 slot = Vector3(-5.2, 0, -1.4)
+
+[node name="Sensei" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 0.05, 6.8)
+script = ExtResource("14_sensei")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1253512132]
 script = ExtResource("1_hud")

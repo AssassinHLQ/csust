@@ -8,7 +8,7 @@
 | `Arisu.glb` | 可选 | 原始版（24 条动作）。切换它只需把 `player.tscn` 第 4 行的 `Arisu_ext.glb` 改回 `Arisu.glb` |
 | `school.collision.glb` | 可选 | 校园碰撞网格。默认不挂载（`SplatScene.build_collision = false`） |
 | `Arisu*_*.png` | 自动生成 | 贴图会由 Godot 在首次导入 glb 时自动解包，不用手动放 |
-| `companions/Mika.glb` | 可选 | 同伴「未花」。145 骨、33 动作（README 第八节） |
+| `companions/Koyuki.glb` | 可选 | 同伴「小雪」。44 骨、33 动作（README 第八节）。原来这里是未花 |
 | `companions/Yuuka.glb` | 可选 | 同伴「优香」。108 骨、38 动作 |
 | `companions/Noa.glb` | 可选 | 同伴「诺亚」。135 骨、31 动作 |
 | `companions/Momoi.glb` | 可选 | 同伴「小桃」。105 骨、37 动作 |
@@ -23,6 +23,7 @@
 | `boss_perorozilla/Perorozilla_Original.fbx` | 可选 | 第五位 Boss（README §7.7）。47 骨、无动画、6 网格共用 1 个材质；`Perorozilla_Emotion_01..05` 是**叠在同一位置**的五种表情，只留一张 |
 | `boss_binah/Binah_Original.fbx` | 可选 | 第六位 Boss（**备用**，README §7.7）。44 骨、无动画、3 个材质（本体+4 环 / 武器面 / 光环）。只有 `-- --bosses=all` 才上场 |
 | `boss_goliath/Goliath_Decagram_Vulcan.fbx` | 可选 | 第七位 Boss（**备用**，README §7.7）。34 骨、单网格单材质。同上 |
+| `npc/sensei.glb` | 可选 | **老师** NPC（站在学生身后）。313 骨、**0 条动作**（待机是程序化的）；38 材质、约 40 MB（几何占大头）。由 `sensei.blend` 重导出，见 `scripts/sensei_npc.gd` 与 README §1.21 |
 
 同伴与 Boss 都是**可选**的。**默认场上只有飞猪优香一位**（不挤），其余六位在
 `scenes/bosses_standby.tscn` 里待命 —— 要全部上场就用 `-- --bosses=all`，
@@ -40,6 +41,8 @@
 > `boss_perorozilla/`（佩洛洛斯拉）、`boss_binah/`（比纳）、`boss_goliath/`（哥利亚）
 > 六个 Boss 的制作**作者是「一个睿智」**，全部派生自 Blue Archive，属专有版权。
 > 完整清单见仓库根的 [CREDITS.md](../CREDITS.md)。
+>
+> `npc/`（老师）的作者是**食小派蒙辣**，同样派生自 Blue Archive、专有版权。
 >
 > 主角 Arisu 与七名同伴的模型**取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)**
 > （Blue Archive 官方素材的解包整理版，整理者 lihaohong6 / Peterli）——

@@ -50,7 +50,7 @@ func _run() -> void:
 	root.add_child(game)
 	await _wait(10)
 	_space = root.world_3d.direct_space_state
-	for n in ["Player", "CompanionMika", "CompanionYuuka", "CompanionNoa",
+	for n in ["Player", "CompanionKoyuki", "CompanionYuuka", "CompanionNoa",
 			"CompanionMomoi", "CompanionMidori", "CompanionYuzu", "CompanionKei"]:
 		var c := game.get_node_or_null(n) as CollisionObject3D
 		if c != null:

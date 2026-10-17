@@ -27,8 +27,10 @@
 # 第六、第七名 Boss：比纳 / 哥利亚（备用库，作者：一个睿智）
 /models/boss_binah/**
 /models/boss_goliath/**
-# 同伴模型（未花 / 优香 / 诺亚，同样派生自 Blue Archive）
+# 同伴模型（小雪 / 优香 / 诺亚，同样派生自 Blue Archive）
 /models/companions/**
+# 老师 NPC（MMD 模型，作者：食小派蒙辣）—— 同属第三方素材，不随仓库分发
+/models/npc/**
 
 # Sprout Lands UI 素材（美术：Cup Nooble）—— 授权原文写着
 # 「You can not redistribute or resale, even if modified.」，

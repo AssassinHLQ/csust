@@ -137,7 +137,7 @@ const ENTRIES := [
 	{
 		"group": "角色与 Boss 模型",
 		"path": "models/companions",
-		"title": "七名同伴模型（未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊）",
+		"title": "七名同伴模型（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊）",
 		"author": "NEXON Games / Yostar（Blue Archive）",
 		"license": "专有版权",
 		"distributed": false,
@@ -155,6 +155,17 @@ const ENTRIES := [
 		"source": "https://github.com/lihaohong6/BlueArchiveModels",
 		"license_file": "",
 		"note": "官方素材解包（整理者 lihaohong6 / Peterli）；Arisu.glb / Arisu_ext.glb / Arisu*.png（导入时自动解包）/ school.collision.glb",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/npc",
+		"title": "老师（sensei）NPC 模型与贴图",
+		"author": "食小派蒙辣",
+		"license": "专有版权（派生自 Blue Archive，玩家二创）",
+		"distributed": false,
+		"source": "sensei_by_食小派蒙辣.zip",
+		"license_file": "",
+		"note": "sensei.blend（MMD/PMX 导出，313 骨、**0 条动作**）；本工程重导出为 sensei.glb：剔除 307 个刚体、贴图降到 1024、材质重建（MMD 材质树 glTF 导出器认不出，会丢贴图）。待机是程序化的（scripts/sensei_npc.gd）",
 	},
 	{
 		"group": "角色与 Boss 模型",

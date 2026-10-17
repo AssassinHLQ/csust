@@ -12,7 +12,7 @@ extends SceneTree
 ## 用法（要真渲染）：godot --path <工程> --script res://scripts/_verify_companion.gd -- --splat=off
 
 const COMPANIONS := [
-	"CompanionMika", "CompanionYuuka", "CompanionNoa",
+	"CompanionKoyuki", "CompanionYuuka", "CompanionNoa",
 	"CompanionMomoi", "CompanionMidori", "CompanionYuzu", "CompanionKei",
 ]
 
