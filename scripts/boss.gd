@@ -47,14 +47,18 @@ const TEXTURES := {
 @export var body_name_prefix := "Tyrannosaurus"
 ## 碰撞盒 = 归一化尺寸 × 这三个系数。
 ## 霸王龙这套（0.55/0.85/0.62）是量出来的：身体约占全长的六成，剩下是尾巴。
-## ⚠️ 只在 `complex_collision = false`、或三角面数超上限时才用。
+## ⚠️ 只在 `collision_mode = BOX`、或其它形态建不出来时才用。
 @export var collision_factors := Vector3(0.55, 0.85, 0.62)
-## **复杂碰撞（三角网格）**：默认开。把模型可见网格的三角形直接做成
-## `ConcavePolygonShape3D`，子弹打在哪儿命中哪儿。
-## 用户报「boss 怎么都是简单碰撞不是复杂碰撞」就是它 —— 以前一律是一个大方盒子。
-@export var complex_collision := true
-## 三角面数上限。超了就退回盒子形状：碰撞树是**静态**的，面越多
-## 射线查询越慢，没必要为了 10 万面的高模把每发子弹都拖慢。
+## 碰撞形态：
+##   BOX          一个方盒子把整只 Boss 框住（老行为，最省，撞哪儿都不准）
+##   BOX_PARTS    每块身体一个盒子（由 AABB 得来），便宜但只是「几个方块」
+##   CONVEX_HULLS **自动凹包分解**（默认）—— 对应 UE 的 Convex Decomposition：
+##                引擎自带 V-HACD，走 `MeshInstance3D.create_multiple_convex_collisions()`
+##   TRIMESH      原始网格全量三角面（最准，也最费 —— 用户报「有点卡」就是它）
+enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
+@export var collision_mode: CollisionMode = CollisionMode.CONVEX_HULLS
+## 每块身体最多拆几个凸包。8~16 足够描出轮廓，再多收益很小。
+@export var max_convex_hulls := 12
 @export var max_trimesh_tris := 60000
 ## 目标身高（m）。Arisu 约 1.7、靶子柱 1.15；木桩默认 4.5（约 2.6 个 Arisu）
 @export var height := 4.5
@@ -79,6 +83,8 @@ var _dead := false
 var _materials: Array[StandardMaterial3D] = []
 var _collision: CollisionShape3D
 var _collision_shape: BoxShape3D
+## 多块碰撞体（BOX_PARTS 模式会是好几个）。`_collision` 就是第一个，保持兼容。
+var _collisions: Array[CollisionShape3D] = []
 
 
 func _ready() -> void:
@@ -248,9 +254,115 @@ func _mesh_box() -> AABB:
 func _build_collision() -> void:
 	if visual_size == Vector3.ZERO:
 		return
-	if complex_collision and _build_trimesh_collision():
-		return
+	if collision_mode == CollisionMode.TRIMESH:
+		if _build_trimesh_collision():
+			return
+	elif collision_mode == CollisionMode.CONVEX_HULLS:
+		if _build_convex_hulls_collision():
+			return
+	elif collision_mode == CollisionMode.BOX_PARTS:
+		if _build_box_parts_collision():
+			return
 	_build_box_collision()
+
+
+## **自动凹包分解（默认）**：引擎自带的 V-HACD，就是 UE 那个 Convex Decomposition。
+##
+## `MeshInstance3D.create_multiple_convex_collisions(settings)` 会**顺手挂一个
+## StaticBody3D 子节点**、里面塞一堆 `ConvexPolygonShape3D`。这里不直接用它：
+##   · `_die()` / `_respawn()` 要统一开关碰撞，多一层 body 不好管；
+##   · 也不想让 boss 平白多出一个节点。
+## 所以把生成的形状**捞出来**、搬进 boss 自己的 CollisionShape3D 里，再把临时 body 删掉。
+##
+## ⚠️ 耗时实测：猪猪优香最大那块网格（6148 顶点）**103 ms**。
+##    之前「跑 5 分钟没结果」是 **FBX 首次导入**在拖，不是分解 —— 别被那次误导。
+func _build_convex_hulls_collision() -> bool:
+	var settings := MeshConvexDecompositionSettings.new()
+	settings.max_convex_hulls = max_convex_hulls
+	settings.max_num_vertices_per_convex_hull = 32
+	settings.convex_hull_downsampling = 2
+	settings.convex_hull_approximation = true
+	settings.min_volume_per_convex_hull = 0.0001
+	var to_body := global_transform.affine_inverse()
+	var made := 0
+	for m in _all(model, "MeshInstance3D"):
+		var mi := m as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		mi.create_multiple_convex_collisions(settings)
+		for c in mi.get_children():
+			if not (c is StaticBody3D):
+				continue
+			for cc in c.get_children():
+				if not (cc is CollisionShape3D):
+					continue
+				var src := (cc as CollisionShape3D).shape
+				if not (src is ConvexPolygonShape3D):
+					continue
+				var pts: PackedVector3Array = (src as ConvexPolygonShape3D).points
+				if pts.size() < 4:
+					continue
+				var hull := ConvexPolygonShape3D.new()
+				hull.points = pts
+				var cs := CollisionShape3D.new()
+				cs.name = "Collision" if made == 0 else "Collision%d" % made
+				cs.shape = hull
+				cs.transform = to_body * (cc as CollisionShape3D).global_transform
+				add_child(cs)
+				_collisions.append(cs)
+				made += 1
+			c.queue_free()
+	if made == 0:
+		_collisions.clear()
+		return false
+	_collision = _collisions[0]
+	collision_layer = 1
+	collision_mask = 0
+	print("[Boss] 自动凹包分解：%d 个凸包（V-HACD，UE 同款）" % made)
+	return true
+
+
+## **低模碰撞（默认）**：每块可见网格 → 一个 `BoxShape3D`，位置/尺寸取该网格的 AABB。
+##
+## ── 为什么最后选的是这个 ──
+## ① UE 那种「自动凹包分解」Godot **有**：`MeshConvexDecompositionSettings` +
+##    `MeshInstance3D.create_multiple_convex_collisions()`（V-HACD）。但**太慢** ——
+##    在猪猪优香这份模型上跑 **5 分钟没出结果**，载入时做等于卡死。
+## ② `Mesh.create_convex_shape()`（全部顶点求 QuickHull）同样跑到超时；
+##    连「抽 600 个点交给 `ConvexPolygonShape3D.set_points()`」都**不返回**（试过两次）。
+## ③ 全量三角网格（上一版）确实准，但用户报「有点卡」。
+## ⇒ 折中：**每块身体一个盒子**。盒子是引擎里最便宜的凸形状，
+##    4~9 个拼起来轮廓已经有模有样（头/身体/尾巴各一个），
+##    而且求 AABB 是 O(1)（导入时就缓存好了），载入零成本。
+func _build_box_parts_collision() -> bool:
+	var to_body := global_transform.affine_inverse()
+	var made := 0
+	for m in _all(model, "MeshInstance3D"):
+		var mi := m as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		var box := mi.get_aabb()
+		if box.size.length() < 0.01:
+			continue
+		var b := BoxShape3D.new()
+		b.size = box.size
+		var cs := CollisionShape3D.new()
+		cs.name = "Collision" if made == 0 else "Collision%d" % made
+		cs.shape = b
+		cs.transform = to_body * mi.global_transform \
+			* Transform3D(Basis.IDENTITY, box.get_center())
+		add_child(cs)
+		_collisions.append(cs)
+		made += 1
+	if made == 0:
+		_collisions.clear()
+		return false
+	_collision = _collisions[0]
+	collision_layer = 1
+	collision_mask = 0
+	print("[Boss] 低模碰撞：%d 个盒子（每块身体一个）" % made)
+	return true
+
 
 
 ## 复杂碰撞：把模型**可见**网格的三角形原样做成 `ConcavePolygonShape3D`。
@@ -305,6 +417,7 @@ func _build_trimesh_collision() -> bool:
 	_collision.shape = shape
 	_collision.position = Vector3.ZERO
 	add_child(_collision)
+	_collisions = [_collision]
 	collision_layer = 1
 	collision_mask = 0
 	print("[Boss] 复杂碰撞：%d 个三角面（三角网格，不再是盒子）" % tris)
@@ -324,6 +437,7 @@ func _build_box_collision() -> void:
 	_collision.position = Vector3(
 		model.position.x, _collision_shape.size.y * 0.5, model.position.z)
 	add_child(_collision)
+	_collisions = [_collision]
 	collision_layer = 1
 	collision_mask = 0
 	print("[Boss] 碰撞盒 size = %s" % str(_collision_shape.size.snappedf(0.01)))
@@ -343,8 +457,8 @@ func _flash() -> void:
 func _die(by_damage: float) -> void:
 	_dead = true
 	died.emit(by_damage)
-	if _collision:
-		_collision.set_deferred("disabled", true)
+	for c in _collisions:
+		c.set_deferred("disabled", true)
 	# 向前扑倒（模型脸朝 +Z，绕 +X 转正角就是低头栽下去）
 	var tw := create_tween()
 	tw.set_parallel(true)
@@ -358,8 +472,8 @@ func _respawn() -> void:
 	_dead = false
 	health = max_health
 	health_changed.emit(health, max_health)
-	if _collision:
-		_collision.set_deferred("disabled", false)
+	for c in _collisions:
+		c.set_deferred("disabled", false)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(model, "rotation:x", 0.0, 0.35)
