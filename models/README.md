@@ -23,7 +23,7 @@
 | `boss_perorozilla/Perorozilla_Original.fbx` | 可选 | 第五位 Boss（README §7.7）。47 骨、无动画、6 网格共用 1 个材质；`Perorozilla_Emotion_01..05` 是**叠在同一位置**的五种表情，只留一张 |
 | `boss_binah/Binah_Original.fbx` | 可选 | 第六位 Boss（**备用**，README §7.7）。44 骨、无动画、3 个材质（本体+4 环 / 武器面 / 光环）。只有 `-- --bosses=all` 才上场 |
 | `boss_goliath/Goliath_Decagram_Vulcan.fbx` | 可选 | 第七位 Boss（**备用**，README §7.7）。34 骨、单网格单材质。同上 |
-| `npc/sensei.glb` | 可选 | **老师** NPC（站在学生身后）。313 骨、**0 条动作**（待机是程序化的）；38 材质、约 40 MB（几何占大头）。由 `sensei.blend` 重导出，见 `scripts/sensei_npc.gd` 与 README §1.21 |
+| `npc/sensei.glb` | 可选 | **老师** NPC（站在学生身后）。**卡通版**：338 骨、**0 条动作**、**0 张贴图**（颜色全烘在顶点色里，绿皮肤 + 马克笔五官）；2.5 MB、8 材质。自带 55 个 `cs_*` 控制器网格（载入即删）、网格几乎整块绑在 `head.x` 上（手臂只能掰顶点）。见 `scripts/sensei_npc.gd` 与 README §8.9 |
 
 同伴与 Boss 都是**可选**的。**默认场上只有飞猪优香一位**（不挤），其余六位在
 `scenes/bosses_standby.tscn` 里待命 —— 要全部上场就用 `-- --bosses=all`，
@@ -42,7 +42,8 @@
 > 六个 Boss 的制作**作者是「一个睿智」**，全部派生自 Blue Archive，属专有版权。
 > 完整清单见仓库根的 [CREDITS.md](../CREDITS.md)。
 >
-> `npc/`（老师）的作者是**食小派蒙辣**，同样派生自 Blue Archive、专有版权。
+> `npc/`（老师）的作者是**张伟事务所**（卡通版；旧版 MMD 模型是**食小派蒙辣**），
+> 同样派生自 Blue Archive、专有版权。
 >
 > 主角 Arisu 与七名同伴的模型**取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)**
 > （Blue Archive 官方素材的解包整理版，整理者 lihaohong6 / Peterli）——

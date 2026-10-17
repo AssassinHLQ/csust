@@ -46,12 +46,34 @@ func _run() -> void:
 	print("[sensei] 世界包围盒 size=%s  center=%s" % [
 		str(aabb.size.snappedf(0.01)), str(aabb.get_center().snappedf(0.01))])
 
-	await _shoot(cam, p + fwd * 3.0 + Vector3.UP * 1.15, p + Vector3.UP * 0.85,
-		out.path_join("front.png"))
-	await _shoot(cam, p + sensei.global_transform.basis.x * 3.0 + Vector3.UP * 1.15,
-		p + Vector3.UP * 0.85, out.path_join("side.png"))
-	# 合影：从玩家身后往老师那边看
+	# 俯视图：高斯房间**没有碰撞体**，射线扫不出墙在哪，只能用眼睛看平面图。
+	# 老师之前被摆在 (+6.4, +6.8)，渲出来整幅白墙 —— 那个点在墙里。
+	var player1 := game.get_node_or_null("Player") as Node3D
+	var focus := player1.global_position if player1 else Vector3.ZERO
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = 26.0
+	cam.global_position = focus + Vector3.UP * 22.0
+	cam.look_at(focus, Vector3(0, 0, -1))
+	await process_frame
+	await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png(out.path_join("topdown.png"))
+	print("  [img] topdown.png（正交 26 m，玩家在正中）")
+	cam.projection = Camera3D.PROJECTION_PERSPECTIVE
+	cam.size = 1.0
+
+	# 绕老师一圈（近景 2.6 m），确认姿态 / 朝向 / 身高，不受墙体遮挡影响
+	for az in [0, 90, 180, 270]:
+		var rad := deg_to_rad(float(az))
+		var dir := Vector3(sin(rad), 0.0, cos(rad))
+		await _shoot(cam, p + dir * 2.6 + Vector3.UP * 1.25, p + Vector3.UP * 0.85,
+			out.path_join("orbit_%03d.png" % az))
+	# 玩家眼里的画面：这是唯一有意义的「看得到吗」测试
 	var player := game.get_node_or_null("Player") as Node3D
+	var peye := (player.global_position if player else Vector3.ZERO) + Vector3(0, 1.62, 0)
+	var pfwd := -player.global_transform.basis.z if player else Vector3.FORWARD
+	await _shoot(cam, peye, peye + pfwd * 6.0, out.path_join("player_view.png"))
+	# 合影：从玩家身后往老师那边看
 	var eye := (player.global_position if player else Vector3.ZERO) + Vector3(0, 1.7, 4.0)
 	await _shoot(cam, eye, p + Vector3.UP * 0.9, out.path_join("group.png"))
 
