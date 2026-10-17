@@ -72,6 +72,23 @@ func _run() -> void:
 	print("\n========== 3. 目标在背后时不开火 ==========")
 	# 位置不动，只把同伴转 180°：靶子落到背后，就不该再开火。
 	# 这条守的是 `companion_gun.gd` 文件头第 3 条（不为开火乱转身）。
+	#
+	# ⚠️ 第四、第五位 Boss（霍德 / 佩洛洛斯拉）摆在场地的 **+Z 那半边**，
+	#    正好落在这排同伴「背对靶子」时的**正前方** —— 它们会合法开火，
+	#    于是这条断言变成假红（实测多出 7 发）。所以先临时把 Boss 全体
+	#    移出 `bosses` 组（§5 之前再放回去），让这一节只剩「有没有靶子在前面」。
+	var all_bosses: Array[Boss] = []
+	for ch in game.get_children():
+		if ch is Boss:
+			all_bosses.append(ch as Boss)
+	for b in all_bosses:
+		b.remove_from_group("bosses")
+	# ⚠️ 光摘组不够：`companion_gun.gd` 的 `_collect_targets()` **只跑一次**并把
+	#    结果缓存进 `_targets`（第 78 行），摘组之后它照样对着缓存里的 Boss 打。
+	#    实测：不重扫的话这条会多出 7 发。所以这里手动重扫一次。
+	for g in guns:
+		g.call("_collect_targets")
+	await _wait(2)
 	_line_up(companions, target.global_position + Vector3(0, 0, 4.0), 0.0)
 	await _wait_seconds(0.5)
 	var shots2 := _total_shots(guns)
@@ -93,6 +110,12 @@ func _run() -> void:
 	await _wait(2)
 
 	print("\n========== 5. 也会去打 Boss ==========")
+	# 把 §3 临时摘掉的 `bosses` 组放回去，否则同伴找不到 Boss 可打
+	for b in all_bosses:
+		b.add_to_group("bosses")
+	for g in guns:
+		g.call("_collect_targets")     # 同上：缓存不重扫就看不见放回去的 Boss
+	await _wait(2)
 	_line_up(companions, trex.global_position - Vector3(6.0, 0, 0), PI * 0.5)
 	await _wait_seconds(0.5)
 	var trex_hp0 := trex.health

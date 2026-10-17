@@ -79,10 +79,12 @@ func _run() -> void:
 	_check(not _guns_idle(guns), "打开后恢复开火")
 
 	var bosses := _bosses(game)
-	_check(bosses.size() == 2, "找到 2 位 Boss（实测 %d）" % bosses.size())
+	# ⚠️ 场上有几位就断言几位：现在（第三～第五位加进来之后）是 5 位。
+	#    写死数字的话，每加一位 Boss 这条就假红一次 —— 本喵已经踩过一次。
+	_check(bosses.size() == 5, "找到 5 位 Boss（实测 %d）" % bosses.size())
 	GameSettings.set_value("boss_attack", false)
 	await _wait(2)
-	_check(_boss_attack_off(bosses), "关掉后两位 Boss 都不主动攻击")
+	_check(_boss_attack_off(bosses), "关掉后 %d 位 Boss 都不主动攻击" % bosses.size())
 	GameSettings.set_value("boss_attack", true)
 	await _wait(2)
 	_check(not _boss_attack_off(bosses), "打开后恢复攻击")

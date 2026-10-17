@@ -1,0 +1,71 @@
+# 素材署名与许可（CREDITS）
+
+> **这份文件是 `scripts/credits.gd` 的人读版。** 游戏里 Esc → 设置 →「致谢与素材署名」
+> 显示的是同一份数据；`scripts/_verify_credits.gd` 会断言 `models/`、`assets/`、
+> `addons/`、`splatdata/` 下的**每一个目录**都在这张表里登记过 ——
+> 也就是说：**新加一套素材却没署名，自检直接红。**
+
+本项目自己的代码、场景、着色器、文档以 **MIT** 授权，见 [LICENSE](LICENSE)。
+许可分两类：能随仓库分发的（✅）与**只能本地使用、不可再分发**的（❌，已被
+`.gitignore` 排除，克隆者需自己合法取得才能运行对应部分）。
+
+## 画面上最重要的三件事
+
+1. **主角、七名同伴、两位 Blue Archive 角色的 Boss、泼溅扫描** —— 版权不属于本项目，
+   只用于本地学习研究，**不得再分发、不得商用、不得用于任何发布产物**。
+   这些模型取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)
+   （Blue Archive 官方素材的解包整理版，整理者 **lihaohong6 / Peterli**）——
+   **解包不改变版权**，它们仍然是 NEXON Games / Yostar 的专有素材。
+2. **四位玩家二创的 Boss（飞猪 / 倭瓜 / 霍德 / 佩洛洛斯拉）出自「一个睿智」**，
+   派生自 Blue Archive，同样是专有版权。署名照下面表格写。
+3. **界面字体 `assets/ui_font/Aa暗夜深渊.ttf` 商用需授权**。发布前要么取得授权，
+   要么删掉它（会自动回退到 OFL 授权的 Fusion Pixel）。
+
+## 一、代码与插件
+
+| 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
+|---|---|---|---|---|---|
+| 全部 GDScript 代码、场景、着色器 | 本项目作者 | MIT | ✅ | `scripts/`、`scenes/`、`project.godot` | 见 [LICENSE](LICENSE) |
+| [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | ReconWorldLab | MIT | ✅ | `addons/gdgs/` | 高斯泼溅渲染插件；原许可保留在 `addons/gdgs/LICENSE` |
+
+## 二、角色与 Boss 模型（**全部不随仓库分发**）
+
+| 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
+|---|---|---|---|---|---|
+| 霍德（第四位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_hod/`，来源 `霍德_by_一个睿智.zip` | `HOD_Original.fbx`，164 骨、无动画；3 个材质；`*_Mask.png` 是原作者渲染遮罩，游戏里不绑 |
+| 佩洛洛斯拉（第五位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_perorozilla/`，来源 `佩洛洛斯拉_by_一个睿智.zip` | `Perorozilla_Original.fbx`，47 骨、无动画；6 网格共用 1 材质；5 张表情变体只留 1 张 |
+| 倭瓜优香（第三位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_squash/`，来源 `倭瓜优香压缩文件_by_一个睿智.zip` | `倭瓜优香.obj`，纯静态网格、无骨架；4 个材质 |
+| 飞猪优香（第二位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_pig/`，来源 `飞猪优香 (2)_by_一个睿智.zip` | `猪猪优香.fbx`；`uv/` 里两张是作者的成品渲染图，已挪到 `ref/` 当贴图基准 |
+| 霸王龙优香（第一位 Boss） | Blue Archive 玩家二创（原作者未标注） | 专有 | ❌ | `models/boss/` | `优香霸王龙.fbx`，73 骨、无动画 |
+| 七名同伴（未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/companions/`，来源 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包，整理者 lihaohong6 / Peterli） | 均取初始形态；凯伊用 `Kei_ext.glb` |
+| 主角 Arisu 模型与贴图、校园碰撞网格 | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/Arisu*.glb`、`Arisu*.png`、`school.collision.glb`，来源同上 | 贴图由 Godot 导入 glb 时自动解包 |
+| 校园 / 画室609 高斯泼溅扫描 | 由使用者提供，**权利状态未核实** | 未核实 | ❌ | `splatdata/*.sogdata` | 拍摄权、场地权、肖像权、再分发权均未确认；缺失时用 `-- --splat=off` |
+
+## 三、界面与字体
+
+| 素材 | 作者 | 许可 | 分发 | 位置 / 来源 | 说明 |
+|---|---|---|---|---|---|
+| [UI Pack: Pixel Adventure](https://kenney.nl/assets/ui-pack-pixel-adventure) 2.0 | Kenney | **CC0 1.0** | ✅ | `assets/ui/`，许可原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 九宫格面板 / 按钮切片；`tile_panel.png`、`tile_button_hover.png` 的中心被填成白色（原图中空），CC0 允许修改 |
+| [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/font.ttf`，许可原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 中文像素字体，覆盖 19214/20992 个 CJK 汉字；整套 UI 的兜底字 |
+| Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
+| [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
+
+## 四、音效
+
+| 素材 | 作者 | 许可 | 分发 | 位置 / 来源 | 说明 |
+|---|---|---|---|---|---|
+| [Interface Sounds](https://kenney.nl/assets/interface-sounds) / [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) / [RPG Audio](https://kenney.nl/assets/rpg-audio) | Kenney | **CC0 1.0** | ✅ | `assets/sfx/`，许可原文 `assets/sfx/LICENSE_Kenney_CC0.md` | `click_*`、`toggle_*`、`tick_*`、`open_*`、`close_*`、`laserSmall_000..004`、`metalLatch`、`metalClick` |
+| 枪声 | 本项目作者（Python 合成） | MIT | ✅ | `assets/sfx/gunshot_000.wav` ~ `gunshot_004.wav` | 不是采样，是算出来的：噪声 + 包络 + 带通，见 README §1.19 |
+
+## 五、剧情与图标
+
+| 素材 | 作者 | 许可 | 分发 | 位置 | 说明 |
+|---|---|---|---|---|---|
+| 剧情文本（开场 / 设定） | 本项目作者 | MIT | ✅ | `story/` | 角色名来自 Blue Archive，属同人创作 |
+| 项目图标 `icon.png` | **待确认** | 待确认 | ✅ | `icon.png` | 若不是原创请替换为自有图标 |
+
+## 怎么改
+
+1. 加一套素材 → 在 `scripts/credits.gd` 的 `ENTRIES` 里加一条（`path` 写目录即可覆盖其下全部文件）。
+2. 同步这张表与 `THIRD_PARTY.md`（前者面向「谁做了什么」，后者面向「许可合规」）。
+3. 跑 `--script res://scripts/_verify_credits.gd`：漏登记、缺许可原文、把私有素材漏进仓库，都会红。

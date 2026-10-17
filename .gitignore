@@ -21,6 +21,9 @@
 # 第二名 Boss：飞猪优香（FBX + 贴图 + 作者的对照渲染图）
 /models/boss_pig/**
 /models/boss_squash/**
+# 第四、第五名 Boss：霍德 / 佩洛洛斯拉（FBX + 贴图，作者：一个睿智）
+/models/boss_hod/**
+/models/boss_perorozilla/**
 # 同伴模型（未花 / 优香 / 诺亚，同样派生自 Blue Archive）
 /models/companions/**
 

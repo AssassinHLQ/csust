@@ -33,6 +33,10 @@ const LABEL_WIDTH := 150.0
 const VALUE_WIDTH := 84.0
 const PANEL_WIDTH := 620.0
 const ROW_GAP := 10
+## 致谢面板：比设置面板宽一倍（每条素材要排下「作者 / 许可 / 来源 / 备注」四行）
+const CREDITS_WIDTH := 900.0
+## 滚动区高度。1600×900 的窗口下，这个高度不会让面板超出屏幕。
+const CREDITS_HEIGHT := 520.0
 
 ## 操作说明 / 场地说明。
 ##
@@ -45,6 +49,9 @@ const HELP_TEXT := "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　�
 var is_open := false
 
 var _root: Control
+## 致谢面板（懒建：第一次点「致谢与素材署名」才生成）
+var _credits_root: Control
+var _credits_scroll: ScrollContainer
 var _skin: Dictionary = {}
 ## key -> {"control": Control, "value": Label}
 var _rows := {}
@@ -78,6 +85,11 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key.pressed or key.echo or key.keycode != KEY_ESCAPE:
 		return
+	# 致谢面板开着时，Esc 先关它（不然一按就直接退出整个设置界面）
+	if _credits_root != null and _credits_root.visible:
+		close_credits()
+		get_viewport().set_input_as_handled()
+		return
 	toggle()
 	# 吃掉这次 Esc：不然它还会漏给别的节点（比如 player 的转向门控）
 	get_viewport().set_input_as_handled()
@@ -107,6 +119,7 @@ func open() -> void:
 func close() -> void:
 	if not is_open:
 		return
+	close_credits()
 	is_open = false
 	_root.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -199,6 +212,7 @@ func _build() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 14)
 	vbox.add_child(buttons)
+	buttons.add_child(_make_button("致谢与素材署名", open_credits))
 	buttons.add_child(_make_button("恢复默认", _on_reset))
 	buttons.add_child(_make_button("关闭 (Esc)", close))
 
@@ -436,6 +450,91 @@ func _make_style(tex_path: String, tint: Color) -> StyleBoxTexture:
 
 func _make_theme() -> Theme:
 	return UiSkin.make_theme(_skin)
+
+
+# --- 致谢与素材署名（用户要求：所有资源都要署名）---
+
+## 面板内容全部来自 `credits.gd` 的 `ENTRIES` —— **不在这里抄第二份**，
+## 否则「游戏里写的」和「仓库里写的」迟早会走散。
+func open_credits() -> void:
+	if _credits_root == null:
+		_build_credits()
+	_credits_root.visible = true
+	if _credits_scroll != null:
+		_credits_scroll.scroll_vertical = 0
+	Sfx.play("ui_press")
+
+
+func close_credits() -> void:
+	if _credits_root != null:
+		_credits_root.visible = false
+
+
+func _build_credits() -> void:
+	_credits_root = Control.new()
+	_credits_root.name = "CreditsPanel"
+	_credits_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_credits_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_credits_root.theme = _make_theme()
+	add_child(_credits_root)
+
+	var dim := ColorRect.new()
+	dim.color = _skin["dim"]
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_root.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(CREDITS_WIDTH, 0.0)
+	panel.add_theme_stylebox_override("panel",
+		_make_style(_tex("panel.png"), _skin["panel_tint"]))
+	center.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 22)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "致谢与素材署名"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", _skin["text"])
+	vbox.add_child(title)
+	vbox.add_child(HSeparator.new())
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.custom_minimum_size = Vector2(0.0, CREDITS_HEIGHT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+	_credits_scroll = scroll
+
+	var body := Label.new()
+	body.name = "Body"
+	body.text = Credits.plain_text()
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.custom_minimum_size.x = CREDITS_WIDTH - 52.0
+	body.add_theme_font_size_override("font_size", 13)
+	body.add_theme_color_override("font_color", _skin["subtext"])
+	scroll.add_child(body)
+
+	vbox.add_child(HSeparator.new())
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(row)
+	row.add_child(_make_button("返回设置 (Esc)", close_credits))
 
 
 # --- 控件 <-> 设置 同步 ---

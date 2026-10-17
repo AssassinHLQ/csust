@@ -282,6 +282,109 @@ func _run() -> void:
 	await _steps(40)
 	await _shot(out.path_join("95_pig_three_quarter.png"))
 
+	print("\n========== 8. 第四、第五位 Boss（霍德 / 佩洛洛斯拉）==========")
+	# 这两位和前面三位共用 `boss_attacker.gd`，所以这里重点验**它们自己的特点**：
+	#   霍德   = 圈套在自己脚下（reach 0）+ 全向 + 最慢
+	#   佩洛     = 起手最快 + 圈最小
+	var hod := game.get_node_or_null("BossHod") as Boss
+	var pero := game.get_node_or_null("BossPeroro") as Boss
+	_check(hod != null and pero != null, "场景里有 BossHod 与 BossPeroro")
+	if hod != null and pero != null:
+		print("  霍德：%s  身高 %.2f m  骨 %d（按%s量）" % [
+			hod.display_name, hod.visual_size.y, hod.bone_count, hod.measure_kind])
+		print("  佩洛洛斯拉：%s  身高 %.2f m  骨 %d（按%s量）" % [
+			pero.display_name, pero.visual_size.y, pero.bone_count, pero.measure_kind])
+		_check(hod.display_name == "霍德", "第四位叫霍德")
+		_check(pero.display_name == "佩洛洛斯拉", "第五位叫佩洛洛斯拉")
+		_check(hod.model != null and pero.model != null, "两个模型都载入了")
+		_check(hod.measure_kind == "骨架" and hod.bone_count > 100,
+			"霍德按骨架量（164 骨）")
+		_check(pero.measure_kind == "骨架" and pero.bone_count > 30,
+			"佩洛洛斯拉按骨架量（47 骨）")
+		_check(absf(hod.visual_size.y - hod.height) < 0.05,
+			"霍德身高归一化到 %.2f m" % hod.height)
+		_check(absf(pero.visual_size.y - pero.height) < 0.05,
+			"佩洛洛斯拉身高归一化到 %.2f m" % pero.height)
+
+		# 贴图：这两个的材质**每个面都要绑上**，有一面空着就是漏了 texture_map 的键
+		for b in [hod, pero]:
+			var boss2 := b as Boss
+			var bare := 0
+			var total := 0
+			for m in _all(boss2.model, "MeshInstance3D"):
+				var mi := m as MeshInstance3D
+				var am := mi.mesh as ArrayMesh
+				if am == null:
+					continue
+				for s in am.get_surface_count():
+					var smat := am.surface_get_material(s)
+					if smat is StandardMaterial3D:
+						total += 1
+						if (smat as StandardMaterial3D).albedo_texture == null:
+							bare += 1
+			print("  %s：%d 个贴图槽位，%d 个空着" % [boss2.display_name, total, bare])
+			_check(total > 0 and bare == 0,
+				"%s 的每个材质面都绑上了贴图（%d/%d）" % [boss2.display_name, total - bare, total])
+
+		# 霍德：圈心就在自己脚下，而且是全向
+		_check(is_zero_approx(float(hod.get("attack_reach"))),
+			"霍德的预警圈套在自己脚下（reach = %.1f）" % float(hod.get("attack_reach")))
+		_check(absf(float(hod.get("attack_half_angle_degrees")) - 180.0) < 0.1,
+			"霍德全向起手（半角 180°）")
+		# ⚠️ 起手时间不能拿飞猪比：§6 为了快速驱动，已经把它的 `windup_time`
+		#    改成了 0.12。这里改用霸王龙的 0.9 s 当基准（它没被改过）。
+		_check(float(hod.get("windup_time")) > float(trex.get("windup_time")),
+			"霍德起手比霸王龙还慢（%.2f > %.2f s）" % [
+				float(hod.get("windup_time")), float(trex.get("windup_time"))])
+		_check(float(hod.get("attack_radius")) > float(trex.get("attack_radius")),
+			"霍德的圈比霸王龙还大（%.1f > %.1f m）" % [
+				float(hod.get("attack_radius")), float(trex.get("attack_radius"))])
+
+		# 佩洛洛斯拉：起手最快、圈最小
+		# 同上：基准用霸王龙（0.9 s），不用被 §6 改过的飞猪。
+		_check(float(pero.get("windup_time")) < float(trex.get("windup_time")),
+			"佩洛洛斯拉起手全场最快（%.2f < %.2f s）" % [
+				float(pero.get("windup_time")), float(trex.get("windup_time"))])
+		_check(float(pero.get("attack_radius")) < float(pig.get("attack_radius")),
+			"佩洛洛斯拉的圈最小（%.1f < %.1f m）" % [
+				float(pero.get("attack_radius")), float(pig.get("attack_radius"))])
+		var visible_emotion := 0
+		for m in _all(pero.model, "MeshInstance3D"):
+			var mi := m as MeshInstance3D
+			if mi.name.begins_with("Perorozilla_Emotion_") and mi.visible:
+				visible_emotion += 1
+		_check(visible_emotion == 1,
+			"佩洛洛斯拉只留 1 张表情变体（实测 %d 张，5 张全开会糊成一团）" % visible_emotion)
+
+		# 实打实打一下霍德：站在它脚下（圈心）应该掉血；退到圈外不该掉
+		var hod_telegraph := hod.get_node_or_null("AttackTelegraph") as MeshInstance3D
+		_check(hod_telegraph != null, "霍德有预警圈节点")
+		if hod_telegraph != null:
+			(hod as Node).set_process(false)      # 手动驱动，避免 _process 抢跑
+			hod.set("windup_time", 0.12)
+			player.set_physics_process(false)
+			player.global_position = hod.global_position + Vector3(1.0, 0.05, 1.0)
+			player.health = player.max_health
+			player.velocity = Vector3.ZERO
+			hod.call("_attack", player)
+			_check(hod_telegraph.visible, "霍德起手时露出预警圈")
+			await _wait_seconds(0.4)
+			print("  站在霍德脚下：玩家 HP 100 → %.0f" % player.health)
+			_check(player.health < player.max_health, "站在霍德圈里会掉血（全向）")
+			_check(player.velocity.length() > 0.1, "霍德命中会击退")
+			_check(not hod_telegraph.visible, "霍德结算后收起预警圈")
+
+			# 圈外（但在发现距离内）不该掉血 —— 和另外三位同一条铁律
+			player.global_position = hod.global_position \
+				+ Vector3(float(hod.get("attack_radius")) + 2.0, 0.05, 0.0)
+			player.health = player.max_health
+			player.velocity = Vector3.ZERO
+			hod.call("_attack", player)
+			await _wait_seconds(0.4)
+			print("  退到霍德圈外：玩家 HP = %.0f" % player.health)
+			_check(is_equal_approx(player.health, player.max_health),
+				"站在霍德圈外不掉血（预警圈 = 伤害区）")
+
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)
 	quit(1 if _fail > 0 else 0)

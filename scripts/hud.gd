@@ -89,10 +89,12 @@ const BOSS_TOP := 30.0
 
 # --- 左上角泼溅加载状态行 ---
 ## **一份场地一行**，贴在血量面板下沿（不挡住血量）。
-## ⚠️ 现在是**三位 Boss**（霸王龙 / 飞猪 / 倭瓜），Boss 条组占到 y ≈ 149
-##    （30 + 2×46 + 条高 27），原来的 128 会跟第三行叠在一起 —— 所以整体下移到 162。
+## ⚠️ 现在是**五位 Boss**（霸王龙 / 飞猪 / 倭瓜 / 霍德 / 佩洛洛斯拉），
+##    Boss 条组占到 y ≈ 226（30 + 4×46 + 名字/条高），所以整体下移到 240。
+##    `SPLAT_ROW_TOP` 必须大于「BOSS_TOP + (Boss 数 − 1) × BOSS_ROW_HEIGHT + BOSS_BAR_HEIGHT」，
+##    再加 Boss 时先算这一行；`_verify_credits.gd` 里有一条断言锁这个不变量。
 const SPLAT_ROW_HEIGHT := 20.0
-const SPLAT_ROW_TOP := 162.0
+const SPLAT_ROW_TOP := 240.0
 
 var _player: Player
 var _weapon: Weapon

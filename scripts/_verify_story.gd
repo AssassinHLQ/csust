@@ -426,8 +426,8 @@ func _test_bible(game: Node) -> void:
 	var names: Array[String] = []
 	for row in cast_rows:
 		names.append(String(row.get(StoryScript.COL_NAME, "")))
-	# 10 = 主角 + 七名同伴 + 两位 Boss。少一个多半是表被误删了行。
-	_check(names.size() >= 10, "角色表里 %d 个名字：%s" % [names.size(), str(names)])
+	# 13 = 主角 + 七名同伴 + 五位 Boss。少一个多半是表被误删了行。
+	_check(names.size() >= 13, "角色表里 %d 个名字：%s" % [names.size(), str(names)])
 
 	# 真剧本的说话人必须都在表里
 	var real := StoryScript.load_file(TEMPLATE)

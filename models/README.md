@@ -18,15 +18,28 @@
 | `companions/Kei_ext.glb` | ✅（用凯伊时） | 同伴「凯伊」**实际引用**的版本。同上，但跑动 `Move_Ing` 的整体前折已修正（README §8.8）。`game.tscn` 的 `CompanionKei.model_path` 指向它 |
 | `boss/优香霸王龙.fbx` | 可选 | 第一位 Boss（README 第七节）。73 骨、无动画、约 31 万三角形 |
 | `boss_pig/猪猪优香.fbx` | 可选 | 第二位 Boss（README §7.6）。**纯静态网格**，4 网格 / 1.27 万三角形、无骨无动画 |
+| `boss_squash/倭瓜优香.obj` | 可选 | 第三位 Boss（README §7.7）。**OBJ 导入成 `Mesh` 不是 `PackedScene`** —— `boss.gd` 两条分支都接。附带 `textures/` 4 张图 |
+| `boss_hod/HOD_Original.fbx` | 可选 | 第四位 Boss（README §7.7）。164 骨、无动画、3 个材质（本体 / 光环 / 随身高塔）。`*_Mask.png` 是原作者渲染遮罩，游戏里不用 |
+| `boss_perorozilla/Perorozilla_Original.fbx` | 可选 | 第五位 Boss（README §7.7）。47 骨、无动画、6 网格共用 1 个材质；`Perorozilla_Emotion_01..05` 是**叠在同一位置**的五种表情，只留一张 |
 
 同伴与 Boss 都是**可选**的：没有就把 `scenes/game.tscn` 里对应的
 `CompanionMika` / `CompanionYuuka` / `CompanionNoa` / `CompanionMomoi` /
-`CompanionMidori` / `CompanionYuzu` / `CompanionKei` / `Boss` / `BossPig` 节点删掉。
+`CompanionMidori` / `CompanionYuzu` / `CompanionKei` / `Boss` / `BossPig` /
+`BossSquash` / `BossHod` / `BossPeroro` 节点删掉。
 
 同伴这七份 GLB 的**贴图是内嵌的**（image 走 bufferView），所以只要拷 `.glb` 本体。
 
 `companions/` 与 `boss*/` 内部的文件名（ASCII 化后的 `tex/*.png`、`ref/*.png`）见 README 第七、八节。
-`models/companions/**`、`models/boss/**`、`models/boss_pig/**` 都已被 `.gitignore` 排除。
+`models/companions/**`、`models/boss/**`、`models/boss_pig/**`、`models/boss_squash/**`、
+`models/boss_hod/**`、`models/boss_perorozilla/**` 都已被 `.gitignore` 排除。
+
+> **署名**：`boss_pig/`（飞猪优香）、`boss_squash/`（倭瓜优香）、`boss_hod/`（霍德）、
+> `boss_perorozilla/`（佩洛洛斯拉）四个 Boss 的制作**作者是「一个睿智」**，
+> 全部派生自 Blue Archive，属专有版权。完整清单见仓库根的 [CREDITS.md](../CREDITS.md)。
+>
+> 主角 Arisu 与七名同伴的模型**取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)**
+> （Blue Archive 官方素材的解包整理版，整理者 lihaohong6 / Peterli）——
+> 解包不改变版权，它们仍是 NEXON Games / Yostar 的专有素材。
 
 ## ⚠️ 版权
 
