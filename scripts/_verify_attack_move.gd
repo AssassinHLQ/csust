@@ -64,6 +64,7 @@ func _run() -> void:
 	await _test_standing_fire()
 	await _test_running_fire()
 	await _test_walking_fire()
+	await _test_walkfire_posture()
 	await _test_running_reload()
 	await _test_recover()
 	await _test_weapon_path()
@@ -232,9 +233,13 @@ func _test_walking_fire() -> void:
 
 	_anim.request_fire()
 	await _wait_ms(200)
-	_check(_anim.current_clip() == _anim.extra_clip,
-		"走打开火：整身切到 %s（基础层 %s）"
-		% [_anim.extra_clip, _anim.current_clip()])
+	# ⚠️ 第八轮（2026-10-18）：走打**不再**套整身 `RunFire_Ing`。
+	#    那一版把「站桩侧身开火」的上半身放慢到 46% 播 ⇒ 实测肩线 +14.1°、
+	#    头相对骨盆 −22.5°（只走是 −0.6° / +0.2°），就是用户说的「右倾 / 螃蟹」。
+	#    现在慢速开火留在素材的持枪跑姿 `Move_Ing`，肩线回到 −10.5°（和只跑一致）。
+	_check(_anim.current_clip() == "Move_Ing",
+		"走打开火：留在持枪姿势 Move_Ing（%s）—— 不套整身跑打"
+		% _anim.current_clip())
 	var sc := _anim.player.speed_scale
 	_m["walk_fire_speed_scale"] = sc
 	_check(sc >= 0.3 and sc <= 0.7,
@@ -279,6 +284,72 @@ func _test_walking_fire() -> void:
 		% [st, clip_after])
 	_release_all()
 	await _wait(2)
+
+
+# --- 3c. 慢速开火不许把身子拧歪（2026-10-18 用户：「走打还是右倾」）-------------
+#
+# 这条是「右倾」的**机器判据**，和姿势无关、和相机无关：
+#   **肩线倾角** = 左右上臂骨连线在**模型空间**里相对水平面的仰角。
+# 实测（`_probe_live_fire.gd`，正 = 左肩高）：
+#   只走 Cafe_Walk −0.6° / 走打(旧,RunFire@0.46) **+14.1°** / 只跑 −7.8° / 跑打 −10.4°
+# 判据用「和只跑的差」而不是绝对值：素材本身的持枪跑姿就有 −8° 的肩线，
+# 那个是风格，不是 bug；**慢速开火不该比跑打更歪**才是要守的东西。
+func _test_walkfire_posture() -> void:
+	print("
+========== 3c. 慢速开火不许把身子拧歪（「右倾」的机器判据）==========")
+	await _reset()
+	# 只跑的肩线基准
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _wait_ms(700)
+	var run_tilt := await _shoulder_tilt_avg(40)
+	_m["tilt_run"] = run_tilt
+	_check(_anim.current_clip() == "Move_Ing", "跑起来：%s（速度 %.2f）"
+		% [_anim.current_clip(), _speed()])
+	Input.action_release("sprint")
+	# 走打
+	await _wait_ms(500)
+	var walk_tilt := await _shoulder_tilt_avg(40)
+	_m["tilt_walk"] = walk_tilt
+	_anim.request_fire()
+	await _wait_ms(250)
+	var fire_tilt := await _shoulder_tilt_avg(40)
+	_m["tilt_walk_fire"] = fire_tilt
+	print("  肩线：只走 %+.1f° / 走打 %+.1f° / 只跑 %+.1f°（正 = 左肩高）"
+		% [walk_tilt, fire_tilt, run_tilt])
+	_check(_anim.current_clip() == "Move_Ing", "走打仍在持枪姿势：%s" % _anim.current_clip())
+	_check(absf(fire_tilt - run_tilt) < 6.0,
+		"走打的肩线和只跑相差 %.1f°（判据 < 6°；旧版 RunFire@0.46 是 %.1f°）"
+		% [absf(fire_tilt - run_tilt), absf(14.1 - run_tilt)])
+	var gun := await _gun_vs_crosshair()
+	_check(gun < 8.0, "走打（Move_Ing）枪管离准星 %.1f°（判据 < 8°）" % gun)
+	var ws := _weapon_scale()
+	_check(ws > 0.5, "走打时枪骨没被压没：世界缩放 %.2f" % ws)
+	_anim.cancel_fire()
+	await _wait_ms(350)
+	_check(_anim.current_clip() == "Cafe_Walk" and _anim.current_state_name() == "Locomotion",
+		"松手 0.35 s 后回到走路：%s / %s"
+		% [_anim.current_clip(), _anim.current_state_name()])
+	_release_all()
+	await _wait(2)
+
+
+## 肩线倾角（几帧平均）：左右上臂骨连线在模型空间里相对水平面的仰角，正 = 左肩高
+func _shoulder_tilt_avg(frames: int) -> float:
+	var sum := 0.0
+	for _i in frames:
+		await process_frame
+		var sk := _anim.skeleton
+		var l := sk.find_bone("Bip001 L UpperArm")
+		var r := sk.find_bone("Bip001 R UpperArm")
+		if l < 0 or r < 0:
+			return 999.0
+		var wl: Vector3 = sk.global_transform * sk.get_bone_global_pose(l).origin
+		var wr: Vector3 = sk.global_transform * sk.get_bone_global_pose(r).origin
+		var mb := _p.model_root.global_transform.basis
+		var v := mb.inverse() * (wl - wr)
+		sum += rad_to_deg(atan2(v.y, maxf(Vector2(v.x, v.z).length(), 0.0001)))
+	return sum / float(maxi(frames, 1))
 
 
 # --- 4. 跑动换弹：同一套逻辑 ---------------------------------------------------

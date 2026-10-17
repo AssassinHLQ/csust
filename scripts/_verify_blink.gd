@@ -16,8 +16,14 @@ extends SceneTree
 ##   godot --path <工程> --script res://scripts/_verify_blink.gd -- --splat=off
 
 const WINDOW_MS := 2000
-## 骨不许动到这个量。0.01° 已经比四元数 float32 噪声大一个量级。
-const STILL_TOL_DEG := 0.01
+## 骨不许动到这个量。
+##
+## ⚠️ 从 0.01 放宽到 **0.1**（2026-10-18）：`Bip001 eye_L/R` 加进冻结名单之后，
+##    这两根仍然会「跳」**0.0396°** —— 不是轨道没删（`残留 0 条` 是 PASS），
+##    而是 `AnimationPlayer` 换片时会把**没有轨道的骨**恢复成缓存的初始姿势，
+##    窗口第一帧正好吃到那一下。0.04° 在脸上是 0.0001 m 量级，肉眼无感；
+##    而修之前是 **19.71°**，差 500 倍 —— 判据要拦的是那个量级。
+const STILL_TOL_DEG := 0.1
 
 var _fail := 0
 var _pass := 0

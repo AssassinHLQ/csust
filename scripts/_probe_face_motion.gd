@@ -62,21 +62,39 @@ func _run() -> void:
 		for _i in 4:
 			await process_frame
 		var base := {}
+		var base_s := {}
+		var base_p := {}
 		var names := _face_bones(sk)
 		for i in names:
 			base[i] = _rel(sk, i, head)
+			base_s[i] = sk.get_bone_pose_scale(i)
+			base_p[i] = sk.get_bone_pose_position(i)
 		var peak := {}
+		var peak_s := {}
+		var peak_p := {}
 		for i in names:
 			peak[i] = 0.0
+			peak_s[i] = 0.0
+			peak_p[i] = 0.0
 		for _f in FRAMES:
 			await process_frame
 			for i in names:
 				var d: float = rad_to_deg((base[i] as Quaternion).angle_to(_rel(sk, i, head)))
 				if d > float(peak[i]):
 					peak[i] = d
+				# ⚠️ 眨眼不一定靠**旋转**：很多素材是把眼球骨（`eye_L`）的 **scale** 压扁，
+				#    只量旋转会漏掉整整一类眨眼。
+				var sc: Vector3 = sk.get_bone_pose_scale(i)
+				var sd: float = maxf(maxf(absf(sc.x - 1.0), absf(sc.y - 1.0)), absf(sc.z - 1.0))
+				sd = maxf(sd, (sc - (base_s[i] as Vector3)).length())
+				if sd > float(peak_s[i]):
+					peak_s[i] = sd
+				var pd: float = (sk.get_bone_pose_position(i) - (base_p[i] as Vector3)).length()
+				if pd > float(peak_p[i]):
+					peak_p[i] = pd
 		var rows := []
 		for i in names:
-			rows.append([float(peak[i]), i])
+			rows.append([float(peak[i]) + float(peak_s[i]) * 100.0 + float(peak_p[i]) * 100.0, i])
 		rows.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
 		print("[%s] %.2f s —— 相对头骨的最大旋转（%d 帧）" % [clip,
 			anim.player.get_animation(String(clip)).length, FRAMES])
@@ -84,7 +102,9 @@ func _run() -> void:
 		for r in rows:
 			if float(r[0]) < 0.5 and shown >= 6:
 				continue
-			print("    %6.2f°  %s" % [float(r[0]), sk.get_bone_name(int(r[1]))])
+			var i2 := int(r[1])
+			print("    %6.2f°  scale 差 %.3f  pos 差 %.4f m  %s" % [float(peak[i2]),
+				float(peak_s[i2]), float(peak_p[i2]), sk.get_bone_name(i2)])
 			shown += 1
 			if shown >= 14:
 				break

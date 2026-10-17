@@ -151,6 +151,9 @@ var _aiming := false
 var _auto_return := false
 ## 这一发正在播「单条跑打动作」（整身，自带腿）—— 此时 `_update_locomotion()` 不许插手
 var _runfire_playing := false
+## 这一发是**走着 / 蹲着**开火：基础层强制留在 `Move_Ing`（素材的持枪跑姿），
+## 不套整身跑打动作 —— 见 `_fire_while_walking()` 上面那张表
+var _walk_fire := false
 ## 滤掉的下半身轨道条数（自检用）
 var lower_tracks_removed := 0
 ## 移动层额外滤掉的躯干轨道条数（自检用）
@@ -360,7 +363,7 @@ func _aim_gun(delta: float) -> void:
 	#    站定开火走的是叠加层，素材那套站桩开火姿势把枪抱在胸前 70~98°，
 	#    硬掰成朝向准星会让两只手整个离开枪 —— 那个动作本来就是风格化的，
 	#    用户也没提过它，所以不动（探针里量得到它仍然是斜的）。
-	var want := 1.0 if (state == State.FIRE and _runfire_playing) else 0.0
+	var want := 1.0 if (state == State.FIRE and (_runfire_playing or _walk_fire)) else 0.0
 	_gun_aim_weight = move_toward(_gun_aim_weight, want, maxf(gun_aim_speed, 0.001) * delta)
 	if _gun_aim_weight <= 0.0001:
 		_gun_aim_weight = 0.0
@@ -414,8 +417,14 @@ func _parent_world(i: int) -> Transform3D:
 
 ## 松开扳机：给跑打动作留一点点收招余韵，然后由 `_tick_release()` 收掉。
 func cancel_fire() -> void:
-	if state != State.FIRE or not _runfire_playing:
+	if state != State.FIRE:
 		return
+	# 走打开火：本来就没有「攻击动作要播完」这回事，松手立刻交回走路
+	if _walk_fire:
+		_return_to_locomotion()
+		return
+	if not _runfire_playing:
+		return                        # 站定开火（叠加层）不砍，让它自己播完
 	_release_left = FIRE_RELEASE_GRACE
 
 
@@ -635,6 +644,11 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	_migrate_upper_layer()
 	# 整身跑打动作在播：腿是它自带的，只跟着速度调倍速，别让 `_update_locomotion()`
 	# 把动作切回 `Move_Ing`（那样这一枪就只剩「站着开火」了）。
+	# 走着开火时站住了：先回移动，再让站桩开火接上（扳机可能还按着）
+	if _walk_fire and _speed < IDLE_SPEED:
+		_return_to_locomotion()
+		_play_once("Normal_Attack_Ing", State.FIRE)
+		return
 	if _runfire_playing:
 		# 速度掉回站住 / 怠速 → 这条「跑步姿势」的整身动作就不该继续了，交回普通移动。
 		# （门槛和 `request_fire()` 那边同一根线：`IDLE_SPEED`）
@@ -672,10 +686,46 @@ func request_fire() -> void:
 	# `Bip001_Weapon` 的缩放 ≈ 0.04，实测），等于走打没枪。用户选了前者。
 	# 现在：≥ `IDLE_SPEED` 全部走这条整身动作，慢速时靠 `speed_scale` 放慢
 	# （2.4 m/s → 0.46 倍），步幅仍然对得上地面，不会脚底打滑。
-	if state == State.LOCOMOTION and has_runfire() and _speed >= IDLE_SPEED:
+	# **跑起来**（≥ `WALK_THRESHOLD`）才套整身跑打动作：那一档的姿势实测是正的
+	# （肩线 −10.5°，和只跑 −7.8° 只差 2.7°）。**走 / 蹲** 走另一条路，见下。
+	if state == State.LOCOMOTION and has_runfire() and _speed >= WALK_THRESHOLD:
 		_start_runfire()
 		return
+	# 走着 / 蹲着开火：**不换整身动作**，基础层继续 `Move_Ing`（持枪姿势），只掰枪。
+	# ⚠️ 上界卡在 `WALK_THRESHOLD`：**跑起来但没有跑打动作**（同伴 / 没填 `extra_glb`）
+	#    时必须继续走叠加层那条老路，否则 `_verify_attack_move` §7 的反向对照会
+	#    静默失效（它把 `extra_clip` 清空来模拟改前行为，结果撞进这条分支，量出 0°）。
+	if state == State.LOCOMOTION and _speed >= IDLE_SPEED and _speed < WALK_THRESHOLD 			and player != null and player.has_animation("Move_Ing"):
+		_fire_while_walking()
+		return
 	_play_once("Normal_Attack_Ing", State.FIRE)
+
+
+## 走着开火：**不换整身动作**，基础层留在 `Move_Ing`（素材的持枪跑姿），
+## 只让 `_aim_gun()` 把枪管掰到准星。
+##
+## 用户 2026-10-18（第七轮之后）：「走打还是右倾」。实测（`_probe_live_fire.gd`，
+## 模型空间，肩线正 = 左肩高）：
+##
+## | 状态 | 肩线 | 髋线 | 头相对骨盆 |
+## |---|---|---|---|
+## | 只走 `Cafe_Walk` | −0.6° | +0.2° | +0.2° |
+## | 走打 `RunFire_Ing`（0.46 倍） | **+14.1°** | +6.6° | **−22.5°** |
+## | 只跑 `Move_Ing` | −7.8° | −18.4° | −8.6° |
+## | 跑打 `RunFire_Ing`（1.31 倍） | −10.5° | −19.8° | −7.1° |
+##
+## 也就是：跑打是正的（和只跑只差 2.7°），**只有 0.46 倍速下的走打**歪 ——
+## `RunFire_Ing` 的上半身来自**站桩开火**（侧身持枪），放到 46% 之后那个侧身
+## 被拉成一个「一直往右拧着走」的定格，就是用户说的右倾 / 螃蟹。
+## 所以慢速开火不套那条整身动作，用素材自己的持枪跑姿：肩线回到 −8° 那一档，
+## 腿还在走，枪照样掰向准星（`_aim_gun()` 只转枪，不动肩膀）。
+func _fire_while_walking() -> void:
+	state = State.FIRE
+	_walk_fire = true
+	_auto_return = false          # 这条没有「播完」这回事，收招挂在松扳机上
+	_runfire_playing = false
+	stop_upper_layer()
+	_update_locomotion()
 
 
 ## 有没有「单条跑打动作」（`extra_glb` 并进来的那条）
@@ -699,6 +749,7 @@ func _start_runfire() -> void:
 	state = State.FIRE
 	_auto_return = true
 	_runfire_playing = true
+	_walk_fire = false
 	_release_left = 0.0              # 新的一发：收招余韵作废
 	stop_upper_layer()               # 这条动作是整身的，叠加层必须让开
 	var cyc := runfire_cycle()
@@ -770,6 +821,9 @@ func _update_locomotion() -> void:
 	var want := "Normal_Idle"
 	if _speed >= WALK_THRESHOLD:
 		want = "Move_Ing"
+	elif _walk_fire:
+		# 走着开火：**必须留在持枪姿势**（`Cafe_Walk` 会把枪缩到 0，等于没枪）
+		want = "Move_Ing"
 	elif _speed > IDLE_SPEED:
 		want = "Cafe_Walk"
 
@@ -823,6 +877,7 @@ func _on_finished(anim_name: StringName) -> void:
 func _return_to_locomotion() -> void:
 	state = State.LOCOMOTION
 	_auto_return = false
+	_walk_fire = false
 	# 停掉叠加层：它的骨头立刻会被基础层（每帧写全部骨）覆盖回去，不会留残影
 	stop_upper_layer()
 	_update_locomotion()
@@ -841,6 +896,7 @@ func stop_upper_layer() -> void:
 func reset_state() -> void:
 	stop_upper_layer()
 	_runfire_playing = false
+	_walk_fire = false
 	_auto_return = false
 	_release_left = 0.0
 	state = State.LOCOMOTION
