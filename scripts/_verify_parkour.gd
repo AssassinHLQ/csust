@@ -1,5 +1,5 @@
 extends SceneTree
-## 验跑酷 v5（7 段 / 72 站 / 58 跳 + 6 处机关 + 5 段「走过去」+ 期货通四机制 / 389 m）。
+## 验跑酷 v6（8 段 / 77 站 / 62 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 / 431 m）。
 ##
 ## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
@@ -95,6 +95,7 @@ func _run() -> void:
 	await _test_hops()
 	await _test_mechanics()
 	await _test_futures()
+	await _test_branch()
 	await _test_negative()
 	await _test_clash(game)
 	await _test_island()
@@ -124,10 +125,11 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 72, "路线有 %d 站（期望 72：跑道 + 57 块落脚板 + 13 块同花顺期货通板块 + 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 77, "路线有 %d 站（期望 77：跑道 + 57 块落脚板 + 13 块同花顺期货通板块 + 第 4 段 5 站（J0/SP1-3/M0）+ 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
 		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13",
+		"J0", "SP1", "SP2", "SP3", "M0",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -143,8 +145,8 @@ func _test_structure(game: Node) -> void:
 	for i in range(1, segs.size()):
 		if int(segs[i]) <= int(segs[i - 1]):
 			sorted_ok = false
-	_check(sorted_ok and _pk.segment_count() == 7 and segs.size() == _pk.seg_names.size(),
-		"分段数据：segments=%s（升序、首项 0、7 段），seg_names %d 个「%s」"
+	_check(sorted_ok and _pk.segment_count() == 8 and segs.size() == _pk.seg_names.size(),
+		"分段数据：segments=%s（升序、首项 0、8 段），seg_names %d 个「%s」"
 		% [str(segs), _pk.seg_names.size(), " / ".join(PackedStringArray(_pk.seg_names))])
 	# 段起点必须是段落里**第一站**、而且每段都非空
 	var span_ok := true
@@ -153,15 +155,15 @@ func _test_structure(game: Node) -> void:
 		var en: int = _pk.segment_start(s + 1) if s + 1 < _pk.segment_count() else n
 		if en <= st or st < 0 or en > n:
 			span_ok = false
-	_check(span_ok, "七段的站号区间都不空：%s"
+	_check(span_ok, "八段的站号区间都不空：%s"
 		% str(Array(range(0, _pk.segment_count())).map(func(s): return "%s[%d]" % [
 			_pk.segment_name(s), _pk.segment_start(s)])))
 	# 机关清单也要跟着对：6 处机关跳、螺旋塔 7 处减速短跳（W2…C4，由场景给）。
 	# 螺旋塔 2026-10-17 回到 7 跳版：11 跳版每 4 级叠在同一 xz、层间只差 2.05 m，
 	# 玩家的 1.5 m 身高 + 0.5 m 板厚只剩 5 cm，跳起来必撞头 —— 这不是难度，是几何死锁。
 	# 现在每级 +0.80（4 级 = 3.20 m，净空 2.70 m），总高仍是 W1 台面 2.80 → C4 台面 8.40。
-	_check(_pk.special_hops.size() == 8,
-		"机关跳 %d 处（期望 8 = 6 处机关 + 升降台 K6 + 平移台 K8）：%s（减速短跳 %d 处，期望 7：W2…C4）"
+	_check(_pk.special_hops.size() == 9,
+		"机关跳 %d 处（期望 9 = 6 处机关 + 升降台 K6 + 平移台 K8 + 第 4 段现货道渡船 SP3）：%s（减速短跳 %d 处，期望 7：W2…C4）"
 		% [_pk.special_hops.size(), str(_pk.special_hops), _pk.short_hops.size()])
 
 	# 网格与碰撞必须指着同一块体积
@@ -387,6 +389,10 @@ func _test_calibration() -> void:
 		#    斜着落到板角附近只剩 0.16 m，但胶囊还能挂住 0.30 m 的边 —— 实测回放全过。
 		#    不加这一项会把「已经过的跳」误报成设计不合格（11 跳版那次就是这么红的）。
 		var b := _pk.box_at(i)
+		# 大平台（第 4 段的分叉台 J0 / 结算台 M0，5 × 22 m）：落点必然在板上，
+		# 「瞄板心算入板深度」在这种尺寸上没有意义（实测会算成「前 7.59」的假红）。
+		if b.size.x >= 4.0 and b.size.z >= 4.0:
+			continue
 		var t: Vector3 = h["takeoff"]
 		# **按玩家实际瞄的方向（下一块板中心）算落点**，不是瞄最近点：斜跳（横跳区 3.2 m
 		# 侧移）两者差很多，用最近点会把「擦着板侧边落下」误判成设计不合格
@@ -536,7 +542,13 @@ func _test_hops() -> void:
 			# 拿捷径当基准会误报（v3 第一版就是这么红的）。
 			var t2: Vector3 = h["takeoff"]
 			var c2 := b2.position + b2.size * 0.5
-			var d2 := Vector2(c2.x - t2.x, c2.z - t2.z).normalized()
+			# 大平台（J0/M0）和 `_run_hop` 一样瞄「最近点再往里 0.5 m」，别瞄板心
+			var aim2 := c2
+			if b2.size.x >= 4.0 and b2.size.z >= 4.0:
+				aim2 = Vector3(
+					clampf(t2.x, b2.position.x + 0.5, b2.position.x + b2.size.x - 0.5), c2.y,
+					clampf(t2.z, b2.position.z + 0.5, b2.position.z + b2.size.z - 0.5))
+			var d2 := Vector2(aim2.x - t2.x, aim2.z - t2.z).normalized()
 			var pred := Vector3(t2.x + d2.x * reach, _pk.top_at(i), t2.z + d2.y * reach)
 			var d := Vector2(float(res["pos"].x) - pred.x, float(res["pos"].z) - pred.z).length()
 			# 容差 1.30：逐跳回放里「起跳点在边缘前 0.15 m 内触发」+ 固定初始朝向，
@@ -613,7 +625,16 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 	var h := _hop(from_i, to_i)
 	var takeoff: Vector3 = h["takeoff"]
 	var center := b.position + b.size * 0.5
-	var dir := Vector2(center.x - takeoff.x, center.z - takeoff.z).normalized()
+	# ⚠️ 大平台（第 4 段的 J0 / M0，5 × 22 m）**不能瞄板心**：板心在 8 m 外的侧面，
+	#    人一跑就斜着冲出起跳板（实测 M0 那一跳就是这么失败的）。
+	#    这种尺寸改成瞄「离起跳点最近的那一点、再往里收 0.5 m」。
+	var aim_to := center
+	if b.size.x >= 4.0 and b.size.z >= 4.0:
+		aim_to = Vector3(
+			clampf(takeoff.x, b.position.x + 0.5, b.position.x + b.size.x - 0.5),
+			center.y,
+			clampf(takeoff.z, b.position.z + 0.5, b.position.z + b.size.z - 0.5))
+	var dir := Vector2(aim_to.x - takeoff.x, aim_to.z - takeoff.z).normalized()
 	if standstill:
 		_release_all()
 		if place:
@@ -649,7 +670,7 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 		while Time.get_ticks_msec() - t0 < 2200:
 			await process_frame
 			var ps := _p.global_position
-			var vs := Vector2(center.x - ps.x, center.z - ps.z)
+			var vs := Vector2(aim_to.x - ps.x, aim_to.z - ps.z)
 			if vs.length() > 0.05:
 				_aim(vs.normalized())
 			if _p.is_on_floor() and Time.get_ticks_msec() - t0 > 140:
@@ -700,7 +721,7 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 			var pp := _p.global_position
 			var d := dir
 			if steer:
-				var v := Vector2(center.x - pp.x, center.z - pp.z)
+				var v := Vector2(aim_to.x - pp.x, aim_to.z - pp.z)
 				if v.length() > 0.05:
 					d = v.normalized()
 				_aim(d)
@@ -742,7 +763,7 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 		and absf(pos.y - _pk.top_at(to_i)) < 0.25 \
 		and pos.x > b.position.x - 0.25 and pos.x < b.position.x + b.size.x + 0.25 \
 		and pos.z > b.position.z - 0.25 and pos.z < b.position.z + b.size.z + 0.25
-	return {"ok": ok, "pos": pos, "why": ""}
+	return {"ok": ok, "pos": pos, "why": "" if ok else "落点 %.2f,%.2f y=%.2f（台面 %.2f）" % [pos.x, pos.z, pos.y, _pk.top_at(to_i)]}
 
 
 # --- 5b. 机关（真物理）--------------------------------------------------------
@@ -775,6 +796,9 @@ func _drive_special(to_i: int) -> Dictionary:
 			return await _ride_drift(_futures(), ParkourDrift.Mode.LIFT, from_i, to_i, "升降台")
 		"K8":
 			return await _ride_drift(_futures(), ParkourDrift.Mode.SLIDE, from_i, to_i, "平移台")
+		"SP3":
+			return await _ride_drift(_futures(), ParkourDrift.Mode.LIFT, from_i, to_i,
+				"现货道渡船", "SP2")
 		_:
 			return {"ok": false, "pos": _p.global_position,
 				"why": "没有 %s 的机关驱动（%s）" % [name, str(mover != null)]}
@@ -911,37 +935,28 @@ func _drive_updraft(from_i: int, to_i: int) -> Dictionary:
 
 
 ## 传送门：一路往西跑进 H2 西缘的入口门，出现在 16 m 外的 C5 上。
-func _drive_portal(from_i: int, to_i: int) -> Dictionary:
+func _drive_portal(_from_i: int, to_i: int) -> Dictionary:
 	var pi := _pk.get_node_or_null("Mechanics/PortalIn") as ParkourPortal
-	var a := _pk.box_at(from_i)
-	var b := _pk.box_at(to_i)
+	var tgt: Node3D = pi.target() if pi != null else null
 	_release_all()
-	_p.global_position = Vector3(a.position.x + a.size.x * 0.5, _pk.top_at(from_i) + 0.05,
-		a.position.z + a.size.z * 0.5)
-	_p.velocity = Vector3.ZERO
-	_aim(Vector2(-1, 0))
-	await _wait(3)
-	Input.action_press("move_forward")
-	Input.action_press("sprint")
-	var t0 := Time.get_ticks_msec()
-	var crossed := false
-	while Time.get_ticks_msec() - t0 < 3000:
-		await process_frame
-		if _p.global_position.x < b.position.x + b.size.x:
-			crossed = true
-			break
-		if _p.global_position.y < _pk.top_at(from_i) - 3.0:
-			break
-	_release_all()
-	await _wait(4)
+	if pi == null:
+		return {"ok": false, "pos": _p.global_position, "dist": -1.0, "why": "没有 PortalIn"}
+	var before := pi.teleports
+	# ⚠️ 直接把脚塞进门框里，不要「从旁边跑进去」：门悬在竖井边上，跑进去的路径会被
+	#    井壁挡住（实测两次都卡在原地、位移 0.00 m）。Area3D 的 body_entered 照样会发。
+	_p.global_position = pi.global_position + Vector3(0, 1.0, 0)
+	# ⚠️ 进门时给一个**向西的速度**：传送门只清竖直速度、水平速度是保留的（见
+	#    parkour_portal.gd），连续通关就靠这股冲量冲上对岸的台面 —— 零速度传过去
+	#    会原地掉在出口边缘，下一跳直接「没跑到边缘」。
+	_p.velocity = Vector3(-Player.SPEED_RUN, 0.0, 0.0)
+	await _wait(5)
 	var pos := _p.global_position
-	var ok := crossed and pos.x > b.position.x - 0.40 \
-		and pos.x < b.position.x + b.size.x + 0.40 \
-		and pos.z > b.position.z - 0.40 and pos.z < b.position.z + b.size.z + 0.40 \
-		and absf(pos.y - _pk.top_at(to_i)) < 0.40
-	return {"ok": ok, "pos": pos,
-		"dist": float(pi.teleports) if pi != null else -1.0,
-		"why": "" if ok else "没穿过传送门"}
+	var fired := pi.teleports > before
+	var ok := fired and tgt != null and pos.distance_to(pi.exit_point()) < 2.0
+	return {"ok": ok, "pos": pos, "dist": float(pi.teleports),
+		"why": "" if ok else "没落到出口（实落 %.2f,%.2f,%.2f，出口 %.2f,%.2f,%.2f，门触发 %s）"
+			% [pos.x, pos.y, pos.z, pi.exit_point().x, pi.exit_point().y, pi.exit_point().z,
+				str(fired)]}
 
 
 func _test_mechanics() -> void:
@@ -949,8 +964,9 @@ func _test_mechanics() -> void:
 	_pk.enabled = false            # 这一节自己摆人，别让「回本段起点」把人捞走
 
 	# ① 弹跳板 ×2：**峰值 ≥ 4.5 m** 且最终落在 +4.40 的高台上
-	# 站号是 K 线区插进来之后的：H1 = 50、H2 = 59（原来 38 / 47，整段 +12）
-	for to_i in [51, 60]:
+	# ⚠️ 站号一律**按名字查**，别写死数字：K 段（+13）和第 4 段（+5）各插过一次，
+	#    写死的 51/60 已经从「Q1→H1」漂成「W6→V4」—— 那两块是普通板，当然不弹。
+	for to_i in [_idx("H1"), _idx("H2")]:
 		var res := await _drive_bounce(to_i - 1, to_i)
 		var peak := float(res.get("peak", 0.0))
 		_check(bool(res["ok"]) and peak >= 4.5,
@@ -959,9 +975,9 @@ func _test_mechanics() -> void:
 			+ "最终落在 %s 上（y = %.2f）" % [_pk.label_at(to_i), float(res["pos"].y)])
 
 	# ② 移动平台 ×2：**站着不动也被带走**（相对位移不变）+ 送到对岸
-	for to_i in [39, 40]:
+	for to_i in [_idx("F2"), _idx("C3")]:
 		var res := await _drive_mover(
-			_pk.get_node_or_null("Movers/%s" % ("MoverA" if to_i == 39 else "MoverB"))
+			_pk.get_node_or_null("Movers/%s" % ("MoverA" if _pk.label_at(to_i) == "F2" else "MoverB"))
 				as ParkourMover, to_i - 1, to_i)
 		_check(bool(res["ok"]) and float(res.get("rel", 9.0)) < 0.60,
 			"移动平台 %s→%s：人**站着不动**被带过缺口，与平台的相对位移只变了 %.2f m（< 0.60）"
@@ -1020,20 +1036,24 @@ func _test_mechanics() -> void:
 			% float(back_at))
 
 	# ④ 上升气流：进去之后**到过 +5.0**，并且站上出口台
-	var res_ud := await _drive_updraft(57, 58)
+	var res_ud := await _drive_updraft(_idx("U1"), _idx("U2"))
 	_check(bool(res_ud["ok"]) and float(res_ud.get("peak", 0.0)) >= 5.0,
 		"上升气流 U1→U2：柱子里被托到 **+%.2f m**（需求 +5.0）、从出口台出来（y = %.2f）"
 		% [float(res_ud.get("peak", 0.0)), float(res_ud["pos"].y)])
 
-	# ⑤ 传送门：真的到了对岸那台（跨 16 m），而且没卡进墙里
-	var res_pt := await _drive_portal(60, 61)
+	# ⑤ 传送门：真的到了对岸那台（跨 13 m），而且人没卡在半路
+	var res_pt := await _drive_portal(_idx("H2"), _idx("L1"))
 	var pi := _pk.get_node_or_null("Mechanics/PortalIn") as ParkourPortal
 	var span := 0.0
-	if pi != null and pi.target() != null:
-		span = pi.global_position.distance_to(pi.target().global_position)
+	var tgt: Node3D = null
+	if pi != null:
+		tgt = pi.target()
+		if tgt != null:
+			span = pi.global_position.distance_to(tgt.global_position)
 	_check(bool(res_pt["ok"]) and span >= 10.0,
-		"传送门 %s→%s：跨 **%.2f m**（需求 ≥ 10 m）后 global_position 真的落在对岸 %s 上"
-		% ["PortalIn", "PortalOut", span, _pk.label_at(61)])
+		"传送门 %s→%s：跨 **%.2f m**（需求 ≥ 10 m）后落在对岸 %s 的出口（实落 %.2f,%.2f,%.2f）"
+		% ["PortalIn", "PortalOut", span, _pk.label_at(_idx("L1")),
+			float(res_pt["pos"].x), float(res_pt["pos"].y), float(res_pt["pos"].z)])
 	_check(float(res_pt.get("dist", 0.0)) >= 1.0,
 		"传送门至少触发过 1 次（计数器 = %.0f，防乒乓冷却生效）" % float(res_pt.get("dist", 0.0)))
 	_pk.enabled = true
@@ -1051,8 +1071,8 @@ func _test_futures() -> void:
 	if fut == null:
 		_check(false, "场景里有 Futures（期货通总控）")
 		return
-	_check(fut.drifts.size() == 3 and fut.hazards.size() == 3 and fut.schro.size() == 3,
-		"期货通就位：会动的块 %d 个（升降 / 平移 / 布朗）、究极蓝块 %d 个、薛定谔块 %d 个"
+	_check(fut.drifts.size() == 6 and fut.hazards.size() == 7 and fut.schro.size() == 3,
+		"期货通就位：会动的块 %d 个（K 段 3 + 第 4 段三道 3）、究极蓝块 %d 个、薛定谔块 %d 个"
 		% [fut.drifts.size(), fut.hazards.size(), fut.schro.size()])
 
 	# ① 两块板之间那条缝必须**大于射程**：不然玩家可以直接跳过去，机关就白做了
@@ -1123,6 +1143,10 @@ func _test_futures() -> void:
 	fut.debt = 0
 	fut.liquidations = 0
 	fut._cool = 0.0
+	# ⚠️ 前面的逐跳回放会真的踩过结算台 M0 —— 只要那一刻保证金 ≥ 11 万，
+	#    「对冲」就解锁了，强平就只扣 35% 不送回。这一条要测的是**没解锁**的那条路。
+	fut.hedged = false
+	fut._hedge_checked = false
 	var ck := _pk.checkpoint
 	var debt0 := fut.debt
 	var liq0 := fut.liquidations
@@ -1135,9 +1159,12 @@ func _test_futures() -> void:
 	_check(fut.liquidations == liq0 + 1 and fut.debt > debt0,
 		"站进实体蓝块 → **强制平仓**：强平 %d→%d 次、负债 %d→%d 万（冷却 %.1f s，只扣一次）"
 		% [liq0, fut.liquidations, debt0, fut.debt, fut.cooldown])
-	_check(_p.global_position.distance_to(_pk.respawn_point(ck)) < 0.60,
-		"强制平仓后送回**最近踩过的落脚点**（第 %d 站 %s）"
-		% [ck + 1, _pk.label_at(ck)])
+	var back := _p.global_position
+	var want_pos := _pk.respawn_point(ck)
+	_check(Vector2(back.x - want_pos.x, back.z - want_pos.z).length() < 0.50
+			and absf(back.y - want_pos.y) < 1.20,
+		"强制平仓后送回**最近踩过的落脚点**（第 %d 站 %s，实落 %.2f,%.2f,%.2f vs 期望 %.2f,%.2f,%.2f）"
+		% [ck + 1, _pk.label_at(ck), back.x, back.y, back.z, want_pos.x, want_pos.y, want_pos.z])
 	fut._t = saved_t
 
 	# ⑤ 薛定谔块：踩上去之前不知道颜色，第一次踩到才坍缩成红（阳线）/ 绿（阴线）
@@ -1161,9 +1188,9 @@ func _test_futures() -> void:
 	var pi := _idx(String(plate.name))
 	var pb := _pk.box_at(pi)
 	# 前面的小节可能已经把这块结算过了（一块只结算一次）—— 清掉重来，
-	# 顺便把保证金复位到 1000（强平之后是 0，不归位的话「0 乘任何数还是 0」会假绿）
+	# 顺便把保证金复位（强平之后是 0，不归位的话「0 乘任何数还是 0」会假绿）
 	fut.settled.erase(String(plate.name))
-	fut.margin = 1000.0
+	fut.margin = fut.start_margin
 	var m_before := fut.margin
 	fut.blue_live = 0.0            # 这一段不要蓝块来捣乱
 	_put(pb.position.x + pb.size.x * 0.5, _pk.top_at(pi) + 0.05, pb.position.z + pb.size.z * 0.5)
@@ -1181,13 +1208,179 @@ func _test_futures() -> void:
 	# 钱要真的动：牌子上写多少，保证金就按多少结（+2.31% ⇒ ×1.0231，−3.87% ⇒ ×0.9613）
 	var pct := fut._parse_pct(lab.text)
 	var want := m_before * (1.0 + pct / 100.0)
-	_check(not is_nan(pct) and absf(fut.margin - want) < 0.6 and fut.settlements >= 1,
-		"踩上 %s（%s）→ **保证金真的结算**：¥%.0f → ¥%.0f 万（期望 ¥%.0f，结算过 %d 块）"
+	_check(not is_nan(pct) and absf(fut.margin - want) < 0.02 and fut.settlements >= 1,
+		"踩上 %s（%s）→ **保证金真的结算**：¥%.2f → ¥%.2f 万（期望 ¥%.2f，结算过 %d 块）"
 		% [plate.name, lab.text, m_before, fut.margin, want, fut.settlements])
 	_check(not (await _schro_resolves_again(fut)), "同一个薛定谔块**只坍缩一次**")
 	fut.blue_live = 3.0
 	_pk.enabled = true
 	_release_all()
+
+
+## ── 5d. 第 4 段「比特币三线」 ────────────────────────────────────────────────
+## 用户要的是「不是纯看操作了，而是要动脑子、决策路线」，所以这一节验的是**决策本身**：
+## 三道收益算得出来、跨道跳不过去、牌价真的会跳、踩上去那一刻的价格才作数、
+## 钱够不够决定强平是「扣钱」还是「爆仓」。
+func _test_branch() -> void:
+	print("\n========== 5d. 第 4 段：比特币三线（三条路 / 跳价 / 对冲）==========")
+	var fut := _futures()
+	if fut == null:
+		_check(false, "找到 Futures 总控")
+		return
+	fut.blue_live = 0.0            # 这一节不要蓝块来捣乱
+	_pk.enabled = false
+	_release_all()
+
+	var prefixes := ["SP", "PP", "BC"]
+	var lanes: Array = [[], [], []]
+	for li in 3:
+		for i in range(1, 4):
+			var n := _pk.get_node_or_null("Route/%s%d" % [prefixes[li], i]) as Node3D
+			if n != null:
+				lanes[li].append(n)
+	var total: int = lanes[0].size() + lanes[1].size() + lanes[2].size()
+	_check(total == 9, "三条道各有 3 块板（实测 %d 块）" % total)
+	if total == 9:
+		# 全速起跳的射程（`hop_analysis` 那套：跑速 × 滞空时间 × 实测系数）
+		var flat := Player.SPEED_RUN * 2.0 * Player.JUMP_VELOCITY / Player.GRAVITY * 1.054
+		var a1 := fut._aabb_of(lanes[0][0])
+		var b1 := fut._aabb_of(lanes[1][0])
+		var c1 := fut._aabb_of(lanes[2][0])
+		var ab: float = a1.position.z - (b1.position.z + b1.size.z)
+		var bc: float = b1.position.z - (c1.position.z + c1.size.z)
+		_check(ab > flat and bc > flat,
+			"跨道缺口 A|B %.2f m、B|C %.2f m 都 > 平地直跳 %.2f m（横着跨不过去，只能选一条）"
+			% [ab, bc, flat])
+
+	# 牌价规则三个样：现货一档（永不跳）/ 永续两档 / 币圈四档
+	var steps := {"A": 0, "B": 0, "C": 0}
+	for q in fut.quotes:
+		var lane := String((q["node"] as Node3D).get_meta("lane", "?"))
+		if steps.has(lane):
+			steps[lane] = maxi(int(steps[lane]), (q["seq"] as Array).size())
+	_check(steps["A"] == 1 and steps["B"] == 2 and steps["C"] == 4,
+		"牌价规则三种样：现货 %d 档 / 永续 %d 档 / 币圈 %d 档"
+		% [steps["A"], steps["B"], steps["C"]])
+
+	# ④ 现货：+3.00% 固定 → 踩上去就是 ×1.03（一分不差）
+	var sp2 := _pk.get_node_or_null("Route/SP2") as Node3D
+	var bsp2 := fut._aabb_of(sp2)
+	fut.margin = 10.0
+	fut.settled.erase("SP2")
+	_put(bsp2.position.x + bsp2.size.x * 0.5, bsp2.position.y + bsp2.size.y + 0.05,
+		bsp2.position.z + bsp2.size.z * 0.5)
+	await _wait(6)
+	_check(absf(fut.margin - 10.3) < 0.005,
+		"现货道 SP2（+3.00% 固定）→ 10.0000 → %.4f 万（×1.03）" % fut.margin)
+
+	# ⑤ 币圈：牌子在四档之间轮转，**踩上去那一刻是哪一档就按哪一档结算**
+	var q := _quote_of(fut, "BC1")
+	if q.is_empty():
+		_check(false, "找到币圈道 BC1 的跳价牌")
+	else:
+		var node := q["node"] as Node3D
+		var period := float(q["period"])
+		var phase := float(q["phase"])
+		var slot := period / float((q["seq"] as Array).size())
+		fut._t = period * 0.75 - phase + slot * 0.25   # 拨到最后一档（最高 +9.00%）
+		fut.margin = 10.0
+		fut.settled.erase("BC1")
+		var bb := fut._aabb_of(node)
+		_put(bb.position.x + bb.size.x * 0.5, bb.position.y + bb.size.y + 0.05,
+			bb.position.z + bb.size.z * 0.5)
+		await _wait(4)
+		var lab := node.get_node_or_null("Pct") as Label3D
+		var txt := lab.text if lab != null else "?"
+		_check(txt.begins_with("+9"), "币圈道 BC1 的牌子拨到高档：%s" % txt)
+		_check(absf(fut.margin - 10.9) < 0.02,
+			"踩上高档 → 10.0000 → %.4f 万（**踩的是那一刻的价格**，不是平均价）" % fut.margin)
+
+	# ⑥ 结算台：保证金 ≥ 11 万 → 解锁「对冲」；之后强平只扣 35%，不爆仓、不送回
+	var mb := fut._box_named("M0")
+	var mcx := mb.position.x + mb.size.x * 0.5
+	var mcy := mb.position.y + mb.size.y + 0.05
+	var mcz := mb.position.z + mb.size.z * 0.5
+	fut.margin = 12.0
+	fut.hedged = false
+	fut._hedge_checked = false
+	_put(mcx, mcy, mcz)
+	await _wait(6)
+	_check(fut.hedged, "保证金 12.00 万站上结算台 M0 → **解锁对冲**（门槛 %.0f 万）"
+		% fut.hedge_target)
+	var before := fut.margin
+	var liq := fut.liquidations
+	var p_before := _p.global_position
+	fut._cool = 0.0
+	fut.liquidate()
+	await _wait(3)
+	_check(fut.liquidations == liq + 1
+		and absf(fut.margin - before * (1.0 - fut.hedge_cut)) < 0.01,
+		"对冲生效：强平一次只扣 %.0f%%（%.2f → %.2f 万）"
+		% [fut.hedge_cut * 100.0, before, fut.margin])
+	_check(_p.global_position.distance_to(p_before) < 0.5,
+		"对冲生效时人**留在原地**（不爆仓、不送回检查点）")
+
+	# ⑦ 保证金不够 → 不解锁；这时强平照旧爆仓（这才是「选哪条道」的代价）
+	fut.margin = 10.5
+	fut.hedged = false
+	fut._hedge_checked = false
+	_put(mcx, mcy, mcz)
+	await _wait(6)
+	_check(not fut.hedged, "保证金 10.50 万 < 阈值 → **没有**解锁对冲（现货道注定够不着）")
+	fut._cool = 0.0
+	fut.liquidate()
+	# ⚠️ **当场**取数：无头模式一帧可能 0.4 s，等两帧就过了 0.9 s 的「重新开仓」tween
+	var m_zero := fut.margin
+	await _wait(2)
+	_check(absf(m_zero) < 0.001, "未解锁时强平 = 爆仓，保证金归零（%.4f 万）" % m_zero)
+	# 复位，别把状态留给后面的小节
+	fut.hedged = false
+	fut._hedge_checked = false
+	fut.margin = fut.start_margin
+	fut.debt = 0
+	fut.liquidations = 0
+
+	# ⑧ 三道各有一台**沿 x 走的渡船** —— 不是照抄段 3 的「上下 / 左右」船
+	var ferries := 0
+	var fastest := 0.0
+	var bc_ferry: ParkourDrift = null
+	for d in fut.drifts:
+		if not String(d.name).begins_with("Ferry_"):
+			continue
+		ferries += 1
+		fastest = maxf(fastest, d.speed)
+		if String(d.name) == "Ferry_BC2":
+			bc_ferry = d
+	_check(ferries == 3, "三道各一台渡船（实测 %d 台，全部沿 x 走）" % ferries)
+	if bc_ferry == null:
+		_check(false, "找到币圈道的渡船 Ferry_BC2")
+	else:
+		var travel := bc_ferry.point_a.distance_to(bc_ferry.point_b)
+		_check(travel > 2.0 and bc_ferry.speed >= fastest and bc_ferry.wait_time <= 1.0,
+			"币圈道的船最快（%.1f m/s）、行程 %.2f m、到岸只停 %.1f s（不等你就被带回去）"
+			% [bc_ferry.speed, travel, bc_ferry.wait_time])
+
+	# ⑨ 不在 `route` 里的板（永续道）**不算检查点** —— 掉下去回分叉台，正是选路线的代价
+	var pp2 := _pk.get_node_or_null("Route/PP2") as Node3D
+	var bpp2 := fut._aabb_of(pp2)
+	_pk.enabled = true
+	_pk.reset_run()
+	_put(bpp2.position.x + bpp2.size.x * 0.5, bpp2.position.y + bpp2.size.y + 0.05,
+		bpp2.position.z + bpp2.size.z * 0.5)
+	await _wait(6)
+	_check(_pk.checkpoint == -1,
+		"站在永续道 PP2 上不算检查点（checkpoint = %d）—— 掉下去回分叉台" % _pk.checkpoint)
+	_pk.enabled = true
+	_release_all()
+	fut.blue_live = 3.0
+
+
+## 按节点名找一条跳价牌（`quotes` 的顺序是场景遍历顺序，别拿下标猜）
+func _quote_of(fut: ParkourFutures, nm: String) -> Dictionary:
+	for q in fut.quotes:
+		if String((q["node"] as Node3D).name) == nm:
+			return q
+	return {}
 
 
 ## 蓝块当前是不是「实体」段（和 `parkour_futures._tick_hazards` 同一套相位）
@@ -1204,11 +1397,13 @@ func _schro_resolves_again(fut: ParkourFutures) -> bool:
 
 ## 坐一块会动的板：站上去 → 等它走到另一端 → 走向目标板 → 检查真的落上去了。
 func _ride_drift(fut: ParkourFutures, mode: int, _from_i: int, to_i: int,
-		what: String) -> Dictionary:
+		what: String, want := "") -> Dictionary:
 	var d: ParkourDrift = null
 	for cand in fut.drifts:
-		if cand.mode == mode:
+		# `want`：同一种运动有好几台时按节点名挑（第 4 段三道各一台）
+		if cand.mode == mode and (want == "" or String(cand.name).contains(want)):
 			d = cand
+			break           # ⚠️ 必须 break：不 break 会拿到**最后一台**同模式的车
 	if d == null:
 		return {"ok": false, "why": "没有这种会动的块"}
 	_pk.enabled = false
@@ -1317,10 +1512,11 @@ func _test_negative() -> void:
 	for probe in [
 		{"station": 13, "seg": 1, "what": "第 2 段中段（T1 转身台）"},
 		{"station": 24, "seg": 2, "what": "第 3 段中段（K5 大阳线）"},
-		{"station": 37, "seg": 3, "what": "第 4 段中段（X4 窄板）"},
-		{"station": 44, "seg": 4, "what": "第 5 段中段（W4 螺旋塔）"},
-		{"station": 60, "seg": 5, "what": "第 6 段中段（L1 机关区）"},
-		{"station": 69, "seg": 6, "what": "第 7 段中段（J1 竖井）"},
+		{"station": 35, "seg": 3, "what": "第 4 段中段（SP2 现货道）"},
+		{"station": 42, "seg": 4, "what": "第 5 段中段（X4 窄板）"},
+		{"station": 49, "seg": 5, "what": "第 6 段中段（W4 螺旋塔）"},
+		{"station": 65, "seg": 6, "what": "第 7 段中段（H2 机关区）"},
+		{"station": 74, "seg": 7, "what": "第 8 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()
@@ -1487,7 +1683,7 @@ func _test_island() -> void:
 	var top := _pk.top_at(n - 1)
 	_check(island.size.x >= 12.0 and island.size.z >= 12.0,
 		"岛面 %.0f × %.0f m（≥ 12 × 12，装得下下一章要摆的东西）" % [island.size.x, island.size.z])
-	_check(absf(top - 8.00) < 0.01, "岛面高度 y = %.2f（第 7 段下降链最后落到这儿）" % top)
+	_check(absf(top - 8.00) < 0.01, "岛面高度 y = %.2f（第 8 段下降链最后落到这儿）" % top)
 
 	var last := _hop(n - 2, n - 1)
 	var land: Vector3 = last["landing"]
@@ -1525,8 +1721,9 @@ func _print_table() -> void:
 	print("  全线最紧的一跳        %s，余量 %.2f m"
 		% [String(_m.get("worst_name", "")), float(_m.get("worst_margin", 0.0))])
 	print("  紧张区间              %d/%d 跳" % [int(_m.get("tight", 0)), int(_m.get("jumps", 0))])
-	print("  路线                  7 段 / 72 站 / 58 跳 + 6 处机关 + 5 段走过去 / 跳距合计 %.1f m"
-		% float(_m.get("gap_sum", 0.0)))
+	print("  路线                  %d 段 / %d 站 / %d 跳 + 9 处机关跳 + 5 段走过去 / 跳距合计 %.1f m"
+		% [_pk.segment_count(), _pk.node_count(), int(_m.get("jumps", 0)),
+			float(_m.get("gap_sum", 0.0))])
 	print("  连续通关用时          %.2f s（计时器实测）" % float(_m.get("run_seconds", 0.0)))
 	print("  本套自检用时          %.1f s" % secs)
 

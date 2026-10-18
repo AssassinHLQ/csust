@@ -100,19 +100,26 @@ func _run() -> void:
 		fut._t = fut.blue_period - fut.blue_live + 0.2
 		await _wait(4)
 	await _shot("18_futures_blue", Vector3(-148.0, 6.5, -2.0), Vector3(-157.0, 4.4, -8.0))
-	# ── 段 4 横跳区（X1..X5；F1 −257.05）──
-	await _shot("19_sidejump", Vector3(-237.0, 7.2, 3.4), Vector3(-245.0, 2.2, -5.6))
-	await _shot("20_mover", Vector3(-260.5, 4.6, 7.5), Vector3(-266.0, 2.2, -5.0))
-	# ── 段 5 绕柱螺旋塔（柱轴 x −284.2 / z −4.9）──
-	await _shot("21_spiral_low", Vector3(-284.2, 1.6, 2.6), Vector3(-284.2, 6.2, -4.9))
-	await _shot("22_spiral_high", Vector3(-276.0, 12.5, 1.5), Vector3(-284.5, 5.4, -4.9))
-	# ── 段 6 机关区 ──
-	await _shot("23_mech", Vector3(-296.5, 14.0, 1.0), Vector3(-308.5, 12.6, -7.5))
-	await _shot("24_mech_air", Vector3(-322.5, 20.0, 3.0), Vector3(-336.5, 15.5, -7.5))
-	# ── 段 7 竖井 / 终点岛 ──
-	await _shot("25_shaft", Vector3(-372.5, 17.5, -2.0), Vector3(-384.5, 11.5, -7.5))
-	await _shot("26_island", Vector3(-392.5, 15.0, 2.0), Vector3(-406.5, 9.0, -9.5))
-	await _shot("27_plan", Vector3(-215.0, 190.0, -4.0), Vector3(-215.0, 0.0, -4.5))
+	# ── 第 4 段：比特币三线（J0 −227.55 / 三道 z −1,−10,−19 / M0 −256.65）──
+	# 站在分叉台上看三条道分开：三块价目牌 + 结算门槛牌
+	await _shot("19_branch_split", Vector3(-222.0, 7.0, 9.0), Vector3(-238.0, 3.0, -10.0))
+	# 俯瞰三条道（跨道缺口 6 m，跳不过去）
+	await _shot("20_branch_lanes", Vector3(-246.0, 22.0, 26.0), Vector3(-246.0, 2.0, -10.0))
+	# 结算台 + 那块会被改写的牌子
+	await _shot("21_branch_merge", Vector3(-251.0, 6.5, 4.0), Vector3(-259.0, 2.5, -9.5))
+	# ── 段 5 横跳区（X1..X5；F1 −294.35）──
+	await _shot("22_sidejump", Vector3(-274.0, 7.2, 3.4), Vector3(-282.0, 2.2, -5.6))
+	await _shot("23_mover", Vector3(-297.5, 4.6, 7.5), Vector3(-303.0, 2.2, -5.0))
+	# ── 段 6 绕柱螺旋塔（柱轴 x −321.5 / z −4.9）──
+	await _shot("24_spiral_low", Vector3(-321.5, 1.6, 2.6), Vector3(-321.5, 6.2, -4.9))
+	await _shot("25_spiral_high", Vector3(-313.3, 12.5, 1.5), Vector3(-321.8, 5.4, -4.9))
+	# ── 段 7 机关区 ──
+	await _shot("26_mech", Vector3(-333.8, 14.0, 1.0), Vector3(-345.8, 12.6, -7.5))
+	await _shot("27_mech_air", Vector3(-359.8, 20.0, 3.0), Vector3(-373.8, 15.5, -7.5))
+	# ── 段 8 竖井 / 终点岛 ──
+	await _shot("28_shaft", Vector3(-409.8, 17.5, -2.0), Vector3(-421.8, 11.5, -7.5))
+	await _shot("29_island", Vector3(-429.8, 15.0, 2.0), Vector3(-443.8, 9.0, -9.5))
+	await _shot("30_plan", Vector3(-252.0, 190.0, -4.0), Vector3(-252.0, 0.0, -4.5))
 
 
 	print("\n出图目录：%s" % _out)
