@@ -107,6 +107,7 @@ func _table(tag: String, frames: int) -> void:
 	var hd := 0.0
 	var hip := 0.0
 	var yaw := 0.0
+	var twist := 0.0
 	var prev := _model_pos(String(_names["toe"]))
 	var tag_state := "%s/%s" % [_anim.current_clip(), _anim.current_state_name()]
 	var tag_ss := _anim.player.speed_scale
@@ -122,12 +123,14 @@ func _table(tag: String, frames: int) -> void:
 		hd += _head_lateral()
 		hip += _hip_tilt()
 		yaw += _yaw_error()
+		twist += _torso_twist()
 	var n := float(maxi(frames, 1))
 	print("  [%s] clip=%-13s ss=%.2f  肩线 %+5.1f°  髋线 %+5.1f°  头侧偏 %+5.1f°  "
 		% [tag, tag_state, tag_ss,
 		sh / n, hip / n, hd / n] +
-		"脚横/纵 %.2f  朝向差 %+5.1f°  速度 %.2f  枪离手 %.3f m" % [
-		lat / maxf(fwd, 0.0001), yaw / n, _speed(), _gun_hand_gap()])
+		"脚横/纵 %.2f  朝向差 %+5.1f°  速度 %.2f  枪离手 %.3f m  躯干扭转 %+6.1f°  根Y %+7.1f° 根X %+7.1f°" % [
+		lat / maxf(fwd, 0.0001), yaw / n, _speed(), _gun_hand_gap(), twist / n,
+		rad_to_deg(_root_euler().y), rad_to_deg(_root_euler().x)])
 
 
 func _row(f: int, tag: String) -> void:
@@ -152,6 +155,37 @@ func _hip_tilt() -> float:
 	var v := l - r
 	var h := Vector2(v.x, v.z).length()
 	return rad_to_deg(atan2(v.y, maxf(h, 0.0001)))
+
+
+## 根骨 `Bip001` 的局部欧拉角（相对骨架节点）。
+##
+## ⚠️ 这是**唯一能看出「整个骨架被动作转了」**的量：`_model_pos()` 之类的
+## 模型空间量全都跟着骨架一起转，所以「人朝前走、模型却拧着」在那些量里是**看不见**的。
+## 素材的根骨本来是 180° 反着烘进去的（见 `player.gd` 的朝向那段），
+## 所以这里只关心**动作之间有没有差别** —— 同一个节点朝向、不同 clip 的根 Y 不一样，
+## 走路就会「横着走」。
+func _root_euler() -> Vector3:
+	var i := _sk.find_bone("Bip001")
+	if i < 0:
+		return Vector3.ZERO
+	return _sk.get_bone_pose_rotation(i).get_euler()
+
+
+## 躯干**扭转**：肩线相对髋线在水平面上转了多少度（正 = 肩往右拧）。
+##
+## ⚠️ 这个量和「肩线仰角」不是一回事：仰角量的是**侧倾（roll）**，
+##    扭转量的是**偏航（yaw）**。用户说「右侧身子」，很可能指的就是这个 ——
+##    上半身朝着右边、胯和腿还是朝前，看起来就是「横着走」。
+func _torso_twist() -> float:
+	var sh := _model_pos(String(_names["arm_l"])) - _model_pos(String(_names["arm_r"]))
+	var hp := _model_pos(String(_names["thigh_l"])) - _model_pos(String(_names["thigh_r"]))
+	sh.y = 0.0
+	hp.y = 0.0
+	if sh.length() < 0.0001 or hp.length() < 0.0001:
+		return 0.0
+	sh = sh.normalized()
+	hp = hp.normalized()
+	return rad_to_deg(atan2(sh.cross(hp).y, sh.dot(hp)))
 
 
 ## 头相对骨盆的侧偏角（模型空间，正 = 往右歪）

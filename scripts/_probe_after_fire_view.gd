@@ -62,6 +62,7 @@ func _run() -> void:
 		await process_frame
 	await _row("1_walk")
 	await _shot("1_walk.png")
+	await _fixed_shots("1_walk")
 
 	# ② 站着点一下火，然后立刻走路（用户的原话顺序）
 	_anim.reset_state()
@@ -77,14 +78,55 @@ func _run() -> void:
 		await process_frame
 	await _row("2_walk_after_fire")
 	await _shot("2_walk_after_fire.png")
+	await _fixed_shots("2_walk_after_fire")
 	# ③ 再走 60 帧（攻击应该已经演完）
 	for _i in 60:
 		await process_frame
 	await _row("3_walk_settled")
 	await _shot("3_walk_settled.png")
+	await _fixed_shots("3_walk_settled")
+
+	# ④ 按住左键走路（走打开火）
+	_wpn.trigger_down()
+	for _i in 40:
+		await process_frame
+		_pin()
+	await _row("4_walk_fire_held")
+	await _fixed_shots("4_walk_fire_held")
+	_wpn.trigger_up()
+	for _i in 20:
+		await process_frame
+	await _row("5_released")
 
 	print("[afterfire] 输出 %s" % _out)
 	quit(0)
+
+
+## 固定机位：角色背后上方俯视（≈用户截图的角度）
+func _fixed_shots(tag: String) -> void:
+	var cam := Camera3D.new()
+	cam.fov = 55.0
+	cam.far = 200.0
+	root.add_child(cam)
+	cam.make_current()
+	var fwd: Vector3 = _p.model_root.global_transform.basis.z.normalized()
+	var right: Vector3 = _p.model_root.global_transform.basis.x.normalized()
+	var chest: Vector3 = _p.global_position + Vector3.UP * 1.0
+	for sh in [
+		["topback", chest - fwd * 1.9 + Vector3.UP * 1.5],
+		["left", chest - right * 2.0 + Vector3.UP * 0.6],
+	]:
+		cam.global_position = sh[1]
+		cam.look_at(chest, Vector3.UP)
+		await _shot("%s_%s.png" % [tag, String(sh[0])])
+	cam.queue_free()
+
+
+func _pin() -> void:
+	if _p.global_position.y < SPOT.y:
+		_p.global_position = SPOT
+	else:
+		_p.global_position = Vector3(SPOT.x, _p.global_position.y, SPOT.z)
 
 
 func _drive_walk() -> void:

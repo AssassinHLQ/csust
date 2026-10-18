@@ -65,6 +65,7 @@ func _run() -> void:
 	await _test_running_fire()
 	await _test_walking_fire()
 	await _test_walkfire_posture()
+	await _test_fire_then_walk()
 	await _test_running_reload()
 	await _test_recover()
 	await _test_weapon_path()
@@ -347,8 +348,11 @@ func _shoulder_tilt_avg(frames: int) -> float:
 	for _i in frames:
 		await process_frame
 		var sk := _anim.skeleton
-		var l := sk.find_bone("Bip001 L UpperArm")
-		var r := sk.find_bone("Bip001 R UpperArm")
+		# ⚠️ 用**锁骨**而不是上臂：上臂原点会跟着手臂摆动前后挪（走一个循环能挪几厘米），
+		#    量出来的「肩线」会被摆臂污染（实测同一条走路，30 帧平均 −2.3° 和 +8.3° 都有）。
+		#    锁骨根部固定在胸上，才是干净的肩线基准。
+		var l := sk.find_bone("Bip001 L Clavicle")
+		var r := sk.find_bone("Bip001 R Clavicle")
 		if l < 0 or r < 0:
 			return 999.0
 		var wl: Vector3 = sk.global_transform * sk.get_bone_global_pose(l).origin
@@ -357,6 +361,122 @@ func _shoulder_tilt_avg(frames: int) -> float:
 		var v := mb.inverse() * (wl - wr)
 		sum += rad_to_deg(atan2(v.y, maxf(Vector2(v.x, v.z).length(), 0.0001)))
 	return sum / float(maxi(frames, 1))
+
+
+# --- 3d. 「先开火一次，再走路」（用户本轮的原话，完整复现）------------------------
+#
+# 用户：「现在只要修这个了，先开火一次，在走路就变成这样子右侧身子螃蟹平移」。
+#
+# 这条和 3b/3c 不是同一条路：**站着**开火走的是叠加层（含脊椎/颈/头），
+# 而「走起来之后开火」走的是手臂层。之前所有探针都是「先走再打」，
+# 正好绕过了用户实际做的事 —— 所以这一节专门按他的顺序来。
+#
+# 两个判据（都必须是「和只走一样」，不是「看起来还行」）：
+#   1. 打完立刻走：0.35 s 内必须回到 `Cafe_Walk` / `Locomotion`（不许还在演开火）；
+#   2. 此时的肩线（侧倾）和躯干扭转（偏航）都要和「只走」差 < 6°。
+# 再加一条「按住扳机走」：腿仍是走路、手臂层在播、枪没被压没、枪还在手里。
+func _test_fire_then_walk() -> void:
+	print("
+========== 3d. 先开火一次，再走路（用户原话）==========")
+	var wpn := _p.get_node_or_null("Weapon") as Weapon
+	if wpn == null:
+		_check(false, "玩家身上没有 Weapon")
+		return
+	await _reset()
+	Input.action_press("move_forward")
+	await _wait_ms(600)
+	var walk_tilt := await _shoulder_tilt_avg(60)
+	var walk_twist := await _torso_twist_avg(60)
+	_m["walk_tilt_3d"] = walk_tilt
+	_m["walk_twist_3d"] = walk_twist
+	print("  基准（只走）：肩线 %+.1f° / 躯干扭转 %+.1f°" % [walk_tilt, walk_twist])
+	_release_all()
+	await _wait_ms(500)
+
+	# 站着点一下（真武器链），然后立刻走
+	_anim.reset_state()
+	await _wait_ms(200)
+	wpn.trigger_down()
+	await _wait(4)
+	wpn.trigger_up()
+	Input.action_press("move_forward")
+	await _wait_ms(350)
+	var st := _anim.current_state_name()
+	var clip := _anim.current_clip()
+	_m["fire_then_walk_state"] = st
+	_check(st == "Locomotion" and clip == "Cafe_Walk",
+		"站着打完立刻走：0.35 s 内回到 %s / %s（不许还在演开火）" % [st, clip])
+	var tilt := await _shoulder_tilt_avg(60)
+	var twist := await _torso_twist_avg(60)
+	print("  打完立刻走：肩线 %+.1f° / 躯干扭转 %+.1f°" % [tilt, twist])
+	_check(absf(tilt - walk_tilt) < 6.0,
+		"肩线和只走相差 %.1f°（< 6°）" % absf(tilt - walk_tilt))
+	_check(absf(twist - walk_twist) < 6.0,
+		"躯干扭转和只走相差 %.1f°（< 6°）" % absf(twist - walk_twist))
+
+	# 按住扳机走
+	wpn.trigger_down()
+	await _wait_ms(400)
+	var arms_on := _anim.arms != null and _anim.arms.is_playing() 		and String(_anim.arms.current_animation) == AnimDriver.ARMS_CLIP
+	_m["held_arms_on"] = arms_on
+	_check(_anim.current_clip() == "Cafe_Walk" and arms_on,
+		"按住扳机走：腿是 %s、手臂层 %s" % [_anim.current_clip(),
+		"在播" if arms_on else "**没在播**"])
+	var ws := _weapon_scale()
+	var gap := _gun_hand_gap()
+	_check(ws > 0.5, "按住扳机走：枪骨缩放 %.2f（看得见）" % ws)
+	_check(gap < 0.16, "按住扳机走：枪离最近的手 %.3f m（< 0.16，还在手里）" % gap)
+	wpn.trigger_up()
+	await _wait_ms(350)
+	_check(_anim.current_state_name() == "Locomotion" and _anim.current_clip() == "Cafe_Walk",
+		"松开扳机 0.35 s 后：%s / %s" % [_anim.current_state_name(), _anim.current_clip()])
+	_release_all()
+	await _wait(2)
+
+
+## 躯干扭转（肩线 vs 髋线，水平面内）的平均值，正 = 肩往右拧
+func _torso_twist_avg(frames: int) -> float:
+	var sum := 0.0
+	for _i in frames:
+		await process_frame
+		var sk := _anim.skeleton
+		var l: int = sk.find_bone("Bip001 L Clavicle")
+		var r: int = sk.find_bone("Bip001 R Clavicle")
+		var tl: int = sk.find_bone("Bip001 L Thigh")
+		var tr: int = sk.find_bone("Bip001 R Thigh")
+		if l < 0 or r < 0 or tl < 0 or tr < 0:
+			return 999.0
+		var mb := _p.model_root.global_transform.basis.inverse()
+		var sh: Vector3 = mb * (_bone_w(l) - _bone_w(r))
+		var hp: Vector3 = mb * (_bone_w(tl) - _bone_w(tr))
+		sh.y = 0.0
+		hp.y = 0.0
+		if sh.length() < 0.0001 or hp.length() < 0.0001:
+			continue
+		sh = sh.normalized()
+		hp = hp.normalized()
+		sum += rad_to_deg(atan2(sh.cross(hp).y, sh.dot(hp)))
+	return sum / float(maxi(frames, 1))
+
+
+func _bone_w(i: int) -> Vector3:
+	return _anim.skeleton.global_transform * _anim.skeleton.get_bone_global_pose(i).origin
+
+
+## 枪骨原点到最近那只手的距离（素材原样 ≈ 0.11~0.22 m）
+func _gun_hand_gap() -> float:
+	var sk := _anim.skeleton
+	var wi := sk.find_bone(AnimDriver.GUN_BONE)
+	if wi < 0:
+		return 999.0
+	var g := _bone_w(wi)
+	var best := 999.0
+	for b in [AnimDriver.HAND_L_BONE, AnimDriver.HAND_R_BONE]:
+		var i := sk.find_bone(b)
+		if i < 0:
+			continue
+		best = minf(best, g.distance_to(_bone_w(i)))
+	return best
 
 
 # --- 4. 跑动换弹：同一套逻辑 ---------------------------------------------------
