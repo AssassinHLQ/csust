@@ -233,17 +233,20 @@ func _test_walking_fire() -> void:
 
 	_anim.request_fire()
 	await _wait_ms(200)
-	# ⚠️ 第八轮（2026-10-18）：走打**不再**套整身 `RunFire_Ing`。
-	#    那一版把「站桩侧身开火」的上半身放慢到 46% 播 ⇒ 实测肩线 +14.1°、
-	#    头相对骨盆 −22.5°（只走是 −0.6° / +0.2°），就是用户说的「右倾 / 螃蟹」。
-	#    现在慢速开火留在素材的持枪跑姿 `Move_Ing`，肩线回到 −10.5°（和只跑一致）。
-	_check(_anim.current_clip() == "Move_Ing",
-		"走打开火：留在持枪姿势 Move_Ing（%s）—— 不套整身跑打"
-		% _anim.current_clip())
+	# ⚠️ 第十一轮（2026-10-18）：走打 = **腿用 `Cafe_Walk`（走路节奏）+ 手臂层**
+	#    （`Move_Ing` 只留手臂/武器）。第九轮那版是整身 `Move_Ing` 放慢 0.46 ——
+	#    跑周期 0.667 s ÷ 0.46 = 1.45 s/循环（0.69 Hz），而 `Cafe_Walk` 是
+	#    1.25 s ÷ 1.5 = 0.83 s（1.2 Hz）：**用跑的腿去走**，脚在地上滑 = 螃蟹。
+	_check(_anim.current_clip() == "Cafe_Walk",
+		"走打开火：腿仍是走路 Cafe_Walk（%s）" % _anim.current_clip())
+	_check(_anim.arms_track_count() > 0 and _anim.arms_stray_track_count() == 0,
+		"手臂层只剩手臂/武器轨道：%d 条，越界 %d 条"
+		% [_anim.arms_track_count(), _anim.arms_stray_track_count()])
 	var sc := _anim.player.speed_scale
 	_m["walk_fire_speed_scale"] = sc
-	_check(sc >= 0.3 and sc <= 0.7,
-		"按实际速度放慢：speed_scale %.2f（走 %.2f m/s / 标称 5.20）" % [sc, _speed()])
+	_check(sc >= 1.2 and sc <= 1.8,
+		"腿按走路节奏播：speed_scale %.2f（走 %.2f m/s / Cafe_Walk 标称 1.60）"
+		% [sc, _speed()])
 	var ws := _weapon_scale()
 	_m["walk_fire_weapon_scale"] = ws
 	_check(ws > 0.5,
@@ -317,12 +320,16 @@ func _test_walkfire_posture() -> void:
 	_m["tilt_walk_fire"] = fire_tilt
 	print("  肩线：只走 %+.1f° / 走打 %+.1f° / 只跑 %+.1f°（正 = 左肩高）"
 		% [walk_tilt, fire_tilt, run_tilt])
-	_check(_anim.current_clip() == "Move_Ing", "走打仍在持枪姿势：%s" % _anim.current_clip())
-	_check(absf(fire_tilt - run_tilt) < 6.0,
-		"走打的肩线和只跑相差 %.1f°（判据 < 6°；旧版 RunFire@0.46 是 %.1f°）"
-		% [absf(fire_tilt - run_tilt), absf(14.1 - run_tilt)])
+	_check(_anim.current_clip() == "Cafe_Walk", "走打的腿仍是走路：%s" % _anim.current_clip())
+	# ⚠️ 判据从「和只跑比」改成「和**只走**比」：走打现在腿是 `Cafe_Walk`、
+	#    手臂是独立一层，姿态本来就该跟**走路**一致，而不是跟跑一致。
+	#    实测 只走 −1.0° / 走打 −1.1°（旧版整身 `RunFire@0.46` 是 +14.1°）。
+	_check(absf(fire_tilt - walk_tilt) < 6.0,
+		"走打的肩线和**只走**相差 %.1f°（判据 < 6°；旧版 RunFire@0.46 是 +14.1°）"
+		% absf(fire_tilt - walk_tilt))
+	_check(absf(fire_tilt) < 15.0, "走打肩线绝对值 %.1f°（< 15°）" % absf(fire_tilt))
 	var gun := await _gun_vs_crosshair()
-	_check(gun < 8.0, "走打（Move_Ing）枪管离准星 %.1f°（判据 < 8°）" % gun)
+	_check(gun < 8.0, "走打（Cafe_Walk 腿 + 手臂层）枪管离准星 %.1f°（判据 < 8°）" % gun)
 	var ws := _weapon_scale()
 	_check(ws > 0.5, "走打时枪骨没被压没：世界缩放 %.2f" % ws)
 	_anim.cancel_fire()

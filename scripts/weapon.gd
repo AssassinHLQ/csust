@@ -137,6 +137,8 @@ func set_debug_raycast(on: bool) -> void:
 
 func trigger_down() -> void:
 	_trigger = true
+	if _driver:
+		_driver.set_trigger(true)
 	if not auto_fire:
 		shoot()
 
@@ -149,6 +151,7 @@ func trigger_up() -> void:
 	#    用户报的「攻击一下后再开始走路会变成右转螃蟹平移」就是这个
 	#    （实测见 `anim_driver.gd` 的 `FIRE_RELEASE_GRACE`）。
 	if _driver:
+		_driver.set_trigger(false)
 		_driver.cancel_fire()
 
 

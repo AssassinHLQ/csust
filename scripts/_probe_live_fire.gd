@@ -126,8 +126,8 @@ func _table(tag: String, frames: int) -> void:
 	print("  [%s] clip=%-13s ss=%.2f  肩线 %+5.1f°  髋线 %+5.1f°  头侧偏 %+5.1f°  "
 		% [tag, tag_state, tag_ss,
 		sh / n, hip / n, hd / n] +
-		"脚横/纵 %.2f  朝向差 %+5.1f°  速度 %.2f" % [
-		lat / maxf(fwd, 0.0001), yaw / n, _speed()])
+		"脚横/纵 %.2f  朝向差 %+5.1f°  速度 %.2f  枪离手 %.3f m" % [
+		lat / maxf(fwd, 0.0001), yaw / n, _speed(), _gun_hand_gap()])
 
 
 func _row(f: int, tag: String) -> void:
@@ -184,6 +184,23 @@ func _pin() -> void:
 		_p.global_position = SPOT
 	else:
 		_p.global_position = Vector3(SPOT.x, _p.global_position.y, SPOT.z)
+
+
+## 「枪还在不在手里」：枪骨原点到最近那只手的距离。
+## 素材原本（只跑 / 站定）实测 0.223 m —— 大于这个数太多就说明枪飘出去了。
+func _gun_hand_gap() -> float:
+	var wi := _sk.find_bone("Bip001_Weapon")
+	if wi < 0:
+		return -1.0
+	var g: Vector3 = _sk.global_transform * _sk.get_bone_global_pose(wi).origin
+	var best := 999.0
+	for b in ["Bip001 L Hand", "Bip001 R Hand"]:
+		var i := _sk.find_bone(b)
+		if i < 0:
+			continue
+		var h: Vector3 = _sk.global_transform * _sk.get_bone_global_pose(i).origin
+		best = minf(best, g.distance_to(h))
+	return best
 
 
 func _speed() -> float:

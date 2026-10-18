@@ -64,7 +64,12 @@ func _run() -> void:
 	# ⚠️ 只关输入，**不能**关 _physics_process —— 转身逻辑就跑在里面。
 	player.set_process_input(false)
 	weapon.trigger_down()
-	await _wait(2)
+	# ⚠️ 这里必须等**物理帧**，不能等渲染帧：转身逻辑在 `_physics_process` 里，
+	#    而 headless 的渲染帧可能慢到 6 fps —— 一帧渲染里能塞 10 个物理步，
+	#    「2 帧」就够她转完 180°，断言必然假红（本轮实测：渲染帧 ×2 ⇒ 5°，
+	#    物理帧 ×2 ⇒ 82°，判定才稳定）。
+	await physics_frame
+	await physics_frame
 	var early := weapon._shot_index - shots0
 	print("  扣扳机后 2 帧射出 %d 发（应 0）" % early)
 	print("  此刻 align_error = %.1f 度   is_turning = %s   model.rot.y = %.3f" % [
@@ -77,7 +82,7 @@ func _run() -> void:
 	var first_at := -1
 	var err_at_first := -1.0
 	while guard < 3000:
-		await process_frame
+		await physics_frame
 		guard += 1
 		if weapon._shot_index > shots0:
 			first_at = guard

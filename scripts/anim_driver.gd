@@ -136,6 +136,42 @@ const WEAPON_KEYWORDS := ["weapon", "railgun", "magazine", "muzzle", "point"]
 ##   只差武器那几根（见 `_probe_upper_freeze.gd`）。
 const ARM_FREEZE_WHY := true
 
+## **根骨**的名字（精确匹配，不是关键字）。
+##
+## 位置：移动层（`UpperBodyMove`）会**精确剔除**这几根骨的轨道，站定层保留。
+##
+## 为什么先怀疑它（2026-10-18 第十轮）：`Normal_Attack_Ing` 是全骨架动作，
+## 如果它连根骨 `Bip001` 的旋转也写了，那移动层就会把整个身体从基础层的朝向
+## 掰成开火动作的侧身 —— 正是「走路时右侧身子螃蟹平移」的形状。
+## **但实测这条动作里没有根骨轨道**（`_make_overlay()` 里 `root_tracks_removed`
+## 量到 0），所以它不是真凶（真凶见 `ARMS_LAYER_WHY`）。
+## 过滤器保留：将来换了带根位移的动作，这一条会自动兜住。
+## ⚠️ 必须**精确匹配**：把 "Bip001" 当关键字会连 `Bip001 Spine1` 一起滤掉。
+const ROOT_BONES := ["Bip001"]
+
+## ── 走打开火为什么要单独一层「手臂」──
+##
+## 2026-10-18 第十一轮，用户：「先开火一次，在走路就变成这样子右侧身子螃蟹平移」。
+## 走路开火前后试过两条路，都被否了：
+##   ① `Cafe_Walk` + **站桩开火上半身**（叠加层含脊椎/颈/头）→ 躯干被掰成侧身，「右倾」；
+##   ② **整身** `RunFire_Ing`／`Move_Ing` 放慢到 0.46 → 腿变成 **0.69 Hz** 慢动作滑行。
+## ② 的病根是**节奏对不上**：
+##    · 跑：`Move_Ing` 0.667 s 一个循环，走 2.4 m/s 要 `2.4 / 5.2 = 0.46` 倍
+##      ⇒ **1.45 s 一个循环（0.69 Hz）**
+##    · 走：`Cafe_Walk` 1.25 s，1.5 倍 ⇒ **0.83 s（1.2 Hz）**
+##   用「跑的腿」去走 2.4 m/s，脚在地上打滑 —— 画面就是「螃蟹平移」。
+## 所以：**腿用 `Cafe_Walk`（走路节奏），手臂 + 枪单独叠一层 `Move_Ing` 的手臂**。
+## 枪是看得见的（武器骨 scale = 1.0；`Cafe_Walk` 是 0.04），腿是走路的样子。
+const ARMS_CLIP := "Move_Ing"
+## 手臂层的播放倍速：跑到 0.46 太慢、1.0 又比腿快，取 0.8（≈0.52 s/循环）
+const ARMS_SPEED_SCALE := 0.8
+## 手臂层**额外剔掉**的骨：锁骨。
+## ⚠️ 实测（`_verify_attack_move` §3c）：带着锁骨的 `Move_Ing` 叠在 `Cafe_Walk` 的脊椎上，
+##    肩线会被抬到 **+10.7°**（只跑是 −9.0°）—— 因为锁骨一根就把整条手臂的**起点**
+##    搬了位置，肩膀看着一边高一边低。锁骨交给 `Cafe_Walk`，手臂从肩关节往下一段才覆盖，
+##    肩线就回到走路那一档。
+const ARMS_EXCLUDE := ["clavicle"]
+
 var state := State.LOCOMOTION
 ## 基础层：整体动画（`Normal_Idle` / `Move_Ing`），一直播着，包括开火期间。
 var player: AnimationPlayer
@@ -144,6 +180,8 @@ var player: AnimationPlayer
 var upper: AnimationPlayer
 ## 叠加层（移动）：在静止层的基础上**再滤掉躯干**，跑打开火用这层。
 var upper_move: AnimationPlayer
+## 第三层：**只有手臂 + 武器**（取 `Move_Ing`）—— 走打开火用，见 `ARMS_LAYER_WHY`
+var arms: AnimationPlayer
 var skeleton: Skeleton3D
 
 var _speed := 0.0
@@ -151,9 +189,11 @@ var _aiming := false
 var _auto_return := false
 ## 这一发正在播「单条跑打动作」（整身，自带腿）—— 此时 `_update_locomotion()` 不许插手
 var _runfire_playing := false
-## 这一发是**走着 / 蹲着**开火：基础层强制留在 `Move_Ing`（素材的持枪跑姿），
-## 不套整身跑打动作 —— 见 `_fire_while_walking()` 上面那张表
+## 这一发是**走着 / 蹲着**开火：腿走 `Cafe_Walk`、手臂单独一层，见 `ARMS_LAYER_WHY`
 var _walk_fire := false
+## 扳机是不是还按着（`Weapon.trigger_down/up()` 会同步过来）。
+## 只用来回答一个问题：**站桩开火中途起步**时，是「继续打（换成走打/跑打）」还是「收招」。
+var _trigger_held := false
 ## 滤掉的下半身轨道条数（自检用）
 var lower_tracks_removed := 0
 ## 移动层额外滤掉的躯干轨道条数（自检用）
@@ -162,6 +202,8 @@ var trunk_tracks_removed := 0
 var migrations := 0
 ## 移动层额外滤掉的**手臂 + 武器**轨道条数（自检用）
 var arm_tracks_removed := 0
+## 移动层额外滤掉的**根骨 `Bip001`** 轨道条数（自检用）
+var root_tracks_removed := 0
 ## `PoseFix.fix_run_lean()` 的报告（自检用：改了哪些骨、多少帧）
 var lean_fix := {}
 ## `PoseFix.fix_head_roll()`：跑步时头往左偏的那 13.9°，掰正的报告
@@ -339,7 +381,7 @@ func _ready() -> void:
 ## 但已经播上的循环动作继续播 —— 呼吸、眨眼（已停用）、待机的身体摆动都在。
 ## 代价：Esc 菜单开着时背后的角色也会动。这才是正常的观感，不是 bug。
 func _keep_alive_when_paused() -> void:
-	for p in [player, upper, upper_move]:
+	for p in [player, upper, upper_move, arms]:
 		if p != null:
 			(p as AnimationPlayer).process_mode = Node.PROCESS_MODE_ALWAYS
 
@@ -413,6 +455,11 @@ func _bone_world(i: int) -> Transform3D:
 func _parent_world(i: int) -> Transform3D:
 	var p := skeleton.get_bone_parent(i)
 	return skeleton.global_transform if p < 0 else _bone_world(p)
+
+
+## 扳机状态同步（`Weapon.trigger_down/up()` 调的）
+func set_trigger(on: bool) -> void:
+	_trigger_held = on
 
 
 ## 松开扳机：给跑打动作留一点点收招余韵，然后由 `_tick_release()` 收掉。
@@ -509,11 +556,13 @@ func _setup_upper_layer() -> void:
 	upper = _make_overlay(host, "UpperBody", [])
 	# 移动层：躯干 + **手臂 + 武器**都滤掉（只剩头发/眼/领子/挂饰），见 `ARM_FREEZE_WHY`
 	upper_move = _make_overlay(host, "UpperBodyMove",
-		TRUNK_KEYWORDS + ARM_KEYWORDS + WEAPON_KEYWORDS)
+		TRUNK_KEYWORDS + ARM_KEYWORDS + WEAPON_KEYWORDS, ROOT_BONES)
+	arms = _make_arms_layer(host)
 
 
 ## 造一层叠加层：轨道路径是相对 `root_node` 的字符串，两层必须指向**同一个**根节点。
-func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPlayer:
+func _make_overlay(host: Node, layer_name: String, extra: Array,
+		exact: Array = []) -> AnimationPlayer:
 	var ov := AnimationPlayer.new()
 	ov.name = layer_name
 	ov.root_node = player.root_node
@@ -528,11 +577,16 @@ func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPla
 		var low_n := 0
 		var trunk_n := 0
 		var arm_n := 0
+		var root_n := 0
 		for t in range(a.get_track_count() - 1, -1, -1):
 			var bone := _bone_of(String(a.track_get_path(t)))
 			var is_low := _in_keywords(bone, LOWER_KEYWORDS)
-			if is_low or _in_keywords(bone, extra):
-				if is_low:
+			# ⚠️ 根骨**必须精确匹配**：把 "Bip001" 当关键字会连 `Bip001 Spine1` 一起滤掉
+			var is_root := exact.has(bone)
+			if is_low or is_root or _in_keywords(bone, extra):
+				if is_root:
+					root_n += 1
+				elif is_low:
 					low_n += 1
 				elif _in_keywords(bone, TRUNK_KEYWORDS):
 					trunk_n += 1
@@ -545,6 +599,7 @@ func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPla
 		else:
 			trunk_tracks_removed += trunk_n
 			arm_tracks_removed += arm_n
+			root_tracks_removed += root_n
 		lib.add_animation(clip, a)
 	ov.add_animation_library(&"", lib)
 	# ⚠️ **必须延后一帧加进树**：`_ready()` 期间父节点还在装自己的孩子，
@@ -552,6 +607,30 @@ func _make_overlay(host: Node, layer_name: String, extra: Array) -> AnimationPla
 	#    而失败是**静默**的：不在树里 ⇒ 一帧都不更新 ⇒ 上半身根本没叠上去、
 	#    而且 `animation_finished` 永远不来（状态卡在 Fire，再也开不了下一枪）。
 	#    本喵第一版就是这样：结构断言全绿，只有「右手在不在动」那条红了才露馅。
+	host.add_child.call_deferred(ov)
+	return ov
+
+
+## 造「手臂层」：`Move_Ing` 只留 **手臂 + 武器** 的轨道（见 `ARMS_LAYER_WHY`）。
+## 其余（腿 / 脊椎 / 头发 / 眼…）全部删掉：腿和头发由基础层的 `Cafe_Walk` 提供。
+func _make_arms_layer(host: Node) -> AnimationPlayer:
+	var ov := AnimationPlayer.new()
+	ov.name = "ArmsCarry"
+	ov.root_node = player.root_node
+	ov.process_priority = player.process_priority + 1
+	var lib := AnimationLibrary.new()
+	if player.has_animation(ARMS_CLIP):
+		var a: Animation = player.get_animation(ARMS_CLIP).duplicate(true)
+		for t in range(a.get_track_count() - 1, -1, -1):
+			var bone := _bone_of(String(a.track_get_path(t)))
+			var ok := _in_keywords(bone, ARM_KEYWORDS) or _in_keywords(bone, WEAPON_KEYWORDS)
+			if ok and _in_keywords(bone, ARMS_EXCLUDE):
+				ok = false
+			if not ok:
+				a.remove_track(t)
+		lib.add_animation(ARMS_CLIP, a)
+	ov.add_animation_library(&"", lib)
+	# 同 `_make_overlay()`：`_ready()` 期间不能直接 add_child
 	host.add_child.call_deferred(ov)
 	return ov
 
@@ -644,6 +723,23 @@ func set_locomotion(speed: float, _on_floor: bool, _vertical_speed: float) -> vo
 	_migrate_upper_layer()
 	# 整身跑打动作在播：腿是它自带的，只跟着速度调倍速，别让 `_update_locomotion()`
 	# 把动作切回 `Move_Ing`（那样这一枪就只剩「站着开火」了）。
+	# ── 站桩开火**中途起步**：攻击立刻收掉 ──
+	# 用户 2026-10-18（本轮目标）：「先开火一次，在走路就变成这样子右侧身子螃蟹平移」。
+	# 不收的话，这 1.07 s 里上半身还在演**站桩开火**（那套姿势是侧身的），腿却在走 ——
+	# 画面就是「身子拧着横着挪」。收了之后：扳机还按着 → 接走打 / 跑打；
+	# 扳机已经松开 → 直接回走路。
+	# ⚠️ 只对**有整身跑打动作**的角色生效（= 主角）。没有这条动作的角色
+	#    （同伴 / 没填 `extra_glb`）走的是「叠加层开火」老路，那条路本来就要让
+	#    玩家在移动中把开火动作演完 —— 硬收会把它变成「按一下什么都不演」，
+	#    `_verify_attack_move` §7 的反向对照就是靠这条动作量出 40° 的。
+	if state == State.FIRE and not _walk_fire and not _runfire_playing 			and _speed >= IDLE_SPEED and has_runfire():
+		_return_to_locomotion()
+		if _trigger_held:
+			if _speed >= WALK_THRESHOLD:
+				_start_runfire()
+			else:
+				_fire_while_walking()
+		return
 	# 走着开火时站住了：先回移动，再让站桩开火接上（扳机可能还按着）
 	if _walk_fire and _speed < IDLE_SPEED:
 		_return_to_locomotion()
@@ -725,7 +821,10 @@ func _fire_while_walking() -> void:
 	_auto_return = false          # 这条没有「播完」这回事，收招挂在松扳机上
 	_runfire_playing = false
 	stop_upper_layer()
-	_update_locomotion()
+	if arms != null and arms.is_inside_tree() and arms.has_animation(ARMS_CLIP):
+		arms.speed_scale = ARMS_SPEED_SCALE
+		arms.play(ARMS_CLIP, 0.08, 1.0)
+	_update_locomotion()          # → `Cafe_Walk`（走路节奏，见 ARMS_LAYER_WHY）
 
 
 ## 有没有「单条跑打动作」（`extra_glb` 并进来的那条）
@@ -821,9 +920,6 @@ func _update_locomotion() -> void:
 	var want := "Normal_Idle"
 	if _speed >= WALK_THRESHOLD:
 		want = "Move_Ing"
-	elif _walk_fire:
-		# 走着开火：**必须留在持枪姿势**（`Cafe_Walk` 会把枪缩到 0，等于没枪）
-		want = "Move_Ing"
 	elif _speed > IDLE_SPEED:
 		want = "Cafe_Walk"
 
@@ -886,7 +982,7 @@ func _return_to_locomotion() -> void:
 ## 停叠加层（自检也会用；不在树里时 `stop()` 会报一串 ERROR，所以在这里挡一道）
 ## 两层都停：调用的时机（收招 / 自检复位）分不清刚才用的哪一层。
 func stop_upper_layer() -> void:
-	for l in [upper, upper_move]:
+	for l in [upper, upper_move, arms]:
 		if l != null and l.is_inside_tree():
 			l.stop()
 
@@ -906,6 +1002,26 @@ func reset_state() -> void:
 
 func has_upper_layer() -> bool:
 	return upper != null and upper_move != null
+
+
+## 手臂层里剩下的轨道数（自检用：应当只有手臂 / 武器那几簇）
+func arms_track_count() -> int:
+	if arms == null or not arms.has_animation(ARMS_CLIP):
+		return -1
+	return arms.get_animation(ARMS_CLIP).get_track_count()
+
+
+## 手臂层里还剩几根**非手臂 / 非武器**的骨（自检用：必须是 0）
+func arms_stray_track_count() -> int:
+	if arms == null or not arms.has_animation(ARMS_CLIP):
+		return -1
+	var a := arms.get_animation(ARMS_CLIP)
+	var n := 0
+	for t in a.get_track_count():
+		var bone := _bone_of(String(a.get_track_path(t)))
+		if not (_in_keywords(bone, ARM_KEYWORDS) or _in_keywords(bone, WEAPON_KEYWORDS)):
+			n += 1
+	return n
 
 
 ## 当前这一发实际在演哪一层（站定 / 移动由 `active_upper_layer()` 决定）。
