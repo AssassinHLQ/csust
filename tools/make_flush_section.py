@@ -62,36 +62,46 @@ def snap(v: float) -> float:
 # mat       up_a/up_b = 阳线（红，两档亮度）；dn_a/dn_b = 阴线（绿）
 # pct       牌子上写的涨跌幅（flavor，断言只看正负号与涨跌一致）
 CANDLES = [
+    # 期货通版：z 在 −10.2 ~ −3.9 之间甩（四面八方），高度 2.00 → 6.60 → 2.00。
+    # `ferry`：这一跳之间的**直跳是不可能的**，靠会动的方块摆渡（见 parkour_futures.gd）。
+    # `mat="sch"`：薛定谔块 —— 踩上去之前不知道红绿（运行时才坍缩）。
     dict(name="K1",  top=2.00, margin=3.20, depth=3.60, width=3.80, z=-4.90,
-         body=1.20, wd=1.20, wu=1.40, mat="up_a", pct="+0.00%", kind="十字星・开盘"),
-    dict(name="K2",  top=2.60, margin=1.60, depth=3.00, width=3.00, z=-5.30,
+         body=1.20, wd=1.20, wu=1.40, mat="up_a", pct="+0.00%", kind="开盘十字星"),
+    dict(name="K2",  top=2.60, margin=1.60, depth=3.00, width=3.20, z=-8.20,
          body=1.80, wd=0.60, wu=0.40, mat="up_a", pct="+2.31%", kind="小阳线"),
-    dict(name="K3",  top=3.30, margin=1.40, depth=3.00, width=2.80, z=-4.60,
+    dict(name="K3",  top=3.30, margin=1.45, depth=3.00, width=3.00, z=-3.90,
          body=2.40, wd=0.70, wu=0.50, mat="up_b", pct="+3.52%", kind="中阳线"),
-    dict(name="K4",  top=3.90, margin=1.10, depth=2.60, width=2.60, z=-5.10,
+    dict(name="K4",  top=3.90, margin=1.10, depth=2.60, width=2.60, z=-9.20,
          body=0.80, wd=2.00, wu=1.80, mat="up_a", pct="+2.24%", kind="十字星（长影）"),
-    dict(name="K5",  top=4.60, margin=1.30, depth=3.20, width=3.00, z=-4.40,
+    dict(name="K5",  top=4.60, margin=1.30, depth=3.20, width=3.00, z=-4.90,
          body=3.00, wd=0.60, wu=0.30, mat="up_b", pct="+3.31%", kind="大阳线"),
-    dict(name="K6",  top=5.40, margin=1.00, depth=4.00, width=1.20, z=-4.90,
-         body=0.90, wd=0.40, wu=0.00, mat="up_a", pct="+3.76%", kind="一字板（涨停・窄梁）"),
-    dict(name="K7",  top=4.60, margin=1.50, depth=3.40, width=3.20, z=-5.40,
-         body=2.80, wd=0.50, wu=0.80, mat="dn_b", pct="-3.48%", kind="大阴线"),
-    dict(name="K8",  top=3.60, margin=1.60, depth=3.20, width=3.00, z=-4.50,
-         body=2.00, wd=0.80, wu=0.70, mat="dn_a", pct="-4.55%", kind="跳空缺口"),
-    dict(name="K9",  top=2.60, margin=1.30, depth=3.00, width=2.60, z=-5.20,
-         body=2.60, wd=0.60, wu=0.70, mat="dn_b", pct="-4.61%", kind="大阴线"),
-    dict(name="K10", top=1.70, margin=1.40, depth=3.20, width=3.00, z=-4.60,
+    dict(name="K6",  top=6.20, ferry="lift", depth=4.00, width=2.00, z=-8.40,
+         body=0.90, wd=0.40, wu=0.00, mat="up_a", pct="+3.76%", kind="一字板（涨停留）+ 升降台"),
+    dict(name="K7",  top=6.80, margin=1.20, depth=2.80, width=2.80, z=-6.20,
+         body=1.60, wd=0.90, wu=0.90, mat="sch", pct="+2.90%", kind="薛定谔・十字星"),
+    dict(name="K8",  top=6.20, ferry="slide", depth=3.40, width=3.20, z=-10.20,
+         body=2.80, wd=0.50, wu=0.80, mat="dn_b", pct="-3.48%", kind="大阴线 + 平移台"),
+    dict(name="K9",  top=5.40, margin=1.40, depth=3.20, width=3.00, z=-5.90,
+         body=1.40, wd=1.30, wu=0.70, mat="sch", pct="-2.10%", kind="薛定谔"),
+    dict(name="K10", top=4.60, margin=1.30, depth=3.00, width=2.60, z=-10.20,
+         body=2.60, wd=0.60, wu=0.70, mat="dn_b", pct="-4.61%", kind="大阴线（布朗块在旁边）"),
+    dict(name="K11", top=3.60, margin=1.45, depth=3.20, width=3.00, z=-6.30,
          body=1.40, wd=1.60, wu=0.90, mat="dn_a", pct="-3.49%", kind="阴线・长下影"),
-    dict(name="K11", top=1.20, margin=1.30, depth=2.80, width=2.80, z=-5.10,
-         body=0.80, wd=2.20, wu=0.80, mat="dn_a", pct="-1.02%", kind="锤头线"),
-    dict(name="K12", top=1.80, margin=1.60, depth=3.20, width=3.40, z=-4.90,
-         body=1.60, wd=0.60, wu=0.80, mat="up_a", pct="+2.27%", kind="反转阳线"),
+    dict(name="K12", top=2.60, margin=1.30, depth=2.80, width=2.80, z=-9.50,
+         body=0.80, wd=2.20, wu=0.80, mat="sch", pct="+1.80%", kind="薛定谔・锤头"),
+    dict(name="K13", top=2.00, margin=1.45, depth=3.20, width=3.40, z=-4.60,
+         body=1.60, wd=0.60, wu=0.80, mat="dn_a", pct="-0.80%", kind="收盘阴线"),
 ]
 
 # 第 2 段终点 C2 的台面（场景里写死的 −135.65 / 4.30 / 台面 2.00），新段从它西边缘往西排
 SEG2_END = dict(name="C2", top=2.00, x0=-137.80, x1=-133.50, z0=-7.05, z1=-2.75)
 
 # 新段最后一根蜡烛 → 原第 3 段起点 X1（进深 3.70 / 宽 3.70 / 台面 2.00 / z −1.70）
+# 渡船跳（升降台 / 平移台）的**边到边**缺口：必须**大于**直跳射程，
+# 否则玩家可以绕过会动的方块直接跳过去，那这些机关就白做了。
+FERRY_GAP = 6.00
+FERRY_GAP_SLIDE = 6.20
+
 X1_GAP_MARGIN = 1.60
 X1_DEPTH = 3.70
 X1_WIDTH = 3.70
@@ -116,7 +126,7 @@ BASE_SEG_NAMES = ["起跳・极限跳", "独木桥・绕角・台阶链", "横�
 BASE_SPECIAL = [26, 27, 38, 45, 47, 48]      # F1 F2 H1 U2 H2 C5
 BASE_SHORT = [29, 30, 31, 32, 33, 34, 35]    # W2…C4
 INS_AT = BASE_ROUTE.index("C2")              # K 段插在 C2 之后
-FLUSH_SEG_NAME = "同花顺 K 线区"
+FLUSH_SEG_NAME = "同花顺期货通"
 
 MATERIALS = {
     # 阳线（红）：涨停/大阳用亮红，普通用深红
@@ -125,6 +135,8 @@ MATERIALS = {
     # 阴线（绿）
     "dn_a": ("Mat_k_dn_a", (0.10, 0.55, 0.28), (0.03, 0.28, 0.12), 0.25),
     "dn_b": ("Mat_k_dn_b", (0.07, 0.38, 0.20), (0.02, 0.20, 0.09), 0.20),
+    # 薛定谔：踩上去之前是这个灰紫色，坍缩时才换成红/绿（见 parkour_futures.gd）
+    "sch": ("Mat_k_unknown", (0.34, 0.30, 0.46), (0.30, 0.24, 0.55), 0.45),
 }
 
 
@@ -180,29 +192,73 @@ def landing_checks(a: dict, b: dict, h: dict) -> dict:
 
 # --- 布局 -----------------------------------------------------------------------
 
+def make_box(c: dict, x1: float) -> dict:
+    box = dict(c)
+    box["wd"] = round(float(c["wd"]), 1)
+    box["wu"] = round(float(c["wu"]), 1)
+    box.update(x1=snap(x1), x0=snap(x1 - c["depth"]),
+               z0=snap(c["z"] - c["width"] * 0.5),
+               z1=snap(c["z"] + c["width"] * 0.5))
+    return box
+
+
+def solve_gap(prev: dict, c: dict) -> float:
+    """二分出**边到边**的 x 间距，让**解析落点正落在目标板中心**。
+
+    ⚠️ 不能直接 `gap = 射程 − 余量`：台面在 z 上甩开之后 `required` 是**斜距**，
+       还夹着两块板之间的 z 边缝，x 间距只是它的一个分量。第一版照抄直线版公式，
+       K3→K4 的余量直接掉到 0.25；第二版改成「解余量」，又因为斜跳把落点顶到板外
+       （前 / 侧 都是 0）。**只有解「落点在板上」这一条同时管住上下界**：
+       余量 = 近边到落点的距离，落在中心 ⇒ 前后各半个板、侧向也是半个板。
+    """
+    def err(gap: float) -> float:
+        box = make_box(c, prev["x0"] - gap)
+        h = hop(prev, box)
+        cx = (box["x0"] + box["x1"]) * 0.5
+        cz = (box["z0"] + box["z1"]) * 0.5
+        tx, tz = h["takeoff"]
+        dx, dz = cx - tx, cz - tz
+        n = math.hypot(dx, dz) or 1.0
+        reach = h["reach"] * K_MEAS
+        lx, lz = tx + dx / n * reach, tz + dz / n * reach
+        return (lx - cx) * dx / n + (lz - cz) * dz / n
+
+    lo, hi = 0.0, 12.0
+    if err(lo) < 0.0:
+        return 0.0
+    for _ in range(60):
+        mid = (lo + hi) * 0.5
+        if err(mid) > 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return snap((lo + hi) * 0.5)
+
+
 def layout() -> list:
-    """从 C2 西边缘往西排：gap 由「落点多深」（margin）反推。"""
+    """从 C2 西边缘往西排。
+
+    普通跳：gap 由「落点多深」（margin）反推；
+    **渡船跳**（`ferry`）：gap 直接给死（6.00 / 6.20 m），并断言**直跳一定过不去** ——
+    不然玩家可以绕过会动的方块直接跳过去，那套机关就白做了。
+    """
     out = []
     prev = SEG2_END
     for c in CANDLES:
         rise = c["top"] - prev["top"]
-        reach = reach_of(rise)
-        if reach < 0:
-            raise SystemExit("!! %s 抬升 %.2f 无解" % (c["name"], rise))
-        gap = snap(reach * K_MEAS - c["margin"])
+        if c.get("ferry"):
+            gap = FERRY_GAP if c["ferry"] != "slide" else FERRY_GAP_SLIDE
+        else:
+            reach = reach_of(rise)
+            if reach < 0:
+                raise SystemExit("!! %s 抬升 %.2f 无解" % (c["name"], rise))
+            gap = solve_gap(prev, c)
         x1 = snap(prev["x0"] - gap)
         x0 = snap(x1 - c["depth"])
-        box = dict(c)
-        # ⚠️ 影线长度必须归到 **0.1**：影线中心 = (实体厚 + 影线长) / 2，
-        #    两个都是 0.05 的倍数时一半可能落在 0.025 上 —— 自检第 1 节会红。
-        box["wd"] = round(float(c["wd"]), 1)
-        box["wu"] = round(float(c["wu"]), 1)
-        box.update(x0=x0, x1=x1, z0=snap(c["z"] - c["width"] * 0.5),
-                   z1=snap(c["z"] + c["width"] * 0.5), gap=gap,
-                   body_bottom=snap(c["top"] - c["body"]))
+        box = make_box(c, x1)
+        box.update(gap=gap, body_bottom=snap(c["top"] - c["body"]))
         out.append(box)
         prev = box
-    # 最后一根 → X1：先算 X1 应该落在哪儿
     last = out[-1]
     reach = reach_of(X1_TOP - last["top"])
     gap_x1 = snap(reach * K_MEAS - X1_GAP_MARGIN)
@@ -213,7 +269,7 @@ def layout() -> list:
 def report(boxes: list, x1_tgt: dict) -> dict:
     prev = SEG2_END
     rows = []
-    worst, worst_name, tight, jumps = math.inf, "", 0, 0
+    worst, worst_name, tight, jumps, ferries = math.inf, "", 0, 0, 0
     for b in boxes + [dict(name="X1", top=X1_TOP, depth=X1_DEPTH, width=X1_WIDTH,
                            z=X1_Z, x0=x1_tgt["center"] - X1_DEPTH * 0.5,
                            x1=x1_tgt["center"] + X1_DEPTH * 0.5,
@@ -221,6 +277,18 @@ def report(boxes: list, x1_tgt: dict) -> dict:
         h = hop(prev, b)
         lc = landing_checks(prev, b, h)
         margin = h["reach"] * K_MEAS - h["required"]
+        if b.get("ferry"):
+            # 渡船跳：直跳**必须过不去**（余量 < 0），否则机关会被绕过
+            if margin >= 0.0:
+                print("  !! %s→%s 直跳余量 %.2f ≥ 0，渡船会被绕过"
+                      % (prev["name"], b["name"], margin))
+            rows.append(dict(name=b["name"], gap=h["required"], rise=h["rise"],
+                             margin=margin, back=0.0, fwd=0.0, side=0.0,
+                             lx=h["takeoff"][0], ok=True, x=b["x0"],
+                             ferry=b["ferry"]))
+            ferries += 1
+            prev = b
+            continue
         ok = margin >= 0.80 and lc["back"] + EDGE >= 0.40 and lc["fwd"] + EDGE >= 0.40 \
             and lc["side"] + EDGE >= 0.20
         rows.append(dict(name=b["name"], gap=h["required"], rise=h["rise"],
@@ -235,10 +303,13 @@ def report(boxes: list, x1_tgt: dict) -> dict:
             print("  !! %s→%s 不合格：余量 %.2f  后 %.2f 前 %.2f 侧 %.2f"
                   % (prev["name"], b["name"], margin, lc["back"], lc["fwd"], lc["side"]))
         prev = b
-    # 语义：上涨必须红、下跌必须绿（同花顺的红涨绿跌）
+    # 语义：上涨必须红、下跌必须绿（同花顺的红涨绿跌）。薛定谔块没有固定颜色，跳过。
     prev = SEG2_END
     for b in boxes:
         up = b["top"] >= prev["top"]
+        if b["mat"] == "sch":
+            prev = b
+            continue
         is_red = b["mat"].startswith("up")
         if up != is_red:
             print("  !! %s 涨跌与颜色不一致（%s / %s）" % (b["name"], up, b["mat"]))
@@ -248,15 +319,16 @@ def report(boxes: list, x1_tgt: dict) -> dict:
           % (len(boxes), tops[0], max(tops), min(tops), tops[-1]))
     print("  起伏幅度（峰 - 谷）= %.2f m；x 跨度 %.1f m"
           % (max(tops) - min(tops), SEG2_END["x0"] - boxes[-1]["x0"]))
-    print("  %-6s %8s %7s %8s %8s %8s %8s %8s"
-          % ("站", "间距", "抬升", "余量", "后", "前", "侧", "落点x"))
+    print("  %-6s %8s %7s %8s %8s %8s %8s %8s  %s"
+          % ("站", "间距", "抬升", "余量", "后", "前", "侧", "落点x", "方式"))
     for r in rows:
-        print("  %-6s %8.2f %7.2f %8.2f %8.2f %8.2f %8.2f %8.2f"
+        print("  %-6s %8.2f %7.2f %8.2f %8.2f %8.2f %8.2f %8.2f  %s"
               % (r["name"], r["gap"], r["rise"], r["margin"], r["back"], r["fwd"],
-                 r["side"], r["lx"]))
-    print("\n  最紧 %s 余量 %.2f m（闸门 0.80）；紧张区 %d/%d"
-          % (worst_name, worst, tight, jumps))
-    return dict(worst=worst, tight=tight, jumps=jumps, rows=rows)
+                 r["side"], r["lx"],
+                 "渡船·" + r.get("ferry", "") if r.get("ferry") else "跳"))
+    print("\n  最紧 %s 余量 %.2f m（闸门 0.80）；紧张区 %d/%d；渡船 %d 处"
+          % (worst_name, worst, tight, jumps, ferries))
+    return dict(worst=worst, tight=tight, jumps=jumps, rows=rows, ferries=ferries)
 
 
 # --- .tscn 文本手术 -------------------------------------------------------------
@@ -355,9 +427,11 @@ def build_nodes(boxes: list, x1: dict) -> list:
     out = []
     for b in boxes:
         cy = snap(b["top"] - b["body"] * 0.5)
+        # 薛定谔块挂元数据：运行时的 parkour_futures.gd 靠它找块
+        extra = (chr(10) + "metadata/schrodinger = true") if b["mat"] == "sch" else ""
         out.append('[node name="%s" type="StaticBody3D" parent="Route"]\n'
-                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s, %s, %s)'
-                   % (b["name"], _num(b["x0"] + b["depth"] * 0.5), _num(cy), _num(b["z"])))
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s, %s, %s)%s'
+                   % (b["name"], _num(b["x0"] + b["depth"] * 0.5), _num(cy), _num(b["z"]), extra))
         xf = "Transform3D(%s, 0, 0, 0, %s, 0, 0, 0, %s, 0, 0, 0)" % (
             _num(b["depth"]), _num(b["body"]), _num(b["width"]))
         out.append('[node name="Mesh" type="MeshInstance3D" parent="Route/%s"]\n'
@@ -406,8 +480,15 @@ def build_nodes(boxes: list, x1: dict) -> list:
     out.append('[node name="Sign" type="Label3D" parent="Route/Beacon_K1"]\n'
                'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)\n'
                'pixel_size = 0.01\nbillboard = 1\nalpha_cut = 1\n'
-               'text = "第 3 段 · 同花顺 K 线"\nfont_size = 64\noutline_size = 14')
+               'text = "第 3 段 · 同花顺期货通"\nfont_size = 64\noutline_size = 14')
+    # 期货通总控：会动的方块 / 蓝块强平 / 薛定谔坍缩 / 负债 HUD 都在它里面
+    out.append('[node name="Futures" type="Node3D" parent="."]' + chr(10)
+               + 'script = ExtResource("7_futures")')
     return out
+
+
+EXT_FUTURES = ('[ext_resource type="Script" path="res://scripts/parkour_futures.gd" '
+               'id="7_futures"]')
 
 
 def build_subresources() -> list:
@@ -433,7 +514,9 @@ def rewrite_arrays(text: str, boxes: list) -> str:
     segments = [int(v) for v in BASE_SEGMENTS[:3]] + [BASE_SEGMENTS[2] + n]         + [v + n for v in BASE_SEGMENTS[3:]]
     seg_names = BASE_SEG_NAMES[:2] + [FLUSH_SEG_NAME] + BASE_SEG_NAMES[2:]
     # ⚠️ 判据是「站号 ≥ 插入点」，不是「≥ 第 4 段起点」——F1/F2（26/27）也在插入点之后
-    special = [v + n if v >= INS_AT + 1 else v for v in BASE_SPECIAL]
+    # 渡船跳（升降台 / 平移台）的落点也算机关跳：弹道核算跳过，交给 5b 的真物理验收
+    ferry = [INS_AT + 1 + i for i, c in enumerate(CANDLES) if c.get("ferry")]
+    special = sorted(set([v + n if v >= INS_AT + 1 else v for v in BASE_SPECIAL] + ferry))
     short = [v + n for v in BASE_SHORT]
     subs = [
         ("route", "[%s]" % ", ".join('NodePath("%s")' % ("Route/" + r)
@@ -500,6 +583,11 @@ def main() -> None:
         raise SystemExit("!! 最紧的余量 %.2f < 0.80，先调 CANDLES 表" % stats["worst"])
 
     text = TSCN.read_text(encoding="utf-8")
+    if 'id="7_futures"' not in text:
+        # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
+        k = text.index("[sub_resource")
+        k = text.rindex(chr(10), 0, k) + 1
+        text = text[:k] + EXT_FUTURES + chr(10) + chr(10) + text[k:]
     parts = chunks(text)
 
     # 1) 先量 X1 现在在哪儿（上次生成过就是已经平移过的位置）

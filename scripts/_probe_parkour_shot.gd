@@ -74,29 +74,32 @@ func _run() -> void:
 	await _shot("12_bridge", Vector3(-86.0, 4.6, 11.0), Vector3(-90.0, 0.5, 4.0))
 	await _shot("13_corner", Vector3(-92.0, 8.0, -1.0), Vector3(-101.0, 0.6, -1.0))
 	await _shot("14_stairs", Vector3(-110.0, 6.0, 3.0), Vector3(-120.0, 1.6, -4.9))
-	# ── 段 3 同花顺 K 线区（K1..K12，x −143 ~ −218，台面 2.00 → 峰 5.00 → 谷 1.60）──
-	# 进场：站在 C2 上往西看，第一眼要看出「一溜红绿方块往上爬」
-	await _shot("15_flush_entry", Vector3(-134.0, 3.2, 2.2), Vector3(-152.0, 2.9, -4.9))
-	# 整段侧面轮廓（从南边 58 m 外平视）：**高低起伏**一眼可见，红涨绿跌排成 K 线
-	await _shot("16_flush_profile", Vector3(-178.0, 7.0, 40.0), Vector3(-178.0, 3.4, -4.9))
-	# 峰顶特写：K5 大阳线 → K6 一字板（1.2 m 窄梁，涨停）→ K7 大阴线
-	await _shot("17_flush_peak", Vector3(-157.0, 8.0, 9.5), Vector3(-175.0, 4.6, -4.9))
-	# ── 段 4 横跳区（X1..X5 在 x −221 ~ −249，z 在 −3.4 / −6.4 之间交替；F1 −253.05）──
-	await _shot("18_sidejump", Vector3(-233.0, 7.2, 3.4), Vector3(-241.0, 2.2, -5.6))
-	# 移动平台特写：MoverA 在 F1(−253.05)⇄F2(−262.85) 之间
-	await _shot("19_mover", Vector3(-256.5, 4.6, 7.5), Vector3(-262.0, 2.2, -5.0))
-	# ── 段 5 绕柱螺旋塔（中央柱轴在 x −280.65 / z −4.9，W1 y2.80 → C4 y8.40）──
-	await _shot("20_spiral_low", Vector3(-280.7, 1.6, 2.6), Vector3(-280.7, 6.2, -4.9))
-	await _shot("21_spiral_high", Vector3(-272.5, 12.5, 1.5), Vector3(-281.0, 5.4, -4.9))
+	# ── 段 3 同花顺期货通（K1..K13 散在 x −143~−221、z −11~−3、台面 2.00 → 6.80 → 2.00）──
+	await _shot("15_flush_entry", Vector3(-134.0, 3.4, 2.0), Vector3(-152.0, 3.2, -6.5))
+	# 整场的 3/4 俯瞰：13 块四面散开的红绿块 + 中间那条会动的板
+	await _shot("16_futures_field", Vector3(-176.0, 16.0, 26.0), Vector3(-180.0, 5.5, -7.5))
+	# 升降台 + 一字板 + 平移台：站到南边近处看缺口
+	await _shot("17_futures_lift", Vector3(-158.0, 9.5, 1.5), Vector3(-171.0, 6.4, -8.4))
+	# 究极蓝块（强制平仓）：把相位推到实体段再拍
+	var fut := game.get_node_or_null("Parkour/Futures") as ParkourFutures
+	if fut != null and fut.hazards.size() > 0:
+		fut._t = fut.blue_period - fut.blue_live + 0.2
+		await _wait(4)
+	await _shot("18_futures_blue", Vector3(-148.0, 6.5, -2.0), Vector3(-157.0, 4.4, -8.0))
+	# ── 段 4 横跳区（X1..X5；F1 −257.05）──
+	await _shot("19_sidejump", Vector3(-237.0, 7.2, 3.4), Vector3(-245.0, 2.2, -5.6))
+	await _shot("20_mover", Vector3(-260.5, 4.6, 7.5), Vector3(-266.0, 2.2, -5.0))
+	# ── 段 5 绕柱螺旋塔（柱轴 x −284.2 / z −4.9）──
+	await _shot("21_spiral_low", Vector3(-284.2, 1.6, 2.6), Vector3(-284.2, 6.2, -4.9))
+	await _shot("22_spiral_high", Vector3(-276.0, 12.5, 1.5), Vector3(-284.5, 5.4, -4.9))
 	# ── 段 6 机关区 ──
-	await _shot("22_mech", Vector3(-293.0, 14.0, 1.0), Vector3(-305.0, 12.6, -7.5))
-	await _shot("23_mech_air", Vector3(-319.0, 20.0, 3.0), Vector3(-333.0, 15.5, -7.5))
-	# ── 段 7 竖井（J1 y13.80 → J4 y9.60，开口在 z −5.9 / −9.1 之间错开）──
-	await _shot("24_shaft", Vector3(-369.0, 17.5, -2.0), Vector3(-381.0, 11.5, -7.5))
-	# 终点岛（中心 x −409.25 / z −9.5，台面 y 8.00）
-	await _shot("25_island", Vector3(-389.0, 15.0, 2.0), Vector3(-403.0, 9.0, -9.5))
-	# 近乎垂直俯视：`look_at` 的 up 不能和视线重合，所以目标点错开 0.5 m
-	await _shot("26_plan", Vector3(-205.0, 190.0, -4.0), Vector3(-205.0, 0.0, -4.5))
+	await _shot("23_mech", Vector3(-296.5, 14.0, 1.0), Vector3(-308.5, 12.6, -7.5))
+	await _shot("24_mech_air", Vector3(-322.5, 20.0, 3.0), Vector3(-336.5, 15.5, -7.5))
+	# ── 段 7 竖井 / 终点岛 ──
+	await _shot("25_shaft", Vector3(-372.5, 17.5, -2.0), Vector3(-384.5, 11.5, -7.5))
+	await _shot("26_island", Vector3(-392.5, 15.0, 2.0), Vector3(-406.5, 9.0, -9.5))
+	await _shot("27_plan", Vector3(-215.0, 190.0, -4.0), Vector3(-215.0, 0.0, -4.5))
+
 
 	print("\n出图目录：%s" % _out)
 	quit(0)

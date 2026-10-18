@@ -1,5 +1,5 @@
 extends SceneTree
-## 验跑酷 v4（7 段 / 71 站 / 59 跳 + 6 处机关 + 5 段「走过去」/ 389 m）。
+## 验跑酷 v5（7 段 / 72 站 / 58 跳 + 6 处机关 + 5 段「走过去」+ 期货通四机制 / 389 m）。
 ##
 ## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
@@ -81,6 +81,9 @@ func _run() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_space = _p.get_world_3d().direct_space_state
 	_pk._build_route()
+	var fut0 := _pk.get_node_or_null("Futures") as ParkourFutures
+	if fut0 != null:
+		fut0.blue_live = 0.0          # 第 1~4 节只测跳；蓝块由 5c 自己打开
 	# ⚠️ 这一套会**真的跑完一次全程**，于是 `parkour.gd` 会把那次用时写进
 	#    `user://parkour_best.cfg` —— 那是玩家真实存档。开跑前备份、收尾时还回去
 	#    （和 `_verify_settings` 测音量时的做法一样）。
@@ -91,6 +94,7 @@ func _run() -> void:
 	await _test_calibration()
 	await _test_hops()
 	await _test_mechanics()
+	await _test_futures()
 	await _test_negative()
 	await _test_clash(game)
 	await _test_island()
@@ -108,7 +112,7 @@ func _run() -> void:
 		"所有起跳都是**靠输入按出来**的（兜底用了 %d 次；>0 说明跳键脉冲又被微弹吃掉了）"
 		% _jump_assisted)
 	# 兜底：任何一节静默跳过，断言总数都会掉下来（当前 125 条；71 站版比 59 站版多 12 根 K 线的回放）
-	_check(_pass + _fail >= 120,
+	_check(_pass + _fail >= 150,
 		"断言总数 ≥ 120（实测 %d 条）—— 哪一节没跑完这里会先变红" % (_pass + _fail))
 	print("通过 %d 项" % _pass)
 	_print_table()
@@ -120,10 +124,10 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 71, "路线有 %d 站（期望 71：跑道 + 57 块落脚板 + 12 根同花顺 K 线 + 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 72, "路线有 %d 站（期望 72：跑道 + 57 块落脚板 + 13 块同花顺期货通板块 + 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
-		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12",
+		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -156,8 +160,8 @@ func _test_structure(game: Node) -> void:
 	# 螺旋塔 2026-10-17 回到 7 跳版：11 跳版每 4 级叠在同一 xz、层间只差 2.05 m，
 	# 玩家的 1.5 m 身高 + 0.5 m 板厚只剩 5 cm，跳起来必撞头 —— 这不是难度，是几何死锁。
 	# 现在每级 +0.80（4 级 = 3.20 m，净空 2.70 m），总高仍是 W1 台面 2.80 → C4 台面 8.40。
-	_check(_pk.special_hops.size() == 6,
-		"机关跳 %d 处（期望 6）：%s（减速短跳 %d 处，期望 7：W2…C4）"
+	_check(_pk.special_hops.size() == 8,
+		"机关跳 %d 处（期望 8 = 6 处机关 + 升降台 K6 + 平移台 K8）：%s（减速短跳 %d 处，期望 7：W2…C4）"
 		% [_pk.special_hops.size(), str(_pk.special_hops), _pk.short_hops.size()])
 
 	# 网格与碰撞必须指着同一块体积
@@ -211,14 +215,22 @@ func _test_structure(game: Node) -> void:
 		% ("" if off.is_empty() else "（越界：%s）" % str(off.slice(0, 4))))
 	var bad_dock: Array[String] = []
 	for node in _walk(_pk):
-		if node is AnimatableBody3D:
+		if node is ParkourMover:
 			var mv := node as ParkourMover
 			for v in [mv.point_a, mv.point_b]:
 				for c in 3:
 					var q: float = absf(v[c]) / 0.05
 					if absf(q - roundf(q)) > 0.001:
 						bad_dock.append("%s %s=%.3f" % [mv.name, "xyz"[c], v[c]])
-	_check(bad_dock.is_empty(), "移动平台的两个端点也落在 0.05 m 网格上%s"
+	for node in _walk(_pk):
+		if node is ParkourDrift and (node as ParkourDrift).mode != ParkourDrift.Mode.BROWNIAN:
+			var dr := node as ParkourDrift
+			for v in [dr.point_a, dr.point_b]:
+				for c in 3:
+					var q: float = absf(v[c]) / 0.05
+					if absf(q - roundf(q)) > 0.001:
+						bad_dock.append("%s %s=%.3f" % [dr.name, "xyz"[c], v[c]])
+	_check(bad_dock.is_empty(), "移动平台 / 升降台 / 平移台的两个端点也落在 0.05 m 网格上%s"
 		% ("" if bad_dock.is_empty() else "（越界：%s）" % str(bad_dock)))
 
 	var bad_layer: Array[String] = []
@@ -657,7 +669,8 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 		var ok2 := _p.is_on_floor() and absf(pos2.y - _pk.top_at(to_i)) < 0.25 \
 			and pos2.x > b.position.x - 0.25 and pos2.x < b.position.x + b.size.x + 0.25 \
 			and pos2.z > b.position.z - 0.25 and pos2.z < b.position.z + b.size.z + 0.25
-		return {"ok": ok2, "pos": pos2, "why": ""}
+		return {"ok": ok2, "pos": pos2, "why": "" if ok2 else "落点 %.2f,%.2f y=%.2f（台面 %.2f）"
+			% [pos2.x, pos2.z, pos2.y, _pk.top_at(to_i)]}
 	if place:
 		_release_all()
 		# 助跑能有多长取决于板有多大：从起跳点往回走，走到出板为止（再留 0.40 m）
@@ -745,6 +758,10 @@ func _run_hop(from_i: int, to_i: int, walk: bool, place := true, steer := false,
 
 ## 六处「机关跳」的驱动：按真实玩法走一遍（等平台 / 踩弹跳板 / 进气流 / 穿传送门）。
 ## 连续通关里就是靠它过那六处。
+func _futures() -> ParkourFutures:
+	return _pk.get_node_or_null("Futures") as ParkourFutures
+
+
 func _drive_special(to_i: int) -> Dictionary:
 	var from_i := to_i - 1
 	var b := _pk.box_at(to_i)
@@ -763,6 +780,10 @@ func _drive_special(to_i: int) -> Dictionary:
 			return await _drive_updraft(from_i, to_i)
 		"C5":
 			return await _drive_portal(from_i, to_i)
+		"K6":
+			return await _ride_drift(_futures(), ParkourDrift.Mode.LIFT, from_i, to_i, "升降台")
+		"K8":
+			return await _ride_drift(_futures(), ParkourDrift.Mode.SLIDE, from_i, to_i, "平移台")
 		_:
 			return {"ok": false, "pos": _p.global_position,
 				"why": "没有 %s 的机关驱动（%s）" % [name, str(mover != null)]}
@@ -805,9 +826,15 @@ func _drive_mover(mv: ParkourMover, from_i: int, to_i: int) -> Dictionary:
 			return {"ok": false, "pos": _p.global_position, "why": "中途掉下去了"}
 	var rel := (_p.global_position - mv.global_position) - rel0
 	# 下船（平台在对岸只停 0.8 s，别磨蹭）
+	# 下船：**走到真的站上对岸**为止。原来是固定 600 ms —— 平台端点只停 1.2 s，
+	# 检测到靠岸 + 按方向键的延迟一抖，人还在船上平台就开回去了（实测只挪 0.10 m）。
 	_aim(Vector2(-1, 0))
 	Input.action_press("move_forward")
-	await _wait_ms(600)
+	var tw0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - tw0 < 1500:
+		await process_frame
+		if _inside_box(_p.global_position, _pk.box_at(to_i)):
+			break
 	_release_all()
 	await _wait(3)
 	var b := _pk.box_at(to_i)
@@ -932,7 +959,7 @@ func _test_mechanics() -> void:
 
 	# ① 弹跳板 ×2：**峰值 ≥ 4.5 m** 且最终落在 +4.40 的高台上
 	# 站号是 K 线区插进来之后的：H1 = 50、H2 = 59（原来 38 / 47，整段 +12）
-	for to_i in [50, 59]:
+	for to_i in [51, 60]:
 		var res := await _drive_bounce(to_i - 1, to_i)
 		var peak := float(res.get("peak", 0.0))
 		_check(bool(res["ok"]) and peak >= 4.5,
@@ -941,9 +968,9 @@ func _test_mechanics() -> void:
 			+ "最终落在 %s 上（y = %.2f）" % [_pk.label_at(to_i), float(res["pos"].y)])
 
 	# ② 移动平台 ×2：**站着不动也被带走**（相对位移不变）+ 送到对岸
-	for to_i in [38, 39]:
+	for to_i in [39, 40]:
 		var res := await _drive_mover(
-			_pk.get_node_or_null("Movers/%s" % ("MoverA" if to_i == 38 else "MoverB"))
+			_pk.get_node_or_null("Movers/%s" % ("MoverA" if to_i == 39 else "MoverB"))
 				as ParkourMover, to_i - 1, to_i)
 		_check(bool(res["ok"]) and float(res.get("rel", 9.0)) < 0.60,
 			"移动平台 %s→%s：人**站着不动**被带过缺口，与平台的相对位移只变了 %.2f m（< 0.60）"
@@ -1002,24 +1029,251 @@ func _test_mechanics() -> void:
 			% float(back_at))
 
 	# ④ 上升气流：进去之后**到过 +5.0**，并且站上出口台
-	var res_ud := await _drive_updraft(56, 57)
+	var res_ud := await _drive_updraft(57, 58)
 	_check(bool(res_ud["ok"]) and float(res_ud.get("peak", 0.0)) >= 5.0,
 		"上升气流 U1→U2：柱子里被托到 **+%.2f m**（需求 +5.0）、从出口台出来（y = %.2f）"
 		% [float(res_ud.get("peak", 0.0)), float(res_ud["pos"].y)])
 
 	# ⑤ 传送门：真的到了对岸那台（跨 16 m），而且没卡进墙里
-	var res_pt := await _drive_portal(59, 60)
+	var res_pt := await _drive_portal(60, 61)
 	var pi := _pk.get_node_or_null("Mechanics/PortalIn") as ParkourPortal
 	var span := 0.0
 	if pi != null and pi.target() != null:
 		span = pi.global_position.distance_to(pi.target().global_position)
 	_check(bool(res_pt["ok"]) and span >= 10.0,
 		"传送门 %s→%s：跨 **%.2f m**（需求 ≥ 10 m）后 global_position 真的落在对岸 %s 上"
-		% ["PortalIn", "PortalOut", span, _pk.label_at(60)])
+		% ["PortalIn", "PortalOut", span, _pk.label_at(61)])
 	_check(float(res_pt.get("dist", 0.0)) >= 1.0,
 		"传送门至少触发过 1 次（计数器 = %.0f，防乒乓冷却生效）" % float(res_pt.get("dist", 0.0)))
 	_pk.enabled = true
 	_release_all()
+
+
+# --- 5c. 同花顺期货通（第 3 段的四个机制）----------------------------------------
+
+## 期货通那一节：会动的块怎么坐、蓝块怎么把人送走、薛定谔怎么坍缩。
+## ⚠️ 蓝块是「凭空出现」的，人可能已经站在里面才轮到它变实体 —— 所以既要测
+##    「站着不动会不会被平仓」，也要测「冷却一次只扣一次」。
+func _test_futures() -> void:
+	print("\n========== 5c. 同花顺期货通（会动的块 / 蓝块强平 / 薛定谔）==========")
+	var fut := _pk.get_node_or_null("Futures") as ParkourFutures
+	if fut == null:
+		_check(false, "场景里有 Futures（期货通总控）")
+		return
+	_check(fut.drifts.size() == 3 and fut.hazards.size() == 3 and fut.schro.size() == 3,
+		"期货通就位：会动的块 %d 个（升降 / 平移 / 布朗）、究极蓝块 %d 个、薛定谔块 %d 个"
+		% [fut.drifts.size(), fut.hazards.size(), fut.schro.size()])
+
+	# ① 两块板之间那条缝必须**大于射程**：不然玩家可以直接跳过去，机关就白做了
+	for pair in [["K5", "K6"], ["K7", "K8"]]:
+		var from_i := _idx(String(pair[0]))
+		var to_i := _idx(String(pair[1]))
+		var h := _hop(from_i, to_i)
+		var reach := float(h["reach"]) * float(_m.get("k", 1.055))
+		_check(float(h["required"]) > reach,
+			"%s→%s 直跳**过不去**（必须跨 %.2f m > 射程 %.2f m）—— 只能坐会动的块"
+			% [pair[0], pair[1], float(h["required"]), reach])
+
+	# ② 升降台 / 平移台：站上去**不动**被送到对岸
+	var lift := await _ride_drift(fut, ParkourDrift.Mode.LIFT, _idx("K5"), _idx("K6"), "升降台")
+	_check(bool(lift["ok"]),
+		"升降台 K5→K6：人站着不动升到 +%.2f m 的 K6 上（%s）"
+		% [float(_pk.top_at(_idx("K6"))), String(lift.get("why", "ok"))])
+	var slide := await _ride_drift(fut, ParkourDrift.Mode.SLIDE, _idx("K7"), _idx("K8"), "平移台")
+	_check(bool(slide["ok"]),
+		"平移台 K7→K8：人站着不动横过缺口、走到 K8 上（%s）" % String(slide.get("why", "ok")))
+
+	# ③ 布朗块：真的在乱走，而且**跑不出自己的活动半径**
+	var brown: ParkourDrift = null
+	for d in fut.drifts:
+		if d.mode == ParkourDrift.Mode.BROWNIAN:
+			brown = d
+	if brown != null:
+		var home := brown.global_position
+		var far := 0.0
+		var moved := 0.0
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 2600:
+			await process_frame
+			far = maxf(far, Vector2(brown.global_position.x - home.x,
+				brown.global_position.z - home.z).length())
+			moved = maxf(moved, brown.global_position.distance_to(home))
+		_check(moved > 0.6 and far <= brown.roam + 0.6,
+			"布朗块：2.6 s 内最远走了 %.2f m、离出生点最远 %.2f m（活动半径 %.1f m，不许跑飞）"
+			% [moved, far, brown.roam])
+
+	# ④ 究极蓝块：预警 → 实体 → 消失；站进实体里 = 强制平仓
+	var hz: Node3D = fut.hazards[0]
+	var saved_t := fut._t
+	fut.blue_live = 3.0            # `_run()` 为了前几节把它关了，这里打开
+	# 观察周期的时候把人放到主平台上（别站在蓝块底下等人来平仓）
+	_pk.enabled = false
+	_put(SPAWN.x, SPAWN.y, SPAWN.z)
+	await _wait(3)
+	var seen_live := false
+	var seen_dark := false
+	fut._t = 0.0
+	for _i in 600:
+		await physics_frame
+		if hz.visible and _hazard_live(fut, hz):
+			seen_live = true
+		if not hz.visible:
+			seen_dark = true
+		if seen_live and seen_dark:
+			break
+	_check(seen_live and seen_dark, "蓝块会**凭空出现再消失**（周期里见过实体，也见过空缺）")
+	# 先把人站到 K4 上（检查点 = K4），再**把计数器清零**，然后把他塞进实体蓝块里
+	var k4 := _idx("K4")
+	var b4 := _pk.box_at(k4)
+	_pk.enabled = true
+	_pk.reset_run()
+	_put(b4.position.x + b4.size.x * 0.5, _pk.top_at(k4) + 0.05, b4.position.z + b4.size.z * 0.5)
+	await _wait(6)
+	fut.debt = 0
+	fut.liquidations = 0
+	fut._cool = 0.0
+	var ck := _pk.checkpoint
+	var debt0 := fut.debt
+	var liq0 := fut.liquidations
+	# ⚠️ 顺序不能反：`_put` 进蓝块 → 同一帧就可能被平仓 → 人被送回 K4。
+	#    第一版把「清零」写在 `_put` 之后，正好把刚发生的强平擦掉了、还误判成「没触发」。
+	fut._t = float(hz.get_meta("offset")) * -1.0 + fut.blue_period - fut.blue_live + 0.05
+	_put(hz.global_position.x, hz.global_position.y - 0.9, hz.global_position.z)
+	for _i in 20:
+		await physics_frame
+	_check(fut.liquidations == liq0 + 1 and fut.debt > debt0,
+		"站进实体蓝块 → **强制平仓**：强平 %d→%d 次、负债 %d→%d 万（冷却 %.1f s，只扣一次）"
+		% [liq0, fut.liquidations, debt0, fut.debt, fut.cooldown])
+	_check(_p.global_position.distance_to(_pk.respawn_point(ck)) < 0.60,
+		"强制平仓后送回**最近踩过的落脚点**（第 %d 站 %s）"
+		% [ck + 1, _pk.label_at(ck)])
+	fut._t = saved_t
+
+	# ⑤ 薛定谔块：踩上去之前不知道颜色，第一次踩到才坍缩成红（阳线）/ 绿（阴线）
+	# 前面几节可能已经踩过它们了 —— 找一个还没坍缩的；都坍缩了就**重置一块**再测
+	var plate: Node3D = null
+	for cand in fut.schro:
+		if not cand.has_meta("resolved"):
+			plate = cand
+			break
+	if plate == null:
+		plate = fut.schro[0]
+		plate.remove_meta("resolved")
+		var m0 := plate.get_node_or_null("Mesh") as MeshInstance3D
+		m0.material_override = fut._mat(ParkourFutures.SCH_UNKNOWN, 0.45, 1.0)
+		var l0 := plate.get_node_or_null("Pct") as Label3D
+		l0.text = "?"
+		l0.modulate = Color(1, 1, 1, 1)
+	var mesh := plate.get_node_or_null("Mesh") as MeshInstance3D
+	var before: Color = (mesh.material_override as StandardMaterial3D).albedo_color
+	var c0 := fut.collapses
+	var pi := _idx(String(plate.name))
+	var pb := _pk.box_at(pi)
+	fut.blue_live = 0.0            # 这一段不要蓝块来捣乱
+	_put(pb.position.x + pb.size.x * 0.5, _pk.top_at(pi) + 0.05, pb.position.z + pb.size.z * 0.5)
+	await _wait(6)
+	var after: Color = (mesh.material_override as StandardMaterial3D).albedo_color
+	var lab := plate.get_node_or_null("Pct") as Label3D
+	_check(fut.collapses == c0 + 1 and plate.has_meta("resolved"),
+		"薛定谔块 %s：踩之前是灰紫（%.2f,%.2f,%.2f），踩到后**坍缩一次**（累计 %d 次）"
+		% [plate.name, before.r, before.g, before.b, fut.collapses])
+	_check((after.r > after.g and after.r > after.b) or (after.g > after.r and after.g > after.b),
+		"坍缩结果一定是**红或绿**（实测 %.2f,%.2f,%.2f），不会是灰紫"
+		% [after.r, after.g, after.b])
+	_check(lab != null and (lab.text.begins_with("+") or lab.text.begins_with("-")),
+		"坍缩后牌子写上真实涨跌幅：「%s」" % (lab.text if lab != null else "（没有牌子）"))
+	_check(not (await _schro_resolves_again(fut)), "同一个薛定谔块**只坍缩一次**")
+	fut.blue_live = 3.0
+	_pk.enabled = true
+	_release_all()
+
+
+## 蓝块当前是不是「实体」段（和 `parkour_futures._tick_hazards` 同一套相位）
+func _hazard_live(fut: ParkourFutures, h: Node3D) -> bool:
+	var phase := fmod(fut._t + float(h.get_meta("offset")), fut.blue_period)
+	return phase >= fut.blue_period - fut.blue_live
+
+
+func _schro_resolves_again(fut: ParkourFutures) -> bool:
+	var c := fut.collapses
+	await _wait(4)
+	return fut.collapses != c
+
+
+## 坐一块会动的板：站上去 → 等它走到另一端 → 走向目标板 → 检查真的落上去了。
+func _ride_drift(fut: ParkourFutures, mode: int, _from_i: int, to_i: int,
+		what: String) -> Dictionary:
+	var d: ParkourDrift = null
+	for cand in fut.drifts:
+		if cand.mode == mode:
+			d = cand
+	if d == null:
+		return {"ok": false, "why": "没有这种会动的块"}
+	_pk.enabled = false
+	_release_all()
+	d.force_progress(0.0, 3.0)
+	await _wait(2)
+	_put(d.global_position.x, d.global_position.y + 0.25, d.global_position.z)
+	await _wait(5)
+	var t0 := Time.get_ticks_msec()
+	var arrived := false
+	while Time.get_ticks_msec() - t0 < 14000:
+		await process_frame
+		if d.progress() > 0.99:
+			arrived = true
+			break
+	if not arrived:
+		_pk.enabled = true
+		return {"ok": false, "why": "%s 14 s 内没走到另一端" % what}
+	var b := _pk.box_at(to_i)
+	var c := b.position + b.size * 0.5
+	# ⚠️ 到岸之后**必须跳**：会动的块和对岸之间还隔着 1.8 m 的空隙，走过去会直接掉进缝里
+	#    （第一版就是这么掉到 y = −33 的）。按住 W 加速，走到离块心 1.30 m（≈块边）时起跳。
+	_aim(Vector2(c.x - _p.global_position.x, c.z - _p.global_position.z))
+	Input.action_press("move_forward")
+	var t1 := Time.get_ticks_msec()
+	var jumped := false
+	var landed := false
+	while Time.get_ticks_msec() - t1 < 3000:
+		await process_frame
+		var pp := _p.global_position
+		var to_center := Vector2(pp.x - d.global_position.x, pp.z - d.global_position.z)
+		if not jumped and to_center.length() > 1.30:
+			await _jump()
+			jumped = true
+		elif jumped and _p.is_on_floor() and _inside_box(pp, b):
+			landed = true
+			break
+	if landed:
+		# 走到板心再交给下一跳：连续通关里下一跳是「从板心助跑」的，
+		# 落在板边会被 `_exit_dist` 判成「没有助跑距离」，跳出去直接掉下去
+		_aim(Vector2(c.x - _p.global_position.x, c.z - _p.global_position.z))
+		Input.action_press("move_forward")
+		await _wait_ms(450)
+	_release_all()
+	await _wait(4)
+	var pos := _p.global_position
+	var ok := landed and _p.is_on_floor() and absf(pos.y - _pk.top_at(to_i)) < 0.45 \
+		and pos.x > b.position.x - 0.45 and pos.x < b.position.x + b.size.x + 0.45 \
+		and pos.z > b.position.z - 0.45 and pos.z < b.position.z + b.size.z + 0.45
+	_pk.enabled = true
+	return {"ok": ok, "why": "ok" if ok else "落在 %.2f,%.2f y=%.2f（台面 %.2f，on_floor=%s，跳了=%s）"
+		% [pos.x, pos.z, pos.y, _pk.top_at(to_i), str(_p.is_on_floor()), str(jumped)]}
+
+
+## 人是不是站在这个盒子的 footprint 里（只看 xz）
+func _inside_box(p: Vector3, b: AABB) -> bool:
+	return p.x > b.position.x and p.x < b.position.x + b.size.x \
+		and p.z > b.position.z and p.z < b.position.z + b.size.z
+
+
+
+## 按名字找站号
+func _idx(label: String) -> int:
+	for i in _pk.node_count():
+		if _pk.label_at(i) == label:
+			return i
+	return -1
 
 
 # --- 5. 反例 -------------------------------------------------------------------
@@ -1060,11 +1314,11 @@ func _test_negative() -> void:
 	# ② 摔落 → 回**本段起点**（这是 v2 的核心惩罚）
 	for probe in [
 		{"station": 13, "seg": 1, "what": "第 2 段中段（T1 转身台）"},
-		{"station": 25, "seg": 2, "what": "第 3 段中段（K5 大阳线）"},
-		{"station": 36, "seg": 3, "what": "第 4 段中段（X4 窄板）"},
-		{"station": 43, "seg": 4, "what": "第 5 段中段（W4 螺旋塔）"},
-		{"station": 59, "seg": 5, "what": "第 6 段中段（L1 机关区）"},
-		{"station": 68, "seg": 6, "what": "第 7 段中段（J1 竖井）"},
+		{"station": 24, "seg": 2, "what": "第 3 段中段（K5 大阳线）"},
+		{"station": 37, "seg": 3, "what": "第 4 段中段（X4 窄板）"},
+		{"station": 44, "seg": 4, "what": "第 5 段中段（W4 螺旋塔）"},
+		{"station": 60, "seg": 5, "what": "第 6 段中段（L1 机关区）"},
+		{"station": 69, "seg": 6, "what": "第 7 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()
@@ -1272,7 +1526,7 @@ func _print_table() -> void:
 	print("  全线最紧的一跳        %s，余量 %.2f m"
 		% [String(_m.get("worst_name", "")), float(_m.get("worst_margin", 0.0))])
 	print("  紧张区间              %d/%d 跳" % [int(_m.get("tight", 0)), int(_m.get("jumps", 0))])
-	print("  路线                  7 段 / 71 站 / 59 跳 + 6 处机关 + 5 段走过去 / 跳距合计 %.1f m"
+	print("  路线                  7 段 / 72 站 / 58 跳 + 6 处机关 + 5 段走过去 / 跳距合计 %.1f m"
 		% float(_m.get("gap_sum", 0.0)))
 	print("  连续通关用时          %.2f s（计时器实测）" % float(_m.get("run_seconds", 0.0)))
 	print("  本套自检用时          %.1f s" % secs)
