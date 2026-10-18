@@ -74,6 +74,20 @@ func _run() -> void:
 	await _shot("12_bridge", Vector3(-86.0, 4.6, 11.0), Vector3(-90.0, 0.5, 4.0))
 	await _shot("13_corner", Vector3(-92.0, 8.0, -1.0), Vector3(-101.0, 0.6, -1.0))
 	await _shot("14_stairs", Vector3(-110.0, 6.0, 3.0), Vector3(-120.0, 1.6, -4.9))
+	# 先让玩家真的踩两块 K 线（保证金会按牌子上的涨跌幅结算），HUD 才是活的
+	var pk := game.get_node_or_null("Parkour") as Parkour
+	var player := game.get_node_or_null("Player") as Player
+	if pk != null and player != null:
+		for nm in ["K3", "K7", "K9"]:
+			for idx in pk.node_count():
+				if pk.label_at(idx) != nm:
+					continue
+				var bb := pk.box_at(idx)
+				player.global_position = Vector3(bb.position.x + bb.size.x * 0.5,
+					pk.top_at(idx) + 0.05, bb.position.z + bb.size.z * 0.5)
+				player.velocity = Vector3.ZERO
+				await _wait(8)
+				break
 	# ── 段 3 同花顺期货通（K1..K13 散在 x −143~−221、z −11~−3、台面 2.00 → 6.80 → 2.00）──
 	await _shot("15_flush_entry", Vector3(-134.0, 3.4, 2.0), Vector3(-152.0, 3.2, -6.5))
 	# 整场的 3/4 俯瞰：13 块四面散开的红绿块 + 中间那条会动的板

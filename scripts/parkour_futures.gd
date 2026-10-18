@@ -40,10 +40,20 @@ const SCH_UNKNOWN := Color(0.34, 0.30, 0.46)
 ## 强平后的冷却（秒）：别让同一次碰撞连扣八次
 @export var cooldown := 1.2
 
-## 累计负债（万）/ 强平次数 / 薛定谔坍缩次数
+## ── 账户（单位：万）──
+## `margin` = 保证金（真实结算：每块 K 线第一次踩上去，就按它牌子上那个涨跌幅结算一次）
+## `debt`   = 负债（强平累加）/ `liquidations` 强平次数 / `collapses` 薛定谔坍缩次数
+var margin := 1000.0
 var debt := 0
 var liquidations := 0
 var collapses := 0
+## 结算过几次 / 最近一次结算的文案
+var settlements := 0
+var _last_settle := ""
+## 已经结算过的板（一块只结算一次，免得来回走刷钱）
+var settled := {}
+## 13 块 K 线的包围盒 + 台面 + 牌子（结算要用）
+var plates: Array[Dictionary] = []
 
 var drifts: Array[ParkourDrift] = []
 var hazards: Array[Node3D] = []
@@ -56,6 +66,7 @@ var _t := 0.0
 var _cool := 0.0
 var _hud_layer: CanvasLayer
 var _debt_label: Label
+var _result_label: Label
 var _banner: Label
 var _flash: ColorRect
 
@@ -77,6 +88,7 @@ func _build() -> void:
 	_make_hazard("K9", blue_period / 3.0)
 	_make_hazard("K12", blue_period * 2.0 / 3.0)
 	_collect_schro()
+	_collect_plates()
 	_build_hud()
 	print("[Futures] 期货通就位：会动的块 %d、蓝块 %d、薛定谔块 %d"
 		% [drifts.size(), hazards.size(), schro.size()])
@@ -170,6 +182,18 @@ func _make_hazard(near: String, phase_offset: float) -> void:
 	hazards.append(n)
 
 
+## 把 13 块 K 线（站名 `K1`…`K13`）连包围盒一起收进来 —— 结算要看「踩在哪块上」。
+func _collect_plates() -> void:
+	for i in _pk.node_count():
+		var nm := _pk.label_at(i)
+		if not nm.begins_with("K") or not nm.substr(1).is_valid_int():
+			continue
+		var b := _pk.box_at(i)
+		plates.append({"name": nm, "node": _pk.get_node_or_null(NodePath(String(_pk.route[i]))),
+			"x0": b.position.x, "x1": b.position.x + b.size.x,
+			"z0": b.position.z, "z1": b.position.z + b.size.z, "top": _pk.top_at(i)})
+
+
 func _collect_schro() -> void:
 	var route := _pk.get_node_or_null("Route")
 	if route == null:
@@ -239,8 +263,25 @@ func _build_hud() -> void:
 	_debt_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.62, 1))
 	_debt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_debt_label.add_theme_constant_override("outline_size", 6)
-	_debt_label.text = "保证金 ¥1000 万　负债 ¥0 万"
+	_debt_label.text = "保证金 ¥%.0f 万　负债 ¥0 万　强平 0 次" % margin
 	_hud_layer.add_child(_debt_label)
+
+	# 第二行：最近一次结算（踩板时 +2.31% / −3.87% 就写在这儿，钱也跟着变）
+	_result_label = Label.new()
+	_result_label.name = "Result"
+	_result_label.anchor_left = 1.0
+	_result_label.anchor_right = 1.0
+	_result_label.offset_left = -620.0
+	_result_label.offset_right = -28.0
+	_result_label.offset_top = 136.0
+	_result_label.offset_bottom = 168.0
+	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_result_label.add_theme_font_size_override("font_size", 19)
+	_result_label.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95, 1))
+	_result_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_result_label.add_theme_constant_override("outline_size", 5)
+	_result_label.text = "最近结算：—"
+	_hud_layer.add_child(_result_label)
 
 	_banner = Label.new()
 	_banner.name = "Banner"
@@ -278,6 +319,7 @@ func _physics_process(delta: float) -> void:
 	_cool = maxf(0.0, _cool - delta)
 	_tick_hazards()
 	_tick_schro()
+	_tick_plates()
 
 
 func _tick_hazards() -> void:
@@ -321,6 +363,60 @@ func _tick_schro() -> void:
 		_resolve(plate, top)
 
 
+## 结算：**每块 K 线第一次踩上去**，按它牌子上那个涨跌幅结算一次保证金。
+##
+## ⚠️ 牌子上写的就是真数：`+2.31%` 就是保证金 ×1.0231，`−3.87%` 就是 ×0.9613。
+##    薛定谔块先坍缩（`_tick_schro` 在上一行跑）再结算，所以「踩上去才知道」这件事
+##    真的会体现在钱上 —— 这是用户问「踩了 −3.87% 为什么保证金不掉」之后补的。
+func _tick_plates() -> void:
+	if _player == null:
+		return
+	var p := _player.global_position
+	for pl in plates:
+		if settled.has(pl["name"]):
+			continue
+		if absf(p.y - float(pl["top"])) > 0.45:
+			continue
+		if p.x < float(pl["x0"]) - 0.25 or p.x > float(pl["x1"]) + 0.25:
+			continue
+		if p.z < float(pl["z0"]) - 0.25 or p.z > float(pl["z1"]) + 0.25:
+			continue
+		_settle(pl)
+
+
+func _settle(pl: Dictionary) -> void:
+	var node := pl["node"] as Node3D
+	if node == null:
+		return
+	var lab := node.get_node_or_null("Pct") as Label3D
+	if lab == null:
+		return
+	var pct := _parse_pct(lab.text)
+	if is_nan(pct):
+		return                       # 薛定谔还没坍缩（牌子还是「?」）→ 下一帧再说
+	settled[pl["name"]] = true
+	var before := margin
+	margin = maxf(0.0, margin * (1.0 + pct / 100.0))
+	settlements += 1
+	_last_settle = "最近结算：%s %+.2f%%　%+.0f 万" % [pl["name"], pct, margin - before]
+	if _result_label != null:
+		_result_label.text = _last_settle
+		_result_label.add_theme_color_override("font_color",
+			Color(1.0, 0.55, 0.55, 1) if pct < 0.0 else Color(0.55, 1.0, 0.65, 1))
+	_update_hud_text()
+	Sfx.play("ui_slider", 0.0)
+	if margin <= 0.0:
+		liquidate("保证金耗尽")
+
+
+## 从牌子文字里取百分比：「+2.31%」→ 2.31；「?」/空 → NAN
+func _parse_pct(t: String) -> float:
+	var v := t.strip_edges().replace("%", "").replace("＋", "+").strip_edges()
+	if v.is_empty() or not (v.is_valid_float() or (v.begins_with("+") and v.substr(1).is_valid_float())):
+		return NAN
+	return v.to_float()
+
+
 ## 薛定谔坍缩：红（阳线）/ 绿（阴线）各一半，涨跌幅随机 1.0 ~ 15.0%。
 func _resolve(plate: Node3D, _top: float) -> void:
 	plate.set_meta("resolved", true)
@@ -340,27 +436,37 @@ func _resolve(plate: Node3D, _top: float) -> void:
 
 # --- 强制平仓 ----------------------------------------------------------------
 
-func liquidate() -> void:
+func liquidate(reason := "强制平仓") -> void:
 	if _cool > 0.0:
 		return
 	_cool = cooldown
 	liquidations += 1
 	var loss := _rng.randi_range(debt_min, debt_max)
 	debt += loss
-	_update_debt()
-	_banner_text("强制平仓！本金归零　负债 +%d 万" % loss, BLUE)
+	margin = 0.0
+	_update_hud_text()
+	_banner_text("%s！本金归零　负债 +%d 万" % [reason, loss], BLUE)
 	_flash_screen()
 	Sfx.play("ui_close", 8.0)
 	if _player != null and _pk != null:
 		_player.global_position = _pk.respawn_point(_pk.respawn_station())
 		_player.velocity = Vector3.ZERO
+	# 0.9 s 之后「重新开仓」：不这么做的话，一次爆仓之后整局就没钱可掉了
+	# （负债留着、越滚越大，那才是这段的主题）
+	var tw := create_tween()
+	tw.tween_interval(0.9)
+	tw.tween_callback(func() -> void:
+		margin = 1000.0
+		_update_hud_text()
+		if _result_label != null:
+			_result_label.text = "重新开仓：保证金 ¥1000 万（负债不清）")
 	liquidated.emit(debt, loss)
 
 
-func _update_debt() -> void:
+func _update_hud_text() -> void:
 	if _debt_label == null:
 		return
-	_debt_label.text = "保证金 ¥0 万　负债 ¥%d 万　强平 %d 次" % [debt, liquidations]
+	_debt_label.text = "保证金 ¥%.0f 万　负债 ¥%d 万　强平 %d 次" % [margin, debt, liquidations]
 
 
 func _banner_text(text: String, col: Color) -> void:

@@ -1169,6 +1169,11 @@ func _test_futures() -> void:
 	var c0 := fut.collapses
 	var pi := _idx(String(plate.name))
 	var pb := _pk.box_at(pi)
+	# 前面的小节可能已经把这块结算过了（一块只结算一次）—— 清掉重来，
+	# 顺便把保证金复位到 1000（强平之后是 0，不归位的话「0 乘任何数还是 0」会假绿）
+	fut.settled.erase(String(plate.name))
+	fut.margin = 1000.0
+	var m_before := fut.margin
 	fut.blue_live = 0.0            # 这一段不要蓝块来捣乱
 	_put(pb.position.x + pb.size.x * 0.5, _pk.top_at(pi) + 0.05, pb.position.z + pb.size.z * 0.5)
 	await _wait(6)
@@ -1182,6 +1187,12 @@ func _test_futures() -> void:
 		% [after.r, after.g, after.b])
 	_check(lab != null and (lab.text.begins_with("+") or lab.text.begins_with("-")),
 		"坍缩后牌子写上真实涨跌幅：「%s」" % (lab.text if lab != null else "（没有牌子）"))
+	# 钱要真的动：牌子上写多少，保证金就按多少结（+2.31% ⇒ ×1.0231，−3.87% ⇒ ×0.9613）
+	var pct := fut._parse_pct(lab.text)
+	var want := m_before * (1.0 + pct / 100.0)
+	_check(not is_nan(pct) and absf(fut.margin - want) < 0.6 and fut.settlements >= 1,
+		"踩上 %s（%s）→ **保证金真的结算**：¥%.0f → ¥%.0f 万（期望 ¥%.0f，结算过 %d 块）"
+		% [plate.name, lab.text, m_before, fut.margin, want, fut.settlements])
 	_check(not (await _schro_resolves_again(fut)), "同一个薛定谔块**只坍缩一次**")
 	fut.blue_live = 3.0
 	_pk.enabled = true
