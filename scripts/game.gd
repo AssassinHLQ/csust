@@ -507,12 +507,14 @@ const ROOM_PROXY_NAME := "RoomProxy"
 const ROOM_SWAP_HYSTERESIS := 0.25
 ## 配色照 `scenes/mesh_hut.tscn` 那间手工小屋的调子（用户说的「你之前做的这样子」）
 const ROOM_WALL_COLOR := Color(0.86, 0.83, 0.76)
-## 门板：淡黄色。门洞是**全高**的（切墙只在 x 上切），所以门板也是一整块板；
-## **没有碰撞**，人照常穿过去 —— 只是从门外看，屋里不再一览无余。
+## 门板：淡黄色。门洞可能是整面全高切出来的（只剩左右两段墙），所以门板也是
+## 一整块板；**没有碰撞**，人照常穿过去 —— 只是从门外看，屋里不再一览无余。
 const ROOM_DOOR_COLOR := Color(0.96, 0.90, 0.62)
 ## 门板比洞口每边多出多少（盖住软边，别在缝里漏光）
 const ROOM_DOOR_OVERLAP := 0.12
-const ROOM_DOOR_OFFSET := 0.04
+## 门洞扫描：沿墙心线每 5 cm 打点；比 0.8 m 窄的空段不当门
+const ROOM_DOOR_SCAN_STEP := 0.05
+const ROOM_DOOR_MIN_WIDTH := 0.80
 ## 门板高度（到平台面算起）。门洞本身是全高的，上面那截用墙材质补成「门楣」
 const ROOM_DOOR_HEIGHT := 2.6
 const ROOM_ROOF_COLOR := Color(0.27, 0.28, 0.30)
@@ -541,6 +543,7 @@ func _build_room_proxy() -> void:
 	var lo := Vector3(INF, INF, INF)
 	var hi := Vector3(-INF, -INF, -INF)
 	var walls := 0
+	var wall_boxes: Array[AABB] = []
 	for c in body.get_children():
 		var cs := c as CollisionShape3D
 		if cs == null or not (cs.shape is BoxShape3D):
@@ -558,6 +561,7 @@ func _build_room_proxy() -> void:
 		var b: AABB = cs.global_transform * AABB(-size * 0.5, size)
 		lo = lo.min(b.position)
 		hi = hi.max(b.position + b.size)
+		wall_boxes.append(b)
 		walls += 1
 	if walls == 0:
 		proxy.queue_free()
@@ -576,7 +580,7 @@ func _build_room_proxy() -> void:
 	roof.global_position = Vector3((lo.x + hi.x) * 0.5,
 		hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
 
-	_build_room_door(proxy, AABB(lo, hi - lo), wall_mat)
+	_build_room_door(proxy, wall_boxes, AABB(lo, hi - lo), wall_mat)
 	_room_proxy = proxy
 	_room_box = AABB(lo, hi - lo)
 	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [
@@ -589,89 +593,120 @@ func _build_room_proxy() -> void:
 ## 用户原话：「这里可以做个淡黄色的门吗，把门填满，不要漏出破绽，当然这个门没有碰撞
 ## 正常穿过，只是视觉上遮住房内」。
 ##
+## ⚠️ **门洞的位置是扫出来的，不是拿 `box_door_*` 猜的。**
+## 第一版照 `box_door_side`（"z-"）建，门板就贴在了 z− 那面墙上 —— 可那面被
+## `WallZNegA` 一整条封死，真正「没有碰撞箱」的缺口在 **x+ 面**：`WallXPos` 的
+## 下沿 `z = −1.65` 与 `WallZNegB` 的上沿 `z = −3.76` 之间那 2.11 m。
+## 用户一眼看穿：「做错地方了，是放在没有碰撞箱的地方不是放在墙那里」。
+##
 ## 三个要点：
-##  1. **比洞口每边大 0.12 m**：门洞是从碰撞盒切出来的，而泼溅墙有软边、代理墙也有
+##  1. **比洞口每边大 0.12 m**：门洞是碰撞盒切出来的，而泼溅墙有软边、代理墙也有
 ##     接缝，严丝合缝的板一定会在边上漏出屋里的黑；压过墙 0.12 m 就看不出来了。
-##  2. **往屋外偏 4 cm**：免得和代理墙的盒子共面打架（z-fighting 会闪）。
+##  2. **门扇缩在墙厚中间**（离外表面 0.15 m），四周用一圈比墙厚的门框收口 ——
+##     门扇四条边全藏在门洞里，从门外看不到「一块飘在墙面上的黄板子」。
 ##  3. **无碰撞**：它只是个 `MeshInstance3D`，挂在 `RoomProxy` 下面 —— 于是
 ##     「走出门 → 代理网格亮起来」时门板一起出现、「走回屋里 → 代理网格隐藏」时
 ##     门板一起消失，不用单独写开关。
-func _build_room_door(proxy: Node3D, room: AABB, wall_mat: Material) -> void:
-	var room609 := get_node_or_null("Room609")
-	if room609 == null or room.size.length() <= 0.001:
-		return
-	var side := String(room609.get("box_door_side"))
-	var width := float(room609.get("box_door_width"))
-	var center := float(room609.get("box_door_center"))
-	if side == "none" or side == "" or width <= 0.05:
-		return
+
+
+## 门洞 = 墙环上**没有碰撞盒**的那一段。
+##
+## 做法：沿四面墙的**墙心线**（离外表面 0.15 m）每 5 cm 打一个点，落在任何一个
+## 碰撞盒里就算「有墙」；取最长的一段「连续没墙、且两端都有墙」的区间。
+## 只认两端都有墙的 —— 房间四角的开口（墙本来就到边）不算门。
+func _room_doorway(walls: Array[AABB], room: AABB) -> Dictionary:
+	const HALF_WALL := 0.15
+	const EDGE := 0.20
 	var lo := room.position
 	var hi := room.position + room.size
+	var faces := [
+		{"side": "x-", "axis": 0, "plane": lo.x + HALF_WALL, "outer": lo.x},
+		{"side": "x+", "axis": 0, "plane": hi.x - HALF_WALL, "outer": hi.x},
+		{"side": "z-", "axis": 2, "plane": lo.z + HALF_WALL, "outer": lo.z},
+		{"side": "z+", "axis": 2, "plane": hi.z - HALF_WALL, "outer": hi.z},
+	]
+	var best := {}
+	var best_w := 0.0
+	for f in faces:
+		var axis: int = int(f["axis"])
+		var plane: float = float(f["plane"])
+		var t_lo: float = (lo.z if axis == 0 else lo.x) + EDGE
+		var t_hi: float = (hi.z if axis == 0 else hi.x) - EDGE
+		var n := int(round((t_hi - t_lo) / ROOM_DOOR_SCAN_STEP)) + 1
+		var hit := PackedByteArray()
+		hit.resize(n)
+		for i in n:
+			var t := t_lo + float(i) * ROOM_DOOR_SCAN_STEP
+			var p := Vector3(plane, 1.6, t) if axis == 0 else Vector3(t, 1.6, plane)
+			for b in walls:
+				if b.has_point(p):
+					hit[i] = 1
+					break
+		var i2 := 0
+		while i2 < n:
+			if hit[i2] != 0:
+				i2 += 1
+				continue
+			var a := i2
+			while i2 < n and hit[i2] == 0:
+				i2 += 1
+			if a == 0 or i2 >= n:
+				continue
+			var w := float(i2 - a) * ROOM_DOOR_SCAN_STEP
+			if w > best_w:
+				best_w = w
+				best = {
+					"side": String(f["side"]), "axis": axis, "plane": plane,
+					"outer": float(f["outer"]),
+					"lo": t_lo + float(a) * ROOM_DOOR_SCAN_STEP,
+					"hi": t_lo + float(i2) * ROOM_DOOR_SCAN_STEP,
+					"width": w,
+				}
+	return best if best_w >= ROOM_DOOR_MIN_WIDTH else {}
+
+
+func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: Material) -> void:
+	var door := _room_doorway(walls, room)
+	if door.is_empty():
+		print("[Game] 609 代理墙环上没有找到「没有碰撞」的缺口 —— 不做门板")
+		return
+	var axis := int(door["axis"])            # 0 = 洞开在 x± 面（法向 x），2 = z± 面
+	var plane := float(door["plane"])        # 墙心线的法向坐标
+	var outer := float(door["outer"])        # 墙外表面的法向坐标
+	var t_lo := float(door["lo"])
+	var t_hi := float(door["hi"])
+	var center := (t_lo + t_hi) * 0.5
+	var gap := t_hi - t_lo
+	# 「往屋外」是法向的哪一边：x+ / z+ 是 +1，x− / z− 是 −1
+	var out_sign := 1.0 if outer > plane else -1.0
 	# 人在平台面上走（y = 0），所以门从**平台面**起，而不是从埋在地下的碰撞盒底部起
-	var floor_y := maxf(lo.y, 0.0)
+	var floor_y := maxf(room.position.y, 0.0)
+	var top_y := room.position.y + room.size.y
 	var door_top := floor_y + ROOM_DOOR_HEIGHT
-	var w := width + ROOM_DOOR_OVERLAP * 2.0
+	var w := gap + ROOM_DOOR_OVERLAP * 2.0
 	var thick := 0.08
-	var axis_z := side.begins_with("z")
-	# 门洞是**全高**切出来的，但门本身只到 2.6 m：上面那截拿**墙的材质**填平，
-	# 看上去就是「门 + 门楣」，而且一点缝都不漏（比一整条 8.5 m 的黄漆条自然得多）
-	var planes: Array[Dictionary] = []
-	# ① 门板（淡黄 + 一点自发光：朝外那一面常常正好背光，纯 PBR 会黑成一坨）
-	planes.append({"name": "DoorPanel", "color": ROOM_DOOR_COLOR,
-		"y0": floor_y, "y1": door_top, "unshaded": false, "glow": true})
-	# ② 门楣：门顶到墙顶，用墙的材质（和左右墙面天然同色）
-	if door_top < hi.y:
-		planes.append({"name": "DoorLintel", "color": ROOM_WALL_COLOR,
-			"y0": door_top, "y1": hi.y + ROOM_DOOR_OVERLAP, "unshaded": false})
-	for pl in planes:
-		var h: float = float(pl["y1"]) - float(pl["y0"])
-		if h <= 0.01:
-			continue
-		var size := Vector3(w, h, thick) if axis_z else Vector3(thick, h, w)
-		var pos := Vector3.ZERO
-		match side:
-			"z-":
-				pos = Vector3(center, (float(pl["y0"]) + float(pl["y1"])) * 0.5, lo.z - ROOM_DOOR_OFFSET)
-			"z+":
-				pos = Vector3(center, (float(pl["y0"]) + float(pl["y1"])) * 0.5, hi.z + ROOM_DOOR_OFFSET)
-			"x-":
-				pos = Vector3(lo.x - ROOM_DOOR_OFFSET, (float(pl["y0"]) + float(pl["y1"])) * 0.5, center)
-			_:
-				pos = Vector3(hi.x + ROOM_DOOR_OFFSET, (float(pl["y0"]) + float(pl["y1"])) * 0.5, center)
-		var mi := MeshInstance3D.new()
-		mi.name = String(pl["name"])
-		var m := BoxMesh.new()
-		m.size = size
-		mi.mesh = m
-		var mat: Material = wall_mat
-		if pl.has("glow"):
-			mat = _door_mat(pl["color"], false, 0.45)
-		elif bool(pl["unshaded"]):
-			mat = _door_mat(pl["color"], true, 0.0)
-		mi.material_override = mat
-		proxy.add_child(mi)
-		mi.global_position = pos
-	# 门框：比门板大 10 cm、深一档，露出一圈边
-	var fsize := (Vector3(w + 0.10, ROOM_DOOR_HEIGHT + 0.10, thick) if axis_z
-		else Vector3(thick, ROOM_DOOR_HEIGHT + 0.10, w + 0.10))
-	var fpos := Vector3.ZERO
-	match side:
-		"z-":
-			fpos = Vector3(center, floor_y + ROOM_DOOR_HEIGHT * 0.5, lo.z - ROOM_DOOR_OFFSET - 0.005)
-		"z+":
-			fpos = Vector3(center, floor_y + ROOM_DOOR_HEIGHT * 0.5, hi.z + ROOM_DOOR_OFFSET + 0.005)
-		"x-":
-			fpos = Vector3(lo.x - ROOM_DOOR_OFFSET - 0.005, floor_y + ROOM_DOOR_HEIGHT * 0.5, center)
-		_:
-			fpos = Vector3(hi.x + ROOM_DOOR_OFFSET + 0.005, floor_y + ROOM_DOOR_HEIGHT * 0.5, center)
-	var frame := MeshInstance3D.new()
-	frame.name = "DoorFrame"
-	var fm := BoxMesh.new()
-	fm.size = fsize
-	frame.mesh = fm
-	frame.material_override = _door_mat(ROOM_DOOR_COLOR.darkened(0.35), true, 0.0)
-	proxy.add_child(frame)
-	frame.global_position = fpos
+	# 门洞是全高切出来的，但门只做到 2.6 m：上面那截拿**墙的材质**填平，
+	# 看上去就是「门 + 门楣」，一点缝都不漏（比一整条 5.4 m 的黄漆自然得多）
+	_put_door_box(proxy, "DoorPanel", axis, plane, floor_y, door_top, center, w, thick,
+		_door_mat(ROOM_DOOR_COLOR, false, 0.45))
+	if door_top < top_y:
+		# 门楣比门扇**靠外**，只往里缩 4 cm：缩得太深（11 cm）会在门框上方留一道
+		# 一直拉到屋顶的暗缝，斜看像墙没接上。也不能齐平 —— 齐平会和代理墙面
+		# 共面打架（z-fighting），而且超过墙顶会露出屋顶轮廓外一小截。
+		_put_door_box(proxy, "DoorLintel", axis,
+			outer - out_sign * (0.04 + thick * 0.5), door_top,
+			top_y + ROOM_DOOR_OVERLAP, center, w, thick, wall_mat)
+	# 门框：四根比墙厚的条，贴在墙外表面上收口（门扇缩在墙里，四条边全靠它遮住）
+	var bar := 0.14
+	var bar_d := 0.12
+	var n_face := outer
+	var frame_mat := _door_mat(ROOM_DOOR_COLOR.darkened(0.35), false, 0.15)
+	_put_door_box(proxy, "DoorFrameL", axis, n_face, floor_y - 0.02, door_top + 0.07,
+		t_lo, bar, bar_d, frame_mat)
+	_put_door_box(proxy, "DoorFrameR", axis, n_face, floor_y - 0.02, door_top + 0.07,
+		t_hi, bar, bar_d, frame_mat)
+	_put_door_box(proxy, "DoorFrameT", axis, n_face, door_top, door_top + bar,
+		center, gap + bar + 0.02, bar_d, frame_mat)
 	# 把手：一颗小圆柱，让这块黄板一眼看得出是「门」而不是刷了漆的墙
 	var knob := MeshInstance3D.new()
 	knob.name = "DoorKnob"
@@ -687,24 +722,38 @@ func _build_room_door(proxy: Node3D, room: AABB, wall_mat: Material) -> void:
 	kmat.roughness = 0.45
 	knob.material_override = kmat
 	proxy.add_child(knob)
-	var kpos := Vector3.ZERO
-	var out_off := ROOM_DOOR_OFFSET + thick * 0.5 + 0.06
-	match side:
-		"z-":
-			kpos = Vector3(center + w * 0.30, floor_y + 1.05, lo.z - out_off)
-		"z+":
-			kpos = Vector3(center + w * 0.30, floor_y + 1.05, hi.z + out_off)
-		"x-":
-			kpos = Vector3(lo.x - out_off, floor_y + 1.05, center + w * 0.30)
-		_:
-			kpos = Vector3(hi.x + out_off, floor_y + 1.05, center + w * 0.30)
-	knob.global_position = kpos
-	knob.global_rotation = Vector3(PI * 0.5, 0, 0) if axis_z else Vector3(0, 0, PI * 0.5)
-	print("[Game] 609 门板：%s 面 %.2f × %.2f m（门楣补齐到墙顶，比洞口每边多 %.2f m，无碰撞）"
-		% [side, width, ROOM_DOOR_HEIGHT, ROOM_DOOR_OVERLAP])
+	knob.global_position = _door_point(axis, outer + out_sign * 0.10, floor_y + 1.05,
+		center + w * 0.30)
+	knob.global_rotation = Vector3(0, 0, PI * 0.5) if axis == 0 else Vector3(PI * 0.5, 0, 0)
+	print("[Game] 609 门洞（没有碰撞盒的那一段）：%s 面 %.2f ~ %.2f，宽 %.2f m，中心 %.2f" % [
+		String(door["side"]), t_lo, t_hi, gap, center])
+	print("[Game] 609 门板：%.2f × %.2f m（门楣补齐到墙顶，比洞口每边多 %.2f m，无碰撞）"
+		% [w, ROOM_DOOR_HEIGHT, ROOM_DOOR_OVERLAP])
 
 
-## 门板 / 门框的材质：**不受光**（门朝外那一面背光，PBR 会黑成一团）
+## 门板 / 门框的通用放置。`axis` = 0 时洞在 x± 面（法向 x、沿墙 z），= 2 时反过来。
+func _put_door_box(proxy: Node3D, nm: String, axis: int, n: float, y0: float, y1: float,
+		t: float, w: float, thick: float, mat: Material) -> void:
+	var h := y1 - y0
+	if h <= 0.01:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	var m := BoxMesh.new()
+	m.size = Vector3(thick, h, w) if axis == 0 else Vector3(w, h, thick)
+	mi.mesh = m
+	mi.material_override = mat
+	proxy.add_child(mi)
+	mi.global_position = _door_point(axis, n, (y0 + y1) * 0.5, t)
+
+
+## 门板坐标系 → 世界坐标：`axis` = 0 时（法向 = x，沿墙 = z），= 2 时（法向 = z，沿墙 = x）
+func _door_point(axis: int, n: float, y: float, t: float) -> Vector3:
+	return Vector3(n, y, t) if axis == 0 else Vector3(t, y, n)
+
+
+## 门板 / 门框的材质。`unshaded` = 完全不吃光（会变成一块纯色贴纸），
+## 一般不要开；背光那一面靠 `glow`（自发光）提亮就够了 —— 纯 PBR 在逆光时是黑的。
 func _door_mat(col: Color, unshaded: bool, glow: float) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = col

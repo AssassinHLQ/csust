@@ -1,11 +1,14 @@
 extends SceneTree
-## 探针：站在画室 609 门外看那块**淡黄色门板**（护墙有没有漏、颜色对不对）。
+## 探针：站在画室 609 门外看那块**淡黄色门板**（位置对不对、有没有漏、颜色对不对）。
 ##
 ## 用法：
 ##   godot --path <工程> --script res://scripts/_probe_door_shot.gd
 ##
 ## ⚠️ 不能加 `--splat=off`：门板是跟着泼溅一起建的，关掉就什么都没有。
 ## 输出：…/_arisu_captures/_door/*.png
+##
+## 门洞在 **x+ 面**（z −3.76 ~ −1.65 那截没有碰撞箱），不是 z− 那面墙 ——
+## 第一版按 `box_door_side`（"z-"）建，贴在了实心墙上（用户：「做错地方了」）。
 
 const OUT_SUB := "_door"
 
@@ -28,17 +31,19 @@ func _run() -> void:
 	var player := game.get_node_or_null("Player") as Player
 	if player != null:
 		player.set_process_input(false)
-	for n in ["HUD", "SettingsMenu", "DialogueBox", "Parkour/ParkourHUD"]:
-		var c := game.get_node_or_null(n) as CanvasLayer
-		if c != null:
-			c.visible = false
+	for n in ["HUD", "SettingsMenu", "DialogueBox", "Parkour/ParkourHUD",
+			"Parkour/Futures/FuturesHUD"]:
+		var c := game.get_node_or_null(n)
+		if c is CanvasLayer:
+			(c as CanvasLayer).visible = false
 
 	var proxy := game.get_node_or_null("RoomProxy")
-	var panel := proxy.get_node_or_null("DoorPanel") if proxy != null else null
+	var panel := proxy.get_node_or_null("DoorPanel") as MeshInstance3D if proxy != null else null
 	var room := game.get_node_or_null("Room609")
-	var box := (room.call("content_world_aabb") as AABB) if room != null else AABB()
-	print("[door] 代理门板 = %s；房间盒 pos %s size %s" % [
-		str(panel != null), str(box.position.snappedf(0.01)), str(box.size.snappedf(0.01))])
+	print("[door] 代理 = %s；门板 = %s"
+		% [str(proxy != null), "没有" if panel == null else str(panel.global_position.snappedf(0.01))])
+	if room != null:
+		print("[door] 泼溅内容盒 %s" % str((room.call("content_world_aabb") as AABB).size.snappedf(0.01)))
 
 	_out = ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join(OUT_SUB)
@@ -50,23 +55,25 @@ func _run() -> void:
 	root.add_child(_cam)
 	_cam.make_current()
 
-	# 门在 z− 面（x ±0.8）。**人必须先站到门外** —— 门内外切换是按玩家位置判的，
-	# 只挪相机的话泼溅还亮着，看到的就是一团糊的点云（第一版就栽在这儿）。
+	# **人必须先站到门外** —— 门内外切换是按玩家位置判的，只挪相机的话泼溅还亮着，
+	# 看到的就是一团糊的点云（第一版就栽在这儿）。
 	if player != null:
-		player.global_position = Vector3(0, player.global_position.y, -9.6)
+		player.global_position = Vector3(7.2, 0.4, -2.7)
 		player.velocity = Vector3.ZERO
 		for _i in 30:
 			await process_frame
-	await _shot("1_front", Vector3(0.0, 2.0, -14.5), Vector3(0.0, 2.6, -6.78))
-	await _shot("2_close", Vector3(0.0, 1.6, -9.6), Vector3(0.0, 1.6, -6.78))
+	await _shot("1_front", Vector3(11.0, 2.2, -2.7), Vector3(4.8, 1.7, -2.7))
+	await _shot("2_close", Vector3(6.4, 1.7, -2.7), Vector3(4.8, 1.5, -2.7))
 	# 斜着看：检查门板和代理墙的接缝（漏不漏边）
-	await _shot("3_angle", Vector3(4.5, 2.6, -12.5), Vector3(0.0, 2.2, -6.78))
+	await _shot("3_angle", Vector3(9.0, 3.6, 2.8), Vector3(4.7, 1.8, -2.7))
+	# 顺便看看屋外这一侧的全貌（门是不是开在「该开的那面墙」上）
+	await _shot("4_wide", Vector3(14.0, 6.0, 6.0), Vector3(0.0, 1.5, -2.0))
 	# 回屋里：代理网格隐藏、门板跟着消失，看到的是真的门洞 + 泼溅
 	if player != null:
-		player.global_position = Vector3(0, player.global_position.y, -4.6)
+		player.global_position = Vector3(2.4, 0.4, -2.7)
 		for _i in 30:
 			await process_frame
-	await _shot("4_inside", Vector3(0.0, 1.9, -4.6), Vector3(0.0, 1.9, -6.78))
+	await _shot("5_inside", Vector3(1.0, 1.9, -2.7), Vector3(4.7, 1.7, -2.7))
 	print("\n出图目录：%s" % _out)
 	quit(0)
 

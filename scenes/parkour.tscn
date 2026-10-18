@@ -1792,38 +1792,4 @@ text = "信号塔
 font_size = 96
 outline_size = 16
 
-[node name="ParkourHUD" type="CanvasLayer" parent="." unique_id=1287714191]
-
-[node name="Timer" type="Label" parent="ParkourHUD"]
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -620.0
-offset_top = 20.0
-offset_right = -28.0
-offset_bottom = 66.0
-grow_horizontal = 0
-horizontal_alignment = 2
-theme_override_colors/font_color = Color(1, 0.96, 0.85, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 30
-text = "TIME 0.00    BEST --.--"
-
-[node name="Seg" type="Label" parent="ParkourHUD"]
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -620.0
-offset_top = 62.0
-offset_right = -28.0
-offset_bottom = 94.0
-grow_horizontal = 0
-horizontal_alignment = 2
-theme_override_colors/font_color = Color(0.85, 0.92, 1, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 22
-text = "SEG 1/7   --"
-
 [connection signal="body_entered" from="Island/Props/ReturnPad/Trigger" to="." method="_on_return_pad_entered"]

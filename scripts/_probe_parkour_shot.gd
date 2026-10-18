@@ -46,10 +46,10 @@ func _run() -> void:
 
 	# 图里不要 UI。⚠️ 必须是 `CanvasLayer`（HUD/设置/对话框都是 CanvasLayer，
 	#    不是 CanvasItem，用 `as CanvasItem` 会拿到 null 而静默失效）。
-	#    ⚠️ 跑酷自带的计时 HUD 挂在 **`Parkour/ParkourHUD`**（跑酷场景的子节点，
-	#       而且已经被挪到右上角），不在 game 根下 —— 写成
-	#       `game.get_node_or_null("ParkourHUD")` 会**静默漏掉**，图上带一大块计时文字。
-	for n in ["HUD", "SettingsMenu", "DialogueBox", "Parkour/ParkourHUD"]:
+	#    `Parkour/ParkourHUD` 是 2026-10-18 删掉的那套计时 HUD（用户嫌挡视线），
+	#    这里留着只是**防御**：万一以后又加回来，出图不会突然多一块文字。
+	for n in ["HUD", "SettingsMenu", "DialogueBox", "Parkour/ParkourHUD",
+			"Parkour/Futures/FuturesHUD"]:
 		var c := game.get_node_or_null(n) as CanvasLayer
 		if c != null:
 			c.visible = false

@@ -251,46 +251,47 @@ func _run() -> void:
 			continue
 		var bs := cs.shape as BoxShape3D
 		boxes.append(cs.global_transform * AABB(-bs.size * 0.5, bs.size))
-	print("  碰撞盒 %d 个（x± 各 1、z+ 1、z− 被门切成 2 → 共 5）" % boxes.size())
+	print("  碰撞盒 %d 个（x− / z− / z+ 各 1、x+ 被门切成 2 → 共 5）" % boxes.size())
 	_check(boxes.size() == 5, "5 个盒")
-	var rlo := aabb.position
-	var rhi := aabb.position + aabb.size
-	# z− 那一面（朝靶场、开了门）的两个盒子。
-	# ⚠️ 判据不能只看 position.z —— x± 两面墙的 z 范围也是整个房间深度，
-	# 它们的 position.z 同样等于 rlo.z，只看位置会数出 4 个。要看**厚度方向**。
+	# ⚠️ 房间矩形要从**碰撞盒**量，不能拿 `content_world_aabb()`：那是 23.9 × 27.2 的
+	#    扫描内容盒（把屋外的东西也框进来了），房间其实只有 10.7 × 20.6 ——
+	#    拿内容盒算墙的位置会整整偏出去 2.8 m，于是「顶墙」「出门」两条全误判成红。
+	var rlo := Vector3(INF, INF, INF)
+	var rhi := Vector3(-INF, -INF, -INF)
+	for b in boxes:
+		rlo = rlo.min(b.position)
+		rhi = rhi.max(b.position + b.size)
+	var inner := AABB(rlo, rhi - rlo)
+	print("  房间矩形（5 个盒的并集）pos %s size %s" % [
+		str(rlo.snappedf(0.01)), str(inner.size.snappedf(0.01))])
 	var t_wall := room.box_wall_thickness
-	var segs: Array[AABB] = []
+	# 门洞 = 墙环上**没有碰撞**的那一段。实测在 **x+ 面**：x+ 那截返墙
+	# （WallZNegB）到 z −3.76 为止，x+ 主墙（WallXPos）从 z −1.65 起，
+	# 中间那 2.11 m 就是门。
+	var door := _door_gap(boxes, inner)
+	print("  门洞：%s" % str(door))
+	_check(not door.is_empty(), "墙环上找得到一段没有碰撞的门洞")
+	if not door.is_empty():
+		_check(String(door["side"]) == "x+", "门洞在 x+ 面（实测 %s）" % String(door["side"]))
+		_check(absf(float(door["width"]) - 2.11) < 0.12,
+			"门洞宽 %.2f m（手摆盒之间是 2.11 m）" % float(door["width"]))
+		_check(absf(float(door["center"]) - (-2.71)) < 0.12,
+			"门洞中心 z = %.2f（手摆盒是 −2.71）" % float(door["center"]))
+	# z− 那面（朝黑板）必须是**一整条**：门不在这儿。
+	# `box_door_side = "z-"` 是自动生成碰撞时代的旧值，手摆以后早就不对了。
+	var sealed := 0
 	for b in boxes:
 		if absf(b.position.z - rlo.z) < 0.05 and absf(b.size.z - t_wall) < 0.05:
-			segs.append(b)
-	_check(segs.size() == 2, "门那一面（z−）被切成 2 段（实测 %d）" % segs.size())
-	if segs.size() == 2:
-		var s0 := segs[0]
-		var s1 := segs[1]
-		if s0.position.x > s1.position.x:
-			var tmp := s0
-			s0 = s1
-			s1 = tmp
-		var gap_lo := s0.position.x + s0.size.x
-		var gap_hi := s1.position.x
-		print("  门洞 x %.2f ~ %.2f（宽 %.2f m，中心 %.2f）" % [
-			gap_lo, gap_hi, gap_hi - gap_lo, (gap_lo + gap_hi) * 0.5])
-		_check(absf((gap_hi - gap_lo) - room.box_door_width) < 0.06,
-			"门洞宽 %.2f m（配的是 %.2f）" % [gap_hi - gap_lo, room.box_door_width])
-		_check(absf((gap_lo + gap_hi) * 0.5 - room.box_door_center) < 0.06,
-			"门洞中心在 %.2f" % ((gap_lo + gap_hi) * 0.5))
+			sealed += 1
+	_check(sealed == 1, "z− 那面墙是一整条、没有开洞（%d 段）" % sealed)
 
-	# 物理验证：① 朝 x+ 的墙跑，应该被挡在墙内面；② 朝 z− 的门跑，应该走出去
-	# ⚠️ 都带 sprint 并且**跑到条件满足为止**，不要靠固定时长 —— 走路速度下
-	#    3 s 只走 6 m，正好停在门口，会被误判成「门被堵住了」（本喵踩过）。
+	# 物理验证：① 朝 x+ 的墙跑，应该被挡在墙内面；② 从 x+ 的门洞跑出去
 	player.set_process_input(false)
-	var wall_inner := rhi.x - room.box_wall_thickness
+	var wall_inner := rhi.x - t_wall
 	_pose(player, Vector3(0, 0.05, room.anchor_world.z), 0.0, -0.04)
 	await _wait(20)
 	Input.action_press("move_right")
 	Input.action_press("sprint")
-	# ⚠️ 跑到顶住为止，别用固定时长：房间尺寸随 world_scale 变，
-	#    ×5 时墙在 13 m 外，写死 3 秒会跑不到（然后被误判成「穿墙了」）。
 	var wall_goal := wall_inner - 0.45
 	var t_reach := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t_reach < 8000 and player.global_position.x < wall_goal:
@@ -305,21 +306,25 @@ func _run() -> void:
 	_check(px < wall_inner + 0.05, "被 x+ 墙挡住，没穿过去（x = %.2f）" % px)
 	_check(player.global_position.y > -1.0, "人还站在地板上（y = %.2f）" % player.global_position.y)
 
-	_pose(player, Vector3(0, 0.05, room.anchor_world.z), 0.0, -0.04)
+	# ② 站到门洞正中间朝 +X 跑：门板没有碰撞，应该直接穿过去
+	var door_z := -2.71
+	if not door.is_empty():
+		door_z = float(door["center"])
+	_pose(player, Vector3(0, 0.05, door_z), 0.0, -0.04)
 	await _wait(20)
-	Input.action_press("move_forward")
+	Input.action_press("move_right")
 	Input.action_press("sprint")
-	var door_goal := rlo.z - 0.5
+	var door_goal := rhi.x + 0.60
 	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < 6000 and player.global_position.z >= door_goal:
+	while Time.get_ticks_msec() - t0 < 6000 and player.global_position.x < door_goal:
 		await process_frame
 	Input.action_release("sprint")
-	Input.action_release("move_forward")
+	Input.action_release("move_right")
 	await _wait(10)
-	var pz := player.global_position.z
-	print("  朝 −Z 跑到 z = %.2f（用了 %d ms；门在 z = %.2f，目标 < %.2f）" % [
-		pz, Time.get_ticks_msec() - t0, rlo.z, door_goal])
-	_check(pz < door_goal, "从门洞走出了房间（z = %.2f）" % pz)
+	var px2 := player.global_position.x
+	print("  从门洞（z = %.2f）朝 +X 跑到 x = %.2f（用了 %d ms；墙外面在 x = %.2f）" % [
+		door_z, px2, Time.get_ticks_msec() - t0, rhi.x])
+	_check(px2 > door_goal, "从门洞走出了房间（x = %.2f）" % px2)
 	_check(player.global_position.y > -1.0 and absf(player.global_position.y) < 3.0,
 		"走出去时还在地面高度（y = %.2f）" % player.global_position.y)
 
@@ -351,6 +356,10 @@ func _run() -> void:
 	print("\n========== 7. 玩家 Arisu 的朝向（用户报告的问题）==========")
 	_check(player != null, "场景里有 Player")
 	if player != null:
+		# ⚠️ 先自己摆一个**静止**姿态再用：上一节（§5）最后是横着（+X）冲刺出门的，
+		#    人还在按「朝移动方向」记 `_facing_yaw = π/2`，而 `_yaw` 停在 0 ——
+		#    直接量就会把「走路时的朝向」当成「待机时的朝向」判红（本喵踩过一次）。
+		_pose(player, Vector3(0, 0.05, room.anchor_world.z), 0.0, -0.04)
 		await _wait(30)
 		var real_fwd := -player.cam.global_transform.basis.z
 		real_fwd.y = 0.0
@@ -867,6 +876,62 @@ func _mouth_forward(model_root: Node, skel: Skeleton3D) -> Vector3:
 	var d := (sum / float(n)) - base
 	d.y = 0.0
 	return d.normalized() if d.length() > 0.0001 else Vector3.ZERO
+
+
+## 墙环上**没有碰撞盒**的那一段（= 门洞）。
+##
+## 和 `game.gd::_room_doorway()` 同一套量法（沿墙心线每 5 cm 打点），但这里是
+## **独立实现** —— 验证器不能直接调被测代码，否则它错了一起错，等于没验。
+func _door_gap(boxes: Array[AABB], room: AABB) -> Dictionary:
+	const STEP := 0.05
+	const MIN_W := 0.80
+	var best := {}
+	var best_w := 0.0
+	var sides := PackedStringArray(["x-", "x+", "z-", "z+"])
+	for side in sides:
+		var axis := 0 if side.begins_with("x") else 2
+		var plus := side.ends_with("+")
+		var outer_n := 0.0
+		var t_lo := 0.0
+		var t_hi := 0.0
+		if axis == 0:
+			outer_n = room.position.x + room.size.x if plus else room.position.x
+			t_lo = room.position.z + 0.20
+			t_hi = room.position.z + room.size.z - 0.20
+		else:
+			outer_n = room.position.z + room.size.z if plus else room.position.z
+			t_lo = room.position.x + 0.20
+			t_hi = room.position.x + room.size.x - 0.20
+		var plane := outer_n + (-0.15 if plus else 0.15)
+		var n := int(round((t_hi - t_lo) / STEP)) + 1
+		var run := 0
+		var run_start := -1
+		for i in n:
+			var t := t_lo + float(i) * STEP
+			var p := Vector3(plane, 1.6, t) if axis == 0 else Vector3(t, 1.6, plane)
+			var hit := false
+			for b in boxes:
+				if b.has_point(p):
+					hit = true
+					break
+			if hit:
+				# 只认**夹在两段墙中间**的空段：贴着房间角落的开口不算门
+				if run > 0 and run_start > 0:
+					var w := float(run) * STEP
+					if w > best_w:
+						best_w = w
+						best = {"side": side, "width": w,
+							"center": t_lo + (float(run_start) + float(run) * 0.5) * STEP,
+							"lo": t_lo + float(run_start) * STEP,
+							"hi": t_lo + float(run_start + run) * STEP}
+				run = 0
+				run_start = -1
+			else:
+				if run == 0:
+					run_start = i
+				run += 1
+	return best if best_w >= MIN_W else {}
+
 
 
 # --- 工具 -------------------------------------------------------------------

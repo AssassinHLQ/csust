@@ -248,24 +248,15 @@ func _test_structure(game: Node) -> void:
 	_check(st["lights"] <= 2 and shadowed == 0,
 		"整条路线只有 %d 盏灯、且全部关阴影（省电：地标用自发光材质，不占灯）"
 		% st["lights"])
-	_check(st["labels"] >= 6 and _pk.get_node_or_null("ParkourHUD/Timer") != null
-		and _pk.get_node_or_null("ParkourHUD/Seg") != null,
-		"指路牌 %d 块 + 计时 HUD 两个 Label 都在" % st["labels"])
-	# ⚠️ 计时 HUD **不许压在玩家血量面板上**（本喵验收时抓到的）：
-	#    左上角 (24,20)–(368,112) 是 `hud.gd` 的 `HP_PANEL_POS` / `HP_PANEL_SIZE`，
-	#    而 `Parkour` 在 `game.tscn` 里排在 `HUD` **前面** —— 两个 CanvasLayer
-	#    同为 layer 1 时按树序画，HUD 会盖在上面、计时文字被整个挡掉。
-	#    两个都是挂在 `game.tscn` 下的 CanvasLayer，`get_global_rect()` 同一套画布坐标，
-	#    所以可以直接比矩形。探针：`_probe_parkour_hud.gd`（还会出一张真机图）。
-	var hp := Rect2(Vector2(24.0, 20.0), Vector2(344.0, 92.0))
-	for hud_name in ["ParkourHUD/Timer", "ParkourHUD/Seg"]:
-		var lb := _pk.get_node_or_null(hud_name) as Label
-		if lb == null:
-			continue
-		var r := lb.get_global_rect()
-		_check(not r.intersects(hp) and r.position.x > 800.0,
-			"%s 在右上角、与血量面板不相交（x = %.0f，重叠 %.0f px²）"
-			% [hud_name, r.position.x, r.intersection(hp).get_area()])
+	_check(st["labels"] >= 6, "指路牌 %d 块都在" % st["labels"])
+	# 2026-10-18 用户：「还有这些 ui 太挡视线了不需要」→ 计时 HUD（原 `ParkourHUD`
+	# 里那两个 Label）整个删掉了，所以这里反过来断言**它不在了** ——
+	# 免得以后谁又把它加回来，在屏幕顶上挡视线。
+	var gone := 0
+	for hud_name in ["ParkourHUD", "ParkourHUD/Timer", "ParkourHUD/Seg"]:
+		if _pk.get_node_or_null(hud_name) == null:
+			gone += 1
+	_check(gone == 3, "跑酷计时 HUD 已删除（用户要求，不挡视线）")
 	print("  小结：%d 个节点，%d 个网格，%d 个碰撞形状，%d 盏灯，%d 个 Label3D"
 		% [st["nodes"], st["meshes"], st["shapes"], st["lights"], st["labels"]])
 
@@ -1380,13 +1371,10 @@ func _test_negative() -> void:
 	_put(island.position.x + island.size.x * 0.5, _pk.top_at(_pk.node_count() - 1) + 0.05,
 		island.position.z + island.size.z * 0.5)
 	await _wait(6)
-	var hud := _pk.get_node_or_null("ParkourHUD/Seg") as Label
 	_check(not started and idle_time == 0.0 and running and t_mid > 0.0
 		and _pk.finished and not _pk.timer_running and _pk.best_seconds() > 0.0,
 		"计时器：站跑道 %s → 离开后 %s（%.2f s）→ 撞岛停表 %s，最好成绩 %.2f s（存 user://）"
 		% [str(started), str(running), t_mid, str(_pk.finished), _pk.best_seconds()])
-	_check(hud != null and hud.text.contains("CLEAR"),
-		"计时 HUD 文本跟着状态走：「%s」" % (hud.text if hud != null else "（没有 HUD）"))
 
 	# ⑤ 岛上的传送台 → 回平台 + 复位
 	var pad := _pk.get_node_or_null("Island/Props/ReturnPad") as Node3D

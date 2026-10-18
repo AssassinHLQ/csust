@@ -55,7 +55,7 @@ const RUN_PATH := "user://parkour_run.cfg"
 @export var route: Array = []
 ## **段起点**的站号（升序）。只是视觉地标；复活点用 `checkpoint`（最近踩过的站）。
 @export var segments: Array = [0]
-## 段名（HUD 用），长度应与 `segments` 一致
+## 段名（自检、探针的段表用），长度应与 `segments` 一致
 @export var seg_names: Array = []
 ## **不是弹道跳**的站号（弹跳板抛射 / 上升气流托举 / 移动平台摆渡 / 传送门）。
 ## 探针与自检会**跳过这些跳的弹道核算**，改由各自的机关真物理自检负责。
@@ -92,9 +92,6 @@ var _boxes: Array[AABB] = []
 var _tops: PackedFloat32Array = []
 var _labels: PackedStringArray = []
 var _player: Player
-var _hud_timer: Label
-var _hud_seg: Label
-var _hud_cache := ""
 ## 读档续跑：**只有 `resume_on_start = true` 时**才会在启动后把人送回存档站。
 ## 默认 false ⇒ 重进游戏从初始位置开始（用户 2026-10-17 的要求）。
 var _resume_pending := false
@@ -102,11 +99,8 @@ var _resume_pending := false
 
 func _ready() -> void:
 	_build_route()
-	_hud_timer = get_node_or_null("ParkourHUD/Timer") as Label
-	_hud_seg = get_node_or_null("ParkourHUD/Seg") as Label
 	_load_best()
 	_load_run()
-	_update_hud(true)
 
 
 # --- 路线 ---------------------------------------------------------------------
@@ -186,7 +180,7 @@ func segment_start(seg: int) -> int:
 ## 摔下去该回哪一站 —— **最近踩过的那一站**（= `checkpoint`）。
 ##
 ## ⚠️ 这里曾经是「回本段起点」，用户玩过之后反馈**太难**（摔一次要重跑整段，最长 45 m），
-##    所以改回「回最近踩过的落脚点」。检查点仍然只在段交界推进（HUD 的 SEG 计数照旧），
+##    所以改回「回最近踩过的落脚点」。检查点仍然只在段交界推进（段号也只在段交界前进），
 ##    但复活点就是你最后踩住的那一站。段起点（`segments`）继续当**视觉地标**：
 ##    那儿有 4 m 休息台 + 5 m 信号桅杆，只是不再当复活点。
 func respawn_station() -> int:
@@ -223,7 +217,6 @@ func reset_run() -> void:
 	_elapsed = 0.0
 	_started_at = Time.get_ticks_msec()
 	checkpoint = -1
-	_update_hud(true)
 
 
 func _start_timer() -> void:
@@ -253,7 +246,7 @@ func _stop_timer() -> void:
 ## 读进度存档。
 ##
 ## ⚠️ 用户要求「重进游戏回到初始位置」，所以默认**不恢复 checkpoint**：
-##    只把文件里的最好成绩读回来；`checkpoint` 留在 −1（HUD 显示 SEG 1/6），
+##    只把文件里的最好成绩读回来；`checkpoint` 留在 −1（段号回到第 1 段），
 ##    人从 `game.tscn` 的初始出生点开始，不会被传送到上次的塔/机关上。
 ##    需要旧行为时把 `resume_on_start` 打开（落盘数据一直都在）。
 ##    站号照旧校验一遍（免得改了路线之后旧存档把人送到空里）。
@@ -294,22 +287,6 @@ func _save_best() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("parkour", "best", _best)
 	cf.save(BEST_PATH)
-
-
-func _update_hud(force := false) -> void:
-	if _hud_timer == null:
-		return
-	var seg := segment_of(checkpoint)
-	var head := "TIME %05.2f    BEST %s" % [_elapsed if not timer_running else elapsed_seconds(),
-		"--.--" if _best <= 0.0 else "%05.2f" % _best]
-	var state := "CLEAR!" if finished else ("RUN" if timer_running else "--")
-	var sub := "SEG %d/%d  %s   %s" % [seg + 1 if seg >= 0 else 1, segment_count(),
-		segment_name(maxi(seg, 0)), state]
-	var key := head + "|" + sub
-	if force or key != _hud_cache:
-		_hud_cache = key
-		_hud_timer.text = head
-		_hud_seg.text = sub
 
 
 # --- 每帧 ---------------------------------------------------------------------
@@ -365,11 +342,6 @@ func _physics_process(_delta: float) -> void:
 			_disarm()
 
 
-func _process(_delta: float) -> void:
-	if enabled:
-		_update_hud()
-
-
 ## 脚下是第几站（不在任何一站上 → −1）。有重叠时取**靠后**的那一站。
 ##
 ## 下界给到 −0.25 而不是「台面以下一点点」：实测**挂在板边上**时人比台面低
@@ -410,7 +382,6 @@ func _disarm() -> void:
 	timer_running = false
 	finished = false
 	_elapsed = 0.0
-	_update_hud(true)
 
 
 ## 第 i 站那台「回平台」传送台 —— 见 `_on_return_pad_entered`（岛上是唯一的回头路）
