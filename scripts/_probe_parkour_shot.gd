@@ -112,7 +112,13 @@ func _run() -> void:
 	await _shot("23_ashare", Vector3(-285.0, 7.0, 8.0), Vector3(-300.0, 2.5, -1.7))
 	await _shot("24_fx", Vector3(-317.0, 7.0, 8.0), Vector3(-331.0, 2.4, -1.7))
 	# ── 第 8 段 暗网黑市（DK1 −344.45 … DK10 −397.85；比纳吊在 (−374, 12.4)）──
+	# 这一张**故意把 HUD 打开**：让「比纳 · 暗网黑市」那行血条也进画面
+	var hud_layer := game.get_node_or_null("HUD") as CanvasLayer
+	if hud_layer != null:
+		hud_layer.visible = true
 	await _shot("25_dark_run", Vector3(-338.0, 8.0, 9.0), Vector3(-368.0, 5.0, -1.7))
+	if hud_layer != null:
+		hud_layer.visible = false
 	await _shot("26_dark_boss", Vector3(-356.0, 14.0, 5.5), Vector3(-374.0, 12.0, -1.7))
 	# ── 第 9 段 横跳区（X1..X5）──
 	await _shot("27_sidejump", Vector3(-414.2, 7.2, 3.4), Vector3(-422.2, 2.2, -5.6))

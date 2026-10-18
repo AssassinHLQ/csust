@@ -152,7 +152,7 @@ MATERIALS = {
     "m_fx_lev": ("Mat_s_fx_lev", (1.00, 0.52, 0.05), (0.55, 0.24, 0.01), 0.36),
     "m_fx_crash": ("Mat_s_fx_crash", (0.55, 0.05, 0.08), (0.30, 0.01, 0.02), 0.40),
     # 第 8 段「暗网黑市」：近黑 + 紫霓虹边
-    "m_spot_dark": ("Mat_s_dark", (0.10, 0.09, 0.14), (0.28, 0.10, 0.45), 0.22),
+    "m_spot_dark": ("Mat_s_dark", (0.02, 0.018, 0.03), (0.35, 0.10, 0.65), 0.16),
 }
 
 
@@ -1005,13 +1005,15 @@ def is_branch_node(nd) -> bool:
 
 
 # 第 5~7 段：12 块板 + 三根桅杆 + 三块规则牌（桅杆名是中文，单独列出来）
-SECTION_NODE = re.compile(r"^(OPT|AS|FX)[1-4]$")
+SECTION_NODE = re.compile(r"^(OPT|AS|FX|DK)\d+$")
 SECTION_HOSTS = ("Beacon_期权交易", "Beacon_A股", "Beacon_外汇",
                  "Rule_期权交易", "Rule_A股", "Rule_外汇")
 
 
 def is_section_node(nd) -> bool:
     if SECTION_NODE.match(nd["name"]) or nd["name"] in SECTION_HOSTS:
+        return True
+    if nd["name"] == "DarkBoss":
         return True
     top = nd["parent"].split("/")[1] if "/" in nd["parent"] else ""
     return bool(SECTION_NODE.match(top)) or top in SECTION_HOSTS
@@ -1091,8 +1093,22 @@ def main() -> None:
     print("  平移了 %d 个节点" % shifted)
 
     # 4) 子资源（缺哪个补哪个）
-    have = set(re.findall(r'id="([^"]+)"', "\n".join(gen)))
-    add = [s for s in build_subresources() if re.search(r'id="([^"]+)"', s).group(1) not in have]
+    # ⚠️ 不能只「缺哪个补哪个」：改了 MATERIALS 里的颜色，旧定义还留在文件里就永远不生效
+    #    （实测：暗网板改成近黑之后，运行时读到的还是上一次的 0.10/0.09/0.14）。
+    #    所以按 id **整块替换**，缺的再补。
+    fresh = {}
+    for sub in build_subresources():
+        fresh[re.search(r'id="([^"]+)"', sub).group(1)] = sub
+    have = set()
+    for i, ch in enumerate(gen):
+        m = re.match(r'\[sub_resource [^\]]*id="([^"]+)"\]', ch)
+        if not m:
+            continue
+        key = m.group(1)
+        have.add(key)
+        if key in fresh:
+            gen[i] = fresh[key]
+    add = [sub for key, sub in fresh.items() if key not in have]
     if add:
         last_sub = max(i for i, ch in enumerate(gen) if ch.startswith("[sub_resource"))
         gen[last_sub + 1:last_sub + 1] = add
@@ -1112,8 +1128,8 @@ def main() -> None:
     out = rewrite_arrays(out, boxes, br, secs)
     out = re.sub(r"\n{3,}", "\n\n", out)
 
-    print("\n  站数 %d → %d（K 段 %d 根蜡烛；另加三道 5 + 期权/A股/外汇 12）；段数 6 → 11"
-          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5 + 12, len(boxes)))
+    print("\n  站数 %d → %d（K 段 %d 根蜡烛 + 三道 5 + 期权/A股/外汇 12 + 暗网 10）；段数 6 → 12"
+          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5 + 12 + 10, len(boxes)))
     if dry:
         print("  --dry-run：不写文件")
         return

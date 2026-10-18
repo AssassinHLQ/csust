@@ -309,6 +309,16 @@ func _ready() -> void:
 			boss.died.connect(_on_target_died)
 		elif child is Companion:
 			_companions.append(child as Companion)
+	# ⚠️ Boss 不一定在 game 的**直接子节点**下：第 8 段的比纳挂在
+	#    `Parkour/Route/DarkBoss`（生成器摆进去的）。`Boss._ready()` 会把自己加进
+	#    `bosses` 组，而且子节点的 `_ready` 先跑，所以这里按组再收一遍就齐了。
+	#    少了这一段：比纳**没有血条**、`died` 也没接上（用户：「怎么没有血条呀」）。
+	for node in get_tree().get_nodes_in_group("bosses"):
+		var b := node as Boss
+		if b == null or _bosses.has(b) or not is_ancestor_of(b):
+			continue
+		_bosses.append(b)
+		b.died.connect(_on_target_died)
 	if not _bosses.is_empty() and _hud.has_method("bind_bosses"):
 		_hud.bind_bosses(_bosses)
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)

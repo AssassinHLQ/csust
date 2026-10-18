@@ -52,6 +52,12 @@ var _shells: Array[Dictionary] = []
 var _shots := 0
 var _player: Player
 var _killed := false
+## 程序化动画（这份 FBX **没有动画**：44 骨、纯静态）——
+## 悬停上下浮动 + 缓慢摆头 + 开火时的一下「反冲」。基准值在 `_ready` 里量。
+var _anim_t := 0.0
+var _base_model_pos := Vector3.ZERO
+var _base_model_scale := Vector3.ONE
+var _base_model_yaw := 0.0
 
 
 func _init() -> void:
@@ -71,6 +77,10 @@ func _init() -> void:
 func _ready() -> void:
 	super._ready()
 	_build_fx()
+	if model != null:
+		_base_model_pos = model.position
+		_base_model_scale = model.scale
+		_base_model_yaw = model.rotation.y
 	died.connect(_on_died)
 	# 先用**半速**开火：玩家第一次见到它时还在 K 线上，别一上来就被激光点名
 	_t_laser = laser_interval * 0.5
@@ -112,6 +122,26 @@ func _build_fx() -> void:
 	_shell_mat.emission_enabled = true
 	_shell_mat.emission = SHELL_COL
 	_shell_mat.emission_energy_multiplier = 2.2
+
+
+## 静止时的「活着」感：上下浮 + 慢慢摆头。**没有骨骼动画**，只能整个模型动。
+## ⚠️ `_dead` 之后不能再动：父类 `_die()` 正在用 tween 把模型往前扑，抢了会打架。
+func _process(delta: float) -> void:
+	if model == null or _dead:
+		return
+	_anim_t += delta
+	model.position = _base_model_pos + Vector3(
+		sin(_anim_t * 0.9) * 0.55, sin(_anim_t * 1.7) * 0.28, 0.0)
+	model.rotation.y = _base_model_yaw + sin(_anim_t * 0.62) * 0.14
+
+
+## 开火时的一下反冲：缩一下再弹回来（激光/炮弹都调）
+func _kick() -> void:
+	if model == null or _dead:
+		return
+	var tw := create_tween()
+	tw.tween_property(model, "scale", _base_model_scale * 1.07, 0.06)
+	tw.tween_property(model, "scale", _base_model_scale, 0.22) 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _physics_process(delta: float) -> void:
@@ -160,6 +190,7 @@ func _tick_laser(pc: Vector3, delta: float) -> void:
 				_laser_state = 2
 				_laser_timer = laser_live_time
 				_beam_mat.albedo_color = BEAM_ON
+				_kick()
 				_hit_laser(pc)
 		2:
 			if _laser_timer <= 0.0:
@@ -184,6 +215,7 @@ func _hit_laser(pc: Vector3) -> void:
 
 func _spawn_shell(pc: Vector3) -> void:
 	_shots += 1
+	_kick()
 	var mi := MeshInstance3D.new()
 	mi.name = "Shell%d" % _shells.size()
 	var sm := SphereMesh.new()
