@@ -1,5 +1,5 @@
 extends SceneTree
-## 探针：把跑酷 v2 的**设计依据**打出来（不跑物理，几秒就完）。
+## 探针：把跑酷 v4（7 段 / 71 站 / 59 跳）的**设计依据**打出来（不跑物理，几秒就完）。
 ##
 ## 这是「设计 → 建模 → 验证」里的**设计**那一半：每一跳跨多远、抬多高、
 ## 解析弹道能到多远、**实测模型**余量多少、落点在板内的哪里 —— 全部来自
@@ -17,12 +17,18 @@ extends SceneTree
 ##
 ## ⚠️ 加 `--splat=off`：跑酷不依赖画室609，关掉泼溅能省 20 s 解码。
 ## ⚠️ 要真渲染，不要 `--headless`。
-## ⚠️ 退出码：任何一跳实测余量 < 0.40、或落点入板 < 0.12、或节点缺失 → 退 1
+## ⚠️ 退出码：任何一跳实测余量 < 门槛（常规 0.80 / 塔内短跳 0.40）、或落点入板不足
+##    （含 0.30 m 挂边容忍）、或节点缺失 → 退 1
 ##    （所以这个探针同时是**设计闸门**，不是只打印给人看）。
 
 ## 实测系数：v1 二分法量的「实测射程 / 解析射程」（平地解析 4.83 → 实测 5.09）
 const K := 1.054
 const MARGIN_MIN := 0.80
+## 减速短跳（绕柱螺旋塔）的余量门槛 —— 和 `_verify_parkour.gd` 的
+## `MARGIN_MIN_SHORT` 同一个数：塔内是「站定起跳 + 空中操控」，1.46 m 的空中射程
+## 对上 0.99 m 的缝隙，本来就是 0.47 的余量，不该拿 0.80 去卡
+## （卡了就会一直显示「失败 7 项」，而那 7 项是设计好的）。
+const MARGIN_MIN_SHORT := 0.40
 ## 解析落点距板边的下限。对直跳来说「解析落点入板深度」恒等于
 ## `解析射程 − 必须跨`，真正要守的是**实测余量**；这条只兜「别落在板沿上」。
 const EDGE_MIN := 0.12
@@ -132,7 +138,8 @@ func _run() -> void:
 		var fwd := _exit(box4, lx, lz, dir.x, dir.y)
 		var side := minf(_exit(box4, lx, lz, -dir.y, dir.x), _exit(box4, lx, lz, dir.y, -dir.x))
 		var margin := reach - req
-		var is_tight := margin <= 0.90
+		# 紧张区 = 0.80~0.90（勉强够）。低于门槛的另算失败，不算「紧张」
+		var is_tight := margin >= MARGIN_MIN and margin <= 0.90
 		if is_tight:
 			tight += 1
 		rows.append({"pair": pair, "req": req, "rise": float(h["rise"]),
@@ -140,10 +147,14 @@ func _run() -> void:
 		print("%-13s %4s %8.2f %+7.2f %7.2f %7.2f %8.2f   前%.2f / 后%.2f / 侧%.2f %s" % [
 			pair, "短跳" if short else "跳", req, h["rise"], h["reach"], reach, margin,
 			fwd, back, side, "★紧张" if is_tight else "✓"])
-		if margin < MARGIN_MIN:
+		if margin < (MARGIN_MIN_SHORT if short else MARGIN_MIN):
 			_fail += 1
-		# 入板判据：沿行进方向**前后都要 ≥ 0.40**（需求），侧向 ≥ 0.20（实测挂边容忍）
-		if back < 0.40 or fwd < 0.40 or side < 0.20:
+		# 入板判据：沿行进方向**前后都要 ≥ 0.40**（需求），侧向 ≥ 0.20（实测挂边容忍）。
+		# ⚠️ 必须算上挂边 `Parkour.EDGE_MARGIN = 0.30`（人挂在板沿上还托得住）——
+		#    这一条 `_verify_parkour.gd` 早就是了，探针这里一直漏着，于是横跳区那 5 跳
+		#    天天报「侧向 0.10 < 0.20」的假红。
+		var edge := Parkour.EDGE_MARGIN
+		if back + edge < 0.40 or fwd + edge < 0.40 or side + edge < 0.20:
 			_fail += 1
 
 	rows.sort_custom(func(x, y): return float(x["margin"]) < float(y["margin"]))

@@ -1,7 +1,7 @@
 extends SceneTree
-## 验跑酷 v2（4 段 / 33 站 / 30 跳 + 2 段独木桥 / 206 m）。
+## 验跑酷 v4（7 段 / 71 站 / 59 跳 + 6 处机关 + 5 段「走过去」/ 389 m）。
 ##
-## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 30 跳挨个跳过去**。
+## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
 ##
 ## 七节：
@@ -23,7 +23,7 @@ extends SceneTree
 ##   · 全程**不截图**（截图是无界等待的重灾区，别的套件已经踩过）
 ##
 ## ⚠️ 时间预算：本套跑完约 2 分钟（运行器有 6 分钟看门狗）。
-##    所以「紧张的跳」全部真输入跑，「余量大的跳」也跑（30 跳 × ~1.2 s 还负担得起），
+##    所以「紧张的跳」全部真输入跑，「余量大的跳」也跑（59 跳 × ~1.2 s 还负担得起），
 ##    连续通关再跑一遍 —— 加起来仍远低于看门狗。
 
 const SPAWN := Vector3(0, 0.05, 6)
@@ -107,7 +107,7 @@ func _run() -> void:
 	_check(_jump_assisted == 0,
 		"所有起跳都是**靠输入按出来**的（兜底用了 %d 次；>0 说明跳键脉冲又被微弹吃掉了）"
 		% _jump_assisted)
-	# 兜底：任何一节静默跳过，断言总数都会掉下来（当前 125 条；59 站版比 63 站版少 4 跳）
+	# 兜底：任何一节静默跳过，断言总数都会掉下来（当前 125 条；71 站版比 59 站版多 12 根 K 线的回放）
 	_check(_pass + _fail >= 120,
 		"断言总数 ≥ 120（实测 %d 条）—— 哪一节没跑完这里会先变红" % (_pass + _fail))
 	print("通过 %d 项" % _pass)
@@ -120,9 +120,10 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 59, "路线有 %d 站（期望 59：跑道 + 46 块落脚板 + 6 段「走过去」的接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 71, "路线有 %d 站（期望 71：跑道 + 57 块落脚板 + 12 根同花顺 K 线 + 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
+		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -138,8 +139,8 @@ func _test_structure(game: Node) -> void:
 	for i in range(1, segs.size()):
 		if int(segs[i]) <= int(segs[i - 1]):
 			sorted_ok = false
-	_check(sorted_ok and _pk.segment_count() == 6 and segs.size() == _pk.seg_names.size(),
-		"分段数据：segments=%s（升序、首项 0、6 段），seg_names %d 个「%s」"
+	_check(sorted_ok and _pk.segment_count() == 7 and segs.size() == _pk.seg_names.size(),
+		"分段数据：segments=%s（升序、首项 0、7 段），seg_names %d 个「%s」"
 		% [str(segs), _pk.seg_names.size(), " / ".join(PackedStringArray(_pk.seg_names))])
 	# 段起点必须是段落里**第一站**、而且每段都非空
 	var span_ok := true
@@ -148,8 +149,8 @@ func _test_structure(game: Node) -> void:
 		var en: int = _pk.segment_start(s + 1) if s + 1 < _pk.segment_count() else n
 		if en <= st or st < 0 or en > n:
 			span_ok = false
-	_check(span_ok, "六段的站号区间都不空：%s"
-		% str(Array(range(0, 6)).map(func(s): return "%s[%d]" % [
+	_check(span_ok, "七段的站号区间都不空：%s"
+		% str(Array(range(0, _pk.segment_count())).map(func(s): return "%s[%d]" % [
 			_pk.segment_name(s), _pk.segment_start(s)])))
 	# 机关清单也要跟着对：6 处机关跳、螺旋塔 7 处减速短跳（W2…C4，由场景给）。
 	# 螺旋塔 2026-10-17 回到 7 跳版：11 跳版每 4 级叠在同一 xz、层间只差 2.05 m，
@@ -367,7 +368,10 @@ func _test_calibration() -> void:
 			else float(h["reach"]) * k) - float(h["required"])
 		var min_margin := MARGIN_MIN_SHORT if is_short else MARGIN_MIN
 		var name := "%s→%s" % [_pk.label_at(i - 1), _pk.label_at(i)]
-		if margin <= 0.90:
+		# 「紧张区」= **勉强够**的那一跳（0.80~0.90）。低于门槛的（螺旋塔短跳 0.47）
+		# 不算紧张区：它们各自有自己的门槛，而且已经由上面 `bad` 单独记账 ——
+		# 把 0.47 也塞进这个区间，会让「紧张区占比」这件事量错（塔的 7 跳会把比例顶穿）。
+		if margin >= MARGIN_MIN and margin <= 0.90:
 			tight += 1
 		if margin < worst:
 			worst = margin
@@ -927,7 +931,8 @@ func _test_mechanics() -> void:
 	_pk.enabled = false            # 这一节自己摆人，别让「回本段起点」把人捞走
 
 	# ① 弹跳板 ×2：**峰值 ≥ 4.5 m** 且最终落在 +4.40 的高台上
-	for to_i in [38, 47]:
+	# 站号是 K 线区插进来之后的：H1 = 50、H2 = 59（原来 38 / 47，整段 +12）
+	for to_i in [50, 59]:
 		var res := await _drive_bounce(to_i - 1, to_i)
 		var peak := float(res.get("peak", 0.0))
 		_check(bool(res["ok"]) and peak >= 4.5,
@@ -936,9 +941,9 @@ func _test_mechanics() -> void:
 			+ "最终落在 %s 上（y = %.2f）" % [_pk.label_at(to_i), float(res["pos"].y)])
 
 	# ② 移动平台 ×2：**站着不动也被带走**（相对位移不变）+ 送到对岸
-	for to_i in [26, 27]:
+	for to_i in [38, 39]:
 		var res := await _drive_mover(
-			_pk.get_node_or_null("Movers/%s" % ("MoverA" if to_i == 26 else "MoverB"))
+			_pk.get_node_or_null("Movers/%s" % ("MoverA" if to_i == 38 else "MoverB"))
 				as ParkourMover, to_i - 1, to_i)
 		_check(bool(res["ok"]) and float(res.get("rel", 9.0)) < 0.60,
 			"移动平台 %s→%s：人**站着不动**被带过缺口，与平台的相对位移只变了 %.2f m（< 0.60）"
@@ -997,20 +1002,20 @@ func _test_mechanics() -> void:
 			% float(back_at))
 
 	# ④ 上升气流：进去之后**到过 +5.0**，并且站上出口台
-	var res_ud := await _drive_updraft(44, 45)
+	var res_ud := await _drive_updraft(56, 57)
 	_check(bool(res_ud["ok"]) and float(res_ud.get("peak", 0.0)) >= 5.0,
 		"上升气流 U1→U2：柱子里被托到 **+%.2f m**（需求 +5.0）、从出口台出来（y = %.2f）"
 		% [float(res_ud.get("peak", 0.0)), float(res_ud["pos"].y)])
 
 	# ⑤ 传送门：真的到了对岸那台（跨 16 m），而且没卡进墙里
-	var res_pt := await _drive_portal(47, 48)
+	var res_pt := await _drive_portal(59, 60)
 	var pi := _pk.get_node_or_null("Mechanics/PortalIn") as ParkourPortal
 	var span := 0.0
 	if pi != null and pi.target() != null:
 		span = pi.global_position.distance_to(pi.target().global_position)
 	_check(bool(res_pt["ok"]) and span >= 10.0,
 		"传送门 %s→%s：跨 **%.2f m**（需求 ≥ 10 m）后 global_position 真的落在对岸 %s 上"
-		% ["PortalIn", "PortalOut", span, _pk.label_at(48)])
+		% ["PortalIn", "PortalOut", span, _pk.label_at(60)])
 	_check(float(res_pt.get("dist", 0.0)) >= 1.0,
 		"传送门至少触发过 1 次（计数器 = %.0f，防乒乓冷却生效）" % float(res_pt.get("dist", 0.0)))
 	_pk.enabled = true
@@ -1055,10 +1060,11 @@ func _test_negative() -> void:
 	# ② 摔落 → 回**本段起点**（这是 v2 的核心惩罚）
 	for probe in [
 		{"station": 13, "seg": 1, "what": "第 2 段中段（T1 转身台）"},
-		{"station": 24, "seg": 2, "what": "第 3 段中段（X4 窄板）"},
-		{"station": 31, "seg": 3, "what": "第 4 段中段（W4 螺旋塔）"},
-		{"station": 47, "seg": 4, "what": "第 5 段中段（L1 机关区）"},
-		{"station": 56, "seg": 5, "what": "第 6 段中段（J1 竖井）"},
+		{"station": 25, "seg": 2, "what": "第 3 段中段（K5 大阳线）"},
+		{"station": 36, "seg": 3, "what": "第 4 段中段（X4 窄板）"},
+		{"station": 43, "seg": 4, "what": "第 5 段中段（W4 螺旋塔）"},
+		{"station": 59, "seg": 5, "what": "第 6 段中段（L1 机关区）"},
+		{"station": 68, "seg": 6, "what": "第 7 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()
@@ -1228,7 +1234,7 @@ func _test_island() -> void:
 	var top := _pk.top_at(n - 1)
 	_check(island.size.x >= 12.0 and island.size.z >= 12.0,
 		"岛面 %.0f × %.0f m（≥ 12 × 12，装得下下一章要摆的东西）" % [island.size.x, island.size.z])
-	_check(absf(top - 8.00) < 0.01, "岛面高度 y = %.2f（第 6 段下降链最后落到这儿）" % top)
+	_check(absf(top - 8.00) < 0.01, "岛面高度 y = %.2f（第 7 段下降链最后落到这儿）" % top)
 
 	var last := _hop(n - 2, n - 1)
 	var land: Vector3 = last["landing"]
@@ -1266,7 +1272,7 @@ func _print_table() -> void:
 	print("  全线最紧的一跳        %s，余量 %.2f m"
 		% [String(_m.get("worst_name", "")), float(_m.get("worst_margin", 0.0))])
 	print("  紧张区间              %d/%d 跳" % [int(_m.get("tight", 0)), int(_m.get("jumps", 0))])
-	print("  路线                  6 段 / 59 站 / 47 跳 + 6 处机关 + 5 段走过去 / 跳距合计 %.1f m"
+	print("  路线                  7 段 / 71 站 / 59 跳 + 6 处机关 + 5 段走过去 / 跳距合计 %.1f m"
 		% float(_m.get("gap_sum", 0.0)))
 	print("  连续通关用时          %.2f s（计时器实测）" % float(_m.get("run_seconds", 0.0)))
 	print("  本套自检用时          %.1f s" % secs)
