@@ -151,6 +151,8 @@ MATERIALS = {
     "m_fx": ("Mat_s_fx", (0.95, 0.80, 0.20), (0.50, 0.40, 0.06), 0.28),
     "m_fx_lev": ("Mat_s_fx_lev", (1.00, 0.52, 0.05), (0.55, 0.24, 0.01), 0.36),
     "m_fx_crash": ("Mat_s_fx_crash", (0.55, 0.05, 0.08), (0.30, 0.01, 0.02), 0.40),
+    # 第 8 段「暗网黑市」：近黑 + 紫霓虹边
+    "m_spot_dark": ("Mat_s_dark", (0.10, 0.09, 0.14), (0.28, 0.10, 0.45), 0.22),
 }
 
 
@@ -595,6 +597,34 @@ SECTIONS = [
              dict(nm="FX4", kind="fx", seq="15.00,-15.00", period=0.50, top=2.20,
                   width=3.0, depth=3.0, gap=2.80),
          ]),
+    # 第 8 段「暗网黑市交易」：最长的一段（10 块板），头顶有**比纳**（dark_boss.gd）
+    # 一边跑一边打。比纳不吃「跳过去」那套 —— 它在上方 10 m，激光 + 炮弹。
+    dict(name="暗网黑市交易", z=-1.70, boss=True, mat="m_spot_dark",
+         sign="比纳在头顶：激光 0.6 s 预警（别停在束线上）%s"
+              "炮弹命中掉血 + 击退（小心被打下板）%s"
+              "它不会复活 —— 边跑边打，把它打光",
+         plates=[
+             dict(nm="DK1", kind="spot", seq="-0.80", period=0.0, top=2.00,
+                  width=3.4, depth=3.0, gap=3.00),
+             dict(nm="DK2", kind="spot", seq="-0.80", period=0.0, top=2.40,
+                  width=2.8, depth=3.0, gap=3.00),
+             dict(nm="DK3", kind="spot", seq="-0.80", period=0.0, top=2.00,
+                  width=3.0, depth=3.0, gap=2.80),
+             dict(nm="DK4", kind="spot", seq="-0.80", period=0.0, top=2.60,
+                  width=3.0, depth=3.0, gap=3.00),
+             dict(nm="DK5", kind="spot", seq="-0.80", period=0.0, top=3.00,
+                  width=2.8, depth=3.0, gap=3.00),
+             dict(nm="DK6", kind="spot", seq="-0.80", period=0.0, top=2.40,
+                  width=3.4, depth=3.0, gap=2.80),
+             dict(nm="DK7", kind="spot", seq="-0.80", period=0.0, top=2.00,
+                  width=3.0, depth=3.0, gap=3.00),
+             dict(nm="DK8", kind="spot", seq="-0.80", period=0.0, top=2.40,
+                  width=3.0, depth=3.0, gap=2.80),
+             dict(nm="DK9", kind="spot", seq="-0.80", period=0.0, top=2.80,
+                  width=2.8, depth=3.0, gap=3.00),
+             dict(nm="DK10", kind="spot", seq="-0.80", period=0.0, top=2.20,
+                  width=3.2, depth=3.0, gap=3.00),
+         ]),
 ]
 SECTION_GAP_FROM_M0 = 3.50
 
@@ -650,7 +680,7 @@ def build_section_nodes(secs: dict, first_seg: int) -> list:
             if p.get("deadline"):
                 meta += chr(10) + "metadata/deadline = %s" % _num(p["deadline"])
             out += _box_node(p["nm"], p["x0"], p["x1"], p["z0"], p["z1"], p["top"], body,
-                             "m_" + p["kind"], meta)
+                             sec.get("mat", "m_" + p["kind"]), meta)
             seq = [float(v) for v in p["seq"].split(",")]
             col = "0.95, 0.25, 0.25, 1" if seq[0] >= 0.0 else "0.25, 0.9, 0.45, 1"
             out.append('[node name="Pct" type="Label3D" parent="Route/%s"]\n'
@@ -680,10 +710,17 @@ def build_section_nodes(secs: dict, first_seg: int) -> list:
                    'text = "第 %d 段 · %s"\nfont_size = 60\noutline_size = 14'
                    % (sec["name"], first_seg + si, sec["name"]))
         out.append('[node name="Rule_%s" type="Label3D" parent="Route/Beacon_%s"]\n'
-                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.6, 0)\n'
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)\n'
                    'pixel_size = 0.0075\nbillboard = 1\nalpha_cut = 1\n'
                    'text = "%s"\nfont_size = 44\noutline_size = 12'
                    % (sec["name"], sec["name"], sec["sign"] % (chr(10), chr(10))))
+        if sec.get("boss"):
+            mid = item["plates"][len(item["plates"]) // 2]
+            out.append('[node name="DarkBoss" type="StaticBody3D" parent="Route"]\n'
+                       'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s, %s, %s)\n'
+                       'script = ExtResource("9_dark")'
+                       % (_num(snap((mid["x0"] + mid["x1"]) * 0.5)),
+                          _num(snap(mid["top"] + 10.0)), _num(snap(sec["z"]))))
     return out
 
 
@@ -845,6 +882,7 @@ def build_nodes(boxes: list, x1: dict) -> list:
 
 EXT_FUTURES = ('[ext_resource type="Script" path="res://scripts/parkour_futures.gd" '
                'id="7_futures"]')
+EXT_DARK = '[ext_resource type="Script" path="res://scripts/dark_boss.gd" id="9_dark"]'
 
 
 def build_subresources() -> list:
@@ -859,6 +897,15 @@ def build_subresources() -> list:
     out.append('[sub_resource type="StandardMaterial3D" id="Mat_k_wick"]\n'
                'albedo_color = Color(0.24, 0.26, 0.31, 1)\nmetallic = 0.35\nroughness = 0.5')
     out.append('[sub_resource type="BoxMesh" id="Box_wick"]\nsize = Vector3(0.15, 1, 0.15)')
+    return out
+
+
+def _sec_starts(secs: dict, base: int) -> list:
+    """第 5~8 段的段起点：每段板数不同（4/4/4/10），按实际板数累加。"""
+    out, cursor = [], base
+    for item in secs["sections"]:
+        out.append(cursor)
+        cursor += len(item["plates"])
     return out
 
 
@@ -880,8 +927,9 @@ def rewrite_arrays(text: str, boxes: list, br: dict, secs: dict) -> str:
     base = seg2 + nk + nb
     segments = ([int(v) for v in BASE_SEGMENTS[:3]]
                 + [seg2 + nk]                                     # 第 4 段：三道
-                + [base + 4 * k for k in range(4)]                # 第 5/6/7 段 + 第 8 段起点
-                + [v + n for v in BASE_SEGMENTS[3:]])             # 原来的段 4~6
+                + _sec_starts(secs, base)                         # 第 5~8 段（板数不同）
+                + [base + ns]                                     # 第 9 段（X 区）起点
+                + [v + n for v in BASE_SEGMENTS[3:]])             # 原来的段 6~7
     seg_names = (BASE_SEG_NAMES[:2] + [FLUSH_SEG_NAME, BRANCH_NAME]
                  + [s["name"] for s in SECTIONS] + BASE_SEG_NAMES[2:])
     # ⚠️ 判据是「站号 ≥ 插入点」，不是「≥ 第 4 段起点」——F1/F2（26/27）也在插入点之后
@@ -917,9 +965,9 @@ def bump_labels(parts: list) -> list:
         nd = node_of(ch)
         if nd is None:
             continue
-        want = {"Beacon_C3": "第 8 段 · 终点", "Beacon_C4": "第 9 段 · 终点",
-                "Beacon_C5": "第 10 段 · 终点", "SignPost": "跑酷 · 11 段 →",
-                "SignText": "跑酷 · 11 段 →"}.get(nd["name"])
+        want = {"Beacon_C3": "第 9 段 · 终点", "Beacon_C4": "第 10 段 · 终点",
+                "Beacon_C5": "第 11 段 · 终点", "SignPost": "跑酷 · 12 段 →",
+                "SignText": "跑酷 · 12 段 →"}.get(nd["name"])
         if want is None:
             continue
         parts[i] = re.sub(r'(?m)^text = ".*"$', 'text = "%s"' % want, ch)
@@ -984,11 +1032,12 @@ def main() -> None:
         raise SystemExit("!! 最紧的余量 %.2f < 0.80，先调 CANDLES 表" % stats["worst"])
 
     text = TSCN.read_text(encoding="utf-8")
-    if 'id="7_futures"' not in text:
-        # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
-        k = text.index("[sub_resource")
-        k = text.rindex(chr(10), 0, k) + 1
-        text = text[:k] + EXT_FUTURES + chr(10) + chr(10) + text[k:]
+    for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="9_dark"', EXT_DARK)):
+        if eid not in text:
+            # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
+            k = text.index("[sub_resource")
+            k = text.rindex(chr(10), 0, k) + 1
+            text = text[:k] + ext + chr(10) + chr(10) + text[k:]
     parts = chunks(text)
 
     # 1) 先量 X1 现在在哪儿（上次生成过就是已经平移过的位置）

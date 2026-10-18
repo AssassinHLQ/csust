@@ -1,5 +1,5 @@
 extends SceneTree
-## 验跑酷 v7（11 段 / 89 站 / 74 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 + 期权/A股/外汇 / 511 m）。
+## 验跑酷 v8（12 段 / 99 站 / 84 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 + 期权/A股/外汇 + 暗网比纳 / 571 m）。
 ##
 ## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
@@ -84,6 +84,11 @@ func _run() -> void:
 	var fut0 := _pk.get_node_or_null("Futures") as ParkourFutures
 	if fut0 != null:
 		fut0.blue_live = 0.0          # 第 1~4 节只测跳；蓝块由 5c 自己打开
+	# 第 8 段的比纳会朝人打激光/炮弹（带击退）：逐跳回放和连续通关不能被它打断。
+	# 先关掉它的 `_physics_process`，§5f 再单独打开测它。
+	var dark0 := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
+	if dark0 != null:
+		dark0.set_physics_process(false)
 	# ⚠️ 这一套会**真的跑完一次全程**，于是 `parkour.gd` 会把那次用时写进
 	#    `user://parkour_best.cfg` —— 那是玩家真实存档。开跑前备份、收尾时还回去
 	#    （和 `_verify_settings` 测音量时的做法一样）。
@@ -96,6 +101,7 @@ func _run() -> void:
 	await _test_mechanics()
 	await _test_futures()
 	await _test_branch()
+	await _test_dark_boss()
 	await _test_negative()
 	await _test_clash(game)
 	await _test_island()
@@ -125,13 +131,14 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 89, "路线有 %d 站（期望 89：跑道 + 57 块落脚板 + 13 块期货通板块 + 第 4 段 5 站 + 期权/A股/外汇 12 站 + 5 处接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 99, "路线有 %d 站（期望 99：跑道 + 57 块落脚板 + 13 块期货通板块 + 第 4 段 5 站 + 期权/A股/外汇 12 站 + 暗网 10 站 + 5 处接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
 		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13",
 		"J0", "SP1", "SP2", "SP3", "M0",
 		"OPT1", "OPT2", "OPT3", "OPT4", "AS1", "AS2", "AS3", "AS4",
 		"FX1", "FX2", "FX3", "FX4",
+		"DK1", "DK2", "DK3", "DK4", "DK5", "DK6", "DK7", "DK8", "DK9", "DK10",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -147,8 +154,8 @@ func _test_structure(game: Node) -> void:
 	for i in range(1, segs.size()):
 		if int(segs[i]) <= int(segs[i - 1]):
 			sorted_ok = false
-	_check(sorted_ok and _pk.segment_count() == 11 and segs.size() == _pk.seg_names.size(),
-		"分段数据：segments=%s（升序、首项 0、11 段），seg_names %d 个「%s」"
+	_check(sorted_ok and _pk.segment_count() == 12 and segs.size() == _pk.seg_names.size(),
+		"分段数据：segments=%s（升序、首项 0、12 段），seg_names %d 个「%s」"
 		% [str(segs), _pk.seg_names.size(), " / ".join(PackedStringArray(_pk.seg_names))])
 	# 段起点必须是段落里**第一站**、而且每段都非空
 	var span_ok := true
@@ -157,7 +164,7 @@ func _test_structure(game: Node) -> void:
 		var en: int = _pk.segment_start(s + 1) if s + 1 < _pk.segment_count() else n
 		if en <= st or st < 0 or en > n:
 			span_ok = false
-	_check(span_ok, "十一段的站号区间都不空：%s"
+	_check(span_ok, "十二段的站号区间都不空：%s"
 		% str(Array(range(0, _pk.segment_count())).map(func(s): return "%s[%d]" % [
 			_pk.segment_name(s), _pk.segment_start(s)])))
 	# 机关清单也要跟着对：6 处机关跳、螺旋塔 7 处减速短跳（W2…C4，由场景给）。
@@ -209,6 +216,8 @@ func _test_structure(game: Node) -> void:
 			continue
 		if node is AnimatableBody3D:
 			continue      # 移动平台**在动**：它的 position 每帧都变，查两个端点即可（见下）
+		if _inside_boss(node):
+			continue      # Boss 的模型是 FBX 原样（骨头坐标不在 0.05 网格上）
 		var xf := (node as Node3D).transform
 		for v in [xf.origin, xf.basis.get_scale()]:
 			for c in 3:
@@ -1273,7 +1282,7 @@ func _test_branch() -> void:
 		bsp2.position.z + bsp2.size.z * 0.5)
 	await _wait(6)
 	_check(absf(fut.margin - 10.3) < 0.005,
-		"现货道 SP2（+3.00% 固定）→ 10.0000 → %.4f 万（×1.03）" % fut.margin)
+		"现货道 SP2（+3.00%% 固定）→ 10.0000 → %.4f 万（×1.03）" % fut.margin)
 
 	# ⑤ 币圈：牌子在四档之间轮转，**踩上去那一刻是哪一档就按哪一档结算**
 	var q := _quote_of(fut, "BC1")
@@ -1380,6 +1389,71 @@ func _test_branch() -> void:
 	_pk.enabled = true
 	_release_all()
 	fut.blue_live = 3.0
+
+
+## ── 5f. 第 8 段「暗网黑市交易」：比纳（激光 / 炮弹 / 不会复活）─────────────────
+## 用户要的是「跑酷同时击败 boss，这个 boss 不会复活」——所以这一节只验三件事：
+## 它会开火（两种）、打得死、**死了不再站起来**。
+func _test_dark_boss() -> void:
+	print("
+========== 5f. 暗网黑市：比纳（激光 / 炮弹 / 不会复活）==========")
+	var db := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
+	_check(db != null, "路线里有 DarkBoss（比纳）")
+	if db == null:
+		return
+	_pk.enabled = false
+	_release_all()
+	# 站到 DK5 上（比纳就吊在它上方 10 m，正好进交战距离）
+	var dk := _pk.get_node_or_null("Route/DK5") as Node3D
+	var b := _dark_box(dk)
+	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
+		b.position.z + b.size.z * 0.5)
+	await _wait(4)
+	db.set_physics_process(true)
+	db._t_shell = 0.05
+	db._t_laser = 0.05
+	await _wait_ms(700)
+	# ⚠️ 别查「在飞几发」：炮弹 20 m/s，0.4 s 就打到人，采样时常常刚好 0 发。
+	#    查**累计发射数**才稳。
+	_check(db.shots_fired() >= 1, "炮弹真的打出来了（累计 %d 发，同时最多在飞 %d 发）"
+		% [db.shots_fired(), db.shell_count()])
+	var beam := db.get_node_or_null("LaserBeam") as MeshInstance3D
+	_check(beam != null and beam.visible, "激光先出**预警**细束（0.6 s 后才实体）")
+	var hp0 := db.health
+	db.take_damage(120.0)
+	_check(db.health < hp0, "被打掉血：%.0f → %.0f（打光 900 就倒）" % [hp0, db.health])
+	db.take_damage(100000.0)
+	await _wait_ms(300)
+	_check(db.killed(), "血量清零 → 倒下")
+	await _wait_ms(1500)
+	_check(db.killed() and db.health <= 0.0,
+		"**不会复活**（等 1.5 s 仍是倒下、血量 %.0f）—— 父类默认 6 s 会站起来" % db.health)
+	db.set_physics_process(false)
+	_pk.enabled = true
+	_release_all()
+
+
+## 非路线站的包围盒（DK5 在 route 里，这里给个通用小工具）
+## 这个节点是不是挂在某位 Boss 底下（Boss 的 FBX 模型坐标是原样的，不查网格）
+func _inside_boss(n: Node) -> bool:
+	var cur := n
+	for _i in 10:
+		cur = cur.get_parent()
+		if cur == null:
+			return false
+		if cur is Boss:
+			return true
+	return false
+
+
+func _dark_box(n: Node3D) -> AABB:
+	if n == null:
+		return AABB()
+	var col := n.get_node_or_null("Col") as CollisionShape3D
+	if col != null and col.shape is BoxShape3D:
+		var s: Vector3 = (col.shape as BoxShape3D).size
+		return col.global_transform * AABB(-s * 0.5, s)
+	return AABB()
 
 
 ## 按节点名找一条跳价牌（`quotes` 的顺序是场景遍历顺序，别拿下标猜）
@@ -1523,10 +1597,11 @@ func _test_negative() -> void:
 		{"station": 39, "seg": 4, "what": "第 5 段中段（OPT2 权利金）"},
 		{"station": 43, "seg": 5, "what": "第 6 段中段（AS2 天地板）"},
 		{"station": 47, "seg": 6, "what": "第 7 段中段（FX2 杠杆）"},
-		{"station": 53, "seg": 7, "what": "第 8 段中段（X4 窄板）"},
-		{"station": 61, "seg": 8, "what": "第 9 段中段（W4 螺旋塔）"},
-		{"station": 77, "seg": 9, "what": "第 10 段中段（H2 机关区）"},
-		{"station": 84, "seg": 10, "what": "第 11 段中段（J1 竖井）"},
+		{"station": 54, "seg": 7, "what": "第 8 段中段（DK5 暗网）"},
+		{"station": 63, "seg": 8, "what": "第 9 段中段（X4 窄板）"},
+		{"station": 71, "seg": 9, "what": "第 10 段中段（W4 螺旋塔）"},
+		{"station": 87, "seg": 10, "what": "第 11 段中段（H2 机关区）"},
+		{"station": 94, "seg": 11, "what": "第 12 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()

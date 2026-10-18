@@ -111,19 +111,22 @@ func _run() -> void:
 	await _shot("22_option", Vector3(-257.0, 6.0, 9.0), Vector3(-272.0, 2.6, -1.7))
 	await _shot("23_ashare", Vector3(-285.0, 7.0, 8.0), Vector3(-300.0, 2.5, -1.7))
 	await _shot("24_fx", Vector3(-317.0, 7.0, 8.0), Vector3(-331.0, 2.4, -1.7))
-	# ── 第 8 段 横跳区（X1..X5）──
-	await _shot("25_sidejump", Vector3(-351.6, 7.2, 3.4), Vector3(-359.6, 2.2, -5.6))
-	await _shot("26_mover", Vector3(-375.2, 4.6, 7.5), Vector3(-380.7, 2.2, -5.0))
-	# ── 第 9 段 绕柱螺旋塔（柱轴 x −399.2 / z −4.9）──
-	await _shot("27_spiral_low", Vector3(-399.2, 1.6, 2.6), Vector3(-399.2, 6.2, -4.9))
-	await _shot("28_spiral_high", Vector3(-391.0, 12.5, 1.5), Vector3(-399.5, 5.4, -4.9))
-	# ── 第 10 段 机关区 ──
-	await _shot("29_mech", Vector3(-411.5, 14.0, 1.0), Vector3(-423.5, 12.6, -7.5))
-	await _shot("30_mech_air", Vector3(-437.5, 20.0, 3.0), Vector3(-451.5, 15.5, -7.5))
-	# ── 第 11 段 竖井 / 终点岛 ──
-	await _shot("31_shaft", Vector3(-487.5, 17.5, -2.0), Vector3(-499.5, 11.5, -7.5))
-	await _shot("32_island", Vector3(-507.5, 15.0, 2.0), Vector3(-521.5, 9.0, -9.5))
-	await _shot("33_plan", Vector3(-352.0, 200.0, -4.0), Vector3(-352.0, 0.0, -4.5))
+	# ── 第 8 段 暗网黑市（DK1 −344.45 … DK10 −397.85；比纳吊在 (−374, 12.4)）──
+	await _shot("25_dark_run", Vector3(-338.0, 8.0, 9.0), Vector3(-368.0, 5.0, -1.7))
+	await _shot("26_dark_boss", Vector3(-356.0, 14.0, 5.5), Vector3(-374.0, 12.0, -1.7))
+	# ── 第 9 段 横跳区（X1..X5）──
+	await _shot("27_sidejump", Vector3(-414.2, 7.2, 3.4), Vector3(-422.2, 2.2, -5.6))
+	await _shot("28_mover", Vector3(-437.8, 4.6, 7.5), Vector3(-443.3, 2.2, -5.0))
+	# ── 第 10 段 绕柱螺旋塔（柱轴 x −461.8 / z −4.9）──
+	await _shot("29_spiral_low", Vector3(-461.8, 1.6, 2.6), Vector3(-461.8, 6.2, -4.9))
+	await _shot("30_spiral_high", Vector3(-453.6, 12.5, 1.5), Vector3(-462.1, 5.4, -4.9))
+	# ── 第 11 段 机关区 ──
+	await _shot("31_mech", Vector3(-474.0, 14.0, 1.0), Vector3(-486.0, 12.6, -7.5))
+	await _shot("32_mech_air", Vector3(-500.0, 20.0, 3.0), Vector3(-514.0, 15.5, -7.5))
+	# ── 第 12 段 竖井 / 终点岛 ──
+	await _shot("33_shaft", Vector3(-550.0, 17.5, -2.0), Vector3(-562.0, 11.5, -7.5))
+	await _shot("34_island", Vector3(-570.0, 15.0, 2.0), Vector3(-584.0, 9.0, -9.5))
+	await _shot("35_plan", Vector3(-404.0, 210.0, -4.0), Vector3(-404.0, 0.0, -4.5))
 
 
 	print("\n出图目录：%s" % _out)
