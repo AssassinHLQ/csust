@@ -141,6 +141,16 @@ MATERIALS = {
     "m_spot": ("Mat_b_spot", (0.90, 0.85, 0.66), (0.45, 0.40, 0.24), 0.18),
     "m_swap": ("Mat_b_swap", (0.95, 0.56, 0.12), (0.55, 0.26, 0.03), 0.30),
     "m_btc": ("Mat_b_btc", (0.88, 0.33, 0.05), (0.45, 0.10, 0.02), 0.34),
+    # 第 5~7 段：期权（权利金深紫 / 行权亮青）、A股（涨停红 / 跌停绿 / 天地板紫红）、
+    # 外汇（金 / 杠杆橙金 / 闪崩暗红）
+    "m_opt_prem": ("Mat_s_opt_prem", (0.45, 0.30, 0.75), (0.20, 0.12, 0.45), 0.30),
+    "m_opt_exer": ("Mat_s_opt_exer", (0.15, 0.75, 0.85), (0.05, 0.40, 0.50), 0.35),
+    "m_ash_up": ("Mat_s_ash_up", (0.85, 0.12, 0.14), (0.45, 0.04, 0.05), 0.30),
+    "m_ash_dn": ("Mat_s_ash_dn", (0.08, 0.55, 0.22), (0.02, 0.28, 0.10), 0.28),
+    "m_ash_lei": ("Mat_s_ash_lei", (0.72, 0.10, 0.45), (0.36, 0.03, 0.20), 0.32),
+    "m_fx": ("Mat_s_fx", (0.95, 0.80, 0.20), (0.50, 0.40, 0.06), 0.28),
+    "m_fx_lev": ("Mat_s_fx_lev", (1.00, 0.52, 0.05), (0.55, 0.24, 0.01), 0.36),
+    "m_fx_crash": ("Mat_s_fx_crash", (0.55, 0.05, 0.08), (0.30, 0.01, 0.02), 0.40),
 }
 
 
@@ -361,9 +371,12 @@ LANES = [
     dict(key="B", prefix="PP", cn="永续道", note="时机", z=-10.0,
          tops=(2.00, 2.60, 3.20), width=3.0, kind="swap",
          seq="8.00,-5.00", period=3.0, ferry="lift"),
+    # 2026-10-18 用户：「比特币杠杆调大点，但是变化快点」——波动从 −6~+9 拉到
+    # −14~+22（3 倍杠杆的味道），周期从 3.6 s 砍到 **1.6 s**（每档 0.4 s，
+    # 站在前一块板上已经等不起了，只能凭节奏跳）。
     dict(key="C", prefix="BC", cn="币圈道", note="赌", z=-19.0,
          tops=(2.00, 2.20, 2.20), width=2.8, kind="btc",
-         seq="-6.00,-1.00,4.00,9.00", period=3.6, ferry="pulse"),
+         seq="-14.00,-3.00,+9.00,+22.00", period=1.6, ferry="pulse"),
 ]
 # 结算门槛（万）：三道里 A 注定够不着（+9.27%），B/C 靠时机才能过 —— 这才是「决策」
 HEDGE_TARGET = 11.0
@@ -529,6 +542,148 @@ def build_branch_nodes(br: dict) -> list:
                'pixel_size = 0.009\nbillboard = 1\nalpha_cut = 1\n'
                'text = "%s"\nfont_size = 56\noutline_size = 14'
                % (_num(snap(body * 0.5 + 2.60)), txt_m0))
+    return out
+
+
+# --- 第 5~7 段：期权 / A股 / 外汇 -------------------------------------------------
+#
+# 用户 2026-10-18：「后面阶段是期权交易，A股，外汇，自由发挥」。
+# 三段都是**直线**（不再分叉），每段 4 块板，但每段换一套规则：
+#   期权：权利金（小亏）→ 行权（大赚，**12 秒内**没摸到就作废）
+#   A股：一字板 —— 板只有 1.2~1.4 m 宽、5~6 m 长，涨跌停 ±10%，只能沿着走
+#   外汇：0.4~0.6 s 跳一次的汇率牌（等不了），杠杆块 ±14%
+SECTIONS = [
+    # ⚠️ 用户 2026-10-18：「后面这个阶段的三种东西，比比特币更加疯狂」——
+    #    所以阈值全部比币圈道（−14 ~ +22 / 1.6 s）更狠：期权是「翻倍或归零」，
+    #    A股是「天地板 ±20%」（创业板/科创板的涨跌停），外汇是「40% 杠杆 + 闪崩」。
+    dict(name="期权交易", z=-1.70,
+         sign="权利金 −1.00%% 先付钱%s行权 ＋25%% / ＋60%% 一口吃成胖子%s"
+              "8 秒内没摸到行权 → 全部作废（买方就是这点残酷）",
+         plates=[
+             dict(nm="OPT1", kind="opt_prem", seq="-1.00", period=0.0, top=2.00,
+                  width=3.0, depth=3.0, gap=3.00),
+             dict(nm="OPT2", kind="opt_prem", seq="-1.00", period=0.0, top=2.20,
+                  width=3.0, depth=3.0, gap=2.80),
+             dict(nm="OPT3", kind="opt_exer", seq="25.00", period=0.0, top=2.60,
+                  width=3.0, depth=3.0, gap=3.00, deadline=8.0),
+             dict(nm="OPT4", kind="opt_exer", seq="60.00", period=0.0, top=2.40,
+                  width=3.0, depth=3.0, gap=2.80, deadline=8.0),
+         ]),
+    dict(name="A股", z=-1.70,
+         sign="天地板：±20%%（创业板/科创板）每 0.9 s 翻一次%s"
+              "一字板只有 1.2 m 宽、6 m 长 —— 只能沿着走%s涨停 +20%% / 跌停 −20%%",
+         plates=[
+             dict(nm="AS1", kind="ash_up", seq="20.00", period=0.0, top=2.00,
+                  width=1.4, depth=5.0, gap=3.00),
+             dict(nm="AS2", kind="ash_lei", seq="20.00,-20.00", period=0.90, top=2.20,
+                  width=1.2, depth=6.0, gap=2.80),
+             dict(nm="AS3", kind="ash_dn", seq="-20.00", period=0.0, top=2.40,
+                  width=1.2, depth=6.0, gap=3.00),
+             dict(nm="AS4", kind="ash_lei", seq="20.00,-20.00", period=0.90, top=2.20,
+                  width=1.4, depth=5.0, gap=2.80),
+         ]),
+    dict(name="外汇", z=-1.70,
+         sign="汇率 24h：0.5 s 跳一次，杠杆块 ±40%%（0.3 s 一跳）%s"
+              "闪崩块 −30%%：踩上去就是断头铡%s顺势 +15/−15 两档",
+         plates=[
+             dict(nm="FX1", kind="fx", seq="15.00,-15.00", period=0.50, top=2.00,
+                  width=3.0, depth=3.0, gap=3.00),
+             dict(nm="FX2", kind="fx_lev", seq="40.00,-40.00", period=0.30, top=2.30,
+                  width=2.8, depth=3.0, gap=2.80),
+             dict(nm="FX3", kind="fx_crash", seq="-30.00", period=0.0, top=2.00,
+                  width=2.8, depth=3.0, gap=3.00),
+             dict(nm="FX4", kind="fx", seq="15.00,-15.00", period=0.50, top=2.20,
+                  width=3.0, depth=3.0, gap=2.80),
+         ]),
+]
+SECTION_GAP_FROM_M0 = 3.50
+
+
+def layout_sections(start_x: float) -> dict:
+    """从结算台 M0 的西边缘往西排三段（每段 4 块，直线）。"""
+    x = start_x
+    out = []
+    for sec in SECTIONS:
+        plist = []
+        for p in sec["plates"]:
+            x1 = snap(x - p["gap"])
+            x0 = snap(x1 - p["depth"])
+            plist.append(dict(p, x0=x0, x1=x1,
+                              z0=snap(sec["z"] - p["width"] * 0.5),
+                              z1=snap(sec["z"] + p["width"] * 0.5)))
+            x = x0
+        out.append(dict(sec=sec, plates=plist))
+    return dict(sections=out, end_x=x)
+
+
+def check_sections(secs: dict) -> None:
+    """每段都要真的跳得过去（同一条直线，抬升 ≤ 0.5 m 的普通跳）。"""
+    prev = None
+    for item in secs["sections"]:
+        for p in item["plates"]:
+            if prev is not None:
+                rise = p["top"] - prev["top"]
+                reach = reach_of(rise) * K_MEAS
+                need = p["gap"]
+                if reach < need + 0.80:
+                    raise SystemExit("!! %s→%s 余量只有 %.2f m（< 0.80）"
+                                     % (prev["nm"], p["nm"], reach - need))
+            prev = p
+        print("  %s：%s（台面 %.2f → %.2f）"
+              % (item["sec"]["name"],
+                 " / ".join("%s %s" % (p["nm"], p["seq"]) for p in item["plates"]),
+                 item["plates"][0]["top"], item["plates"][-1]["top"]))
+
+
+def build_section_nodes(secs: dict, first_seg: int) -> list:
+    """三段的路面 + 牌子 + 段起点桅杆。"""
+    out = []
+    body = 1.20
+    for si, item in enumerate(secs["sections"]):
+        sec = item["sec"]
+        for idx, p in enumerate(item["plates"]):
+            meta = (chr(10) + "metadata/pct_kind = \"%s\"" % p["kind"]
+                    + chr(10) + "metadata/pct_seq = \"%s\"" % p["seq"]
+                    + chr(10) + "metadata/pct_period = %s" % _num(p["period"])
+                    + chr(10) + "metadata/pct_phase = %s" % _num(0.4 * idx)
+                    + chr(10) + "metadata/lane = \"%s\"" % p["nm"][:2])
+            if p.get("deadline"):
+                meta += chr(10) + "metadata/deadline = %s" % _num(p["deadline"])
+            out += _box_node(p["nm"], p["x0"], p["x1"], p["z0"], p["z1"], p["top"], body,
+                             "m_" + p["kind"], meta)
+            seq = [float(v) for v in p["seq"].split(",")]
+            col = "0.95, 0.25, 0.25, 1" if seq[0] >= 0.0 else "0.25, 0.9, 0.45, 1"
+            out.append('[node name="Pct" type="Label3D" parent="Route/%s"]\n'
+                       'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, %s, 0)\n'
+                       'pixel_size = 0.008\nbillboard = 1\nalpha_cut = 1\n'
+                       'modulate = Color(%s)\ntext = "%+.2f%%"\nfont_size = 56\noutline_size = 14'
+                       % (p["nm"], _num(snap(body * 0.5 + 2.20)), col, seq[0]))
+        # 段起点桅杆 + 规则牌（挂在本段第一块板的东侧）
+        f = item["plates"][0]
+        bx = f["x1"] - 1.20
+        bz = f["z1"] + 2.20
+        out.append('[node name="Beacon_%s" type="StaticBody3D" parent="Route"]\n'
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s, %s, %s)'
+                   % (sec["name"], _num(snap(bx)), _num(snap(f["top"] - 0.50)), _num(snap(bz))))
+        for nm, y, mat, mesh in [("Mast", "2.5", "Mat_tower", "Cyl_mast"),
+                                 ("Head", "5.3", "Mat_beacon", "Sphere_beacon")]:
+            out.append('[node name="%s" type="MeshInstance3D" parent="Route/Beacon_%s"]\n'
+                       'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, %s, 0)\n'
+                       'material_override = SubResource("%s")\nmesh = SubResource("%s")'
+                       % (nm, sec["name"], y, mat, mesh))
+        out.append('[node name="Col" type="CollisionShape3D" parent="Route/Beacon_%s"]\n'
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)\n'
+                   'shape = SubResource("Shape_mast")' % sec["name"])
+        out.append('[node name="Sign" type="Label3D" parent="Route/Beacon_%s"]\n'
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)\n'
+                   'pixel_size = 0.01\nbillboard = 1\nalpha_cut = 1\n'
+                   'text = "第 %d 段 · %s"\nfont_size = 60\noutline_size = 14'
+                   % (sec["name"], first_seg + si, sec["name"]))
+        out.append('[node name="Rule_%s" type="Label3D" parent="Route/Beacon_%s"]\n'
+                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.6, 0)\n'
+                   'pixel_size = 0.0075\nbillboard = 1\nalpha_cut = 1\n'
+                   'text = "%s"\nfont_size = 44\noutline_size = 12'
+                   % (sec["name"], sec["name"], sec["sign"] % (chr(10), chr(10))))
     return out
 
 
@@ -707,20 +862,28 @@ def build_subresources() -> list:
     return out
 
 
-def rewrite_arrays(text: str, boxes: list, br: dict) -> str:
+def rewrite_arrays(text: str, boxes: list, br: dict, secs: dict) -> str:
     names = [c["name"] for c in boxes]
     # 第 4 段只有**现货道**进 `route`（它是「正统路线」，连续通关按它走）。
     # 永续道 / 币圈道的板**故意不进 route**：站在上面不算检查点，
     # 掉下去就回分叉台 —— 这正是「选路线」该有的手感（选错了重来只损失时间）。
     branch_names = ["J0"] + [p["name"] for p in br["lanes"][0]] + ["M0"]
-    route = BASE_ROUTE[:INS_AT + 1] + names + branch_names + BASE_ROUTE[INS_AT + 1:]
+    # 第 5~7 段是**直线**（没有分叉），12 块板全进 route
+    sec_names = [p["nm"] for item in secs["sections"] for p in item["plates"]]
+    route = (BASE_ROUTE[:INS_AT + 1] + names + branch_names + sec_names
+             + BASE_ROUTE[INS_AT + 1:])
     nk = len(names)
     nb = len(branch_names)
-    n = nk + nb
+    ns = len(sec_names)
+    n = nk + nb + ns
     seg2 = int(BASE_SEGMENTS[2])
-    segments = ([int(v) for v in BASE_SEGMENTS[:3]] + [seg2 + nk] + [seg2 + nk + nb]
-                + [v + n for v in BASE_SEGMENTS[3:]])
-    seg_names = BASE_SEG_NAMES[:2] + [FLUSH_SEG_NAME, BRANCH_NAME] + BASE_SEG_NAMES[2:]
+    base = seg2 + nk + nb
+    segments = ([int(v) for v in BASE_SEGMENTS[:3]]
+                + [seg2 + nk]                                     # 第 4 段：三道
+                + [base + 4 * k for k in range(4)]                # 第 5/6/7 段 + 第 8 段起点
+                + [v + n for v in BASE_SEGMENTS[3:]])             # 原来的段 4~6
+    seg_names = (BASE_SEG_NAMES[:2] + [FLUSH_SEG_NAME, BRANCH_NAME]
+                 + [s["name"] for s in SECTIONS] + BASE_SEG_NAMES[2:])
     # ⚠️ 判据是「站号 ≥ 插入点」，不是「≥ 第 4 段起点」——F1/F2（26/27）也在插入点之后
     # 渡船跳（升降台 / 平移台）的落点也算机关跳：弹道核算跳过，交给真物理验收
     ferry = [INS_AT + 1 + i for i, c in enumerate(CANDLES) if c.get("ferry")]
@@ -754,9 +917,9 @@ def bump_labels(parts: list) -> list:
         nd = node_of(ch)
         if nd is None:
             continue
-        want = {"Beacon_C3": "第 5 段 · 终点", "Beacon_C4": "第 6 段 · 终点",
-                "Beacon_C5": "第 7 段 · 终点", "SignPost": "跑酷 · 8 段 →",
-                "SignText": "跑酷 · 8 段 →"}.get(nd["name"])
+        want = {"Beacon_C3": "第 8 段 · 终点", "Beacon_C4": "第 9 段 · 终点",
+                "Beacon_C5": "第 10 段 · 终点", "SignPost": "跑酷 · 11 段 →",
+                "SignText": "跑酷 · 11 段 →"}.get(nd["name"])
         if want is None:
             continue
         parts[i] = re.sub(r'(?m)^text = ".*"$', 'text = "%s"' % want, ch)
@@ -793,13 +956,29 @@ def is_branch_node(nd) -> bool:
     return bool(BRANCH_NODE.match(top))
 
 
+# 第 5~7 段：12 块板 + 三根桅杆 + 三块规则牌（桅杆名是中文，单独列出来）
+SECTION_NODE = re.compile(r"^(OPT|AS|FX)[1-4]$")
+SECTION_HOSTS = ("Beacon_期权交易", "Beacon_A股", "Beacon_外汇",
+                 "Rule_期权交易", "Rule_A股", "Rule_外汇")
+
+
+def is_section_node(nd) -> bool:
+    if SECTION_NODE.match(nd["name"]) or nd["name"] in SECTION_HOSTS:
+        return True
+    top = nd["parent"].split("/")[1] if "/" in nd["parent"] else ""
+    return bool(SECTION_NODE.match(top)) or top in SECTION_HOSTS
+
+
 def main() -> None:
     dry = "--dry-run" in sys.argv
     boxes, _ = layout()
     br = layout_branch(boxes[-1])
-    x1 = br["x1"]
+    secs = layout_sections(br["m"]["x0"])
+    x1 = dict(center=snap(secs["end_x"] - SECTION_GAP_FROM_M0 - X1_DEPTH * 0.5),
+              gap=SECTION_GAP_FROM_M0)
     grid_check(boxes)
     check_branch(br)
+    check_sections(secs)
     stats = report(boxes, x1, include_x1=False)
     if stats["worst"] < 0.80:
         raise SystemExit("!! 最紧的余量 %.2f < 0.80，先调 CANDLES 表" % stats["worst"])
@@ -834,6 +1013,7 @@ def main() -> None:
         top = nd["parent"].split("/")[1] if "/" in nd["parent"] else nd["name"]
         if re.fullmatch(r"K\d+", nd["name"]) or re.fullmatch(r"K\d+", top) \
                 or nd["name"] == "Beacon_K1" or top == "Beacon_K1" or is_branch_node(nd) \
+                or is_section_node(nd) \
                 or (nd["name"] == "Futures" and nd["parent"] == "."):
             continue
         gen.append(ch)
@@ -875,15 +1055,16 @@ def main() -> None:
         if nd and (nd["name"] == "C2" or nd["parent"].startswith("Route/C2")
                    or nd["parent"] == "Route/C2"):
             c2_end = i
-    gen[c2_end + 1:c2_end + 1] = build_nodes(boxes, x1) + build_branch_nodes(br)
+    gen[c2_end + 1:c2_end + 1] = (build_nodes(boxes, x1) + build_branch_nodes(br)
+                                  + build_section_nodes(secs, 5))
 
     gen = bump_labels(gen)
     out = "\n".join(gen)
-    out = rewrite_arrays(out, boxes, br)
+    out = rewrite_arrays(out, boxes, br, secs)
     out = re.sub(r"\n{3,}", "\n\n", out)
 
-    print("\n  站数 %d → %d（K 段 %d + 三道 %d）；段数 6 → 8"
-          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5, len(boxes), 5))
+    print("\n  站数 %d → %d（K 段 %d 根蜡烛；另加三道 5 + 期权/A股/外汇 12）；段数 6 → 11"
+          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5 + 12, len(boxes)))
     if dry:
         print("  --dry-run：不写文件")
         return

@@ -71,6 +71,8 @@ var quotes: Array[Dictionary] = []
 ## 在 M0 上解锁的「对冲」：之后强平块只扣钱、不爆仓
 var hedged := false
 var _hedge_checked := false
+## 期权那一段的「到期」总开关：第一次踩到 opt 系的板时记时，行权超时 → 0%
+var _opt_t0 := -1.0
 
 var drifts: Array[ParkourDrift] = []
 var hazards: Array[Node3D] = []
@@ -337,8 +339,9 @@ func _collect_quotes() -> void:
 		quotes.append({
 			"node": n, "label": lab, "kind": String(n.get_meta("pct_kind")),
 			"seq": seq, "period": float(n.get_meta("pct_period", 0.0)),
-			"phase": float(n.get_meta("pct_phase", 0.0)), "last": NAN,
+			"phase": float(n.get_meta("pct_phase", 0.0)), "last": "", "deadline": 0.0,
 		})
+		quotes[-1]["deadline"] = float(n.get_meta("deadline", 0.0))
 
 
 ## 每帧刷新跳价牌 —— 只有数字真变了才写 Label（一帧改 9 个 Label3D 会掉帧）
@@ -351,13 +354,18 @@ func _tick_quotes() -> void:
 			var step := period / float(seq.size())
 			var t := fmod(_t + float(q["phase"]), period)
 			pct = float(seq[mini(int(t / step), seq.size() - 1)])
-		if not is_nan(float(q["last"])) and absf(pct - float(q["last"])) < 0.001:
+		var txt := "%+.2f%%" % pct
+		# 期权：牌子上带倒计时（「12.0s」→ 0 就作废），踩上去之前就能看见剩余时间
+		var dl := float(q["deadline"])
+		if dl > 0.0 and _opt_t0 >= 0.0:
+			txt += "  %.1fs" % maxf(0.0, dl - (_t - _opt_t0))
+		if txt == String(q["last"]):
 			continue
-		q["last"] = pct
+		q["last"] = txt
 		var lab := q["label"] as Label3D
 		if lab == null:
 			continue
-		lab.text = "%+.2f%%" % pct
+		lab.text = txt
 		lab.modulate = Color(1.0, 0.35, 0.35) if pct >= 0.0 else Color(0.35, 1.0, 0.55)
 
 
@@ -599,6 +607,14 @@ func _settle(pl: Dictionary) -> void:
 	var pct := _parse_pct(lab.text)
 	if is_nan(pct):
 		return                       # 薛定谔还没坍缩（牌子还是「?」）→ 下一帧再说
+	# 期权：第一次踩到 opt 系的板就开始计时；超时的「行权」按 0% 结算（买方作废）
+	var kind := String(node.get_meta("pct_kind", ""))
+	var dl := float(node.get_meta("deadline", 0.0))
+	if kind.begins_with("opt") and _opt_t0 < 0.0:
+		_opt_t0 = _t
+	if dl > 0.0 and _opt_t0 >= 0.0 and _t - _opt_t0 > dl:
+		pct = 0.0
+		_banner_text("期权到期：行权作废（0%）", Color(1.0, 0.72, 0.35))
 	settled[pl["name"]] = true
 	var before := margin
 	margin = maxf(0.0, margin * (1.0 + pct / 100.0))
@@ -616,7 +632,12 @@ func _settle(pl: Dictionary) -> void:
 
 ## 从牌子文字里取百分比：「+2.31%」→ 2.31；「?」/空 → NAN
 func _parse_pct(t: String) -> float:
-	var v := t.strip_edges().replace("%", "").replace("＋", "+").strip_edges()
+	# 牌子上可能带倒计时（「+25.00%  8.4s」）—— 只取 `%` 之前那段
+	var v := t.strip_edges()
+	var k := v.find("%")
+	if k >= 0:
+		v = v.substr(0, k)
+	v = v.replace("＋", "+").strip_edges()
 	if v.is_empty() or not (v.is_valid_float() or (v.begins_with("+") and v.substr(1).is_valid_float())):
 		return NAN
 	return v.to_float()

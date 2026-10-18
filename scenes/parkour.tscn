@@ -211,13 +211,69 @@ roughness = 0.45
 emission_enabled = true
 emission = Color(0.45, 0.1, 0.02, 1)
 emission_energy_multiplier = 0.34
+[sub_resource type="StandardMaterial3D" id="Mat_s_opt_prem"]
+albedo_color = Color(0.45, 0.3, 0.75, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.2, 0.12, 0.45, 1)
+emission_energy_multiplier = 0.3
+[sub_resource type="StandardMaterial3D" id="Mat_s_opt_exer"]
+albedo_color = Color(0.15, 0.75, 0.85, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.05, 0.4, 0.5, 1)
+emission_energy_multiplier = 0.35
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_up"]
+albedo_color = Color(0.85, 0.12, 0.14, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.45, 0.04, 0.05, 1)
+emission_energy_multiplier = 0.3
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_dn"]
+albedo_color = Color(0.08, 0.55, 0.22, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.02, 0.28, 0.1, 1)
+emission_energy_multiplier = 0.28
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_lei"]
+albedo_color = Color(0.72, 0.1, 0.45, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.36, 0.03, 0.2, 1)
+emission_energy_multiplier = 0.32
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx"]
+albedo_color = Color(0.95, 0.8, 0.2, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.5, 0.4, 0.06, 1)
+emission_energy_multiplier = 0.28
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx_lev"]
+albedo_color = Color(1.0, 0.52, 0.05, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.55, 0.24, 0.01, 1)
+emission_energy_multiplier = 0.36
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx_crash"]
+albedo_color = Color(0.55, 0.05, 0.08, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.3, 0.01, 0.02, 1)
+emission_energy_multiplier = 0.4
 [node name="Parkour" type="Node3D" unique_id=1943431392]
 script = ExtResource("1_parkour")
-route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/K1"), NodePath("Route/K2"), NodePath("Route/K3"), NodePath("Route/K4"), NodePath("Route/K5"), NodePath("Route/K6"), NodePath("Route/K7"), NodePath("Route/K8"), NodePath("Route/K9"), NodePath("Route/K10"), NodePath("Route/K11"), NodePath("Route/K12"), NodePath("Route/K13"), NodePath("Route/J0"), NodePath("Route/SP1"), NodePath("Route/SP2"), NodePath("Route/SP3"), NodePath("Route/M0"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
-segments = [0, 9, 20, 33, 38, 46, 54, 67]
-seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "同花顺期货通", "同花顺期货通 · 比特币", "横跳区・移动平台", "绕柱螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
-special_hops = [25, 27, 36, 44, 45, 56, 63, 65, 66]
-short_hops = [47, 48, 49, 50, 51, 52, 53]
+route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/K1"), NodePath("Route/K2"), NodePath("Route/K3"), NodePath("Route/K4"), NodePath("Route/K5"), NodePath("Route/K6"), NodePath("Route/K7"), NodePath("Route/K8"), NodePath("Route/K9"), NodePath("Route/K10"), NodePath("Route/K11"), NodePath("Route/K12"), NodePath("Route/K13"), NodePath("Route/J0"), NodePath("Route/SP1"), NodePath("Route/SP2"), NodePath("Route/SP3"), NodePath("Route/M0"), NodePath("Route/OPT1"), NodePath("Route/OPT2"), NodePath("Route/OPT3"), NodePath("Route/OPT4"), NodePath("Route/AS1"), NodePath("Route/AS2"), NodePath("Route/AS3"), NodePath("Route/AS4"), NodePath("Route/FX1"), NodePath("Route/FX2"), NodePath("Route/FX3"), NodePath("Route/FX4"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
+segments = [0, 9, 20, 33, 38, 42, 46, 50, 58, 66, 79]
+seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "同花顺期货通", "同花顺期货通 · 比特币", "期权交易", "A股", "外汇", "横跳区・移动平台", "绕柱螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
+special_hops = [25, 27, 36, 56, 57, 68, 75, 77, 78]
+short_hops = [59, 60, 61, 62, 63, 64, 65]
 
 [node name="Launch" type="MeshInstance3D" parent="." unique_id=1183385834]
 transform = Transform3D(10, 0, 0, 0, 0.05, 0, 0, 0, 3, -15, 0, 4)
@@ -246,7 +302,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 pixel_size = 0.008
 billboard = 1
 alpha_cut = 1
-text = "跑酷 · 8 段 →"
+text = "跑酷 · 11 段 →"
 font_size = 64
 outline_size = 14
 
@@ -1007,8 +1063,8 @@ outline_size = 14
 [node name="BC1" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -19)
 metadata/pct_kind = "btc"
-metadata/pct_seq = "-6.00,-1.00,4.00,9.00"
-metadata/pct_period = 3.6
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
 metadata/pct_phase = 0
 metadata/lane = "C"
 [node name="Mesh" type="MeshInstance3D" parent="Route/BC1"]
@@ -1024,14 +1080,14 @@ pixel_size = 0.008
 billboard = 1
 alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-6.00%"
+text = "-14.00%"
 font_size = 56
 outline_size = 14
 [node name="BC2" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 1.6, -19)
 metadata/pct_kind = "btc"
-metadata/pct_seq = "-6.00,-1.00,4.00,9.00"
-metadata/pct_period = 3.6
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
 metadata/pct_phase = 0.6
 metadata/lane = "C"
 [node name="Mesh" type="MeshInstance3D" parent="Route/BC2"]
@@ -1047,14 +1103,14 @@ pixel_size = 0.008
 billboard = 1
 alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-6.00%"
+text = "-14.00%"
 font_size = 56
 outline_size = 14
 [node name="BC3" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 1.6, -19)
 metadata/pct_kind = "btc"
-metadata/pct_seq = "-6.00,-1.00,4.00,9.00"
-metadata/pct_period = 3.6
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
 metadata/pct_phase = 1.2
 metadata/lane = "C"
 [node name="Mesh" type="MeshInstance3D" parent="Route/BC3"]
@@ -1070,7 +1126,7 @@ pixel_size = 0.008
 billboard = 1
 alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-6.00%"
+text = "-14.00%"
 font_size = 56
 outline_size = 14
 [node name="Beacon_J0" type="StaticBody3D" parent="Route"]
@@ -1120,8 +1176,8 @@ pixel_size = 0.0075
 billboard = 1
 alpha_cut = 1
 text = "C · 币圈道
-每块 -6% ~ +9% 四档
-理论 12.95 万（最差 8.31）"
+每块 -14% ~ +22% 四档
+理论 18.16 万（最差 6.36）"
 font_size = 44
 outline_size = 12
 [node name="Sign_J0" type="Label3D" parent="Route/J0"]
@@ -1142,8 +1198,379 @@ text = "结算台
 本段结算：—"
 font_size = 56
 outline_size = 14
+[node name="OPT1" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -263.65, 1.4, -1.7)
+metadata/pct_kind = "opt_prem"
+metadata/pct_seq = "-1.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0
+metadata/lane = "OP"
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT1"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_opt_prem")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/OPT1"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/OPT1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-1.00%"
+font_size = 56
+outline_size = 14
+[node name="OPT2" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -269.45, 1.6, -1.7)
+metadata/pct_kind = "opt_prem"
+metadata/pct_seq = "-1.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0.4
+metadata/lane = "OP"
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT2"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_opt_prem")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/OPT2"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/OPT2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-1.00%"
+font_size = 56
+outline_size = 14
+[node name="OPT3" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -275.45, 2, -1.7)
+metadata/pct_kind = "opt_exer"
+metadata/pct_seq = "25.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0.8
+metadata/lane = "OP"
+metadata/deadline = 8
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT3"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_opt_exer")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/OPT3"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/OPT3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+25.00%"
+font_size = 56
+outline_size = 14
+[node name="OPT4" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -281.25, 1.8, -1.7)
+metadata/pct_kind = "opt_exer"
+metadata/pct_seq = "60.00"
+metadata/pct_period = 0
+metadata/pct_phase = 1.2
+metadata/lane = "OP"
+metadata/deadline = 8
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT4"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_opt_exer")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/OPT4"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/OPT4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+60.00%"
+font_size = 56
+outline_size = 14
+[node name="Beacon_期权交易" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -263.35, 1.5, 2)
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_期权交易"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+material_override = SubResource("Mat_tower")
+mesh = SubResource("Cyl_mast")
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_期权交易"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
+material_override = SubResource("Mat_beacon")
+mesh = SubResource("Sphere_beacon")
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_期权交易"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+shape = SubResource("Shape_mast")
+[node name="Sign" type="Label3D" parent="Route/Beacon_期权交易"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
+pixel_size = 0.01
+billboard = 1
+alpha_cut = 1
+text = "第 5 段 · 期权交易"
+font_size = 60
+outline_size = 14
+[node name="Rule_期权交易" type="Label3D" parent="Route/Beacon_期权交易"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.6, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "权利金 −1.00% 先付钱
+行权 ＋25% / ＋60% 一口吃成胖子
+8 秒内没摸到行权 → 全部作废（买方就是这点残酷）"
+font_size = 44
+outline_size = 12
+[node name="AS1" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -288.25, 1.4, -1.7)
+metadata/pct_kind = "ash_up"
+metadata/pct_seq = "20.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0
+metadata/lane = "AS"
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS1"]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
+material_override = SubResource("Mat_s_ash_up")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/AS1"]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/AS1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+20.00%"
+font_size = 56
+outline_size = 14
+[node name="AS2" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -296.55, 1.6, -1.7)
+metadata/pct_kind = "ash_lei"
+metadata/pct_seq = "20.00,-20.00"
+metadata/pct_period = 0.9
+metadata/pct_phase = 0.4
+metadata/lane = "AS"
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS2"]
+transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
+material_override = SubResource("Mat_s_ash_lei")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/AS2"]
+transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/AS2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+20.00%"
+font_size = 56
+outline_size = 14
+[node name="AS3" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -305.55, 1.8, -1.7)
+metadata/pct_kind = "ash_dn"
+metadata/pct_seq = "-20.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0.8
+metadata/lane = "AS"
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS3"]
+transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
+material_override = SubResource("Mat_s_ash_dn")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/AS3"]
+transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/AS3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-20.00%"
+font_size = 56
+outline_size = 14
+[node name="AS4" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -313.85, 1.6, -1.7)
+metadata/pct_kind = "ash_lei"
+metadata/pct_seq = "20.00,-20.00"
+metadata/pct_period = 0.9
+metadata/pct_phase = 1.2
+metadata/lane = "AS"
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS4"]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
+material_override = SubResource("Mat_s_ash_lei")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/AS4"]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/AS4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+20.00%"
+font_size = 56
+outline_size = 14
+[node name="Beacon_A股" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -286.95, 1.5, 1.2)
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_A股"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+material_override = SubResource("Mat_tower")
+mesh = SubResource("Cyl_mast")
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_A股"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
+material_override = SubResource("Mat_beacon")
+mesh = SubResource("Sphere_beacon")
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_A股"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+shape = SubResource("Shape_mast")
+[node name="Sign" type="Label3D" parent="Route/Beacon_A股"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
+pixel_size = 0.01
+billboard = 1
+alpha_cut = 1
+text = "第 6 段 · A股"
+font_size = 60
+outline_size = 14
+[node name="Rule_A股" type="Label3D" parent="Route/Beacon_A股"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.6, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "天地板：±20%（创业板/科创板）每 0.9 s 翻一次
+一字板只有 1.2 m 宽、6 m 长 —— 只能沿着走
+涨停 +20% / 跌停 −20%"
+font_size = 44
+outline_size = 12
+[node name="FX1" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.85, 1.4, -1.7)
+metadata/pct_kind = "fx"
+metadata/pct_seq = "15.00,-15.00"
+metadata/pct_period = 0.5
+metadata/pct_phase = 0
+metadata/lane = "FX"
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX1"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_fx")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/FX1"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/FX1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+15.00%"
+font_size = 56
+outline_size = 14
+[node name="FX2" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -326.65, 1.7, -1.7)
+metadata/pct_kind = "fx_lev"
+metadata/pct_seq = "40.00,-40.00"
+metadata/pct_period = 0.3
+metadata/pct_phase = 0.4
+metadata/lane = "FX"
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX2"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+material_override = SubResource("Mat_s_fx_lev")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/FX2"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/FX2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+40.00%"
+font_size = 56
+outline_size = 14
+[node name="FX3" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -332.65, 1.4, -1.7)
+metadata/pct_kind = "fx_crash"
+metadata/pct_seq = "-30.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0.8
+metadata/lane = "FX"
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX3"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+material_override = SubResource("Mat_s_fx_crash")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/FX3"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/FX3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-30.00%"
+font_size = 56
+outline_size = 14
+[node name="FX4" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -338.45, 1.6, -1.7)
+metadata/pct_kind = "fx"
+metadata/pct_seq = "15.00,-15.00"
+metadata/pct_period = 0.5
+metadata/pct_phase = 1.2
+metadata/lane = "FX"
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX4"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_s_fx")
+mesh = SubResource("Box_unit")
+[node name="Col" type="CollisionShape3D" parent="Route/FX4"]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+[node name="Pct" type="Label3D" parent="Route/FX4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+15.00%"
+font_size = 56
+outline_size = 14
+[node name="Beacon_外汇" type="StaticBody3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.55, 1.5, 2)
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_外汇"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+material_override = SubResource("Mat_tower")
+mesh = SubResource("Cyl_mast")
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_外汇"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
+material_override = SubResource("Mat_beacon")
+mesh = SubResource("Sphere_beacon")
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_外汇"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+shape = SubResource("Shape_mast")
+[node name="Sign" type="Label3D" parent="Route/Beacon_外汇"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
+pixel_size = 0.01
+billboard = 1
+alpha_cut = 1
+text = "第 7 段 · 外汇"
+font_size = 60
+outline_size = 14
+[node name="Rule_外汇" type="Label3D" parent="Route/Beacon_外汇"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.6, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "汇率 24h：0.5 s 跳一次，杠杆块 ±40%（0.3 s 一跳）
+闪崩块 −30%：踩上去就是断头铡
+顺势 +15/−15 两档"
+font_size = 44
+outline_size = 12
 [node name="X1" type="StaticBody3D" parent="Route" unique_id=899126870]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -264.5, 1.75, -1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -345.3, 1.75, -1.7)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X1" unique_id=1013299967]
 transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
@@ -1155,7 +1582,7 @@ transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="X2" type="StaticBody3D" parent="Route" unique_id=1497631030]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -270.4, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -351.2, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X2" unique_id=825247238]
 transform = Transform3D(2.9, 0, 0, 0, 0.5, 0, 0, 0, 2.9, 0, 0, 0)
@@ -1167,7 +1594,7 @@ transform = Transform3D(2.9, 0, 0, 0, 0.5, 0, 0, 0, 2.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="X3" type="StaticBody3D" parent="Route" unique_id=798534539]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -276.3, 1.75, -8.1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -357.1, 1.75, -8.1)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X3" unique_id=1286694345]
 transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
@@ -1179,7 +1606,7 @@ transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="X4" type="StaticBody3D" parent="Route" unique_id=1030008222]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -282.2, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -363, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X4" unique_id=2030249308]
 transform = Transform3D(2.9, 0, 0, 0, 0.5, 0, 0, 0, 2.9, 0, 0, 0)
@@ -1191,7 +1618,7 @@ transform = Transform3D(2.9, 0, 0, 0, 0.5, 0, 0, 0, 2.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="X5" type="StaticBody3D" parent="Route" unique_id=1451954626]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -288.1, 1.75, -1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -368.9, 1.75, -1.7)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/X5" unique_id=1085114729]
 transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
@@ -1203,7 +1630,7 @@ transform = Transform3D(3.7, 0, 0, 0, 0.5, 0, 0, 0, 3.7, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="F1" type="StaticBody3D" parent="Route" unique_id=502744043]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -294.35, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -375.15, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/F1" unique_id=163259746]
 transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
@@ -1215,7 +1642,7 @@ transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="F2" type="StaticBody3D" parent="Route" unique_id=636839017]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -304.15, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -384.95, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/F2" unique_id=1406689315]
 transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
@@ -1227,7 +1654,7 @@ transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="C3" type="StaticBody3D" parent="Route" unique_id=66389540]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -314.7, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -395.5, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C3" unique_id=1532667707]
 transform = Transform3D(4.8, 0, 0, 0, 0.5, 0, 0, 0, 4.8, 0, 0, 0)
@@ -1239,7 +1666,7 @@ transform = Transform3D(4.8, 0, 0, 0, 0.5, 0, 0, 0, 4.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W1" type="StaticBody3D" parent="Route" unique_id=1052018861]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -321.5, 2.65, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -402.3, 2.65, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W1" unique_id=1607662512]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1251,7 +1678,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W2" type="StaticBody3D" parent="Route" unique_id=456228580]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -324.55, 3.45, -1.85)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.35, 3.45, -1.85)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W2" unique_id=1410099278]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1263,7 +1690,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W3" type="StaticBody3D" parent="Route" unique_id=679181261]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -327.6, 4.25, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -408.4, 4.25, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W3" unique_id=115176382]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1275,7 +1702,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W4" type="StaticBody3D" parent="Route" unique_id=1816096831]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -324.55, 5.05, -7.95)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.35, 5.05, -7.95)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W4" unique_id=948015275]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1287,7 +1714,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W5" type="StaticBody3D" parent="Route" unique_id=180300735]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -321.5, 5.85, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -402.3, 5.85, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W5" unique_id=1790716360]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1299,7 +1726,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W6" type="StaticBody3D" parent="Route" unique_id=1541912047]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -324.55, 6.65, -1.85)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.35, 6.65, -1.85)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W6" unique_id=39957639]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1311,7 +1738,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="W7" type="StaticBody3D" parent="Route" unique_id=1426298885]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -327.6, 7.45, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -408.4, 7.45, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/W7" unique_id=706139443]
 transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
@@ -1323,7 +1750,7 @@ transform = Transform3D(2.35, 0, 0, 0, 0.3, 0, 0, 0, 2.35, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="C4" type="StaticBody3D" parent="Route" unique_id=522206744]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -324.55, 8.25, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.35, 8.25, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C4" unique_id=2007174432]
 transform = Transform3D(2.4, 0, 0, 0, 0.3, 0, 0, 0, 2.4, 0, 0, 0)
@@ -1335,7 +1762,7 @@ transform = Transform3D(2.4, 0, 0, 0, 0.3, 0, 0, 0, 2.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="E1" type="StaticBody3D" parent="Route" unique_id=1831576529]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -330.75, 8.15, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -411.55, 8.15, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/E1" unique_id=566432947]
 transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
@@ -1347,7 +1774,7 @@ transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="Q1" type="StaticBody3D" parent="Route" unique_id=1035250306]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -332.75, 8.15, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -413.55, 8.15, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/Q1" unique_id=2146534284]
 transform = Transform3D(1.2, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1367,7 +1794,7 @@ transform = Transform3D(1.2, 0, 0, 0, 1.5, 0, 0, 0, 2.5, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="H1" type="StaticBody3D" parent="Route" unique_id=1212421276]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -338.1, 12.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -418.9, 12.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/H1" unique_id=1409438729]
 transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
@@ -1379,7 +1806,7 @@ transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="V1" type="StaticBody3D" parent="Route" unique_id=638024524]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -345.4, 12.6, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -426.2, 12.6, -7.9)
 script = ExtResource("3_vanish")
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/V1" unique_id=269809399]
@@ -1399,7 +1826,7 @@ transform = Transform3D(1.9, 0, 0, 0, 0.6, 0, 0, 0, 1.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="V2" type="StaticBody3D" parent="Route" unique_id=1536640778]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -351.5, 12.6, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -432.3, 12.6, -7.9)
 script = ExtResource("3_vanish")
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/V2" unique_id=151713478]
@@ -1419,7 +1846,7 @@ transform = Transform3D(1.9, 0, 0, 0, 0.6, 0, 0, 0, 1.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="V3" type="StaticBody3D" parent="Route" unique_id=49687071]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -357.6, 12.6, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -438.4, 12.6, -7.9)
 script = ExtResource("3_vanish")
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/V3" unique_id=893005221]
@@ -1439,7 +1866,7 @@ transform = Transform3D(1.9, 0, 0, 0, 0.6, 0, 0, 0, 1.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="V4" type="StaticBody3D" parent="Route" unique_id=1042271243]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -363.7, 12.6, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -444.5, 12.6, -7.9)
 script = ExtResource("3_vanish")
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/V4" unique_id=1353188273]
@@ -1459,7 +1886,7 @@ transform = Transform3D(1.9, 0, 0, 0, 0.6, 0, 0, 0, 1.9, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="L1" type="StaticBody3D" parent="Route" unique_id=1088681543]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -370.25, 12.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -451.05, 12.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/L1" unique_id=115604850]
 transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
@@ -1471,7 +1898,7 @@ transform = Transform3D(2.8, 0, 0, 0, 0.5, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="U1" type="StaticBody3D" parent="Route" unique_id=1661652057]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -372.9, 12.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -453.7, 12.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/U1" unique_id=396086503]
 transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1483,7 +1910,7 @@ transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="U2" type="StaticBody3D" parent="Route" unique_id=74788421]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -375.4, 17.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -456.2, 17.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/U2" unique_id=2132921243]
 transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1495,7 +1922,7 @@ transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="Q2" type="StaticBody3D" parent="Route" unique_id=1928139633]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -377.25, 17.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -458.05, 17.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/Q2" unique_id=1740310631]
 transform = Transform3D(1.2, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1515,7 +1942,7 @@ transform = Transform3D(1.2, 0, 0, 0, 1.5, 0, 0, 0, 2.5, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="H2" type="StaticBody3D" parent="Route" unique_id=1922810489]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -382.6, 21.95, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -463.4, 21.95, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/H2" unique_id=1078241800]
 transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
@@ -1527,7 +1954,7 @@ transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="C5" type="StaticBody3D" parent="Route" unique_id=1729628415]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -398.9, 21.95, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -479.7, 21.95, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/C5" unique_id=588053428]
 transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
@@ -1539,7 +1966,7 @@ transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="R1" type="StaticBody3D" parent="Route" unique_id=1815768002]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -407.5, 20.55, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -488.3, 20.55, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R1" unique_id=880671137]
 transform = Transform3D(2.1, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
@@ -1551,7 +1978,7 @@ transform = Transform3D(2.1, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="R2" type="StaticBody3D" parent="Route" unique_id=1904041463]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -412.5, 19.15, -2.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -493.3, 19.15, -2.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R2" unique_id=1625753838]
 transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
@@ -1563,7 +1990,7 @@ transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="R3" type="StaticBody3D" parent="Route" unique_id=805754958]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -417.5, 17.75, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -498.3, 17.75, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R3" unique_id=107642666]
 transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
@@ -1575,7 +2002,7 @@ transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="R4" type="StaticBody3D" parent="Route" unique_id=2013195641]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -412.5, 16.35, -12.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -493.3, 16.35, -12.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R4" unique_id=626130874]
 transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
@@ -1587,7 +2014,7 @@ transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="R5" type="StaticBody3D" parent="Route" unique_id=1017400262]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -407.5, 14.95, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -488.3, 14.95, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/R5" unique_id=1233653223]
 transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
@@ -1599,7 +2026,7 @@ transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="J1" type="StaticBody3D" parent="Route" unique_id=1718793244]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -414.55, 13.55, -6.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -495.35, 13.55, -6.3)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J1" unique_id=1519074153]
 transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
@@ -1611,7 +2038,7 @@ transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="J2" type="StaticBody3D" parent="Route" unique_id=1575469303]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -421.65, 12.15, -9.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -502.45, 12.15, -9.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J2" unique_id=487171218]
 transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
@@ -1623,7 +2050,7 @@ transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="J3" type="StaticBody3D" parent="Route" unique_id=1678571638]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -428.75, 10.75, -6.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -509.55, 10.75, -6.3)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J3" unique_id=1035980443]
 transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
@@ -1635,7 +2062,7 @@ transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="J4" type="StaticBody3D" parent="Route" unique_id=706759986]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -435.85, 9.35, -9.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -516.65, 9.35, -9.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Route/J4" unique_id=1336112732]
 transform = Transform3D(2.3, 0, 0, 0, 0.5, 0, 0, 0, 2.1, 0, 0, 0)
@@ -1699,7 +2126,7 @@ font_size = 64
 outline_size = 14
 
 [node name="Beacon_C3" type="StaticBody3D" parent="Route" unique_id=455632305]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -316.25, 2, -6.45)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -397.05, 2, -6.45)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C3" unique_id=1773440772]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
@@ -1725,7 +2152,7 @@ font_size = 64
 outline_size = 14
 
 [node name="Beacon_C4" type="StaticBody3D" parent="Route" unique_id=1577419640]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -325.15, 8.4, -8.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.95, 8.4, -8.5)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C4" unique_id=1313115786]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
@@ -1751,7 +2178,7 @@ font_size = 64
 outline_size = 14
 
 [node name="Beacon_C5" type="StaticBody3D" parent="Route" unique_id=1743935907]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -400.45, 22.2, -9.45)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -481.25, 22.2, -9.45)
 
 [node name="Mast" type="MeshInstance3D" parent="Route/Beacon_C5" unique_id=919064273]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
@@ -1779,10 +2206,10 @@ outline_size = 14
 [node name="Movers" type="Node3D" parent="." unique_id=1395881251]
 
 [node name="MoverA" type="AnimatableBody3D" parent="Movers" unique_id=1649987381]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -296.7, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -377.5, 1.75, -4.9)
 script = ExtResource("6_mover")
-point_a = Vector3(-296.7, 1.75, -4.9)
-point_b = Vector3(-301.8, 1.75, -4.9)
+point_a = Vector3(-377.5, 1.75, -4.9)
+point_b = Vector3(-382.6, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Movers/MoverA" unique_id=1351440534]
 transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1794,10 +2221,10 @@ transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
 [node name="MoverB" type="AnimatableBody3D" parent="Movers" unique_id=1069991512]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -306.5, 1.75, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -387.3, 1.75, -4.9)
 script = ExtResource("6_mover")
-point_a = Vector3(-306.5, 1.75, -4.9)
-point_b = Vector3(-311.6, 1.75, -4.9)
+point_a = Vector3(-387.3, 1.75, -4.9)
+point_b = Vector3(-392.4, 1.75, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Movers/MoverB" unique_id=1104960106]
 transform = Transform3D(2.5, 0, 0, 0, 0.5, 0, 0, 0, 2.5, 0, 0, 0)
@@ -1811,7 +2238,7 @@ shape = SubResource("Shape_unit")
 [node name="Mechanics" type="Node3D" parent="." unique_id=769013713]
 
 [node name="Updraft" type="Area3D" parent="Mechanics" unique_id=1843466146]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -372.9, 12.85, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -453.7, 12.85, -7.9)
 script = ExtResource("5_updraft")
 
 [node name="Mesh" type="MeshInstance3D" parent="Mechanics/Updraft" unique_id=1364030247]
@@ -1824,7 +2251,7 @@ transform = Transform3D(2.5, 0, 0, 0, 5, 0, 0, 0, 2.5, 0, 2.5, 0)
 shape = SubResource("Shape_unit")
 
 [node name="PortalIn" type="Area3D" parent="Mechanics" unique_id=965811640]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -384.15, 22.2, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -464.95, 22.2, -7.9)
 script = ExtResource("4_portal")
 target_path = NodePath("../PortalOut")
 exit_offset = Vector3(1.2, 0.1, 0)
@@ -1844,7 +2271,7 @@ transform = Transform3D(0.6, 0, 0, 0, 2.2, 0, 0, 0, 1.6, 0, 1.1, 0)
 shape = SubResource("Shape_unit")
 
 [node name="PortalOut" type="Area3D" parent="Mechanics" unique_id=1775650683]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -397.35, 22.2, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -478.15, 22.2, -7.9)
 script = ExtResource("4_portal")
 target_path = NodePath("../PortalIn")
 exit_offset = Vector3(-1.2, 0.1, 0)
@@ -1866,7 +2293,7 @@ shape = SubResource("Shape_unit")
 [node name="Pillars" type="Node3D" parent="." unique_id=728375737]
 
 [node name="PillarUp" type="StaticBody3D" parent="Pillars" unique_id=1355905659]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -324.55, 5.7, -4.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -405.35, 5.7, -4.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Pillars/PillarUp" unique_id=1462227556]
 transform = Transform3D(1, 0, 0, 0, 7.8, 0, 0, 0, 1, 0, 0, 0)
@@ -1878,7 +2305,7 @@ transform = Transform3D(1, 0, 0, 0, 7.8, 0, 0, 0, 1, 0, 0, 0)
 shape = SubResource("Shape_pillar")
 
 [node name="PillarDown" type="StaticBody3D" parent="Pillars" unique_id=1550478779]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -412.5, 18.1, -7.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -493.3, 18.1, -7.9)
 
 [node name="Mesh" type="MeshInstance3D" parent="Pillars/PillarDown" unique_id=2044868183]
 transform = Transform3D(1.5, 0, 0, 0, 7.8, 0, 0, 0, 1.5, 0, 0, 0)
@@ -1890,7 +2317,7 @@ transform = Transform3D(1.5, 0, 0, 0, 7.8, 0, 0, 0, 1.5, 0, 0, 0)
 shape = SubResource("Shape_pillar")
 
 [node name="Island" type="StaticBody3D" parent="." unique_id=1562529355]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -450.55, 7.4, -9.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -531.35, 7.4, -9.5)
 
 [node name="Mesh" type="MeshInstance3D" parent="Island" unique_id=1383837919]
 transform = Transform3D(16, 0, 0, 0, 1.2, 0, 0, 0, 16, 0, 0, 0)

@@ -1,5 +1,5 @@
 extends SceneTree
-## 验跑酷 v6（8 段 / 77 站 / 62 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 / 431 m）。
+## 验跑酷 v7（11 段 / 89 站 / 74 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 + 期权/A股/外汇 / 511 m）。
 ##
 ## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
@@ -125,11 +125,13 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 77, "路线有 %d 站（期望 77：跑道 + 57 块落脚板 + 13 块同花顺期货通板块 + 第 4 段 5 站（J0/SP1-3/M0）+ 5 处「走过去」的接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 89, "路线有 %d 站（期望 89：跑道 + 57 块落脚板 + 13 块期货通板块 + 第 4 段 5 站 + 期权/A股/外汇 12 站 + 5 处接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
 		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13",
 		"J0", "SP1", "SP2", "SP3", "M0",
+		"OPT1", "OPT2", "OPT3", "OPT4", "AS1", "AS2", "AS3", "AS4",
+		"FX1", "FX2", "FX3", "FX4",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -145,8 +147,8 @@ func _test_structure(game: Node) -> void:
 	for i in range(1, segs.size()):
 		if int(segs[i]) <= int(segs[i - 1]):
 			sorted_ok = false
-	_check(sorted_ok and _pk.segment_count() == 8 and segs.size() == _pk.seg_names.size(),
-		"分段数据：segments=%s（升序、首项 0、8 段），seg_names %d 个「%s」"
+	_check(sorted_ok and _pk.segment_count() == 11 and segs.size() == _pk.seg_names.size(),
+		"分段数据：segments=%s（升序、首项 0、11 段），seg_names %d 个「%s」"
 		% [str(segs), _pk.seg_names.size(), " / ".join(PackedStringArray(_pk.seg_names))])
 	# 段起点必须是段落里**第一站**、而且每段都非空
 	var span_ok := true
@@ -155,7 +157,7 @@ func _test_structure(game: Node) -> void:
 		var en: int = _pk.segment_start(s + 1) if s + 1 < _pk.segment_count() else n
 		if en <= st or st < 0 or en > n:
 			span_ok = false
-	_check(span_ok, "八段的站号区间都不空：%s"
+	_check(span_ok, "十一段的站号区间都不空：%s"
 		% str(Array(range(0, _pk.segment_count())).map(func(s): return "%s[%d]" % [
 			_pk.segment_name(s), _pk.segment_start(s)])))
 	# 机关清单也要跟着对：6 处机关跳、螺旋塔 7 处减速短跳（W2…C4，由场景给）。
@@ -1282,7 +1284,7 @@ func _test_branch() -> void:
 		var period := float(q["period"])
 		var phase := float(q["phase"])
 		var slot := period / float((q["seq"] as Array).size())
-		fut._t = period * 0.75 - phase + slot * 0.25   # 拨到最后一档（最高 +9.00%）
+		fut._t = period * 0.75 - phase + slot * 0.25   # 拨到最后一档（四档里最高的那档）
 		fut.margin = 10.0
 		fut.settled.erase("BC1")
 		var bb := fut._aabb_of(node)
@@ -1291,8 +1293,13 @@ func _test_branch() -> void:
 		await _wait(4)
 		var lab := node.get_node_or_null("Pct") as Label3D
 		var txt := lab.text if lab != null else "?"
-		_check(txt.begins_with("+9"), "币圈道 BC1 的牌子拨到高档：%s" % txt)
-		_check(absf(fut.margin - 10.9) < 0.02,
+		# 最高档的数值从 `seq` 里取（用户会调杠杆：写死 +9 的话一调就红）
+		var hi := -999.0
+		for v in (q["seq"] as Array):
+			hi = maxf(hi, float(v))
+		_check(absf(fut._parse_pct(txt) - hi) < 0.01,
+			"币圈道 BC1 的牌子拨到高档：%s（seq 最高档 %+.2f%%）" % [txt, hi])
+		_check(absf(fut.margin - 10.0 * (1.0 + hi / 100.0)) < 0.02,
 			"踩上高档 → 10.0000 → %.4f 万（**踩的是那一刻的价格**，不是平均价）" % fut.margin)
 
 	# ⑥ 结算台：保证金 ≥ 11 万 → 解锁「对冲」；之后强平只扣 35%，不爆仓、不送回
@@ -1513,10 +1520,13 @@ func _test_negative() -> void:
 		{"station": 13, "seg": 1, "what": "第 2 段中段（T1 转身台）"},
 		{"station": 24, "seg": 2, "what": "第 3 段中段（K5 大阳线）"},
 		{"station": 35, "seg": 3, "what": "第 4 段中段（SP2 现货道）"},
-		{"station": 42, "seg": 4, "what": "第 5 段中段（X4 窄板）"},
-		{"station": 49, "seg": 5, "what": "第 6 段中段（W4 螺旋塔）"},
-		{"station": 65, "seg": 6, "what": "第 7 段中段（H2 机关区）"},
-		{"station": 74, "seg": 7, "what": "第 8 段中段（J1 竖井）"},
+		{"station": 39, "seg": 4, "what": "第 5 段中段（OPT2 权利金）"},
+		{"station": 43, "seg": 5, "what": "第 6 段中段（AS2 天地板）"},
+		{"station": 47, "seg": 6, "what": "第 7 段中段（FX2 杠杆）"},
+		{"station": 53, "seg": 7, "what": "第 8 段中段（X4 窄板）"},
+		{"station": 61, "seg": 8, "what": "第 9 段中段（W4 螺旋塔）"},
+		{"station": 77, "seg": 9, "what": "第 10 段中段（H2 机关区）"},
+		{"station": 84, "seg": 10, "what": "第 11 段中段（J1 竖井）"},
 	]:
 		var idx := int(probe["station"])
 		_pk.reset_run()

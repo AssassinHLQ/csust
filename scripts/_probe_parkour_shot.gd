@@ -107,19 +107,23 @@ func _run() -> void:
 	await _shot("20_branch_lanes", Vector3(-246.0, 22.0, 26.0), Vector3(-246.0, 2.0, -10.0))
 	# 结算台 + 那块会被改写的牌子
 	await _shot("21_branch_merge", Vector3(-251.0, 6.5, 4.0), Vector3(-259.0, 2.5, -9.5))
-	# ── 段 5 横跳区（X1..X5；F1 −294.35）──
-	await _shot("22_sidejump", Vector3(-274.0, 7.2, 3.4), Vector3(-282.0, 2.2, -5.6))
-	await _shot("23_mover", Vector3(-297.5, 4.6, 7.5), Vector3(-303.0, 2.2, -5.0))
-	# ── 段 6 绕柱螺旋塔（柱轴 x −321.5 / z −4.9）──
-	await _shot("24_spiral_low", Vector3(-321.5, 1.6, 2.6), Vector3(-321.5, 6.2, -4.9))
-	await _shot("25_spiral_high", Vector3(-313.3, 12.5, 1.5), Vector3(-321.8, 5.4, -4.9))
-	# ── 段 7 机关区 ──
-	await _shot("26_mech", Vector3(-333.8, 14.0, 1.0), Vector3(-345.8, 12.6, -7.5))
-	await _shot("27_mech_air", Vector3(-359.8, 20.0, 3.0), Vector3(-373.8, 15.5, -7.5))
-	# ── 段 8 竖井 / 终点岛 ──
-	await _shot("28_shaft", Vector3(-409.8, 17.5, -2.0), Vector3(-421.8, 11.5, -7.5))
-	await _shot("29_island", Vector3(-429.8, 15.0, 2.0), Vector3(-443.8, 9.0, -9.5))
-	await _shot("30_plan", Vector3(-252.0, 190.0, -4.0), Vector3(-252.0, 0.0, -4.5))
+	# ── 第 5~7 段：期权 / A股 / 外汇（都在 z −1.7 这条线上，x −262 ~ −337）──
+	await _shot("22_option", Vector3(-257.0, 6.0, 9.0), Vector3(-272.0, 2.6, -1.7))
+	await _shot("23_ashare", Vector3(-285.0, 7.0, 8.0), Vector3(-300.0, 2.5, -1.7))
+	await _shot("24_fx", Vector3(-317.0, 7.0, 8.0), Vector3(-331.0, 2.4, -1.7))
+	# ── 第 8 段 横跳区（X1..X5）──
+	await _shot("25_sidejump", Vector3(-351.6, 7.2, 3.4), Vector3(-359.6, 2.2, -5.6))
+	await _shot("26_mover", Vector3(-375.2, 4.6, 7.5), Vector3(-380.7, 2.2, -5.0))
+	# ── 第 9 段 绕柱螺旋塔（柱轴 x −399.2 / z −4.9）──
+	await _shot("27_spiral_low", Vector3(-399.2, 1.6, 2.6), Vector3(-399.2, 6.2, -4.9))
+	await _shot("28_spiral_high", Vector3(-391.0, 12.5, 1.5), Vector3(-399.5, 5.4, -4.9))
+	# ── 第 10 段 机关区 ──
+	await _shot("29_mech", Vector3(-411.5, 14.0, 1.0), Vector3(-423.5, 12.6, -7.5))
+	await _shot("30_mech_air", Vector3(-437.5, 20.0, 3.0), Vector3(-451.5, 15.5, -7.5))
+	# ── 第 11 段 竖井 / 终点岛 ──
+	await _shot("31_shaft", Vector3(-487.5, 17.5, -2.0), Vector3(-499.5, 11.5, -7.5))
+	await _shot("32_island", Vector3(-507.5, 15.0, 2.0), Vector3(-521.5, 9.0, -9.5))
+	await _shot("33_plan", Vector3(-352.0, 200.0, -4.0), Vector3(-352.0, 0.0, -4.5))
 
 
 	print("\n出图目录：%s" % _out)
