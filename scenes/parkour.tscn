@@ -9,7 +9,7 @@
 
 [ext_resource type="Script" path="res://scripts/parkour_futures.gd" id="7_futures"]
 
-[ext_resource type="Script" path="res://scripts/dark_boss.gd" id="9_dark"]
+[ext_resource type="Script" path="res://scripts/dark_gate.gd" id="10_darkgate"]
 
 [sub_resource type="StandardMaterial3D" id="Mat_runway"]
 albedo_color = Color(0.25, 0.26, 0.29, 1)
@@ -270,12 +270,12 @@ emission_enabled = true
 emission = Color(0.3, 0.01, 0.02, 1)
 emission_energy_multiplier = 0.4
 [sub_resource type="StandardMaterial3D" id="Mat_s_dark"]
-albedo_color = Color(0.02, 0.018, 0.03, 1)
+albedo_color = Color(0.16, 0.13, 0.24, 1)
 metallic = 0.1
 roughness = 0.45
 emission_enabled = true
-emission = Color(0.35, 0.1, 0.65, 1)
-emission_energy_multiplier = 0.16
+emission = Color(0.42, 0.13, 0.78, 1)
+emission_energy_multiplier = 0.3
 [node name="Parkour" type="Node3D" unique_id=1943431392]
 script = ExtResource("1_parkour")
 route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/K1"), NodePath("Route/K2"), NodePath("Route/K3"), NodePath("Route/K4"), NodePath("Route/K5"), NodePath("Route/K6"), NodePath("Route/K7"), NodePath("Route/K8"), NodePath("Route/K9"), NodePath("Route/K10"), NodePath("Route/K11"), NodePath("Route/K12"), NodePath("Route/K13"), NodePath("Route/J0"), NodePath("Route/SP1"), NodePath("Route/SP2"), NodePath("Route/SP3"), NodePath("Route/M0"), NodePath("Route/OPT1"), NodePath("Route/OPT2"), NodePath("Route/OPT3"), NodePath("Route/OPT4"), NodePath("Route/AS1"), NodePath("Route/AS2"), NodePath("Route/AS3"), NodePath("Route/AS4"), NodePath("Route/FX1"), NodePath("Route/FX2"), NodePath("Route/FX3"), NodePath("Route/FX4"), NodePath("Route/DK1"), NodePath("Route/DK2"), NodePath("Route/DK3"), NodePath("Route/DK4"), NodePath("Route/DK5"), NodePath("Route/DK6"), NodePath("Route/DK7"), NodePath("Route/DK8"), NodePath("Route/DK9"), NodePath("Route/DK10"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
@@ -1322,16 +1322,6 @@ alpha_cut = 1
 text = "第 5 段 · 期权交易"
 font_size = 60
 outline_size = 14
-[node name="Rule_期权交易" type="Label3D" parent="Route/Beacon_期权交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "权利金 −1.00% 先付钱
-行权 ＋25% / ＋60% 一口吃成胖子
-8 秒内没摸到行权 → 全部作废（买方就是这点残酷）"
-font_size = 44
-outline_size = 12
 [node name="AS1" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -288.25, 1.4, -1.7)
 metadata/pct_kind = "ash_up"
@@ -1445,16 +1435,6 @@ alpha_cut = 1
 text = "第 6 段 · A股"
 font_size = 60
 outline_size = 14
-[node name="Rule_A股" type="Label3D" parent="Route/Beacon_A股"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "天地板：±20%（创业板/科创板）每 0.9 s 翻一次
-一字板只有 1.2 m 宽、6 m 长 —— 只能沿着走
-涨停 +20% / 跌停 −20%"
-font_size = 44
-outline_size = 12
 [node name="FX1" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.85, 1.4, -1.7)
 metadata/pct_kind = "fx"
@@ -1568,16 +1548,6 @@ alpha_cut = 1
 text = "第 7 段 · 外汇"
 font_size = 60
 outline_size = 14
-[node name="Rule_外汇" type="Label3D" parent="Route/Beacon_外汇"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "汇率 24h：0.5 s 跳一次，杠杆块 ±40%（0.3 s 一跳）
-闪崩块 −30%：踩上去就是断头铡
-顺势 +15/−15 两档"
-font_size = 44
-outline_size = 12
 [node name="DK1" type="StaticBody3D" parent="Route"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.45, 1.4, -1.7)
 metadata/pct_kind = "spot"
@@ -1829,236 +1799,11 @@ alpha_cut = 1
 text = "第 8 段 · 暗网黑市交易"
 font_size = 60
 outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="DarkBoss" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -374.05, 12.4, -1.7)
-script = ExtResource("9_dark")
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 8 段 · 暗网黑市交易"
-font_size = 60
-outline_size = 14
-[node name="Rule_暗网黑市交易" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "比纳在头顶：激光 0.6 s 预警（别停在束线上）
-炮弹命中掉血 + 击退（小心被打下板）
-它不会复活 —— 边跑边打，把它打光"
-font_size = 44
-outline_size = 12
+[node name="DarkGate" type="Node3D" parent="Route"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -340.95, 2, -1.7)
+script = ExtResource("10_darkgate")
+trigger_x = -340.95
+spawn_offset = Vector3(-12, 10, 0)
 [node name="X1" type="StaticBody3D" parent="Route" unique_id=899126870]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -404.7, 1.75, -1.7)
 

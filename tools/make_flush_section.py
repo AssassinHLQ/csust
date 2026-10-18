@@ -151,8 +151,11 @@ MATERIALS = {
     "m_fx": ("Mat_s_fx", (0.95, 0.80, 0.20), (0.50, 0.40, 0.06), 0.28),
     "m_fx_lev": ("Mat_s_fx_lev", (1.00, 0.52, 0.05), (0.55, 0.24, 0.01), 0.36),
     "m_fx_crash": ("Mat_s_fx_crash", (0.55, 0.05, 0.08), (0.30, 0.01, 0.02), 0.40),
-    # 第 8 段「暗网黑市」：近黑 + 紫霓虹边
-    "m_spot_dark": ("Mat_s_dark", (0.02, 0.018, 0.03), (0.35, 0.10, 0.65), 0.16),
+    # 第 8 段「暗网黑市」：深紫黑 + 紫霓虹边
+    # ⚠️ 用户 2026-10-19：「黑市太黑了」—— 上一版 albedo 0.02 进场景几乎纯黑，
+    #    板沿 / 台面高度全看不见，跳哪块只能靠猜。抬到 0.16（仍是黑市的深紫，
+    #    但顶面吃得到光、边角有轮廓），紫霓虹发光保留。
+    "m_spot_dark": ("Mat_s_dark", (0.16, 0.13, 0.24), (0.42, 0.13, 0.78), 0.30),
 }
 
 
@@ -558,9 +561,10 @@ SECTIONS = [
     # ⚠️ 用户 2026-10-18：「后面这个阶段的三种东西，比比特币更加疯狂」——
     #    所以阈值全部比币圈道（−14 ~ +22 / 1.6 s）更狠：期权是「翻倍或归零」，
     #    A股是「天地板 ±20%」（创业板/科创板的涨跌停），外汇是「40% 杠杆 + 闪崩」。
+    # ⚠️ 用户 2026-10-19：「第几段下面的描述不需要，挡视线了，都去掉」——
+    #    原来每段桅杆上还有一块三行的 `Rule_*` 说明牌（就在段名下面），
+    #    正好压在板子的价目牌上。规则文字只在 README 里留，场上不再生成。
     dict(name="期权交易", z=-1.70,
-         sign="权利金 −1.00%% 先付钱%s行权 ＋25%% / ＋60%% 一口吃成胖子%s"
-              "8 秒内没摸到行权 → 全部作废（买方就是这点残酷）",
          plates=[
              dict(nm="OPT1", kind="opt_prem", seq="-1.00", period=0.0, top=2.00,
                   width=3.0, depth=3.0, gap=3.00),
@@ -572,8 +576,6 @@ SECTIONS = [
                   width=3.0, depth=3.0, gap=2.80, deadline=8.0),
          ]),
     dict(name="A股", z=-1.70,
-         sign="天地板：±20%%（创业板/科创板）每 0.9 s 翻一次%s"
-              "一字板只有 1.2 m 宽、6 m 长 —— 只能沿着走%s涨停 +20%% / 跌停 −20%%",
          plates=[
              dict(nm="AS1", kind="ash_up", seq="20.00", period=0.0, top=2.00,
                   width=1.4, depth=5.0, gap=3.00),
@@ -585,8 +587,6 @@ SECTIONS = [
                   width=1.4, depth=5.0, gap=2.80),
          ]),
     dict(name="外汇", z=-1.70,
-         sign="汇率 24h：0.5 s 跳一次，杠杆块 ±40%%（0.3 s 一跳）%s"
-              "闪崩块 −30%%：踩上去就是断头铡%s顺势 +15/−15 两档",
          plates=[
              dict(nm="FX1", kind="fx", seq="15.00,-15.00", period=0.50, top=2.00,
                   width=3.0, depth=3.0, gap=3.00),
@@ -599,10 +599,10 @@ SECTIONS = [
          ]),
     # 第 8 段「暗网黑市交易」：最长的一段（10 块板），头顶有**比纳**（dark_boss.gd）
     # 一边跑一边打。比纳不吃「跳过去」那套 —— 它在上方 10 m，激光 + 炮弹。
+    # ⚠️ 用户 2026-10-19：「比纳不能一开始就加载，得进入黑市才加载」→
+    #    这里不再摆 `DarkBoss` 节点，只摆一个空的 `DarkGate`（dark_gate.gd）；
+    #    玩家跑到闸门处才由它 `instantiate` 出比纳（见 build_section_nodes 末尾）。
     dict(name="暗网黑市交易", z=-1.70, boss=True, mat="m_spot_dark",
-         sign="比纳在头顶：激光 0.6 s 预警（别停在束线上）%s"
-              "炮弹命中掉血 + 击退（小心被打下板）%s"
-              "它不会复活 —— 边跑边打，把它打光",
          plates=[
              dict(nm="DK1", kind="spot", seq="-0.80", period=0.0, top=2.00,
                   width=3.4, depth=3.0, gap=3.00),
@@ -688,7 +688,7 @@ def build_section_nodes(secs: dict, first_seg: int) -> list:
                        'pixel_size = 0.008\nbillboard = 1\nalpha_cut = 1\n'
                        'modulate = Color(%s)\ntext = "%+.2f%%"\nfont_size = 56\noutline_size = 14'
                        % (p["nm"], _num(snap(body * 0.5 + 2.20)), col, seq[0]))
-        # 段起点桅杆 + 规则牌（挂在本段第一块板的东侧）
+        # 段起点桅杆（只留段名；原来下面那块三行规则牌已按用户要求删掉）
         f = item["plates"][0]
         bx = f["x1"] - 1.20
         bz = f["z1"] + 2.20
@@ -709,18 +709,16 @@ def build_section_nodes(secs: dict, first_seg: int) -> list:
                    'pixel_size = 0.01\nbillboard = 1\nalpha_cut = 1\n'
                    'text = "第 %d 段 · %s"\nfont_size = 60\noutline_size = 14'
                    % (sec["name"], first_seg + si, sec["name"]))
-        out.append('[node name="Rule_%s" type="Label3D" parent="Route/Beacon_%s"]\n'
-                   'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)\n'
-                   'pixel_size = 0.0075\nbillboard = 1\nalpha_cut = 1\n'
-                   'text = "%s"\nfont_size = 44\noutline_size = 12'
-                   % (sec["name"], sec["name"], sec["sign"] % (chr(10), chr(10))))
         if sec.get("boss"):
-            mid = item["plates"][len(item["plates"]) // 2]
-            out.append('[node name="DarkBoss" type="StaticBody3D" parent="Route"]\n'
+            # 黑市闸门：**空节点**，玩家跑到 x ≤ 闸门时才 `instantiate` 比纳。
+            # 放在本段第一块板的东侧 +2 m（0.05 网格），y 取台面高度。
+            out.append('[node name="DarkGate" type="Node3D" parent="Route"]\n'
                        'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s, %s, %s)\n'
-                       'script = ExtResource("9_dark")'
-                       % (_num(snap((mid["x0"] + mid["x1"]) * 0.5)),
-                          _num(snap(mid["top"] + 10.0)), _num(snap(sec["z"]))))
+                       'script = ExtResource("10_darkgate")\n'
+                       'trigger_x = %s\nspawn_offset = Vector3(%s, %s, 0)'
+                       % (_num(snap(f["x1"] + 2.0)), _num(snap(f["top"])),
+                          _num(snap(sec["z"])), _num(snap(f["x1"] + 2.0)),
+                          _num(snap(-12.0)), _num(snap(10.0))))
     return out
 
 
@@ -882,7 +880,9 @@ def build_nodes(boxes: list, x1: dict) -> list:
 
 EXT_FUTURES = ('[ext_resource type="Script" path="res://scripts/parkour_futures.gd" '
                'id="7_futures"]')
-EXT_DARK = '[ext_resource type="Script" path="res://scripts/dark_boss.gd" id="9_dark"]'
+## 黑市闸门（运行时才 instantiate 比纳）；`dark_boss.gd` 现在只挂在
+## `scenes/dark_boss.tscn` 上，场景里不再直接引用它。
+EXT_DARKGATE = '[ext_resource type="Script" path="res://scripts/dark_gate.gd" id="10_darkgate"]'
 
 
 def build_subresources() -> list:
@@ -1004,16 +1004,25 @@ def is_branch_node(nd) -> bool:
     return bool(BRANCH_NODE.match(top))
 
 
-# 第 5~7 段：12 块板 + 三根桅杆 + 三块规则牌（桅杆名是中文，单独列出来）
+# 第 5~8 段：12 块板 + 四根桅杆（桅杆名是中文，单独列出来）
+#
+# ⚠️ 这里**必须把四段的桅杆都列全**：原来只写了期权/A股/外汇三根，
+#    漏了「Beacon_暗网黑市交易」→ 每跑一次生成器就**再叠一根**，
+#    跑到第 8 次时场上已经站着 8 根一模一样的桅杆、8 块「第 8 段」牌、
+#    8 块叠在一起的说明牌 —— 用户看到的那团糊在一起的字就是这么来的。
 SECTION_NODE = re.compile(r"^(OPT|AS|FX|DK)\d+$")
-SECTION_HOSTS = ("Beacon_期权交易", "Beacon_A股", "Beacon_外汇",
-                 "Rule_期权交易", "Rule_A股", "Rule_外汇")
+SECTION_NAMES = tuple(sec["name"] for sec in SECTIONS)
+SECTION_HOSTS = tuple("Beacon_%s" % n for n in SECTION_NAMES) \
+    + tuple("Rule_%s" % n for n in SECTION_NAMES)
+## 会被重新生成 / 已经废弃的节点（`DarkBoss` 是旧版直接摆进场景的比纳，
+## 现在是 `DarkGate` 运行时生成；两个名字都要清掉，生成器才可重入）
+SECTION_SCRAP = ("DarkBoss", "DarkGate")
 
 
 def is_section_node(nd) -> bool:
     if SECTION_NODE.match(nd["name"]) or nd["name"] in SECTION_HOSTS:
         return True
-    if nd["name"] == "DarkBoss":
+    if nd["name"] in SECTION_SCRAP:
         return True
     top = nd["parent"].split("/")[1] if "/" in nd["parent"] else ""
     return bool(SECTION_NODE.match(top)) or top in SECTION_HOSTS
@@ -1034,7 +1043,12 @@ def main() -> None:
         raise SystemExit("!! 最紧的余量 %.2f < 0.80，先调 CANDLES 表" % stats["worst"])
 
     text = TSCN.read_text(encoding="utf-8")
-    for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="9_dark"', EXT_DARK)):
+    # 旧版把 `dark_boss.gd` 直接引在场景上（`DarkBoss` 节点）；现在改成运行时生成，
+    # 这条 ext_resource 留着就是死引用 —— 顺手删掉。
+    text = re.sub(r'(?m)^\[ext_resource type="Script" '
+                  r'path="res://scripts/dark_boss\.gd" id="9_dark"\]' + chr(10) + '+',
+                  '', text)
+    for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="10_darkgate"', EXT_DARKGATE)):
         if eid not in text:
             # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
             k = text.index("[sub_resource")

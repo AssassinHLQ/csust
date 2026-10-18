@@ -111,8 +111,17 @@ func _run() -> void:
 	await _shot("22_option", Vector3(-257.0, 6.0, 9.0), Vector3(-272.0, 2.6, -1.7))
 	await _shot("23_ashare", Vector3(-285.0, 7.0, 8.0), Vector3(-300.0, 2.5, -1.7))
 	await _shot("24_fx", Vector3(-317.0, 7.0, 8.0), Vector3(-331.0, 2.4, -1.7))
-	# ── 第 8 段 暗网黑市（DK1 −344.45 … DK10 −397.85；比纳吊在 (−374, 12.4)）──
-	# 这一张**故意把 HUD 打开**：让「比纳 · 暗网黑市」那行血条也进画面
+	# ── 第 8 段 暗网黑市（DK1 −344.45 … DK10 −397.85）──
+	# ⚠️ 比纳现在**延迟加载**（玩家跑进黑市才由 `DarkGate` 生成）：
+	#    探针不跑图，得手工喊一次，再把它钉在本段中点上方，这两张图才有它入镜。
+	var gate := game.get_node_or_null("Parkour/Route/DarkGate") as DarkGate
+	if gate != null:
+		var dark := gate.spawn()
+		if dark != null:
+			dark.global_position = Vector3(-374.0, 12.4, -1.7)
+			dark.set_physics_process(false)      # 出图时别朝镜头打激光/炮弹
+	await _wait(6)
+	# 这一张**故意把 HUD 打开**：让「比纳」那行血条也进画面
 	var hud_layer := game.get_node_or_null("HUD") as CanvasLayer
 	if hud_layer != null:
 		hud_layer.visible = true

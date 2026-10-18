@@ -61,7 +61,8 @@ var _base_model_yaw := 0.0
 
 
 func _init() -> void:
-	display_name = "比纳 · 暗网黑市"
+	# 用户 2026-10-19：「比纳名字就叫比纳，不要后缀」（血条上只写这两个字）
+	display_name = "比纳"
 	model_path = "res://models/boss_binah/Binah_Original.fbx"
 	texture_map = {
 		"Binah_Halo": "res://models/boss_binah/Binah_Halo.png",
@@ -70,7 +71,9 @@ func _init() -> void:
 	}
 	collision_factors = Vector3(0.9, 0.9, 0.8)
 	height = 6.0
-	max_health = 900.0
+	# 用户 2026-10-19：「比纳血条增加 3 倍」→ 900 → 2700。
+	# 血条是**按比例**画的，所以看起来一样长，只是要打三倍久。
+	max_health = 2700.0
 	respawn_time = 0.0
 
 

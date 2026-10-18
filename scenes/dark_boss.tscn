@@ -1,0 +1,15 @@
+[gd_scene format=3]
+
+; ── 第 8 段「暗网黑市交易」的 boss：**比纳** ────────────────────────────────────
+;
+; 用户 2026-10-19：「比纳不能一开始就加载，得进入黑市才加载」。
+; 所以这一位**不在** `parkour.tscn` 里躺着：跑酷场景只摆一个空的 `Route/DarkGate`
+; （见 `scripts/dark_gate.gd`），玩家跑到闸门处它才 `instantiate` 这份场景。
+;
+; 血量 / 名字 / 模型都写在 `scripts/dark_boss.gd` 的 `_init()` 里，
+; 这份场景只负责「是个 StaticBody3D + 挂那个脚本」。
+
+[ext_resource type="Script" path="res://scripts/dark_boss.gd" id="1_darkboss"]
+
+[node name="DarkBoss" type="StaticBody3D"]
+script = ExtResource("1_darkboss")

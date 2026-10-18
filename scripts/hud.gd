@@ -105,7 +105,10 @@ var _health_bar: ProgressBar
 var _health_text: Label
 ## 左上角泼溅状态行：**一份场地一行**，每行 {label: Label, title: String, done: bool}
 var _splat_rows: Array[Dictionary] = []
-## 顶部 Boss 血条组：一个 Boss 一行，每行 {name: Label, bar: ProgressBar, title: String}
+## 顶部 Boss 血条组：一个 Boss 一行。
+## 每行 {name: Label, bar: ProgressBar, title: String, boss: Boss,
+##       c_health/c_died: Callable}——两个回调**存下来**，重新绑定时才能按它们断开。
+## 中途加载的 Boss（第 8 段比纳）走 `add_boss()` 追加一行。
 var _boss_rows: Array[Dictionary] = []
 
 ## SogRuntime 的进度阶段 → 给人看的文案
@@ -267,22 +270,77 @@ func _style_ammo_panel() -> void:
 # --- 顶部：Boss 血条组 --------------------------------------------------------
 
 func bind_bosses(bosses: Array) -> void:
-	_boss_rows.clear()
-	var index := 0
+	_clear_boss_rows()
 	for b in bosses:
 		var boss := b as Boss
-		if boss == null:
-			continue
-		_add_boss_row(index, boss.display_name)
-		boss.health_changed.connect(_on_boss_health.bind(index))
-		_on_boss_health(boss.health, boss.max_health, index)
-		index += 1
+		if boss != null:
+			_attach_boss(boss)
+	_after_boss_rows_changed()
+
+
+## **中途加进来的 Boss**（第 8 段的比纳就是：玩家跑进黑市才加载，见 `dark_gate.gd`）。
+## 走同一条建行路径，行号顺着往后排；已经绑过的那位直接忽略。
+func add_boss(boss: Boss) -> void:
+	if boss == null or _row_index_of(boss) >= 0:
+		return
+	_attach_boss(boss)
 	_after_boss_rows_changed()
 
 
 ## 只接一位 Boss 的旧写法（保留，自检里还在用）
 func bind_boss(boss: Boss) -> void:
 	bind_bosses([boss])
+
+
+## 一行 = 名字 + 血条，并把这位 Boss 的 `health_changed` / `died` 接上。
+## 两条连线都**存起来**（`bind()` 出来的 Callable 带行号，重新绑定时要按它断开）。
+func _attach_boss(boss: Boss) -> void:
+	var index := _boss_rows.size()
+	_add_boss_row(index, boss.display_name)
+	var on_hp := _on_boss_health.bind(index)
+	var on_died := _on_boss_died.bind(index)
+	boss.health_changed.connect(on_hp)
+	boss.died.connect(on_died)
+	_boss_rows[index]["boss"] = boss
+	_boss_rows[index]["c_health"] = on_hp
+	_boss_rows[index]["c_died"] = on_died
+	_on_boss_health(boss.health, boss.max_health, index)
+
+
+## 撤掉旧行（重新绑定时用）。必须先 `remove_child` 再 `queue_free`：
+## 只 queue_free 的话节点到帧末才真的消失，这一帧里新建的 `BossBar0`
+## 会因为重名被引擎改成 `@BossBar0@...`，自检按名字就取不到了。
+func _clear_boss_rows() -> void:
+	for row in _boss_rows:
+		var b: Boss = row.get("boss")
+		if is_instance_valid(b):
+			if b.health_changed.is_connected(row["c_health"]):
+				b.health_changed.disconnect(row["c_health"])
+			if b.died.is_connected(row["c_died"]):
+				b.died.disconnect(row["c_died"])
+		for key in ["name", "bar"]:
+			var n: Node = row.get(key)
+			if is_instance_valid(n):
+				if n.get_parent() != null:
+					n.get_parent().remove_child(n)
+				n.queue_free()
+	_boss_rows.clear()
+
+
+func _row_index_of(boss: Boss) -> int:
+	for i in _boss_rows.size():
+		if _boss_rows[i].get("boss") == boss:
+			return i
+	return -1
+
+
+## 这位 Boss 的血条现在显示着没有（自检用）
+func boss_row_shown(title: String) -> bool:
+	for row in _boss_rows:
+		if String(row.get("title", "")) == title:
+			var bar: ProgressBar = row["bar"]
+			return is_instance_valid(bar) and bar.visible
+	return false
 
 
 ## 一行 = 名字 `Label` + 血条 `ProgressBar`，**都是 HUD 的直接子节点**（自检按名字取）。
@@ -343,14 +401,42 @@ func _on_boss_health(current: float, maximum: float, index: int) -> void:
 	# MC 的名字行**只有名字、不带数字**（血量靠条的长度看），所以这里只动条。
 	# ⚠️ 自检那边也相应改成直接对 Boss 的真实 `health` 比，不再从文本里抠数字。
 	bar.value = 0.0 if maximum <= 0.0 else clampf(current / maximum, 0.0, 1.0)
+	# 用户 2026-10-19：「死亡后不要一直残留空血条」——
+	# 血量归零就把这一行（名字 + 条）一起收起来。
+	# 会复活的 Boss 重生时 `health_changed` 会再发一次满血，这一行自己就回来了。
+	_show_boss_row(index, current > 0.0)
+
+
+## 死掉的那一位不占地方：名字和条一起隐藏（不删节点，行号不会错位）
+func _on_boss_died(_by_damage: float, index: int) -> void:
+	_show_boss_row(index, false)
+
+
+func _show_boss_row(index: int, on: bool) -> void:
+	if index < 0 or index >= _boss_rows.size():
+		return
+	var label: Label = _boss_rows[index]["name"]
+	var bar: ProgressBar = _boss_rows[index]["bar"]
+	if not is_instance_valid(label) or not is_instance_valid(bar):
+		return
+	if label.visible == on and bar.visible == on:
+		return
+	label.visible = on
+	bar.visible = on
+	_layout_splat_rows()
 
 
 # --- 左上角：泼溅加载状态 -----------------------------------------------------
 
 ## 泼溅状态行从哪一行开始。**跟着 Boss 条组走**：1 位 Boss 时贴着血量面板下沿（128），
 ## 7 位时自动挪到最后一条血条下面 —— 这样「默认一位 / 全开七位」两种摆法都不会重叠。
+## ⚠️ 只数**还显示着的**行：比纳倒下之后那一行收起来了，泼溅行要跟着往回挪。
 func splat_row_top() -> float:
-	var n := float(_boss_rows.size())
+	var n := 0.0
+	for row in _boss_rows:
+		var bar: ProgressBar = row["bar"]
+		if is_instance_valid(bar) and bar.visible:
+			n += 1.0
 	if n <= 0.0:
 		return SPLAT_ROW_TOP
 	var boss_bottom := BOSS_TOP + (n - 1.0) * BOSS_ROW_HEIGHT + BOSS_BAR_HEIGHT

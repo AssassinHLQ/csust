@@ -309,10 +309,11 @@ func _ready() -> void:
 			boss.died.connect(_on_target_died)
 		elif child is Companion:
 			_companions.append(child as Companion)
-	# ⚠️ Boss 不一定在 game 的**直接子节点**下：第 8 段的比纳挂在
-	#    `Parkour/Route/DarkBoss`（生成器摆进去的）。`Boss._ready()` 会把自己加进
-	#    `bosses` 组，而且子节点的 `_ready` 先跑，所以这里按组再收一遍就齐了。
-	#    少了这一段：比纳**没有血条**、`died` 也没接上（用户：「怎么没有血条呀」）。
+	# ⚠️ Boss 不一定在 game 的**直接子节点**下：备用 Boss 是从
+	#    `bosses_standby.tscn` 里摘出来再挂到 game 下的。`Boss._ready()` 会把自己
+	#    加进 `bosses` 组，而且子节点的 `_ready` 先跑，所以这里按组再收一遍就齐了。
+	#    （第 8 段的比纳**不在**这个组里：它要等玩家跑到黑市才由 `DarkGate` 生成，
+	#      见下面的 `_on_gate_boss`。）
 	for node in get_tree().get_nodes_in_group("bosses"):
 		var b := node as Boss
 		if b == null or _bosses.has(b) or not is_ancestor_of(b):
@@ -321,6 +322,12 @@ func _ready() -> void:
 		b.died.connect(_on_target_died)
 	if not _bosses.is_empty() and _hud.has_method("bind_bosses"):
 		_hud.bind_bosses(_bosses)
+	# 黑市闸门：玩家跑进第 8 段时它才把比纳生成出来（用户：「比纳不能一开始就加载」），
+	# 那一刻补进 `_bosses`、接上计分，并让 HUD 顺着往后加一条血条。
+	for node in get_tree().get_nodes_in_group("dark_gates"):
+		if node.has_signal("boss_spawned") and not node.is_connected(
+				"boss_spawned", Callable(self, "_on_gate_boss")):
+			node.connect("boss_spawned", Callable(self, "_on_gate_boss"))
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
 
 	for target in get_tree().get_nodes_in_group("targets"):
@@ -496,6 +503,19 @@ func _process(_delta: float) -> void:
 func _on_target_died(_by: float) -> void:
 	_score += 1
 	_hits += 1
+
+
+## 黑市闸门放出了比纳（玩家刚跑进第 8 段）。
+## 这时才把它算进 Boss 名单、接上计分、让 HUD 补一条血条 —— 顺序不能反：
+## `bind_bosses` 是全量重绑，这里只加一行，前面几位 Boss 的连线和行号都不动。
+func _on_gate_boss(boss: Boss) -> void:
+	if boss == null or _bosses.has(boss):
+		return
+	_bosses.append(boss)
+	boss.died.connect(_on_target_died)
+	if _hud != null and _hud.has_method("add_boss"):
+		_hud.add_boss(boss)
+	print("[Game] 黑市 Boss 上线：%s（血量 %.0f）" % [boss.display_name, boss.max_health])
 
 
 ## ── 画室609：门内看泼溅、门外看普通网格 ──

@@ -85,10 +85,11 @@ func _run() -> void:
 	if fut0 != null:
 		fut0.blue_live = 0.0          # 第 1~4 节只测跳；蓝块由 5c 自己打开
 	# 第 8 段的比纳会朝人打激光/炮弹（带击退）：逐跳回放和连续通关不能被它打断。
-	# 先关掉它的 `_physics_process`，§5f 再单独打开测它。
-	var dark0 := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
-	if dark0 != null:
-		dark0.set_physics_process(false)
+	# 它现在**不在场景里**（玩家进黑市才由 `DarkGate` 生成），所以关的是闸门：
+	# 闸门不触发 = 比纳不会出现；§5f 再打开测「延迟加载 + 开火」。
+	var gate0 := _pk.get_node_or_null("Route/DarkGate") as DarkGate
+	if gate0 != null:
+		gate0.set_physics_process(false)
 	# ⚠️ 这一套会**真的跑完一次全程**，于是 `parkour.gd` 会把那次用时写进
 	#    `user://parkour_best.cfg` —— 那是玩家真实存档。开跑前备份、收尾时还回去
 	#    （和 `_verify_settings` 测音量时的做法一样）。
@@ -1391,40 +1392,93 @@ func _test_branch() -> void:
 	fut.blue_live = 3.0
 
 
-## ── 5f. 第 8 段「暗网黑市交易」：比纳（激光 / 炮弹 / 不会复活）─────────────────
-## 用户要的是「跑酷同时击败 boss，这个 boss 不会复活」——所以这一节只验三件事：
-## 它会开火（两种）、打得死、**死了不再站起来**。
+## ── 5f. 第 8 段「暗网黑市交易」：比纳（延迟加载 / 激光 / 炮弹 / 不会复活）───────
+## 用户要的是「跑酷同时击败 boss，这个 boss 不会复活」，2026-10-19 又补了四条：
+## 「比纳不能一开始就加载，得进入黑市才加载」「血条增加 3 倍」
+## 「死亡后不要一直残留空血条」「名字就叫比纳，不要后缀」。
+## 所以这一节验五件事：开场不在 / 过闸门才出现 / 两套火力 / 打得死 / 死了不站起来且血条收起。
 func _test_dark_boss() -> void:
 	print("
-========== 5f. 暗网黑市：比纳（激光 / 炮弹 / 不会复活）==========")
-	var db := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
-	_check(db != null, "路线里有 DarkBoss（比纳）")
-	if db == null:
+========== 5f. 暗网黑市：比纳（延迟加载 / 激光 / 炮弹 / 不会复活）==========")
+	# ① 开场**不该有**比纳：模型（44 骨 FBX）+ 12 个凹包碰撞很贵，用户要求进黑市才加载
+	_check(_pk.get_node_or_null("Route/DarkBoss") == null,
+		"开场时比纳**没有加载**（Route 下找不到 DarkBoss）")
+	var gate := _pk.get_node_or_null("Route/DarkGate") as DarkGate
+	_check(gate != null, "黑市入口摆的是**空闸门** DarkGate（没有网格、没有碰撞）")
+	if gate == null:
 		return
 	_pk.enabled = false
 	_release_all()
-	# 站到 DK5 上（比纳就吊在它上方 10 m，正好进交战距离）
+	# ② 站在闸门**东边**（还没进黑市）→ 它不该被喊出来
+	_put(gate.global_position.x + 6.0, gate.global_position.y + 1.20,
+		gate.global_position.z)
+	gate.set_physics_process(true)
+	await _wait(8)
+	_check(_pk.get_node_or_null("Route/DarkBoss") == null,
+		"在闸门东边 6 m 站着，比纳仍然不加载（闸门按 x 触发）")
+	# ③ 跨过闸门 → 现场生成
+	_put(gate.global_position.x - 1.00, gate.global_position.y + 1.20,
+		gate.global_position.z)
+	await _wait(10)
+	var db := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
+	_check(db != null and gate.spawned(), "跑进黑市（x ≤ %.2f）→ 比纳才被 instantiate"
+		% gate.trigger_x)
+	if db == null:
+		_pk.enabled = true
+		return
+	_check(absf(db.max_health - 2700.0) < 0.1, "血量 ×3：900 → %.0f" % db.max_health)
+	_check(db.display_name == "比纳", "名字就叫「%s」，没有后缀" % db.display_name)
+	var hud := _p.get_parent().get_node_or_null("HUD")
+	if hud != null and hud.has_method("boss_row_shown"):
+		_check(hud.boss_row_shown("比纳"),
+			"HUD 上补出了「比纳」那条血条（中途加载也能接上）")
+	db.set_physics_process(true)
+	# 站到 DK5 上（比纳出场就在这一带上方，正好进交战距离）
 	var dk := _pk.get_node_or_null("Route/DK5") as Node3D
 	var b := _dark_box(dk)
 	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
 		b.position.z + b.size.z * 0.5)
 	await _wait(4)
-	db.set_physics_process(true)
-	db._t_shell = 0.05
+	# ⚠️ 比纳是**刚刚**才生成的，激光相位早已跑过好几轮；只重置 `_t_laser` 不够，
+	#    必须把 `_laser_state` / `_laser_timer` 一起归零，否则采样时可能刚好在束线熄灭的
+	#    那 2.8 s 空档里（无头模式一帧比一帧快，`_wait_ms` 是**真实时间**，
+	#    模拟时间早就跑出去老远 —— 第一次改完就是这样假红的）。
+	db.set_physics_process(false)
+	db._laser_state = 0
+	db._laser_timer = 0.0
 	db._t_laser = 0.05
-	await _wait_ms(700)
+	db._t_shell = 0.05
+	await _wait(2)
+	db.set_physics_process(true)
+	var beam := db.get_node_or_null("LaserBeam") as MeshInstance3D
+	# 逐帧等两件事出现，而不是等固定时长后碰运气：
+	#   ① 激光的**预警**段（`_laser_state == 1`，只存在 0.6 s）
+	#   ② 炮弹累计发射数 ≥ 1（`_t_shell = 0.05` → 三帧内打出第一发；
+	#      上一版跟激光一起等 700 ms，结果激光先亮、炮弹还没出膛就判了红）
+	var saw_warn := false
+	var t_laser := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_laser < 1500:
+		await process_frame
+		if beam != null and db._laser_state == 1 and beam.visible:
+			saw_warn = true
+		if saw_warn and db.shots_fired() >= 1:
+			break
+	_check(saw_warn, "激光先出**预警**细束（0.6 s 后才实体）")
 	# ⚠️ 别查「在飞几发」：炮弹 20 m/s，0.4 s 就打到人，采样时常常刚好 0 发。
 	#    查**累计发射数**才稳。
 	_check(db.shots_fired() >= 1, "炮弹真的打出来了（累计 %d 发，同时最多在飞 %d 发）"
 		% [db.shots_fired(), db.shell_count()])
-	var beam := db.get_node_or_null("LaserBeam") as MeshInstance3D
-	_check(beam != null and beam.visible, "激光先出**预警**细束（0.6 s 后才实体）")
 	var hp0 := db.health
 	db.take_damage(120.0)
-	_check(db.health < hp0, "被打掉血：%.0f → %.0f（打光 900 就倒）" % [hp0, db.health])
+	_check(db.health < hp0, "被打掉血：%.0f → %.0f（打光 %.0f 就倒）"
+		% [hp0, db.health, db.max_health])
 	db.take_damage(100000.0)
 	await _wait_ms(300)
 	_check(db.killed(), "血量清零 → 倒下")
+	# ④ 用户：「死亡后不要一直残留空血条」→ 名字行 + 血条一起收起
+	if hud != null and hud.has_method("boss_row_shown"):
+		_check(not hud.boss_row_shown("比纳"),
+			"倒下后「比纳」那行血条**收了**（不再留一条空条）")
 	await _wait_ms(1500)
 	_check(db.killed() and db.health <= 0.0,
 		"**不会复活**（等 1.5 s 仍是倒下、血量 %.0f）—— 父类默认 6 s 会站起来" % db.health)
