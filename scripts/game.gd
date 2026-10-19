@@ -394,6 +394,11 @@ func _ready() -> void:
 		if node.has_signal("boss_spawned") and not node.is_connected(
 				"boss_spawned", Callable(self, "_on_gate_boss")):
 			node.connect("boss_spawned", Callable(self, "_on_gate_boss"))
+	# 跑酷准备区：踏进去 = 同伴全部原地待命（用户：「爱丽丝单枪匹马前去」）
+	for node in get_tree().get_nodes_in_group("ready_zones"):
+		if node.has_signal("entered") and not node.is_connected(
+				"entered", Callable(self, "_on_ready_zone_entered")):
+			node.connect("entered", Callable(self, "_on_ready_zone_entered"))
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
 
 	for target in get_tree().get_nodes_in_group("targets"):
@@ -569,6 +574,22 @@ func _process(_delta: float) -> void:
 func _on_target_died(_by: float) -> void:
 	_score += 1
 	_hits += 1
+
+
+## 玩家踏进「跑酷准备区」（第 1 段跑道东口那块金垫子）：
+## 所有同伴改成**原地待命** —— 不追、也不会因为被甩太远而拉过来，
+## 整条 570 m 就爱丽丝一个人跑（用户 2026-10-19）。
+func _on_ready_zone_entered() -> void:
+	var n := 0
+	for c in _companions:
+		var comp := c as Companion
+		if comp == null or comp.is_standby():
+			continue
+		comp.set_standby(true)
+		n += 1
+	if n > 0:
+		Sfx.play("ui_toggle", -4.0)
+		print("[Game] 踏入跑酷准备区：%d 名同伴原地待命，爱丽丝单枪匹马" % n)
 
 
 ## 黑市闸门放出了比纳（玩家刚跑进第 8 段）。

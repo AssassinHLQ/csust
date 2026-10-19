@@ -72,6 +72,10 @@ var anim: Node
 var _player: Player
 var _speed := 0.0
 var _rescues := 0
+## 原地待命（跑酷准备区触发后打开，见 `parkour_ready_zone.gd`）：
+## 不追玩家、**也不会被「甩太远就拉回」**，就站在按下开关那一刻的位置和朝向。
+var _standby := false
+var _hold_yaw := 0.0
 
 
 func _ready() -> void:
@@ -105,12 +109,47 @@ func _build_model() -> void:
 	print("[Companion %s] 模型就位：%s" % [display_name, model_path.get_file()])
 
 
+## 切「原地待命」。用户 2026-10-19：「一旦进入跑酷准备区，同伴就原地待命」。
+## 打开后：站定、原地待机、**连「掉出平台/被甩 26 m 就拉回」的保险也关掉** ——
+## 否则玩家跑到 x = −300 时，同伴会被一条条拉过去，等于没待命。
+func set_standby(on: bool) -> void:
+	if _standby == on:
+		return
+	_standby = on
+	if on:
+		_hold_yaw = rotation.y
+		velocity = Vector3.ZERO
+		_speed = 0.0
+		if anim and anim.has_method("set_locomotion"):
+			anim.set_locomotion(0.0, true, 0.0)
+	print("[Companion %s] %s" % [display_name,
+		"原地待命" if on else "恢复跟随"])
+
+
+func is_standby() -> bool:
+	return _standby
+
+
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
+
+	if _standby:
+		# 站住：只把残余水平速度收掉，朝向保持待命那一刻
+		var rest := Vector3(velocity.x, 0.0, velocity.z).move_toward(
+			Vector3.ZERO, FRICTION * delta)
+		velocity.x = rest.x
+		velocity.z = rest.z
+		move_and_slide()
+		_speed = Vector2(velocity.x, velocity.z).length()
+		rotation.y = lerp_angle(rotation.y, _hold_yaw,
+			clampf(TURN_SMOOTH * delta, 0.0, 1.0))
+		if anim and anim.has_method("set_locomotion"):
+			anim.set_locomotion(_speed, is_on_floor(), velocity.y)
+		return
 
 	var want := slot_position()
 	var flat := Vector3(want.x - global_position.x, 0.0, want.z - global_position.z)

@@ -100,6 +100,7 @@ func _run() -> void:
 	_best_backup = _read_best_file()
 
 	await _test_structure(game)
+	await _test_ready_zone()
 	await _test_capsule()
 	await _test_calibration()
 	await _test_hops()
@@ -222,7 +223,7 @@ func _test_structure(game: Node) -> void:
 			continue
 		if node is AnimatableBody3D:
 			continue      # 移动平台**在动**：它的 position 每帧都变，查两个端点即可（见下）
-		if _inside_boss(node) or _inside_ram_market(node):
+		if _inside_boss(node) or _inside_decor(node):
 			continue      # Boss 的 FBX / 内存条市场的装饰件不在 0.05 m 网格上
 		var xf := (node as Node3D).transform
 		for v in [xf.origin, xf.basis.get_scale()]:
@@ -278,6 +279,55 @@ func _test_structure(game: Node) -> void:
 	_check(gone == 3, "跑酷计时 HUD 已删除（用户要求，不挡视线）")
 	print("  小结：%d 个节点，%d 个网格，%d 个碰撞形状，%d 盏灯，%d 个 Label3D"
 		% [st["nodes"], st["meshes"], st["shapes"], st["lights"], st["labels"]])
+
+
+## ── 1b. 跑酷准备区：踏进去同伴就原地待命 ─────────────────────────────────────
+## 用户 2026-10-19：「现在跑酷第一段前，设置跑酷准备区，一旦进入，同伴就原地待命，
+## 爱丽丝单枪匹马前去」。
+func _test_ready_zone() -> void:
+	print("\n========== 1b. 跑酷准备区（同伴原地待命）==========")
+	var comps: Array[Companion] = []
+	for c in _p.get_parent().get_children():
+		if c is Companion:
+			comps.append(c as Companion)
+	_check(comps.size() >= 3, "场上有 %d 名同伴" % comps.size())
+	var zone := _pk.get_node_or_null("ReadyZone") as ParkourReadyZone
+	_check(zone != null, "第 1 段跑道东口摆着准备区 `ReadyZone`（金色垫子，x −12~−6）")
+	if zone == null or comps.is_empty():
+		return
+	# ① 进区之前：一个都不许待命
+	_put(0.00, 0.10, 6.00)
+	await _wait(6)
+	var early := 0
+	for c in comps:
+		if c.is_standby():
+			early += 1
+	_check(early == 0, "踏进之前 %d 名同伴都还在跟随（待命 %d 名）" % [comps.size(), early])
+	# ② 踏进垫子 → 全部原地待命
+	_put(zone.global_position.x, 0.10, zone.global_position.z)
+	await _wait(10)
+	var n := 0
+	for c in comps:
+		if c.is_standby():
+			n += 1
+	_check(n == comps.size(), "踏入准备区 → **%d/%d 名同伴原地待命**" % [n, comps.size()])
+	# ③ 玩家跑出 29 m（比 teleport_distance 26 还远）：同伴不许跟、也不许被拉回
+	var homes: Array[Vector3] = []
+	for c in comps:
+		homes.append(c.global_position)
+	var was := _pk.enabled
+	_pk.enabled = false          # 别让掉下去触发检查点回送，把玩家拉回来
+	_put(-38.00, 2.00, 6.00)
+	await _wait_ms(1500)
+	var moved := 0.0
+	for i in comps.size():
+		moved = maxf(moved, comps[i].global_position.distance_to(homes[i]))
+	_check(moved < 1.0,
+		"玩家跑到 29 m 外（> 拉回阈值 26 m），同伴最大位移只有 %.2f m —— 真的在待命"
+		% moved)
+	_pk.enabled = was
+	_put(0.00, 0.10, 6.00)
+	await _wait(4)
 
 
 # --- 2. 胶囊与台面（真物理）----------------------------------------------------
@@ -1117,7 +1167,8 @@ func _test_futures() -> void:
 		if d.mode == ParkourDrift.Mode.BROWNIAN:
 			brown = d
 	if brown != null:
-		var home := brown.global_position
+		# ⚠️ 圆心用布朗块**自己的出生点**（`home()`），不能用测试开始时的位置
+		var home := brown.home()
 		var far := 0.0
 		var moved := 0.0
 		var t0 := Time.get_ticks_msec()
@@ -1431,7 +1482,8 @@ func _test_dark_boss() -> void:
 	if db == null:
 		_pk.enabled = true
 		return
-	_check(absf(db.max_health - 2700.0) < 0.1, "血量 ×3：900 → %.0f" % db.max_health)
+	_check(absf(db.max_health - 2200.0) < 0.1,
+		"血量 %.0f（900 → ×3 的 2700 → 用户嫌肉，削到 2200）" % db.max_health)
 	_check(db.display_name == "比纳", "名字就叫「%s」，没有后缀" % db.display_name)
 	var hud := _p.get_parent().get_node_or_null("HUD")
 	if hud != null and hud.has_method("boss_row_shown"):
@@ -1571,16 +1623,17 @@ func _test_ram_market() -> void:
 	_release_all()
 
 
-## 这个节点是不是挂在内存条市场的装饰底下。
-## 装饰件（PCB 面 / 金手指 / 桁架 / MultiMesh）是**视觉**用的、不参与跳跃判定，
-## 位置按台面高度微调（+8 mm 之类）就必然不在 0.05 m 网格上 —— 不查它们。
-func _inside_ram_market(n: Node) -> bool:
+## 这个节点是不是「纯装饰」：内存条市场（PCB 面 / 金手指 / 桁架 / MultiMesh）和
+## 跑酷准备区的金色垫子。它们只负责好看、不参与跳跃判定，位置按台面微调
+## （+1 mm / +8 mm 之类）就必然不在 0.05 m 网格上 —— 不查它们。
+func _inside_decor(n: Node) -> bool:
 	var cur := n
 	for _i in 8:
 		cur = cur.get_parent()
 		if cur == null:
 			return false
-		if String(cur.name) == "RamMarket":
+		var nm := String(cur.name)
+		if nm == "RamMarket" or nm == "ReadyZone":
 			return true
 	return false
 

@@ -70,6 +70,12 @@ func _run() -> void:
 	root.add_child(_cam)
 	_cam.make_current()
 
+	# ── 第 0 步：跑酷准备区（金色垫子 + 同伴原地待命）──
+	# 先把人挪到垫子上，让「踏入 → 同伴待命」真的发生，再拍同伴站定的样子
+	if p != null:
+		p.global_position = Vector3(-9.0, 0.10, 4.0)
+		await _wait(10)
+	await _shot("09_ready_zone", Vector3(-1.0, 4.6, 12.0), Vector3(-9.0, 1.2, 4.0))
 	# ── 段 1~2（v2 原样，机位不变）──
 	await _shot("10_start", Vector3(-8.5, 2.0, 4.0), Vector3(-26.0, 0.6, 4.0))
 	await _shot("11_edge", Vector3(-19.0, 2.4, 4.0), Vector3(-32.0, 0.5, 4.0))

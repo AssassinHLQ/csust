@@ -894,6 +894,14 @@ EXT_RAMMARKET = ('[ext_resource type="Script" path="res://scripts/ram_market.gd"
 #    直接返回 null（本喵踩过一次，日志里只有一句「built = false」）。
 RAM_MARKET_NODE = ('[node name="RamMarket" type="Node3D" parent="."]' + chr(10)
                    + 'script = ExtResource("11_rammarket")')
+## 跑酷准备区（第 1 段跑道东口的金色垫子）：踏进去 = 同伴原地待命、爱丽丝单枪匹马。
+## 位置固定在 (−9, 0, 4)：正好是 40×40 主平台靠西、跑道（x −20 ~ −10）入口前一步。
+EXT_READYZONE = ('[ext_resource type="Script" path="res://scripts/parkour_ready_zone.gd" '
+                 'id="12_readyzone"]')
+READY_ZONE_NODE = ('[node name="ReadyZone" type="Area3D" parent="."]' + chr(10)
+                   + 'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, 4)' + chr(10)
+                   + 'script = ExtResource("12_readyzone")' + chr(10)
+                   + 'zone_size = Vector3(6, 3, 4)')
 
 
 def build_subresources() -> list:
@@ -1034,7 +1042,7 @@ SECTION_HOSTS = tuple("Beacon_%s" % n for n in SECTION_NAMES) \
     + tuple("Rule_%s" % n for n in SECTION_NAMES)
 ## 会被重新生成 / 已经废弃的节点（`DarkBoss` 是旧版直接摆进场景的比纳，
 ## 现在是 `DarkGate` 运行时生成；两个名字都要清掉，生成器才可重入）
-SECTION_SCRAP = ("DarkBoss", "DarkGate", "RamMarket")
+SECTION_SCRAP = ("DarkBoss", "DarkGate", "RamMarket", "ReadyZone")
 
 
 def is_section_node(nd) -> bool:
@@ -1067,7 +1075,8 @@ def main() -> None:
                   r'path="res://scripts/dark_boss\.gd" id="9_dark"\]' + chr(10) + '+',
                   '', text)
     for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="10_darkgate"', EXT_DARKGATE),
-                     ('id="11_rammarket"', EXT_RAMMARKET)):
+                     ('id="11_rammarket"', EXT_RAMMARKET),
+                     ('id="12_readyzone"', EXT_READYZONE)):
         if eid not in text:
             # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
             k = text.index("[sub_resource")
@@ -1155,7 +1164,7 @@ def main() -> None:
             c2_end = i
     gen[c2_end + 1:c2_end + 1] = (build_nodes(boxes, x1) + build_branch_nodes(br)
                                   + build_section_nodes(secs, 5)
-                                  + [RAM_MARKET_NODE])
+                                  + [RAM_MARKET_NODE, READY_ZONE_NODE])
 
     gen = bump_labels(gen)
     out = "\n".join(gen)

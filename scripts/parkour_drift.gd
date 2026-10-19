@@ -69,6 +69,13 @@ func _physics_process(delta: float) -> void:
 	global_position = point_a.lerp(point_b, _t)
 
 
+## 布朗块的**活动中心**（`_ready` 时的出生点；半径 `roam` 就是在它周围量的）。
+## 自检用：不能拿测试开始那一刻的 `global_position` 当圆心 —— 那时它可能已经偏出去
+## 一两米，再往外走 `roam` 就必然超阈值（2026-10-19 就是这样假红了一次）。
+func home() -> Vector3:
+	return _home
+
+
 func _brownian(delta: float) -> void:
 	_next_pick -= delta
 	var to := _target - global_position
