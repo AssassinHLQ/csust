@@ -1,15 +1,30 @@
-# 长沙理工：2067（Godot 4.7 学习沙盒）
+# 长沙理工：2067
 
 > 工程与窗口标题：`长沙理工：2067`（`project.godot` 的 `config/name`）。
-> 下面是这个学习沙盒里做过的事。
+> 下面是这个沙盒里做过的事。
 
-> **A third-person shooter sandbox in Godot 4.7** — over-the-shoulder camera, turn-to-aim
-> firing gate, 60-round magazine with auto-reload, a hand-rolled animation driver, and a
-> **3D Gaussian Splatting campus** (floating platform above a sunken scan).
-> Code and docs are **MIT**; the character model and the splat data are *not* included.
+> **A third-person shooter + parkour + trading sandbox in Godot 4.7** — over-the-shoulder
+> camera, turn-to-aim firing gate, 60-round magazine, a hand-rolled animation driver,
+> a 12-segment / 571 m parkour course over a **3D Gaussian Splatting campus**, bosses,
+> companions, and a margin/debt/liquidation ledger.
+> Code and docs are **MIT**; the character models and the splat data are *not* included.
 
-一个用 Godot 4.7 手搓的**第三人称射击原型**：越肩相机、开火转身门控、60 发弹匣连发、
-动画驱动、以及**高斯泼溅（3DGS）校园场景**（悬浮记忆平台 + 下沉校园）。
+一个用 Godot 4.7 手搓的**越肩射击 + 跑酷 + 期货交易沙盒**：一边在 12 段 / 571 m 的
+悬浮跑酷路线上跳，一边在「保证金 / 负债 / 强平」的账本里赌命；路上有 7 名同伴、
+6 位 Boss，还有一间能召唤同伴的小屋。
+
+## 现在能玩到什么（2026-10-19）
+
+| 模块 | 内容 |
+|---|---|
+| **跑酷** | **12 段 / 99 站 / 84 跳 + 9 处机关，571 m**：极限跳 → 独木桥 → 同花顺期货通（红绿 K 线 / 会动的块 / 蓝块强平 / 薛定谔块）→ 比特币三线 → 期权 / A股 / 外汇 → 暗网黑市 → 内存条市场（天降内存条）→ 螺旋塔 → 机关区 → 螺旋下降 → 终点岛 |
+| **经济** | 右上角一直在记账：**保证金 ¥10 万起 / 负债 / 强平次数 / 对冲**。第 1 段「稳定基金」每块 +0.10%（复利）；第 2 段「体育彩票」78% 没中（−0.4~−1.6%）、22% 中个小奖（+0.2~+0.8%）；第 3 段起按牌子上的真实涨跌幅结算，踩到蓝块直接爆仓 |
+| **Boss** | 飞猪优香 + 备用 6 位（霸王龙 / 倭瓜 / 霍德 / 佩洛洛斯拉 / 比纳 / 哥利亚）。**第 8 段的比纳**进黑市才加载，**2200 血**，激光 + 炮弹，打倒后躺 5 s 淡出消失 |
+| **同伴** | 7 名同伴跟随（越肩站位不挡镜头）。跑酷准备区让她们**原地待命**；跑完回小屋踩金垫子**把她们召唤回来** |
+| **场景** | 真人尺度画室 609（**277 万点**高斯泼溅）+ 40 × 40 m 悬浮记忆平台 + 手工小屋 + AllSky 全景天空盒 |
+
+> 详细设计、实测数据、踩过的坑都在下面：先看 **§1.16 跑酷**、**§1.16.3 比纳**、
+> **§1.16.4 内存条市场**、**§1.16.0a 小屋召唤台**、**§1.16.0b 稳定基金 / 体育彩票**。
 
 **许可：除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。** 详见
 [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -23,7 +38,7 @@
 
 | 场景 | 用途 |
 |---|---|
-| `scenes/game.tscn` | **第三人称射击原型**（默认启动场景，F5 直接玩） |
+| `scenes/game.tscn` | **默认启动场景**（F5 直接玩：射击 + 跑酷 + 经济） |
 | `scenes/main.tscn` | 动画查看器：24 条动作逐条播、切镜头 |
 
 没有素材也能跑射击部分：
