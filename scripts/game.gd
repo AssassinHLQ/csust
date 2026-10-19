@@ -345,6 +345,8 @@ func _ready() -> void:
 	_dress_empty_lot()
 
 	_hud.bind(_player, _weapon)
+	# 小屋里的「召唤同伴」台（踩上去把跑酷时留在跑道口的同伴召回小屋）
+	_build_summon_pad()
 
 	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
 	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
@@ -590,6 +592,78 @@ func _on_ready_zone_entered() -> void:
 	if n > 0:
 		Sfx.play("ui_toggle", -4.0)
 		print("[Game] 踏入跑酷准备区：%d 名同伴原地待命，爱丽丝单枪匹马" % n)
+
+
+## ── 小屋里的「召唤同伴」台（2026-10-19）──
+##
+## 用户：「在你做的这个房子里面可以召唤同伴，如果不玩跑酷了，可以在这里重新呼叫
+## 同伴回来」。小屋里那块金垫子（`SummonPad`）踩上去 = 7 名同伴**瞬移回小屋**、
+## 恢复跟随；跑酷准备区把她们留在 500 m 外的跑道口时，这是唯一的召回入口。
+##
+## 位置放在 `MeshHut` **里面**（局部 `(1.0, 0.03, 0.3)`）：门开在 −X、走道沿局部
+## z ∈ [−0.9, 0.9]，桌子和凳子都在 z ≈ −1.3 ~ −2.2 那一侧、货架在 z = +2.4，
+## 所以这块垫子正好落在「进门就看得到、又不撞家具」的空地上。
+## 挂在 `MeshHut` 下而不是 `Game` 下：以后挪小屋，垫子跟着走。
+const SUMMON_PAD_LOCAL := Vector3(1.0, 0.03, 0.3)
+## 召回后同伴站成一排：沿小屋长轴（局部 x）、间隔 0.7 m，整排**居中在局部 x = 0.2**。
+## 为什么是「一排」而不是围成一圈：小屋只有 6.2 × 5.2 m，围着玩家摆 7 个人会撞进
+## 桌子/凳子/货架的碰撞盒里（物理引擎一帧之内会把她们顶出去，看起来像抽搐）。
+## 整排宽度 6 × 0.7 = 4.2 m，居中在 x = 0.2 → 局部 x ∈ [−1.9, +2.3]，
+## 离两面山墙（±3.1）都还有 0.8 m 以上。
+const SUMMON_ROW_X := 0.2
+const SUMMON_ROW_STEP := 0.7
+## 这一排**往垫子哪一侧偏**（局部 z，+Z = 货架那侧的空地，−Z 是桌子/凳子）
+const SUMMON_ROW_Z := 1.2
+
+var _summon_pad: SummonPad
+
+
+## 在小屋里摆召唤台，并把 `summoned` 接到 `_on_summon()`。
+func _build_summon_pad() -> void:
+	var hut := get_node_or_null("MeshHut")
+	if hut == null:
+		push_warning("[Game] 场景里没有 MeshHut，召唤台不摆")
+		return
+	var pad := SummonPad.new()
+	pad.name = "SummonPad"
+	pad.position = SUMMON_PAD_LOCAL
+	hut.add_child(pad)
+	pad.summoned.connect(_on_summon)
+	_summon_pad = pad
+	print("[Game] 小屋召唤台就位：世界坐标 %s（踩上去召回全部同伴）"
+		% str(pad.global_position.snappedf(0.01)))
+
+
+## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
+func _on_summon() -> void:
+	var n := 0
+	var total := _companions.size()
+	for i in total:
+		var comp := _companions[i]
+		if not is_instance_valid(comp):
+			continue
+		comp.set_standby(false)
+		comp.global_position = _summon_spot(i, total)
+		comp.velocity = Vector3.ZERO
+		n += 1
+	if _summon_pad != null:
+		_summon_pad.show_result("已召回 %d 人" % n)
+	Sfx.play("ui_open", -2.0)
+	print("[Game] 召唤同伴：%d/%d 名回到小屋（垫子 %s）"
+		% [n, total, str(_summon_pad.global_position.snappedf(0.01)) if _summon_pad else "—"])
+
+
+## 第 i 名同伴的落点：小屋**局部**坐标 → 世界。
+## 垫子在局部 (1.0, 0.03, 0.3)，一排人沿局部 x 排开、整体往 +Z（货架那侧空地）
+## 偏 1.2 m —— 避开桌子（z −2.2）和凳子（z −1.3）。
+##
+## ⚠️ 用 `hut.to_global()` 而不是「垫子世界坐标 + 偏移」：小屋现在没旋转，
+##    但以后一挪一转身，按垫子坐标加世界偏移的那一版就会把一整排人塞进墙里。
+func _summon_spot(i: int, total: int) -> Vector3:
+	var hut := _summon_pad.get_parent() as Node3D
+	var span := SUMMON_ROW_STEP * float(maxi(total, 1) - 1) * 0.5
+	var dx := -span + SUMMON_ROW_STEP * float(i)
+	return hut.to_global(Vector3(SUMMON_ROW_X + dx, 0.06, SUMMON_ROW_Z))
 
 
 ## 黑市闸门放出了比纳（玩家刚跑进第 8 段）。

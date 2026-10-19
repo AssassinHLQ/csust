@@ -13,8 +13,9 @@ extends Boss
 ##   · **炮弹**：每 1.8 s 一发，朝你**出膛那一刻**的位置飞（带上抛），命中掉血 + 击退 ——
 ##     真正的威胁是**被击退掉下板**。
 ##
-## ⚠️ 用户：「这个 boss 不会复活」→ 覆写 `_respawn()` 成空实现：`_die()` 之后
-##    模型前扑、碰撞关掉，然后**永远**停在那儿。
+## ⚠️ 用户：「这个 boss 不会复活」→ 覆写 `_respawn()`：`_die()` 之后
+##    模型前扑、碰撞关掉，躺 `vanish_delay` 秒后**淡出消失**（2026-10-19 用户：
+##    「比纳死后过一段时间消失」），节点最后 `queue_free()`。
 ##
 ## ⚠️ 血量、名字在 `_init()` 里给默认值（场景里不写），这样场景只需要挂脚本 + 位置。
 
@@ -38,6 +39,10 @@ const SHELL_COL := Color(0.95, 0.35, 0.12)
 @export var engage_range := 46.0
 ## 跟着玩家走的水平速度（m/s）
 @export var follow_speed := 7.0
+## 倒下后多久开始消失 / 消失动画多长（秒）。
+## 用户 2026-10-19：「比纳死后过一段时间消失」—— 尸体别一直躺在跑道上挡视线。
+@export var vanish_delay := 5.0
+@export var vanish_time := 1.4
 
 var _beam: MeshInstance3D
 var _beam_mat: StandardMaterial3D
@@ -75,7 +80,8 @@ func _init() -> void:
 	# 同一天下午：「比纳太肉了，削弱一点点血量」→ **2200**（−18.5%）。
 	# 血条是按比例画的，长度不变，只是少打 500 点。想再调就改这一行。
 	max_health = 2200.0
-	respawn_time = 0.0
+	# 倒下后躺多久：`_ready()` 会再按导出参数 `vanish_delay` 覆盖一次
+	respawn_time = 5.0
 
 
 func _ready() -> void:
@@ -86,14 +92,39 @@ func _ready() -> void:
 		_base_model_scale = model.scale
 		_base_model_yaw = model.rotation.y
 	died.connect(_on_died)
+	# 父类 `_die()` 末尾会 `chain().tween_interval(respawn_time)` 再回调 `_respawn()`：
+	# 这个数就是「倒下后躺多久」。这里把它接到 `vanish_delay`（导出参数），
+	# 之后 `_respawn()` 被覆写成「消失」而不是「站起来」。
+	respawn_time = vanish_delay
 	# 先用**半速**开火：玩家第一次见到它时还在 K 线上，别一上来就被激光点名
 	_t_laser = laser_interval * 0.5
 	_t_shell = 0.8
 
 
-## **不会复活**：父类 `_die()` 末尾会 `tween → _respawn()`，这里把它变成空操作。
+## **不会复活，而且会消失**（用户 2026-10-19：「比纳死后过一段时间消失」）。
+##
+## 父类这里本来是「站起来」（重置血量 / 恢复碰撞 / 播起身动作）。我们改成：
+## 倒下 → 躺 `vanish_delay`（默认 5 s）→ 淡出 + 下沉 1.4 s → **删掉节点**。
+## 删掉之后 `Route/DarkBoss` 不存在，血条行早就收了（`hud.gd` 在血量归零时收行）。
 func _respawn() -> void:
-	pass
+	_vanish()
+
+
+func _vanish() -> void:
+	var tw := create_tween()
+	tw.set_parallel(true)
+	if model != null:
+		tw.tween_property(model, "position:y", model.position.y - 1.4, vanish_time)
+		tw.tween_property(model, "scale", model.scale * 0.6, vanish_time)
+	for mat in _materials:
+		if mat == null:
+			continue
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		var c := mat.albedo_color
+		tw.tween_property(mat, "albedo_color", Color(c.r, c.g, c.b, 0.0), vanish_time)
+	tw.chain().tween_callback(queue_free)
+	print("[DarkBoss] 比纳的尸体消失（躺 %.1f s，淡出 %.1f s 后删除节点）"
+		% [vanish_delay, vanish_time])
 
 
 func _on_died(_by_damage: float) -> void:

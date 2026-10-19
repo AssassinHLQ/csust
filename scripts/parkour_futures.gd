@@ -24,6 +24,11 @@ extends Node3D
 ##    所以「踩哪一块、什么时候踩」是决策而不是运气；保证金够 11 万就在 `M0`
 ##    解锁「对冲」，之后强平块只扣 35% 不爆仓。
 ##
+## 6. **第 1 段「稳定基金」/ 第 2 段「体育彩票」**（2026-10-19）：这两段的每一块
+##    落脚板都是一次结算 —— 基金固定 **+0.10%**（复利），彩票 **78% 没中
+##    （−0.4~−1.6%）、22% 中个小奖（+0.2~+0.8%）**。没有牌子，规则写死在
+##    `FUND_PCT` / `lottery_pct()` 里；见 `_collect_plates()` 的 `kind` 字段。
+##
 ## ⚠️ 判「踩到蓝块」用的是**盒子重叠**，不是 `Area3D.body_entered`：
 ##    蓝块是「凭空出现」的，人可能**已经站在里面**才轮到它变实体，`body_entered`
 ##    那一刻根本不会发。
@@ -51,6 +56,23 @@ const SCH_UNKNOWN := Color(0.34, 0.30, 0.46)
 @export var hedge_target := 11.0
 ## 对冲之后，强平块只扣当前保证金的这个比例（不再爆仓）
 @export var hedge_cut := 0.35
+
+## ── 第 1 段「稳定基金」/ 第 2 段「体育彩票」（2026-10-19）──
+##
+## 用户原话：「跑酷第一段是稳定基金，每次加百分之 0.1，第二段是体育彩票大部分输钱
+## 小部分赚小钱」。所以这两段的**每一块落脚板**都是一次结算：
+##   · 稳定基金：每踩一块 **+0.10%**（按当前保证金复利 —— 10 万时每块 +100 元）；
+##   · 体育彩票：**22% 中奖（+0.20% ~ +0.80%）、78% 没中（−0.40% ~ −1.60%）**。
+##     「小部分赚小钱」是字面意思：赢的上限只有输的下限的两倍，期望约 −0.67%/注。
+##
+## ⚠️ 这两段**没有牌子**（`Pct` Label3D），涨跌幅是这里算出来的，不是读牌子 ——
+##    所以 `_settle()` 里按 `pl["kind"]` 分流，别再去找 `Pct`。
+const FUND_PCT := 0.10
+const LOT_WIN_P := 0.22
+const LOT_WIN_LO := 0.20
+const LOT_WIN_HI := 0.80
+const LOT_LOSE_LO := 0.40
+const LOT_LOSE_HI := 1.60
 
 ## ── 账户（单位：万）──
 ## `margin` = 保证金（真实结算：每块 K 线第一次踩上去，就按它牌子上那个涨跌幅结算一次）
@@ -81,6 +103,11 @@ var schro: Array[Node3D] = []
 var _pk: Parkour
 var _player: Player
 var _rng := RandomNumberGenerator.new()
+## 体育彩票专用随机流：**独立种子**，这样加不加彩票都不影响薛定谔块的坍缩序列
+## （那三块的涨跌幅是 `_rng` 抽的，自检里有一节按它核对区间）。
+var _lot_rng := RandomNumberGenerator.new()
+## 已经**解释过规则**的产品（稳定基金 / 体育彩票）：只弹一次横幅，别每块板都糊一屏
+var _intro_done := {}
 var _t := 0.0
 var _cool := 0.0
 var _hud_layer: CanvasLayer
@@ -92,6 +119,7 @@ var _flash: ColorRect
 
 func _ready() -> void:
 	_rng.seed = 2067
+	_lot_rng.seed = 2068          # 独立流，见 `_lot_rng` 的注释
 	margin = start_margin
 	_build.call_deferred()
 
@@ -111,9 +139,11 @@ func _build() -> void:
 	_collect_quotes()
 	_collect_plates()
 	_build_branch()
+	_build_rule_signs()
 	_build_hud()
-	print("[Futures] 期货通就位：会动的块 %d、蓝块 %d、薛定谔块 %d、跳价牌 %d"
-		% [drifts.size(), hazards.size(), schro.size(), quotes.size()])
+	print("[Futures] 期货通就位：会动的块 %d、蓝块 %d、薛定谔块 %d、跳价牌 %d、结算板 %d（含第 1/2 段 %d 块）"
+		% [drifts.size(), hazards.size(), schro.size(), quotes.size(), plates.size(),
+			plates.filter(func(p): return String(p["kind"]) != "").size()])
 
 
 ## 第 4 段：三条道各一个渡船 + 蓝块 + 结算台。
@@ -297,6 +327,13 @@ func _make_hazard(near: String, phase_offset: float, dz := 2.2) -> void:
 func _collect_plates() -> void:
 	for i in _pk.node_count():
 		var nm := _pk.label_at(i)
+		var seg := _pk.segment_of(i)
+		# 第 1 段「稳定基金」/ 第 2 段「体育彩票」：这两段的**每一块板**都结算一次，
+		# 没有牌子可读，规则在 `_settle()` 里（见 FUND_PCT / lottery_pct）
+		if seg <= 1:
+			_add_plate(nm, _pk.get_node_or_null(NodePath(String(_pk.route[i]))),
+				_pk.box_at(i), _pk.top_at(i), "fund" if seg == 0 else "lottery")
+			continue
 		if not nm.begins_with("K") or not nm.substr(1).is_valid_int():
 			continue
 		_add_plate(nm, _pk.get_node_or_null(NodePath(String(_pk.route[i]))), _pk.box_at(i),
@@ -308,10 +345,11 @@ func _collect_plates() -> void:
 		_add_plate(String(n.name), n, b, b.position.y + b.size.y)
 
 
-func _add_plate(nm: String, node: Node, b: AABB, top: float) -> void:
+## `kind` 空 = 读牌子上的 `Pct`（K 线/三道/期权）；`fund`/`lottery` = 按规则算。
+func _add_plate(nm: String, node: Node, b: AABB, top: float, kind := "") -> void:
 	if node == null or b.size.x <= 0.0:
 		return
-	plates.append({"name": nm, "node": node,
+	plates.append({"name": nm, "node": node, "kind": kind,
 		"x0": b.position.x, "x1": b.position.x + b.size.x,
 		"z0": b.position.z, "z1": b.position.z + b.size.z, "top": top})
 
@@ -320,6 +358,39 @@ func _add_plate(nm: String, node: Node, b: AABB, top: float) -> void:
 ##   `spot` 现货 —— `pct_seq` 只有一档，永不跳（稳）
 ##   `swap` 永续 —— 两档交替，`period` 秒一轮（看时机）
 ##   `btc`  币圈 —— 四档轮转，波动最大（赌）
+## 第 1 段「稳定基金」和第 2 段「体育彩票」的规则牌 —— **运行时挂两个 Label3D**。
+##
+## 为什么不写进 `scenes/parkour.tscn`：那两段的几何是**另一个生成器**（早期版本）
+## 摆的，往里塞节点要动 `tools/make_flush_section.py`，而且 0.05 m 网格 / 静态体
+## 那些自检都会跟着响。这两个牌子纯装饰（`Label3D`，自检的网格检查本来就跳过它），
+## 挂在 `Futures` 下最省事。
+##
+## 位置：本段第一块板的正中、台面往上 3.2 m、往 +Z 让开 2 m —— 避开跑道上已有的
+## 「第 N 段 · 起点」信号桅杆。
+func _build_rule_signs() -> void:
+	var specs := [
+		{"seg": 0, "text": "稳定基金\n每踩一块 +0.10%"},
+		{"seg": 1, "text": "体育彩票\n78% 没中（−0.4~−1.6%）\n22% 中奖（+0.2~+0.8%）"},
+	]
+	for spec in specs:
+		var i := _pk.segment_start(int(spec["seg"]))
+		var b := _pk.box_at(i)
+		if b.size.x <= 0.0:
+			continue
+		var lab := Label3D.new()
+		lab.name = "RuleSign_S%d" % int(spec["seg"])
+		lab.text = String(spec["text"])
+		lab.font_size = 40
+		lab.outline_size = 12
+		lab.pixel_size = 0.010
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.no_depth_test = true
+		lab.modulate = Color(1.0, 0.92, 0.55)
+		lab.position = Vector3(b.position.x + b.size.x * 0.5,
+			_pk.top_at(i) + 3.2, b.position.z + b.size.z * 0.5 + 2.0)
+		add_child(lab)
+
+
 func _collect_quotes() -> void:
 	var route := _pk.get_node_or_null("Route")
 	if route == null:
@@ -601,33 +672,73 @@ func _settle(pl: Dictionary) -> void:
 	var node := pl["node"] as Node3D
 	if node == null:
 		return
-	var lab := node.get_node_or_null("Pct") as Label3D
-	if lab == null:
-		return
-	var pct := _parse_pct(lab.text)
-	if is_nan(pct):
-		return                       # 薛定谔还没坍缩（牌子还是「?」）→ 下一帧再说
-	# 期权：第一次踩到 opt 系的板就开始计时；超时的「行权」按 0% 结算（买方作废）
-	var kind := String(node.get_meta("pct_kind", ""))
-	var dl := float(node.get_meta("deadline", 0.0))
-	if kind.begins_with("opt") and _opt_t0 < 0.0:
-		_opt_t0 = _t
-	if dl > 0.0 and _opt_t0 >= 0.0 and _t - _opt_t0 > dl:
-		pct = 0.0
-		_banner_text("期权到期：行权作废（0%）", Color(1.0, 0.72, 0.35))
+	var kind := String(pl.get("kind", ""))
+	var pct := 0.0
+	var what := String(pl["name"])
+	if kind == "fund":
+		# 第 1 段「稳定基金」：每踩一块 +0.10%，没有别的花样
+		pct = FUND_PCT
+		what = "稳定基金"
+	elif kind == "lottery":
+		# 第 2 段「体育彩票」：大部分没中、小部分中个小奖
+		pct = lottery_pct(_lot_rng.randf())
+		what = "体育彩票·中奖" if pct > 0.0 else "体育彩票·未中"
+	else:
+		var lab := node.get_node_or_null("Pct") as Label3D
+		if lab == null:
+			return
+		pct = _parse_pct(lab.text)
+		if is_nan(pct):
+			return                       # 薛定谔还没坍缩（牌子还是「?」）→ 下一帧再说
+		# 期权：第一次踩到 opt 系的板就开始计时；超时的「行权」按 0% 结算（买方作废）
+		var qkind := String(node.get_meta("pct_kind", ""))
+		var dl := float(node.get_meta("deadline", 0.0))
+		if qkind.begins_with("opt") and _opt_t0 < 0.0:
+			_opt_t0 = _t
+		if dl > 0.0 and _opt_t0 >= 0.0 and _t - _opt_t0 > dl:
+			pct = 0.0
+			_banner_text("期权到期：行权作废（0%）", Color(1.0, 0.72, 0.35))
 	settled[pl["name"]] = true
 	var before := margin
 	margin = maxf(0.0, margin * (1.0 + pct / 100.0))
 	settlements += 1
-	_last_settle = "最近结算：%s %+.2f%%　%+.2f 万" % [pl["name"], pct, margin - before]
+	var tail := "%s %+.2f%%　%+.2f 万" % [what, pct, margin - before]
+	_last_settle = "最近结算：" + tail
 	if _result_label != null:
 		_result_label.text = _last_settle
 		_result_label.add_theme_color_override("font_color",
 			Color(1.0, 0.55, 0.55, 1) if pct < 0.0 else Color(0.55, 1.0, 0.65, 1))
+	# 第一次踩到这两类产品时解释一句规则（只弹一次，别每块板都糊一屏）
+	if (kind == "fund" or kind == "lottery") and not _intro_done.has(kind):
+		_intro_done[kind] = true
+		if kind == "fund":
+			_banner_text("稳定基金：每踩一块 +%.2f%%（复利）" % FUND_PCT, Color(0.55, 1.0, 0.65))
+		else:
+			_banner_text("体育彩票：%.0f%% 中奖 %+.1f~%+.1f%%，%.0f%% 没中 −%.1f~%.1f%%" % [
+				LOT_WIN_P * 100.0, LOT_WIN_LO, LOT_WIN_HI,
+				(1.0 - LOT_WIN_P) * 100.0, LOT_LOSE_LO, LOT_LOSE_HI],
+				Color(1.0, 0.82, 0.42))
+	elif kind == "lottery":
+		# 每一注都给反馈：「未中」要让人看见钱少了，不然彩票段白跑
+		_banner_text(tail, Color(0.55, 1.0, 0.65) if pct > 0.0
+			else Color(1.0, 0.55, 0.55))
 	_update_hud_text()
 	Sfx.play("ui_slider", 0.0)
 	if margin <= 0.0:
 		liquidate("保证金耗尽")
+
+
+## 体育彩票一注的结果（**纯函数**，自检直接调它核对规则）：
+## `r ∈ [0, 1)` 前 22% 中奖（+0.20% ~ +0.80%），后 78% 没中（−0.40% ~ −1.60%）。
+##
+## ⚠️ 两个区间**故意不对称**：赢的上限（+0.80）只有输的下限（−0.40）的两倍，
+##    而输的概率是中奖的 3.5 倍 —— 期望 ≈ 0.22×0.50 − 0.78×1.00 = −0.67%/注。
+##    这就是用户说的「大部分输钱、小部分赚小钱」。
+func lottery_pct(r: float) -> float:
+	var x := clampf(r, 0.0, 0.999999)
+	if x < LOT_WIN_P:
+		return lerpf(LOT_WIN_LO, LOT_WIN_HI, x / LOT_WIN_P)
+	return -lerpf(LOT_LOSE_LO, LOT_LOSE_HI, (x - LOT_WIN_P) / (1.0 - LOT_WIN_P))
 
 
 ## 从牌子文字里取百分比：「+2.31%」→ 2.31；「?」/空 → NAN
@@ -694,9 +805,15 @@ func liquidate(reason := "强制平仓") -> void:
 		_player.velocity = Vector3.ZERO
 	# 0.9 s 之后「重新开仓」：不这么做的话，一次爆仓之后整局就没钱可掉了
 	# （负债留着、越滚越大，那才是这段的主题）
+	#
+	# ⚠️ 回调里**先确认还是 0** 再补钱：这个 tween 是 0.9 s 后才跑的，期间可能有
+	#    另一笔结算/测试把 `margin` 改过（自检 §5d 就会手动设 12 万去测对冲）——
+	#    不判一下就补，会把别人刚设好的保证金直接盖成 `start_margin`。
 	var tw := create_tween()
 	tw.tween_interval(0.9)
 	tw.tween_callback(func() -> void:
+		if margin > 0.0:
+			return
 		margin = start_margin
 		_update_hud_text()
 		if _result_label != null:

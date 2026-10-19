@@ -101,6 +101,8 @@ func _run() -> void:
 
 	await _test_structure(game)
 	await _test_ready_zone()
+	await _test_summon_pad()
+	await _test_fund_lottery()
 	await _test_capsule()
 	await _test_calibration()
 	await _test_hops()
@@ -326,6 +328,162 @@ func _test_ready_zone() -> void:
 		"玩家跑到 29 m 外（> 拉回阈值 26 m），同伴最大位移只有 %.2f m —— 真的在待命"
 		% moved)
 	_pk.enabled = was
+	_put(0.00, 0.10, 6.00)
+	await _wait(4)
+
+
+# --- 1c. 小屋里的召唤台 -----------------------------------------------------------
+
+## 用户 2026-10-19：「在你做的这个房子里面可以召唤同伴，如果不玩跑酷了，
+## 可以在这里重新呼叫同伴回来」。
+##
+## 这一节接在 1b 后面：那时 7 名同伴**正以「原地待命」状态留在跑道口**（x ≈ −9），
+## 玩家走回小屋踩一下垫子，她们必须**瞬移回来并且恢复跟随**。
+func _test_summon_pad() -> void:
+	print("\n========== 1c. 小屋召唤台（把同伴叫回来）==========")
+	var game := _p.get_parent()
+	var comps := _companions()
+	_check(comps.size() >= 3, "场上有 %d 名同伴" % comps.size())
+	var pad := game.get_node_or_null("MeshHut/SummonPad") as SummonPad
+	_check(pad != null, "小屋 `MeshHut` 里摆着召唤台 `SummonPad`")
+	if pad == null or comps.is_empty():
+		return
+	var hut := game.get_node_or_null("MeshHut") as Node3D
+	var to_hut := Vector2(pad.global_position.x - hut.global_position.x,
+		pad.global_position.z - hut.global_position.z).length()
+	# 小屋内部 6.2 × 5.2 m：垫子必须真的在屋里，而不是挂在门外的平台上
+	_check(to_hut < 3.2, "垫子在小屋**里面**（离小屋中心 %.2f m，屋内半宽 3.1 / 半深 2.6）"
+		% to_hut)
+
+	# ① 前置：§1b 之后她们应该还在待命（离小屋 20 m 以上）
+	var standby0 := 0
+	var far0 := 0.0
+	for c in comps:
+		if c.is_standby():
+			standby0 += 1
+		far0 = maxf(far0, c.global_position.distance_to(pad.global_position))
+	_check(standby0 == comps.size() and far0 > 5.0,
+		"踩之前：%d/%d 名还在跑道口待命（最远 %.1f m）" % [standby0, comps.size(), far0])
+
+	# ② 踏上垫子 → 全部瞬移回小屋、解除待命
+	_put(pad.global_position.x, pad.global_position.y + 0.10, pad.global_position.z)
+	await _wait(8)
+	var home := 0
+	var standby1 := 0
+	var worst := 0.0
+	for c in comps:
+		if not c.is_standby():
+			home += 1
+		else:
+			standby1 += 1
+		worst = maxf(worst, c.global_position.distance_to(pad.global_position))
+	_check(home == comps.size() and standby1 == 0,
+		"踏上召唤台 → **%d/%d 名同伴回到小屋并恢复跟随**（仍待命 %d 名）"
+		% [home, comps.size(), standby1])
+	# 一排人排在垫子两侧各 2.1 m、往 +Z 偏 1.2 m：最远 ≈ 2.4 m；刚落地就会往
+	# 各自的跟随位挪，给到 3.5 m 的余量
+	_check(worst < 3.5, "全员落在垫子 %.2f m 以内（小屋长轴上一排，间隔 0.7 m）" % worst)
+	_check(pad.title_text().contains("召回"), "垫子上的字变成「%s」" % pad.title_text())
+
+	# ③ 反复踩是**允许**的（和一次性 latch 的跑酷准备区相反）
+	var n0 := comps.size()
+	_put(0.00, 0.10, 6.00)
+	# ⚠️ 必须**等真实时间**过冷却（1.2 s）：`_wait(4)` 只是 4 帧，探针里一帧几毫秒，
+	#    垫子还在冷却中，第二脚根本不会触发（第一版就是这么假红的）。
+	await _wait_ms(1400)
+	_put(pad.global_position.x, pad.global_position.y + 0.10, pad.global_position.z)
+	await _wait(8)
+	# 判据用「人在不在**小屋里面**」而不是「离垫子几米」：刚落地她们就开始往
+	# 各自的跟随位挪（有人会走到门口），只要还在屋里就算召回来了。
+	var hp := hut.global_position
+	var again := 0
+	for c in comps:
+		var q := c.global_position
+		if absf(q.x - hp.x) < 3.6 and absf(q.z - hp.z) < 3.0:
+			again += 1
+	_check(again == n0, "离开再回来还能再召唤一次（再踩 → %d/%d 名又回到小屋里）" % [again, n0])
+
+	_put(0.00, 0.10, 6.00)
+	await _wait(4)
+
+
+# --- 1d. 第 1 段「稳定基金」/ 第 2 段「体育彩票」 --------------------------------
+
+## 用户 2026-10-19：「跑酷第一段是稳定基金，每次加百分之 0.1，第二段是体育彩票
+## 大部分输钱小部分赚小钱」。
+func _test_fund_lottery() -> void:
+	print("\n========== 1d. 第 1 段「稳定基金」/ 第 2 段「体育彩票」==========")
+	var fut := _pk.get_node_or_null("Futures") as ParkourFutures
+	_check(fut != null, "场景里有 `Futures` 总控（结算都归它）")
+	if fut == null:
+		return
+
+	# ① 规则本身：纯函数抽 1000 注，看中奖率和区间
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261019
+	var win := 0
+	var lo := INF
+	var hi := -INF
+	for _i in 1000:
+		var p := fut.lottery_pct(rng.randf())
+		if p > 0.0:
+			win += 1
+		lo = minf(lo, p)
+		hi = maxf(hi, p)
+	_check(win >= 180 and win <= 260,
+		"体育彩票中奖率 %.1f%%（1000 注，规则 22%%）" % (float(win) * 0.1))
+	_check(hi <= ParkourFutures.LOT_WIN_HI + 1e-4 and hi >= ParkourFutures.LOT_WIN_HI - 0.1
+			and lo >= -ParkourFutures.LOT_LOSE_HI - 1e-4 and lo <= -ParkourFutures.LOT_LOSE_HI + 0.1,
+		"涨跌幅正好落在 −%.2f%% ~ +%.2f%%（实测 %.2f ~ %.2f）"
+		% [ParkourFutures.LOT_LOSE_HI, ParkourFutures.LOT_WIN_HI, lo, hi])
+	_check(fut.lottery_pct(0.0) > 0.0 and fut.lottery_pct(0.999) < 0.0,
+		"r = 0 中奖、r → 1 没中（映射单调、两端都对）")
+	# 「大部分输钱」：期望值必须为负
+	var sum := 0.0
+	for i in 1000:
+		sum += fut.lottery_pct((float(i) + 0.5) / 1000.0)
+	_check(sum / 1000.0 < -0.5,
+		"**大部分输钱**：1000 注均摊 %.2f%%/注，期望为负" % (sum / 1000.0))
+
+	# ② 稳定基金：踩第 1 段的 P1 → 保证金 ×1.001
+	fut.margin = fut.start_margin
+	fut.settled.clear()
+	fut._intro_done.clear()
+	var i1 := _idx("P1")
+	var b1 := _pk.box_at(i1)
+	_put(b1.position.x + b1.size.x * 0.5, _pk.top_at(i1) + 0.05,
+		b1.position.z + b1.size.z * 0.5)
+	await _wait(6)
+	var want := fut.start_margin * (1.0 + ParkourFutures.FUND_PCT / 100.0)
+	_check(absf(fut.margin - want) < 0.002 and fut._last_settle.contains("稳定基金"),
+		"踩上第 1 段的 P1 → 保证金 %.4f → %.4f 万（+%.2f%%，复利）：%s"
+		% [fut.start_margin, fut.margin, ParkourFutures.FUND_PCT, fut._last_settle])
+
+	# ③ 一块板只结算一次（来回走不许刷钱）
+	_put(b1.position.x + b1.size.x * 0.5, _pk.top_at(i1) + 0.05,
+		b1.position.z + b1.size.z * 0.5)
+	await _wait(6)
+	_check(absf(fut.margin - want) < 0.0001,
+		"同一块板再站一次**不再结算**（保证金仍是 %.4f 万）" % fut.margin)
+
+	# ④ 体育彩票：踩第 2 段的 T1 → 钱按彩票规则动，HUD 上写「体育彩票」
+	var i2 := _idx("T1")
+	var b2 := _pk.box_at(i2)
+	var m2 := fut.margin
+	_put(b2.position.x + b2.size.x * 0.5, _pk.top_at(i2) + 0.05,
+		b2.position.z + b2.size.z * 0.5)
+	await _wait(6)
+	var pct2 := (fut.margin / maxf(m2, 0.0001) - 1.0) * 100.0
+	_check(fut._last_settle.contains("体育彩票") and absf(pct2) > 0.05,
+		"踩上第 2 段的 T1 → 开一注彩票：%.4f → %.4f 万（%+.2f%%）：%s"
+		% [m2, fut.margin, pct2, fut._last_settle])
+	# 8 名同伴 / 玩家都在跑道上：彩票真的会把保证金往下打，但不会一注清零
+	_check(fut.margin > 0.0, "一注彩票不会直接把保证金打到 0（当前 %.4f 万）" % fut.margin)
+
+	# 还原：后面的逐跳回放要用干净的账（不然 20 块板全被标成「已结算」）
+	fut.margin = fut.start_margin
+	fut.settled.clear()
+	fut._intro_done.clear()
 	_put(0.00, 0.10, 6.00)
 	await _wait(4)
 
@@ -1552,7 +1710,18 @@ func _test_dark_boss() -> void:
 	await _wait_ms(1500)
 	_check(db.killed() and db.health <= 0.0,
 		"**不会复活**（等 1.5 s 仍是倒下、血量 %.0f）—— 父类默认 6 s 会站起来" % db.health)
-	db.set_physics_process(false)
+	# ⑥ 用户 2026-10-19：「比纳死后过一段时间消失」—— 躺 5 s → 淡出 → 删节点
+	var vd := db.vanish_delay
+	var vt := db.vanish_time
+	var t_v := Time.get_ticks_msec()
+	while is_instance_valid(db) and Time.get_ticks_msec() - t_v < 14000:
+		await _wait_ms(100)
+	var waited := float(Time.get_ticks_msec() - t_v) / 1000.0 + 1.5
+	_check(not is_instance_valid(db),
+		"倒下约 %.1f s 后**尸体消失**（Route/DarkBoss 已经不存在；延迟 %.1f s + 淡出 %.1f s）"
+		% [waited, vd, vt])
+	if is_instance_valid(db):
+		db.set_physics_process(false)
 	_pk.enabled = true
 	_release_all()
 
@@ -2113,6 +2282,16 @@ func _put(x: float, y: float, z: float) -> void:
 	_release_all()
 	_p.global_position = Vector3(x, y, z)
 	_p.velocity = Vector3.ZERO
+
+
+## 场上所有同伴（`game.gd` 的直接子节点，按类型收）—— §1b / §1c 共用
+func _companions() -> Array[Companion]:
+	var out: Array[Companion] = []
+	var game := _p.get_parent()
+	for c in game.get_children():
+		if c is Companion:
+			out.append(c as Companion)
+	return out
 
 
 ## 读一份原始的最好成绩存档（不存在 → 空串），测完还要还回去
