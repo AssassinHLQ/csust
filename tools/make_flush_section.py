@@ -121,8 +121,9 @@ BASE_ROUTE = [
     "R1", "R2", "R3", "R4", "R5", "J1", "J2", "J3", "J4", "Island",
 ]
 BASE_SEGMENTS = [0, 9, 20, 28, 36, 49]
-BASE_SEG_NAMES = ["起跳・极限跳", "独木桥・绕角・台阶链", "横跳区・移动平台",
-                  "绕柱螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
+BASE_SEG_NAMES = ["起跳・极限跳", "独木桥・绕角・台阶链",
+                  "内存条市场・横跳", "内存条螺旋塔",
+                  "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
 BASE_SPECIAL = [26, 27, 38, 45, 47, 48]      # F1 F2 H1 U2 H2 C5
 BASE_SHORT = [29, 30, 31, 32, 33, 34, 35]    # W2…C4
 INS_AT = BASE_ROUTE.index("C2")              # K 段插在 C2 之后
@@ -883,6 +884,16 @@ EXT_FUTURES = ('[ext_resource type="Script" path="res://scripts/parkour_futures.
 ## 黑市闸门（运行时才 instantiate 比纳）；`dark_boss.gd` 现在只挂在
 ## `scenes/dark_boss.tscn` 上，场景里不再直接引用它。
 EXT_DARKGATE = '[ext_resource type="Script" path="res://scripts/dark_gate.gd" id="10_darkgate"]'
+## 第 9~10 段「内存条市场」：装饰 + 天降内存条（`scripts/ram_market.gd`）。
+## 它**只加装饰**，路线几何一个点都不动 —— 站台/碰撞/跳距还是原来那套。
+EXT_RAMMARKET = ('[ext_resource type="Script" path="res://scripts/ram_market.gd" '
+                 'id="11_rammarket"]')
+# ⚠️ `parent` 必须写 `"."`（场景根的直接子节点），**不能写根节点名**。
+#    写成 `parent="Parkour"` 时 Godot 4.7 会把它当成「带作用域的名字」，
+#    实例化后节点变成 `Parkour#RamMarket` —— 名字对不上，`get_node("RamMarket")`
+#    直接返回 null（本喵踩过一次，日志里只有一句「built = false」）。
+RAM_MARKET_NODE = ('[node name="RamMarket" type="Node3D" parent="."]' + chr(10)
+                   + 'script = ExtResource("11_rammarket")')
 
 
 def build_subresources() -> list:
@@ -965,9 +976,16 @@ def bump_labels(parts: list) -> list:
         nd = node_of(ch)
         if nd is None:
             continue
+        # ⚠️ 牌子本体是 `Route/Beacon_C3/Sign`（`Label3D`），**名字叫 `Sign`**，
+        #    所以只按 `nd["name"]` 匹配永远命中不了 —— 要按它的**宿主**桅杆判。
+        #    （上一版就是这个 bug：C3/C4/C5 三块牌子一直写着「第 3/4/5 段」，
+        #      而 HUD 上早就是第 9/10/11 段了。）
+        host = nd["parent"].split("/")[1] if nd["parent"].startswith("Route/") else ""
         want = {"Beacon_C3": "第 9 段 · 终点", "Beacon_C4": "第 10 段 · 终点",
                 "Beacon_C5": "第 11 段 · 终点", "SignPost": "跑酷 · 12 段 →",
-                "SignText": "跑酷 · 12 段 →"}.get(nd["name"])
+                "SignText": "跑酷 · 12 段 →"}.get(nd["name"],
+                    {"Beacon_C3": "第 9 段 · 终点", "Beacon_C4": "第 10 段 · 终点",
+                     "Beacon_C5": "第 11 段 · 终点"}.get(host))
         if want is None:
             continue
         parts[i] = re.sub(r'(?m)^text = ".*"$', 'text = "%s"' % want, ch)
@@ -1016,7 +1034,7 @@ SECTION_HOSTS = tuple("Beacon_%s" % n for n in SECTION_NAMES) \
     + tuple("Rule_%s" % n for n in SECTION_NAMES)
 ## 会被重新生成 / 已经废弃的节点（`DarkBoss` 是旧版直接摆进场景的比纳，
 ## 现在是 `DarkGate` 运行时生成；两个名字都要清掉，生成器才可重入）
-SECTION_SCRAP = ("DarkBoss", "DarkGate")
+SECTION_SCRAP = ("DarkBoss", "DarkGate", "RamMarket")
 
 
 def is_section_node(nd) -> bool:
@@ -1048,7 +1066,8 @@ def main() -> None:
     text = re.sub(r'(?m)^\[ext_resource type="Script" '
                   r'path="res://scripts/dark_boss\.gd" id="9_dark"\]' + chr(10) + '+',
                   '', text)
-    for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="10_darkgate"', EXT_DARKGATE)):
+    for eid, ext in (('id="7_futures"', EXT_FUTURES), ('id="10_darkgate"', EXT_DARKGATE),
+                     ('id="11_rammarket"', EXT_RAMMARKET)):
         if eid not in text:
             # ext_resource 必须排在所有 sub_resource 之前（文本格式按块顺序解析）
             k = text.index("[sub_resource")
@@ -1135,7 +1154,8 @@ def main() -> None:
                    or nd["parent"] == "Route/C2"):
             c2_end = i
     gen[c2_end + 1:c2_end + 1] = (build_nodes(boxes, x1) + build_branch_nodes(br)
-                                  + build_section_nodes(secs, 5))
+                                  + build_section_nodes(secs, 5)
+                                  + [RAM_MARKET_NODE])
 
     gen = bump_labels(gen)
     out = "\n".join(gen)

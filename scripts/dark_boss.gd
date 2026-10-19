@@ -154,12 +154,16 @@ func _physics_process(delta: float) -> void:
 		_tick_shells(delta)
 		return
 	var pc := _player_point()
+	# 用户 2026-10-19：「如果比纳没打完，也会追过来的」——
+	# **追击不看距离**：玩家跑过第 8 段、进了内存条市场，它照样跟着飞过去；
+	# 只有**开火**看 `engage_range`（打不到的远处不浪费炮弹）。
+	_follow(pc, delta)
 	if global_position.distance_to(pc) > engage_range:
 		_beam.visible = false
 		_laser_state = 0
+		_laser_timer = 0.0
 		_tick_shells(delta)
 		return
-	_follow(pc, delta)
 	_tick_laser(pc, delta)
 	_tick_shells(delta)
 	_t_shell -= delta

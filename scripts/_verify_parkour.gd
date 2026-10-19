@@ -90,6 +90,10 @@ func _run() -> void:
 	var gate0 := _pk.get_node_or_null("Route/DarkGate") as DarkGate
 	if gate0 != null:
 		gate0.set_physics_process(false)
+	# 第 9~10 段的「天降内存条」同理：逐跳回放 / 连续通关时关掉，§5g 单独开。
+	var ram0 := _pk.get_node_or_null("RamMarket") as RamMarket
+	if ram0 != null:
+		ram0.rain_enabled = false
 	# ⚠️ 这一套会**真的跑完一次全程**，于是 `parkour.gd` 会把那次用时写进
 	#    `user://parkour_best.cfg` —— 那是玩家真实存档。开跑前备份、收尾时还回去
 	#    （和 `_verify_settings` 测音量时的做法一样）。
@@ -103,6 +107,7 @@ func _run() -> void:
 	await _test_futures()
 	await _test_branch()
 	await _test_dark_boss()
+	await _test_ram_market()
 	await _test_negative()
 	await _test_clash(game)
 	await _test_island()
@@ -217,8 +222,8 @@ func _test_structure(game: Node) -> void:
 			continue
 		if node is AnimatableBody3D:
 			continue      # 移动平台**在动**：它的 position 每帧都变，查两个端点即可（见下）
-		if _inside_boss(node):
-			continue      # Boss 的模型是 FBX 原样（骨头坐标不在 0.05 网格上）
+		if _inside_boss(node) or _inside_ram_market(node):
+			continue      # Boss 的 FBX / 内存条市场的装饰件不在 0.05 m 网格上
 		var xf := (node as Node3D).transform
 		for v in [xf.origin, xf.basis.get_scale()]:
 			for c in 3:
@@ -1433,7 +1438,20 @@ func _test_dark_boss() -> void:
 		_check(hud.boss_row_shown("比纳"),
 			"HUD 上补出了「比纳」那条血条（中途加载也能接上）")
 	db.set_physics_process(true)
+	# ⑤ 用户 2026-10-19：「如果比纳没打完，也会追过来的」——
+	#    把它丢到 90 m 外、玩家站进**内存条市场**（第 9 段），看它是不是照样飞过来。
+	#    追击**不看距离**，只有开火才看 `engage_range`（见 dark_boss.gd）。
+	db.global_position = Vector3(-320.0, db.global_position.y, -1.7)
+	_put(-416.50, 2.05, -8.10)
+	await _wait(4)
+	var d0 := db.global_position.distance_to(_p.global_position)
+	await _wait_ms(1200)
+	var d1 := db.global_position.distance_to(_p.global_position)
+	_check(d1 < d0 - 3.0,
+		"玩家跑进内存条市场（x = −416），比纳照样追：%.1f → %.1f m（−%.1f）"
+		% [d0, d1, d0 - d1])
 	# 站到 DK5 上（比纳出场就在这一带上方，正好进交战距离）
+	db.global_position = Vector3(-374.00, 12.00, -1.70)
 	var dk := _pk.get_node_or_null("Route/DK5") as Node3D
 	var b := _dark_box(dk)
 	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
@@ -1485,6 +1503,86 @@ func _test_dark_boss() -> void:
 	db.set_physics_process(false)
 	_pk.enabled = true
 	_release_all()
+
+
+## ── 5g. 第 9~10 段「内存条市场」：装饰 / 天空盒 / 天降内存条 ─────────────────
+## 用户 2026-10-19：「后面横跳区/螺旋塔全改成内存条区域……一边跑一边躲从天空掉下来的
+## 内存条」「说到天空我想起来该加天空盒了」。
+func _test_ram_market() -> void:
+	print("\n========== 5g. 内存条市场（装饰 / 天空盒 / 天降内存条）==========")
+	var game := _p.get_parent()
+	# ① 天空盒：全景贴图真的挂上去了，而且雾没有把它糊平
+	var we := game.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	var env: Environment = we.environment if we != null else null
+	var pano: Texture2D = null
+	if env != null and env.sky != null and env.sky.sky_material is PanoramaSkyMaterial:
+		pano = (env.sky.sky_material as PanoramaSkyMaterial).panorama
+	_check(pano != null and pano.get_width() >= 2048,
+		"天空盒是**全景贴图**：%s（%d×%d）"
+		% [pano.resource_path if pano else "没挂", pano.get_width() if pano else -1,
+			pano.get_height() if pano else -1])
+	_check(env != null and env.fog_sky_affect < 0.01,
+		"雾不糊天空（`fog_sky_affect` = %.2f，默认 1.0 会把全景糊成一片灰）"
+		% (env.fog_sky_affect if env != null else -1.0))
+	# ② 装饰：一百多根内存条 + 两个 MultiMesh（两个 surface 各一个 draw call）
+	var ram := _pk.get_node_or_null("RamMarket") as RamMarket
+	_check(ram != null, "第 9~10 段有 `RamMarket` 节点（装饰 + 内存条雨）")
+	if ram == null:
+		return
+	_check(ram.stick_count() >= 100,
+		"装饰内存条 **%d 根**（平台插槽 2 根/板 + 头顶吊架 5 根/串 + 塔身鳍片 3 根/层）"
+		% ram.stick_count())
+	var batches := 0
+	for c in ram.get_children():
+		if c is MultiMeshInstance3D:
+			batches += 1
+	_check(batches == 2, "两个 surface 各一个 MultiMeshInstance3D（%d 个 draw call 画完全场）"
+		% batches)
+	# ③ 内存条雨：站到 X3 上，打开开关，看它真的往下掉
+	_pk.enabled = false
+	_release_all()
+	var x3 := _pk.get_node_or_null("Route/X3") as Node3D
+	var b := _dark_box(x3)
+	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
+		b.position.z + b.size.z * 0.5)
+	var before := ram.drops_spawned()
+	ram.rain_enabled = true
+	await _wait_ms(2200)
+	_check(ram.drops_spawned() > before,
+		"头顶真的在掉内存条（%.1f s 内 %d → %d 根）"
+		% [2.2, before, ram.drops_spawned()])
+	# ④ 命中：直接朝玩家头顶砸一根（落点圈 0.6 s 预警 + 20 m 自由落体）
+	var hp0 := _p.health
+	ram.force_drop_now()
+	var t_drop := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t_drop < 3000 and _p.health >= hp0:
+		await process_frame
+	_check(_p.health < hp0, "被砸中掉血 %.0f → %.0f（累计命中 %d 次）"
+		% [hp0, _p.health, ram.drops_hit()])
+	# ⑤ 出了范围就停雨（第 8 段暗网那边不该有内存条砸下来）
+	_put(-370.00, 3.00, -1.70)
+	await _wait(6)
+	var before2 := ram.drops_spawned()
+	await _wait_ms(1500)
+	_check(ram.drops_spawned() == before2,
+		"走出范围（x > %.0f 东侧）就停雨（%d 根没变）" % [ram.rain_x_max, before2])
+	ram.rain_enabled = false
+	_pk.enabled = true
+	_release_all()
+
+
+## 这个节点是不是挂在内存条市场的装饰底下。
+## 装饰件（PCB 面 / 金手指 / 桁架 / MultiMesh）是**视觉**用的、不参与跳跃判定，
+## 位置按台面高度微调（+8 mm 之类）就必然不在 0.05 m 网格上 —— 不查它们。
+func _inside_ram_market(n: Node) -> bool:
+	var cur := n
+	for _i in 8:
+		cur = cur.get_parent()
+		if cur == null:
+			return false
+		if String(cur.name) == "RamMarket":
+			return true
+	return false
 
 
 ## 非路线站的包围盒（DK5 在 route 里，这里给个通用小工具）

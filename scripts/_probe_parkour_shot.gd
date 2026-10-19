@@ -7,7 +7,9 @@ extends SceneTree
 ## ⚠️ 加 `--splat=off`：这一套只关心跑酷，画室609 那 277 万点白白拖慢每一张。
 ##    代价是图里没有画室（平台地面是兜底方盒）—— 想看两者同框就别加。
 ##
-## 输出：…/_arisu_captures/_parkour/*.png（1600 × 900）—— **17 张**
+## 输出：…/_arisu_captures/_parkour/*.png（1600 × 900）—— **30 张**
+##   （下面这份旧清单只覆盖 10~23；后面加了期货通 / 比特币三线 / 期权 / A股 / 外汇 /
+##     暗网比纳 / **36·37 内存条市场**，编号以 `_shot()` 调用处为准。）
 ##   10_start       站在跑道东端往西看：第一眼应该看得出「往那边走」
 ##   11_edge        平台边缘：起跳段两块极限跳的间距
 ##   12_bridge      独木桥：0.80 m 宽、中间断开那一段（含断裂处的石台）
@@ -129,12 +131,15 @@ func _run() -> void:
 	if hud_layer != null:
 		hud_layer.visible = false
 	await _shot("26_dark_boss", Vector3(-356.0, 14.0, 5.5), Vector3(-374.0, 12.0, -1.7))
-	# ── 第 9 段 横跳区（X1..X5）──
+	# ── 第 9 段「内存条市场」（X1..X5；台面改成 PCB + 金手指，头顶吊架）──
 	await _shot("27_sidejump", Vector3(-414.2, 7.2, 3.4), Vector3(-422.2, 2.2, -5.6))
 	await _shot("28_mover", Vector3(-437.8, 4.6, 7.5), Vector3(-443.3, 2.2, -5.0))
-	# ── 第 10 段 绕柱螺旋塔（柱轴 x −461.8 / z −4.9）──
+	# ── 第 10 段「内存条螺旋塔」（柱轴 x −461.8 / z −4.9，每层插三根散热鳍片）──
 	await _shot("29_spiral_low", Vector3(-461.8, 1.6, 2.6), Vector3(-461.8, 6.2, -4.9))
 	await _shot("30_spiral_high", Vector3(-453.6, 12.5, 1.5), Vector3(-462.1, 5.4, -4.9))
+	# ── 内存条市场全景 + 塔（2026-10-19 新加的两张）──
+	await _shot("36_ram_market", Vector3(-402.0, 9.0, 8.0), Vector3(-420.0, 2.0, -5.0))
+	await _shot("37_ram_tower", Vector3(-452.0, 9.5, 4.0), Vector3(-466.0, 5.0, -5.0))
 	# ── 第 11 段 机关区 ──
 	await _shot("31_mech", Vector3(-474.0, 14.0, 1.0), Vector3(-486.0, 12.6, -7.5))
 	await _shot("32_mech_air", Vector3(-500.0, 20.0, 3.0), Vector3(-514.0, 15.5, -7.5))

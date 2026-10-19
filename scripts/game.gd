@@ -259,6 +259,71 @@ func _on_setting_changed(key: String, _value: Variant) -> void:
 		_apply_quality()
 
 
+# --- 天空盒 ---------------------------------------------------------------------
+#
+# 用户 2026-10-19：「说到天空我想起来该加天空盒了」。
+# 原来 `game.tscn` 里是一块**程序化天空**（`ProceduralSkyMaterial`，三色渐变），
+# 所以跑酷那边抬头永远是同一片灰蓝。现在换成全景贴图：
+#
+#   素材：AllSky Free（**MIT**，Richard Whitelock）—— 原图 8192~16384 像素的
+#         equirect PNG，本喵缩到 **4096×2048** 转 JPEG（一张 0.2~0.9 MB），
+#         导入后 VRAM 也就 4k×2k，跑酷一路飞过去不会因此掉帧。
+#
+# ⚠️ 为什么在**代码里**换、不改 `game.tscn`：用户那份 game.tscn 还有没提交的
+#    房间碰撞改动，本喵不去动它；而且这样能留一个命令行开关，方便对比：
+#
+#     godot --path . -- --sky=pink     粉紫黄昏（默认）
+#     godot --path . -- --sky=day      晴空
+#     godot --path . -- --sky=night    月夜星空
+#     godot --path . -- --sky=dusk     深暮（很暗，只适合夜景测试）
+const SKIES := {
+	"pink": "res://assets/sky/sky_pink.jpg",
+	"day": "res://assets/sky/sky_day.jpg",
+	"night": "res://assets/sky/sky_night.jpg",
+	"dusk": "res://assets/sky/sky_dusk.jpg",
+}
+const SKY_DEFAULT := "pink"
+## 每张天空配一个雾色：雾是把远处的板子往「天色」里压，配色不一致会显得脏。
+const SKY_FOG := {
+	"pink": Color(0.62, 0.48, 0.55),
+	"day": Color(0.55, 0.62, 0.72),
+	"night": Color(0.10, 0.11, 0.18),
+	"dusk": Color(0.26, 0.18, 0.20),
+}
+
+
+func _setup_sky() -> void:
+	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if we == null or we.environment == null:
+		return
+	var key := SKY_DEFAULT
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--sky="):
+			key = a.substr(6).strip_edges().to_lower()
+	var path: String = SKIES.get(key, SKIES[SKY_DEFAULT])
+	var tex := load(path) as Texture2D
+	if tex == null:
+		push_warning("[Game] 天空贴图加载失败：%s" % path)
+		return
+	var mat := PanoramaSkyMaterial.new()
+	mat.panorama = tex
+	mat.filter = true                       # 线性过滤，云边不会一格一格的
+	var sky := Sky.new()
+	sky.sky_material = mat
+	sky.process_mode = Sky.PROCESS_MODE_REALTIME
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	we.environment.sky = sky
+	we.environment.background_mode = Environment.BG_SKY
+	# ⚠️ **必须关掉雾对天空的影响**（`fog_sky_affect` 默认 1.0）：
+	#    这场的雾是 `fog_density = 0.006` 的指数雾，天空在无穷远 —— 不关的话
+	#    雾会把整张全景图均匀糊成一片雾色（本喵第一版就是这样：日志里明明
+	#    `PanoramaSkyMaterial` 挂上了，画面上还是那块灰蓝，查了半天）。
+	#    关掉之后天空恢复细节，几何体的雾照旧。
+	we.environment.fog_sky_affect = 0.0
+	we.environment.fog_light_color = SKY_FOG.get(key, we.environment.fog_light_color)
+	print("[Game] 天空盒 = %s（%s，%d×%d）" % [key, path, tex.get_width(), tex.get_height()])
+
+
 func _ready() -> void:
 	var vp := get_viewport()
 	if not vp.size_changed.is_connected(_fit_render_scale):
@@ -271,6 +336,7 @@ func _ready() -> void:
 	_player = $Player
 	_weapon = $Player/Weapon
 	_hud = $HUD
+	_setup_sky()
 	_spawn = _player.global_position
 	_build_room_proxy()
 	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。

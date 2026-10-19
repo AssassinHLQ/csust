@@ -11,6 +11,8 @@
 
 [ext_resource type="Script" path="res://scripts/dark_gate.gd" id="10_darkgate"]
 
+[ext_resource type="Script" path="res://scripts/ram_market.gd" id="11_rammarket"]
+
 [sub_resource type="StandardMaterial3D" id="Mat_runway"]
 albedo_color = Color(0.25, 0.26, 0.29, 1)
 metallic = 0.2
@@ -280,7 +282,7 @@ emission_energy_multiplier = 0.3
 script = ExtResource("1_parkour")
 route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/K1"), NodePath("Route/K2"), NodePath("Route/K3"), NodePath("Route/K4"), NodePath("Route/K5"), NodePath("Route/K6"), NodePath("Route/K7"), NodePath("Route/K8"), NodePath("Route/K9"), NodePath("Route/K10"), NodePath("Route/K11"), NodePath("Route/K12"), NodePath("Route/K13"), NodePath("Route/J0"), NodePath("Route/SP1"), NodePath("Route/SP2"), NodePath("Route/SP3"), NodePath("Route/M0"), NodePath("Route/OPT1"), NodePath("Route/OPT2"), NodePath("Route/OPT3"), NodePath("Route/OPT4"), NodePath("Route/AS1"), NodePath("Route/AS2"), NodePath("Route/AS3"), NodePath("Route/AS4"), NodePath("Route/FX1"), NodePath("Route/FX2"), NodePath("Route/FX3"), NodePath("Route/FX4"), NodePath("Route/DK1"), NodePath("Route/DK2"), NodePath("Route/DK3"), NodePath("Route/DK4"), NodePath("Route/DK5"), NodePath("Route/DK6"), NodePath("Route/DK7"), NodePath("Route/DK8"), NodePath("Route/DK9"), NodePath("Route/DK10"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
 segments = [0, 9, 20, 33, 38, 42, 46, 50, 60, 68, 76, 89]
-seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "同花顺期货通", "同花顺期货通 · 比特币", "期权交易", "A股", "外汇", "暗网黑市交易", "横跳区・移动平台", "绕柱螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
+seg_names = ["起跳・极限跳", "独木桥・绕角・台阶链", "同花顺期货通", "同花顺期货通 · 比特币", "期权交易", "A股", "外汇", "暗网黑市交易", "内存条市场・横跳", "内存条螺旋塔", "机关区（弹跳/消失/传送/气流）", "螺旋下降・竖井 → 终点岛"]
 special_hops = [25, 27, 36, 66, 67, 78, 85, 87, 88]
 short_hops = [69, 70, 71, 72, 73, 74, 75]
 
@@ -1804,6 +1806,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -340.95, 2, -1.7)
 script = ExtResource("10_darkgate")
 trigger_x = -340.95
 spawn_offset = Vector3(-12, 10, 0)
+[node name="RamMarket" type="Node3D" parent="."]
+script = ExtResource("11_rammarket")
 [node name="X1" type="StaticBody3D" parent="Route" unique_id=899126870]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -404.7, 1.75, -1.7)
 
@@ -2382,7 +2386,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
 alpha_cut = 1
-text = "第 3 段 · 终点"
+text = "第 9 段 · 终点"
 font_size = 64
 outline_size = 14
 
@@ -2408,7 +2412,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
 alpha_cut = 1
-text = "第 4 段 · 终点"
+text = "第 10 段 · 终点"
 font_size = 64
 outline_size = 14
 
@@ -2434,7 +2438,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
 alpha_cut = 1
-text = "第 5 段 · 终点"
+text = "第 11 段 · 终点"
 font_size = 64
 outline_size = 14
 
