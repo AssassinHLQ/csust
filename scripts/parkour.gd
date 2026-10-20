@@ -117,22 +117,27 @@ func _spawn_roof_gpu() -> void:
 		return
 	var gpu := Rtx5090.new()
 	gpu.name = "RTX5090"
-	gpu.position = Vector3(0.0, 2.5, 0.0)      # 屋顶顶面（2.4 + 0.2 / 2）
+	# 屋顶**东侧**（招牌挪到西边以后，2026-10-20 用户画的框：「放这里」）
+	gpu.position = Vector3(1.1, 2.5, 0.2)
 	shed.add_child(gpu)
 
 
 ## 屋顶的 **BANK 招牌**（2026-10-20 用户：「在这个房顶上面放一个 BANK 的牌子，
 ## 我已经做好模型放桌面了，你来缩放一下适配大小，这样子一个简单的银行就做好了」）。
 ##
-## 站在屋顶**东侧**、正面朝**第 12 段下降链的落点**（岛东缘那一带）——
-## 玩家从跑酷链走过来第一眼就看见它；同时不压住屋顶中间的 5090。
+## 站在屋顶**西侧**、正面朝**第 12 段下降链的落点**（岛东缘那一带）——
+## 玩家从跑酷链走过来第一眼就看见它；东侧留给 5090。
+##
+## ⚠️ 2026-10-20 晚第二轮：用户在原截图上画了个红框标「放这里」——
+##    位置从 `(1.35, 2.5, 0.15)` 挪到 **`(-0.9, 2.5, 0.1)`**（屋顶左半边），
+##    5090 跟着挪到东侧 `(1.1, 2.5, 0.2)`，两件东西在屋顶上一左一右、互不遮挡。
 func _spawn_bank_sign() -> void:
 	var shed := get_node_or_null("Island/Props/Shed") as Node3D
 	if shed == null or shed.get_node_or_null("BankSign") != null:
 		return
 	var sign := BankSign.new()
 	sign.name = "BankSign"
-	sign.position = Vector3(1.35, 2.5, 0.2)     # 屋顶顶面
+	sign.position = Vector3(-0.9, 2.5, 0.1)     # 屋顶顶面
 	shed.add_child(sign)
 	sign.face_towards(Vector3(-583.5, sign.global_position.y, -9.5))
 
