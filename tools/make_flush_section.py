@@ -588,6 +588,8 @@ SECTIONS = [
                   width=1.4, depth=5.0, gap=2.80),
          ]),
     dict(name="外汇", z=-1.70,
+         # 用户 2026-10-20：「外汇长一点点，暗网短一点点」→ 外汇 4 → 5 块，
+         # 暗网 10 → 9 块（一加一减，总站数仍是 99，X1 之后的尾巴几乎不动）。
          plates=[
              dict(nm="FX1", kind="fx", seq="15.00,-15.00", period=0.50, top=2.00,
                   width=3.0, depth=3.0, gap=3.00),
@@ -597,9 +599,12 @@ SECTIONS = [
                   width=2.8, depth=3.0, gap=3.00),
              dict(nm="FX4", kind="fx", seq="15.00,-15.00", period=0.50, top=2.20,
                   width=3.0, depth=3.0, gap=2.80),
+             dict(nm="FX5", kind="fx_lev", seq="40.00,-40.00", period=0.40, top=2.00,
+                  width=2.8, depth=3.0, gap=3.00),
          ]),
-    # 第 8 段「暗网黑市交易」：最长的一段（10 块板），头顶有**比纳**（dark_boss.gd）
-    # 一边跑一边打。比纳不吃「跳过去」那套 —— 它在上方 10 m，激光 + 炮弹。
+    # 第 8 段「暗网黑市交易」：最长的一段（9 块板，2026-10-20 从 10 块减到 9 块），
+    # 头顶有**比纳**（dark_boss.gd）一边跑一边打。比纳不吃「跳过去」那套 —— 它在上方 10 m，
+    # 激光 + 炮弹。
     # ⚠️ 用户 2026-10-19：「比纳不能一开始就加载，得进入黑市才加载」→
     #    这里不再摆 `DarkBoss` 节点，只摆一个空的 `DarkGate`（dark_gate.gd）；
     #    玩家跑到闸门处才由它 `instantiate` 出比纳（见 build_section_nodes 末尾）。
@@ -623,8 +628,6 @@ SECTIONS = [
                   width=3.0, depth=3.0, gap=2.80),
              dict(nm="DK9", kind="spot", seq="-0.80", period=0.0, top=2.80,
                   width=2.8, depth=3.0, gap=3.00),
-             dict(nm="DK10", kind="spot", seq="-0.80", period=0.0, top=2.20,
-                  width=3.2, depth=3.0, gap=3.00),
          ]),
 ]
 SECTION_GAP_FROM_M0 = 3.50
@@ -1173,8 +1176,9 @@ def main() -> None:
     out = rewrite_arrays(out, boxes, br, secs)
     out = re.sub(r"\n{3,}", "\n\n", out)
 
-    print("\n  站数 %d → %d（K 段 %d 根蜡烛 + 三道 5 + 期权/A股/外汇 12 + 暗网 10）；段数 6 → 12"
-          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5 + 12 + 10, len(boxes)))
+    print("\n  站数 %d → %d（K 段 %d 根蜡烛 + 三道 5 + 期权 4 / A股 4 / 外汇 5 + 暗网 9）；段数 6 → 12"
+          % (len(BASE_ROUTE), len(BASE_ROUTE) + len(boxes) + 5
+             + sum(len(s["plates"]) for s in SECTIONS), len(boxes)))
     if dry:
         print("  --dry-run：不写文件")
         return

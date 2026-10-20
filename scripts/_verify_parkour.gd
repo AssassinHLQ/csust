@@ -142,14 +142,14 @@ func _run() -> void:
 func _test_structure(game: Node) -> void:
 	print("\n========== 1. 结构与几何 ==========")
 	var n := _pk.node_count()
-	_check(n == 99, "路线有 %d 站（期望 99：跑道 + 57 块落脚板 + 13 块期货通板块 + 第 4 段 5 站 + 期权/A股/外汇 12 站 + 暗网 10 站 + 5 处接口板 + 6 处机关 + 岛）" % n)
+	_check(n == 99, "路线有 %d 站（期望 99：跑道 + 57 块落脚板 + 13 块期货通板块 + 第 4 段 5 站 + 期权/A股/外汇 13 站 + 暗网 9 站 + 5 处接口板 + 6 处机关 + 岛）" % n)
 	var want := ["Launch", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "C1",
 		"B1", "BA", "S1", "BB", "T1", "T2", "T3", "T4", "T5", "T6", "C2",
 		"K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10", "K11", "K12", "K13",
 		"J0", "SP1", "SP2", "SP3", "M0",
 		"OPT1", "OPT2", "OPT3", "OPT4", "AS1", "AS2", "AS3", "AS4",
-		"FX1", "FX2", "FX3", "FX4",
-		"DK1", "DK2", "DK3", "DK4", "DK5", "DK6", "DK7", "DK8", "DK9", "DK10",
+		"FX1", "FX2", "FX3", "FX4", "FX5",
+		"DK1", "DK2", "DK3", "DK4", "DK5", "DK6", "DK7", "DK8", "DK9",
 		"X1", "X2", "X3", "X4", "X5", "F1", "F2", "C3",
 		"W1", "W2", "W3", "W4", "W5", "W6", "W7", "C4",
 		"E1", "Q1", "H1", "V1", "V2", "V3", "V4", "L1", "U1", "U2", "Q2", "H2", "C5",
@@ -1901,6 +1901,15 @@ func _test_ram_loot() -> void:
 	_check(ram != null, "有 `RamMarket` 节点")
 	if ram == null:
 		return
+	# ③ 第 9 / 10 段的起点牌（用户 2026-10-20：「第九段内存条的提示怎么没显示」——
+	#    生成器只给第 3~8 段立了桅杆，这两段一直没有起点牌，运行时补的）
+	var sign9 := ram.get_node_or_null("SegSign_S8") as Label3D
+	var sign10 := ram.get_node_or_null("SegSign_S9") as Label3D
+	_check(sign9 != null and sign9.text.contains("地上") and sign9.text.contains("天上掉的不算"),
+		"第 9 段起点提示牌：%s"
+		% (sign9.text.replace("\n", " / ") if sign9 != null else "没有"))
+	_check(sign10 != null, "第 10 段起点牌：%s"
+		% (sign10.text if sign10 != null else "没有"))
 	var n_ground := ram.ground_count()
 	_check(n_ground >= 10, "地上躺着 **%d 根**可捡的内存条" % n_ground)
 	var tops: Array[float] = []

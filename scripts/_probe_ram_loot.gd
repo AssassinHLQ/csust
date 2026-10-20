@@ -71,6 +71,16 @@ func _run() -> void:
 	if ps.size() > 5:
 		var at2: Vector3 = ps[5]
 		await _shot(cam, out, "4_other", at2 + Vector3(2.0, 1.4, -2.0), at2)
+	# ⑤ 第 9 段起点牌：站在 X1 东边往前看（玩家跑过来的方向）
+	var x1 := pk.get_node_or_null("Route/X1") as Node3D
+	var sign9 := ram.get_node_or_null("SegSign_S8") as Label3D
+	if x1 != null and sign9 != null:
+		print("[loot] 第 9 段牌在 %s：%s" % [str(sign9.global_position.snappedf(0.01)),
+			sign9.text.replace("\n", " / ")])
+		await _shot(cam, out, "5_sign",
+			x1.global_position + Vector3(9.0, 2.6, 0.0), sign9.global_position)
+	else:
+		print("[loot] ⚠️ 没有第 9 段牌（x1=%s sign=%s）" % [x1, sign9])
 	print("\n出图目录：%s" % out)
 	quit(0)
 

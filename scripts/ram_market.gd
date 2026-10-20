@@ -131,6 +131,7 @@ func _build() -> void:
 	_build_hanging_racks()
 	_build_tower_fins()
 	_build_ground_loot(first, last)
+	_build_seg_signs()
 	_flush_multimeshes()
 	print("[RamMarket] 内存条市场就位：%d 根装饰条（x %.1f ~ %.1f）、地上 %d 根可捡"
 		% [_xf.size(), rain_x_min, rain_x_max, _ground.size()])
@@ -437,6 +438,43 @@ func _tick_drops(delta: float) -> void:
 			continue
 		keep.append(d)
 	_drops = keep
+
+
+## --- 第 9 / 10 段的段起点牌（2026-10-20 补）------------------------------------
+##
+## ⚠️ 用户：「第九段内存条的提示怎么没显示」。查下来**不是牌子写坏了，是根本没生成**：
+##    生成器 `make_flush_section.py` 只给第 3~8 段立了 `Beacon_<段名>`；第 9~10 段
+##    （X 区 / W 区）是从旧的「第 3~4 段」平移过来的，老桅杆上写的是「第 9/10 段 · 终点」，
+##    而**起点**那根牌子一直没有。所以人在 X1 前面什么提示都看不到。
+##
+## 这里在运行时补两根 billboard 牌，第 9 段那块顺带把**拾取规则**写清楚：
+## 地上的能捡、天上掉的不算、每根随机 36 种里的一种。
+func _build_seg_signs() -> void:
+	var specs := [
+		{"seg": 8, "col": Color(1.0, 0.86, 0.42), "text":
+			"第 9 段 · 内存条市场・横跳\n地上的内存条能捡（天上掉的不算）\n每根随机：DDR3/4/5 × 2~64G × ECC/非ECC"},
+		{"seg": 9, "col": Color(0.86, 0.92, 1.0), "text": "第 10 段 · 内存条螺旋塔"},
+	]
+	for spec in specs:
+		var i := _pk.segment_start(int(spec["seg"]))
+		var b := _pk.box_at(i)
+		if b.size.x <= 0.0:
+			continue
+		var lab := Label3D.new()
+		lab.name = "SegSign_S%d" % int(spec["seg"])
+		lab.text = String(spec["text"])
+		# ⚠️ 字别太大：pixel_size × font_size = 每字多高。第一版 0.010 × 40 = 0.40 m/字，
+		#    9 m 外就糊掉半屏、把后面的板全挡了（用户以前就说过「牌子挡视线」）。
+		#    现在 0.009 × 30 ≈ 0.27 m/字，9 m 处约 30 px 高，看得清但不占屏。
+		lab.font_size = 30
+		lab.outline_size = 10
+		lab.pixel_size = 0.009
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.no_depth_test = true
+		lab.modulate = spec["col"] as Color
+		lab.position = Vector3(b.position.x + b.size.x * 0.5,
+			_pk.top_at(i) + 3.8, b.position.z + b.size.z * 0.5 + 2.8)
+		add_child(lab)
 
 
 ## --- 地上躺着的内存条（可拾取 → 资产）------------------------------------------
