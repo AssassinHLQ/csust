@@ -1,3 +1,4 @@
+@tool
 class_name Rtx5090
 extends Node3D
 ## 屋顶上的 **RTX 5090**（2026-10-20 用户：「房子上面放一个 5090……5090 也是加入
@@ -32,6 +33,8 @@ const PICK_DY_MAX := 1.20
 
 var _holder: Node3D
 var _taken := false
+## 编辑器里 `_ready()` 会重跑（重新打开场景 / 热重载），别把模型叠两遍
+var _built := false
 var _prompting := false
 var _confirming := false
 var _t := 0.0
@@ -43,6 +46,9 @@ func _ready() -> void:
 
 
 func _build() -> void:
+	if _built:
+		return
+	_built = true
 	var mesh := load(MODEL) as Mesh
 	if mesh == null:
 		# ⚠️ 这个 OBJ 的许可只到「学习交流」，`.gitignore` 排除了整个目录 ——
@@ -59,6 +65,10 @@ func _build() -> void:
 		rot = Vector3(0.0, deg_to_rad(90.0), 0.0)
 	_holder = Node3D.new()
 	_holder.rotation = rot
+	# 稍微斜放，别正对一条棱。**转在 holder 上、不转节点自己** ——
+	# 这个节点现在也摆进了 `parkour.tscn`（为了在编辑器里看得见、能拖），
+	# 转节点本身会让编辑器把场景标脏，而且每开一次就多转 34°。
+	_holder.rotate_y(0.6)
 	add_child(_holder)
 
 	var mi := MeshInstance3D.new()
@@ -67,13 +77,12 @@ func _build() -> void:
 	_holder.add_child(mi)
 
 	# 旋转后的局部包围盒 → 统一缩放到「长边 LONG_SIDE」，并把底面对齐到 y = 0
-	var after := Transform3D(Basis.from_euler(_holder.rotation), Vector3.ZERO) * box
+	var after := Transform3D(_holder.basis, Vector3.ZERO) * box
 	var s := LONG_SIDE / maxf(maxf(after.size.x, after.size.y), maxf(after.size.z, 0.001))
 	_holder.scale = Vector3(s, s, s)
 	_holder.position = Vector3(-after.get_center().x * s, -after.position.y * s,
 		-after.get_center().z * s)
 
-	rotate_y(0.6)            # 稍微斜放，别正对一条棱
 	print("[Rtx5090] 屋顶 5090 就位：模型原始尺寸 %s → 缩放 %.4f（长边 %.2f m，%d 个三角面）"
 		% [str(box.size.snappedf(0.01)), s, LONG_SIDE, triangle_count()])
 
@@ -119,7 +128,7 @@ func _build_placeholder() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _taken:
+	if Engine.is_editor_hint() or _taken:
 		return
 	_t += delta
 	var player := get_tree().get_first_node_in_group("player") as Node3D
@@ -150,7 +159,7 @@ func _physics_process(delta: float) -> void:
 ## 第一次 F：弹「真的要拾取吗？」；第二次 F：确认收走 → 触发牢笼 + 倭瓜优香。
 ## 走开（离开范围）会把确认状态取消。
 func _input(event: InputEvent) -> void:
-	if _taken or not _prompting:
+	if Engine.is_editor_hint() or _taken or not _prompting:
 		return
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo or key.keycode != KEY_F:

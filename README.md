@@ -687,7 +687,30 @@ $env:ARISU_POSE = "1";    & $g --path $p res://scenes/main.tscn   # 多机位姿
   （`game.gd::_apply_window_mode()`），从全屏 / 最大化回来都不会再「调不回去」。
 - 旧存档迁移：`aa_mode` 的 `"fxaa"/"msaa2"...`、`shadow_quality` 的 `"off"/"low"/"medium"/"high"`、
   `fps_limit` 的 `"unlimited"`、`window_mode` 的 `"exclusive"` 全在 `_load()` 里换算成新值
-  （`GameSettings._coerce()`），升级不会把抗锯齿 / 阴影重置成「关」。
+  （`GameSettings._coerce()`），升级不会把抗锯齿 / 阴影重置成「关」」。
+
+**⚠️ 深夜补丁：切窗口模式会把界面搞坏（用户：「窗口模式看不完整界面，设置都点不到；
+全屏下面一条黑，全屏也点东西点不到，鼠标感觉是歪了一点」）。** 两个真 bug：
+
+1. **无限递归**：`window_set_mode()` 会**同步**发 `size_changed` →
+   `_fit_render_scale()` → `_apply_render()` → 又回到 `_apply_window_mode()`。
+   那一刻 `window_get_mode()` 还没变成新值，于是再 `window_set_mode()` 一次……
+   实测一轮刷了 **5000+ 条** `Index p_screen = 0 is out of bounds`，窗口在
+   窗口 / 全屏之间疯狂重建 —— 画面、视口、鼠标自然全歪。
+   修法：`_applying_window` 重入闸 + `_fit_render_scale()` 里改成
+   `_apply_render.call_deferred()`（切断同步回环）。
+2. **窗口被摆到屏幕外**：切换瞬间 `window_get_current_screen()` 可能短暂返回非法值，
+   `screen_get_usable_rect()` 于是给一个**空矩形**；旧代码拿空矩形算居中 =
+   `(0,0) - size/2` = **负坐标**，窗口半个身子在屏幕左上角外面 ——
+   看到的正是「界面不完整 + 点不到 + 鼠标歪」。
+   修法：`_restore_window_rect()` 在 `get_screen_count() <= 0` 或可用区小于
+   640×480 时**直接返回**（宁可不动，也不摆到屏幕外）。
+
+默认窗口模式仍是**最大化**（`project.godot` 的 `window/size/mode=2`，
+`DEFAULTS["window_mode"] = "maximized"`）；只有用户自己选过「窗口」才会记住窗口尺寸。
+修完实测四种状态的几何（`_probe_window_geom.gd`，出图在
+`_arisu_captures/_wingeom/`）：启动 2560×1334 最大化、全屏 2560×1440（画面铺满、
+无黑边）、窗口 1600×900 居中在 (480, 234)、关闭按钮矩形始终在视口内。
 
 #### ⚠️ 实测：**降分辨率几乎不省电，限帧才省**（旧档位测的，结论仍然成立）
 
@@ -1997,6 +2020,23 @@ HUD 五列（含银行卡）/ **天降不进资产** / **8 s 后不补货** / �
   3. 原 `mtllib BANK.mtl` **没给出来**，缺了它 Godot 会给所有面一份匿名材质
      （`resource_name` 为空），第 2 条就没法按名字剔 —— 所以仓库补了一份最小 `BANK.mtl`。
 - 自检 §5h 新增两条：招牌在屋顶且宽 2.6 m、只剩字面 < 5000 面（包围盒确实剔掉了）。
+
+**⚠️ 2026-10-20 晚第三轮：全部搬进场景文件，编辑器里能看见也能拖。**
+
+用户：「为什么我在这里看不见，我自己调吧」——因为这些东西原来是 `_ready()` 里
+**运行时生成**的，编辑器视口当然什么都没有。现在：
+
+- `scenes/parkour.tscn` 的 `Island/Props/Shed` 下**实打实摆着**四个节点：
+  `RoofSolid`（屋顶碰撞）、`RoofSteps`（三级台阶，3 个 Mesh + 3 个 Collision）、
+  `RTX5090`（脚本 `rtx5090.gd`）、`BankSign`（脚本 `bank_sign.gd`，基里已带 71° 朝向）。
+  想挪位置直接在编辑器里拖，运行时那两段 `_spawn_*()` 看到节点已存在就跳过。
+- `rtx5090.gd` / `bank_sign.gd` 加上了 `@tool`：编辑器里 `_ready()` 也会跑，
+  模型直接在视口里显示出来（子节点不带 owner，所以不会写回场景文件）；
+  `_built` 标记防止「重新打开场景」时把模型叠两遍。
+- 顺带一个坑：`rotate_y(0.6)`（让卡斜一点）从**节点自己**挪到了子节点 `_holder` 上 ——
+  转节点本身会让编辑器把场景标脏，而且每开一次就多转 34°。
+- `_physics_process` / `_input` 里加了 `Engine.is_editor_hint()` 早退，
+  免得编辑器里也去跑拾取逻辑。
 
 ---
 

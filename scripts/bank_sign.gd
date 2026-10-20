@@ -1,3 +1,4 @@
+@tool
 class_name BankSign
 extends Node3D
 ## 屋顶上的 **BANK 招牌**（2026-10-20 用户：「在这个房顶上面放一个 BANK 的牌子，
@@ -34,6 +35,8 @@ var width := 0.0
 var height := 0.0
 ## 这个招牌的可读面朝哪：+Z（世界方向 = `(sin(rotation.y), 0, cos(rotation.y))`）
 var sign_tris := 0
+## 编辑器里 `_ready()` 会重跑，别把字面叠两遍
+var _built := false
 
 
 func _ready() -> void:
@@ -42,6 +45,9 @@ func _ready() -> void:
 
 
 func _build() -> void:
+	if _built:
+		return
+	_built = true
 	var src := load(MODEL) as Mesh
 	if src == null:
 		push_warning("[BankSign] 没有 %s（BANK 旗帜不出现）" % MODEL)

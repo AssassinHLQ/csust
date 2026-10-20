@@ -223,7 +223,12 @@ func _fit_render_scale() -> void:
 	# 两者在 _apply_render() 里相乘。
 	_auto_scale = s
 	print("[Game] _fit_render_scale：渲染尺寸 %s → 自动上限 %.3f" % [str(size), s])
-	_apply_render()
+	# ⚠️ **必须 deferred**：这个函数是 `Viewport.size_changed` 的回调，而
+	#    `_apply_render()` 里的 `window_set_mode()`/`window_set_size()` 会**同步**
+	#    再触发一次 `size_changed` —— 直接调就是无限递归（实测 5000+ 条错误、
+	#    窗口在窗口/全屏之间疯狂重建，画面与鼠标全歪）。
+	#    推迟到本帧末执行，就切断这条同步回环。
+	_apply_render.call_deferred()
 
 
 ## 画面旋钮 → 实际渲染参数。设置界面一改就立刻生效（走 `GameSettings.listen`）。
@@ -332,11 +337,25 @@ func _apply_shadows() -> void:
 ##     再选「窗口」只得到**黑边包围的一小块画面**（用户截图就是这个）；
 ##   · 全屏只留 `WINDOW_MODE_FULLSCREEN`（无边框全屏），切回窗口时**显式重设尺寸 +
 ##     居中**，否则从全屏回来也常常卡在「一小块」。
+##
+## ⚠️⚠️ 2026-10-20 深夜修的两个真 bug（用户：「窗口模式看不完整界面，设置都点不到；
+##     全屏下面一条黑，全屏也点东西点不到，鼠标感觉是歪了一点」）：
+##   1. **`window_set_mode()` 会**同步**发 `size_changed` → `_fit_render_scale()` →
+##      `_apply_render()` → 又回到这里。那一刻 `window_get_mode()` 还没变成新值，
+##      于是**再次** `window_set_mode()`……无限递归，实测刷了 5000+ 条错误、
+##      窗口在两种模式之间疯狂重建 —— 画面/视口/鼠标就全歪了。
+##      修法：`_applying_window` 重入闸 + `_fit_render_scale()` 改成 `call_deferred`。
+##   2. 切窗口模式时 `window_get_current_screen()` 在重建瞬间可能返回**非法值**
+##      （屏幕上只剩 0 个 screen），`screen_get_usable_rect()` 于是给一个**空矩形**；
+##      旧代码拿空矩形算居中 = `(0,0) - size/2` = **负坐标**，窗口被摆到屏幕左上角外面 ——
+##      看到的正好是「界面不完整 + 点不到 + 鼠标歪」。
+##      修法：屏幕数 ≤ 0 或可用区太小时**什么都不做**（宁可保持原样，也不摆到屏幕外）。
 var _last_window_mode := ""
+var _applying_window := false
 
 
 func _apply_window_mode() -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or _applying_window:
 		return
 	var mode := String(GameSettings.value("window_mode"))
 	var want := DisplayServer.WINDOW_MODE_MAXIMIZED
@@ -347,23 +366,35 @@ func _apply_window_mode() -> void:
 			want = DisplayServer.WINDOW_MODE_FULLSCREEN
 		_:
 			want = DisplayServer.WINDOW_MODE_MAXIMIZED
-	var changed := _last_window_mode != "" and _last_window_mode != mode
+	var changed := _last_window_mode != mode
 	_last_window_mode = mode
 	if DisplayServer.window_get_mode() != want:
+		_applying_window = true
 		DisplayServer.window_set_mode(want)
-		changed = true
-	if changed and want == DisplayServer.WINDOW_MODE_WINDOWED:
-		# 回到窗口模式后重新给一个尺寸并摆回屏幕中间：从全屏 / 最大化回来时，
-		# 窗口的矩形往往还是全屏那套，画面就成了「左上角一小块」。
-		var screen := DisplayServer.screen_get_usable_rect(
-			DisplayServer.window_get_current_screen())
-		var size := Vector2i(1600, 900)
-		if screen.size.x > 0:
-			size.x = mini(size.x, screen.size.x - 40)
-			size.y = mini(size.y, screen.size.y - 80)
-		DisplayServer.window_set_size(size)
-		DisplayServer.window_set_position(
-			screen.position + (screen.size - size) / 2)
+		_applying_window = false
+	# 窗口模式永远给一个「放得下」的矩形：启动时（`_last_window_mode` 还是空）
+	# 和每次真正切到窗口模式时校正一次。**不要每次改画质都居中** ——
+	# 用户把窗口拖到别处以后，调个抗锯齿不该把它弹回屏幕中央。
+	if want == DisplayServer.WINDOW_MODE_WINDOWED and changed:
+		_restore_window_rect()
+
+
+## 把窗口摆成「可用区里居中的 1600×900（放不下就缩）」。
+## ⚠️ 拿不到屏幕信息时**直接返回** —— 这条是上面第 2 个 bug 的正解：
+##    宁可窗口保持原样，也不能用空矩形算出一个负坐标的窗口位置。
+func _restore_window_rect() -> void:
+	var count := DisplayServer.get_screen_count()
+	if count <= 0:
+		return
+	var scr := clampi(DisplayServer.window_get_current_screen(), 0, count - 1)
+	var usable := DisplayServer.screen_get_usable_rect(scr)
+	if usable.size.x < 640 or usable.size.y < 480:
+		return
+	var size := Vector2i(1600, 900)
+	size.x = mini(size.x, usable.size.x - 40)
+	size.y = mini(size.y, usable.size.y - 80)
+	DisplayServer.window_set_size(size)
+	DisplayServer.window_set_position(usable.position + (usable.size - size) / 2)
 
 
 ## 设置变了：画面相关的键统统走 `_apply_render`（其余设置由各自的系统自己 listen）。
