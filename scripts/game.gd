@@ -401,6 +401,14 @@ func _ready() -> void:
 		if node.has_signal("entered") and not node.is_connected(
 				"entered", Callable(self, "_on_ready_zone_entered")):
 			node.connect("entered", Callable(self, "_on_ready_zone_entered"))
+	# 兜底：**踩上第 1 站 `Launch` 本身也算进准备区**（2026-10-20 用户：
+	# 「召回所有人后再次跑酷，准备区用不了了」）。
+	# 垫子已经扩到 13×8、离开还会重新武装，但玩家从屋子那边绕到跑道西头、
+	# 或者干脆从侧面插进跑道时可能真的一脚都没踩到垫子 —— 那就由这一条兜住：
+	# `parkour.gd` 在第一次踩上第 0 站时发 `checkpoint_reached(0)`。
+	var parkour := get_node_or_null("Parkour") as Parkour
+	if parkour != null and not parkour.checkpoint_reached.is_connected(_on_parkour_checkpoint):
+		parkour.checkpoint_reached.connect(_on_parkour_checkpoint)
 	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
 
 	for target in get_tree().get_nodes_in_group("targets"):
@@ -592,6 +600,13 @@ func _on_ready_zone_entered() -> void:
 	if n > 0:
 		Sfx.play("ui_toggle", -4.0)
 		print("[Game] 踏入跑酷准备区：%d 名同伴原地待命，爱丽丝单枪匹马" % n)
+
+
+## 跑酷检查点推进。只有**第 0 站（跑道 `Launch`）**会转成「进准备区」——
+## 其余站什么都不做（免得每一跳都去碰同伴）。
+func _on_parkour_checkpoint(index: int, _label: String) -> void:
+	if index == 0:
+		_on_ready_zone_entered()
 
 
 ## ── 小屋里的「召唤同伴」台（2026-10-19）──

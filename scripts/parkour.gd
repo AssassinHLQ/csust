@@ -318,8 +318,13 @@ func _physics_process(_delta: float) -> void:
 		print("[Parkour] 第 %d/%d 站：%s（第 %d 段，y = %.2f）"
 			% [here + 1, node_count(), label_at(here), segment_of(here) + 1, p.y])
 
-	# 起跑：上过跑道（checkpoint ≥ 0）之后**离开第 0 站**就开始计时
-	if checkpoint >= 0 and not timer_running and not finished and here != 0:
+	# 起跑：上过跑道（checkpoint ≥ 0）之后**离开第 0 站**就开始计时。
+	#
+	# ⚠️ 判据必须是 `here > 0`，不能是 `here != 0`：`here = −1` 表示「脚下不是任何一站」，
+	#    玩家站在平台上时就是 −1 —— 那样会变成
+	#    「起表 → 下一帧『回到主平台』停表 → 再起表」**每帧来回抖**，
+	#    日志一秒刷几百行「回到主平台：停表、保留进度」（2026-10-20 自检里撞见的）。
+	if checkpoint >= 0 and not timer_running and not finished and here > 0:
 		_start_timer()
 
 	# 摔下去就救 —— **不再要求 `checkpoint >= 0`**：还没踩到第一站的人从跑道或第一跳掉下去，

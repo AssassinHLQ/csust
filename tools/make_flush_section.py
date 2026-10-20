@@ -898,10 +898,12 @@ RAM_MARKET_NODE = ('[node name="RamMarket" type="Node3D" parent="."]' + chr(10)
 ## 位置固定在 (−9, 0, 4)：正好是 40×40 主平台靠西、跑道（x −20 ~ −10）入口前一步。
 EXT_READYZONE = ('[ext_resource type="Script" path="res://scripts/parkour_ready_zone.gd" '
                  'id="12_readyzone"]')
+# 2026-10-20：6×4 只盖住跑道东口，从屋子那边绕过来踩不到 → 扩到 13×8
+# （x −19 ~ −6、z 0 ~ 8：整条 10 m 跑道几乎都在垫子上）
 READY_ZONE_NODE = ('[node name="ReadyZone" type="Area3D" parent="."]' + chr(10)
-                   + 'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, 4)' + chr(10)
+                   + 'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0, 4)' + chr(10)
                    + 'script = ExtResource("12_readyzone")' + chr(10)
-                   + 'zone_size = Vector3(6, 3, 4)')
+                   + 'zone_size = Vector3(13, 3, 8)')
 
 
 def build_subresources() -> list:

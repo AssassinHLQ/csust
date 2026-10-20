@@ -294,9 +294,19 @@ func _test_ready_zone() -> void:
 			comps.append(c as Companion)
 	_check(comps.size() >= 3, "场上有 %d 名同伴" % comps.size())
 	var zone := _pk.get_node_or_null("ReadyZone") as ParkourReadyZone
-	_check(zone != null, "第 1 段跑道东口摆着准备区 `ReadyZone`（金色垫子，x −12~−6）")
+	_check(zone != null, "第 1 段跑道东口摆着准备区 `ReadyZone`（金色垫子，x −19~−6、z 0~8）")
 	if zone == null or comps.is_empty():
 		return
+	# ⓪ 尺寸：2026-10-20 用户「准备区短了，要延伸到平台边缘」—— 6×4 → 13×8
+	_check(absf(zone.zone_size.x - 13.0) < 0.01 and absf(zone.zone_size.z - 8.0) < 0.01,
+		"垫子尺寸 %s（13×8：整条 10 m 跑道几乎都在垫子上）" % str(zone.zone_size))
+	var zb: AABB = AABB(Vector3(zone.global_position.x - zone.zone_size.x * 0.5, 0.0,
+		zone.global_position.z - zone.zone_size.z * 0.5),
+		Vector3(zone.zone_size.x, 3.0, zone.zone_size.z))
+	_check(zb.position.x <= -19.0 and zb.end.x >= -6.0 and zb.position.z <= 0.0
+			and zb.end.z >= 8.0,
+		"覆盖范围 x %.1f ~ %.1f、z %.1f ~ %.1f（跑道 Launch 是 x −20~−10 / z 2.5~5.5）"
+		% [zb.position.x, zb.end.x, zb.position.z, zb.end.z])
 	# ① 进区之前：一个都不许待命
 	_put(0.00, 0.10, 6.00)
 	await _wait(6)
@@ -328,6 +338,45 @@ func _test_ready_zone() -> void:
 		"玩家跑到 29 m 外（> 拉回阈值 26 m），同伴最大位移只有 %.2f m —— 真的在待命"
 		% moved)
 	_pk.enabled = was
+
+	# ④ 用户 2026-10-20：「召回所有人后再次跑酷，准备区用不了了」
+	#    以前 `_fired` 一旦置真就永远不再触发。现在**离开垫子就重新武装**：
+	#    先手动解除待命（等价于在小屋里按过召唤台），再走回垫子 —— 必须再触发一次。
+	for c in comps:
+		c.set_standby(false)
+	_put(0.00, 0.10, 6.00)          # 离开垫子（x 0 在垫子东边之外）
+	await _wait_ms(700)              # 等过 `rearm_delay`（0.45 s）
+	var armed := not zone.fired()
+	_put(zone.global_position.x, 0.10, zone.global_position.z)
+	await _wait(10)
+	var again := 0
+	for c in comps:
+		if c.is_standby():
+			again += 1
+	_check(armed and again == comps.size(),
+		"离开垫子后**重新武装**（fired 已复位：%s），召回后再踏一次 → 又 %d/%d 名待命"
+		% [str(armed), again, comps.size()])
+
+	# ⑤ 兜底：从跑道西头插进来、一脚没踩到垫子 —— 踩上第 1 站 `Launch` 也照样触发
+	#    （`game.gd::_on_parkour_checkpoint`）。x −19.5 在垫子（x ≥ −19）之外、但在跑道上。
+	for c in comps:
+		c.set_standby(false)
+	var cp0 := _pk.checkpoint
+	_pk.checkpoint = -1
+	_put(-19.50, 0.10, 4.00)
+	await _wait(10)
+	var by_launch := 0
+	for c in comps:
+		if c.is_standby():
+			by_launch += 1
+	_check(by_launch == comps.size(),
+		"没踩到垫子、只踩到跑道 `Launch`（x −19.5）→ 也 **%d/%d 名待命**（保险生效）"
+		% [by_launch, comps.size()])
+	_pk.checkpoint = cp0
+
+	# 收尾：把她们放回跟随、人回出生点
+	for c in comps:
+		c.set_standby(false)
 	_put(0.00, 0.10, 6.00)
 	await _wait(4)
 
@@ -355,7 +404,12 @@ func _test_summon_pad() -> void:
 	_check(to_hut < 3.2, "垫子在小屋**里面**（离小屋中心 %.2f m，屋内半宽 3.1 / 半深 2.6）"
 		% to_hut)
 
-	# ① 前置：§1b 之后她们应该还在待命（离小屋 20 m 以上）
+	# ① 前置：把她们**留在跑道口待命**（§1b 收尾时已经放了跟随，这里重新摆一次，
+	#    模拟「跑完一段、人回小屋」的状态）
+	_put(0.00, 0.10, 6.00)
+	for c in comps:
+		c.set_standby(true)
+	await _wait(4)
 	var standby0 := 0
 	var far0 := 0.0
 	for c in comps:
@@ -366,23 +420,31 @@ func _test_summon_pad() -> void:
 		"踩之前：%d/%d 名还在跑道口待命（最远 %.1f m）" % [standby0, comps.size(), far0])
 
 	# ② 踏上垫子 → 全部瞬移回小屋、解除待命
+	var before_pos: Array[Vector3] = []
+	for c in comps:
+		before_pos.append(c.global_position)
 	_put(pad.global_position.x, pad.global_position.y + 0.10, pad.global_position.z)
 	await _wait(8)
 	var home := 0
 	var standby1 := 0
 	var worst := 0.0
-	for c in comps:
+	var min_move := 1.0e9
+	for i in comps.size():
+		var c := comps[i]
 		if not c.is_standby():
 			home += 1
 		else:
 			standby1 += 1
 		worst = maxf(worst, c.global_position.distance_to(pad.global_position))
+		min_move = minf(min_move, c.global_position.distance_to(before_pos[i]))
 	_check(home == comps.size() and standby1 == 0,
 		"踏上召唤台 → **%d/%d 名同伴回到小屋并恢复跟随**（仍待命 %d 名）"
 		% [home, comps.size(), standby1])
-	# 一排人排在垫子两侧各 2.1 m、往 +Z 偏 1.2 m：最远 ≈ 2.4 m；刚落地就会往
-	# 各自的跟随位挪，给到 3.5 m 的余量
-	_check(worst < 3.5, "全员落在垫子 %.2f m 以内（小屋长轴上一排，间隔 0.7 m）" % worst)
+	# 判「真的瞬移了」用**位移**，不用「离垫子多远」：刚落地她们就开始往各自的
+	# 跟随位走，采样时有人已经在 3~4 m 外了（第一版卡 3.0 m 就是这么假红的）。
+	_check(min_move > 10.0,
+		"每名同伴都是**瞬移**回来的（最小位移 %.1f m；她们刚才在跑道口）" % min_move)
+	_check(worst < 5.0, "落地集中在垫子 %.2f m 内（小屋长轴上一排，间隔 0.7 m）" % worst)
 	_check(pad.title_text().contains("召回"), "垫子上的字变成「%s」" % pad.title_text())
 
 	# ③ 反复踩是**允许**的（和一次性 latch 的跑酷准备区相反）
