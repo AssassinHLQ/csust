@@ -30,11 +30,11 @@ const DEFAULTS := {
 	# 「画质不要这样子调，要单独调帧率、单独调分辨率、单独调抗锯齿之类的。」
 	# 于是原来的 `render_quality`（极致/高/中/低/省电，一档同时改缩放+SSAO+辉光+限帧）
 	# 被拆成下面这些**各自独立**的旋钮，互不覆盖。
-	"resolution_scale": "1.00",
-	"fps_limit": "60",
+	"resolution_scale": 1.0,
+	"fps_limit": 60.0,
 	"vsync": true,
-	"aa_mode": "off",
-	"shadow_quality": "high",
+	"aa_mode": 0.0,
+	"shadow_quality": 3.0,
 	"ssao": true,
 	"glow": true,
 	"ssr": false,
@@ -47,7 +47,23 @@ const RANGES := {
 	"mouse_sensitivity": [0.0005, 0.0060, 0.0001],
 	"fov": [50.0, 90.0, 1.0],
 	"master_volume": [0.0, 1.0, 0.05],
+	# ── 画面（2026-10-20 晚）──
+	# 用户：「帧率上限要那种滑块调节」「3d 渲染缩放也要滑块调节」「抗锯齿、阴影质量
+	# 也要滑块调节」。所以这四个从**分段按钮**改成滑块 —— 滑块按数值存，
+	# 离散的那两个（AA / 阴影）用**整数档位**当值，界面显示人话名字。
+	"resolution_scale": [0.50, 1.00, 0.05],
+	"fps_limit": [0.0, 240.0, 10.0],      # 0 = 不限帧
+	"aa_mode": [0.0, 5.0, 1.0],           # 0 关 / 1 FXAA / 2 MSAA2× / 3 4× / 4 8× / 5 TAA
+	"shadow_quality": [0.0, 3.0, 1.0],    # 0 关 / 1 低 / 2 中 / 3 高
 }
+
+## 抗锯齿 / 阴影的档位名字（滑块取整数值，界面显示这些）
+const AA_NAMES := ["关", "FXAA", "MSAA 2×", "MSAA 4×", "MSAA 8×", "TAA"]
+const SHADOW_NAMES := ["关", "低", "中", "高"]
+## 旧版本的代号（2026-10-20 之前这两个是字符串选项）。**次序和上面两张表一一对应**，
+## 读旧存档时按 `find()` 换算成新档位，别让人一升级抗锯齿就被重置成「关」。
+const AA_OLD := ["off", "fxaa", "msaa2", "msaa4", "msaa8", "taa"]
+const SHADOW_OLD := ["off", "low", "medium", "high"]
 
 ## ── 画面各旋钮的取值 ──
 ##
@@ -57,18 +73,16 @@ const RANGES := {
 ##
 ## 每个键都**独立**落盘、独立生效（`game.gd::_apply_render` 里一个个读）。
 ## 默认值对应以前的高档：原生缩放 + 60 fps + 无 AA + 高阴影 + SSAO/辉光/雾开。
-const RES_CHOICES := ["0.50", "0.60", "0.75", "0.85", "1.00"]
-const FPS_CHOICES := ["30", "45", "60", "90", "120", "144", "240", "unlimited"]
-const AA_CHOICES := ["off", "fxaa", "msaa2", "msaa4", "msaa8", "taa"]
-const SHADOW_CHOICES := ["off", "low", "medium", "high"]
-const WINDOW_CHOICES := ["windowed", "maximized", "fullscreen", "exclusive"]
+const WINDOW_CHOICES := ["windowed", "maximized", "fullscreen"]
 
 ## 离散型设置：值只能取列表里的那些。设置界面据此画**分段按钮**而不是滑块/开关。
+##
+## ⚠️ 2026-10-20 晚只剩「窗口模式」是离散的 —— 用户要求把帧率 / 缩放 / 抗锯齿 /
+##    阴影都改成滑块，所以那四个搬进了 `RANGES`。
+##    另外 **`exclusive`（独占全屏）被删掉了**：切过去之后窗口会卡在全屏坐标系里，
+##    再选「窗口」只得到黑边包围的一小块画面（用户截图就是这个）。全屏只留
+##    引擎的 `WINDOW_MODE_FULLSCREEN`，切回窗口时 `game.gd` 还会**显式重设尺寸并居中**。
 const CHOICES := {
-	"resolution_scale": RES_CHOICES,
-	"fps_limit": FPS_CHOICES,
-	"aa_mode": AA_CHOICES,
-	"shadow_quality": SHADOW_CHOICES,
 	"window_mode": WINDOW_CHOICES,
 }
 
@@ -125,7 +139,14 @@ static func set_value(key: String, v: Variant) -> void:
 	if not DEFAULTS.has(key):
 		push_warning("[GameSettings] 未知设置项：%s" % key)
 		return
-	if CHOICES.has(key) and not (v in CHOICES[key]):
+	if RANGES.has(key):
+		# 滑块直接给 float：先夹到范围里、再对齐步长（防止浮点误差让 `value` 越界）
+		var sp: Array = RANGES[key]
+		var step := float(sp[2])
+		v = clampf(float(v), float(sp[0]), float(sp[1]))
+		if step > 0.0:
+			v = snappedf(v, step)
+	elif CHOICES.has(key) and not (v in CHOICES[key]):
 		push_warning("[GameSettings] %s 不接受「%s」，可选：%s" % [key, str(v), str(CHOICES[key])])
 		return
 	if _values.get(key) == v:
@@ -165,19 +186,35 @@ static func choices(key: String) -> Array:
 static func choice_label(key: String, v: Variant) -> String:
 	var s := str(v)
 	match key:
-		"resolution_scale":
-			return "%s×" % s
-		"fps_limit":
-			return "不限" if s == "unlimited" else "%s fps" % s
-		"aa_mode":
-			return {"off": "关", "fxaa": "FXAA", "msaa2": "MSAA 2×",
-				"msaa4": "MSAA 4×", "msaa8": "MSAA 8×", "taa": "TAA"}.get(s, s)
-		"shadow_quality":
-			return {"off": "关", "low": "低", "medium": "中", "high": "高"}.get(s, s)
 		"window_mode":
 			return {"windowed": "窗口", "maximized": "最大化",
-				"fullscreen": "全屏", "exclusive": "独占全屏"}.get(s, s)
+				"fullscreen": "全屏"}.get(s, s)
 	return s
+
+
+## 右侧那列「当前值」的人话。数值型（滑块）和离散型都走这里，
+## 免得设置界面里再抄一份格式化代码（`settings_menu.gd::_format` 直接转调）。
+static func value_text(key: String, v: Variant) -> String:
+	match key:
+		"mouse_sensitivity":
+			return "%.4f" % float(v)
+		"master_volume":
+			return "%d%%" % int(round(float(v) * 100.0))
+		"fov":
+			return "%d" % int(round(float(v)))
+		"resolution_scale":
+			return "%.2f×" % float(v)
+		"fps_limit":
+			return "不限" if float(v) <= 0.0 else "%d fps" % int(round(float(v)))
+		"aa_mode":
+			return AA_NAMES[clampi(int(round(float(v))), 0, AA_NAMES.size() - 1)]
+		"shadow_quality":
+			return SHADOW_NAMES[clampi(int(round(float(v))), 0, SHADOW_NAMES.size() - 1)]
+	if v is bool:
+		return "开" if bool(v) else "关"
+	if CHOICES.has(key):
+		return choice_label(key, v)
+	return str(v)
 
 
 static func label(key: String) -> String:
@@ -223,7 +260,35 @@ static func _load() -> void:
 		return
 	for key in DEFAULTS.keys():
 		if cfg.has_section_key(SECTION, key):
-			_values[key] = cfg.get_value(SECTION, key)
+			_values[key] = _coerce(key, cfg.get_value(SECTION, key))
+
+
+## 旧存档的迁移 + 类型归一。
+##
+## 2026-10-20 之前：`resolution_scale` / `fps_limit` 是字符串，`aa_mode` /
+## `shadow_quality` 是代号（"fxaa" / "high"），`window_mode` 还可能存着
+## **已经删掉的 `exclusive`**（独占全屏）。这里统统换算成新值 ——
+## 否则一升级，抗锯齿会被当成 0（关）、阴影掉到「关」、窗口还会卡在独占全屏。
+static func _coerce(key: String, v: Variant) -> Variant:
+	match key:
+		"aa_mode":
+			if v is String:
+				return float(maxi(AA_OLD.find(v), 0))
+			return float(v)
+		"shadow_quality":
+			if v is String:
+				return float(maxi(SHADOW_OLD.find(v), 0))
+			return float(v)
+		"fps_limit":
+			if v is String:
+				return 0.0 if v == "unlimited" else float(v)
+			return float(v)
+		"resolution_scale":
+			return float(v)
+		"window_mode":
+			var s := String(v)
+			return "fullscreen" if s == "exclusive" else s
+	return v
 
 
 static func _save() -> void:

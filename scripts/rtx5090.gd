@@ -8,21 +8,25 @@ extends Node3D
 ## 屋顶上，局部 y = 2.4（屋顶顶面）。
 ##
 ## 手感：
-##   · 站在房子旁边（水平 2.0 m、竖直 −3.2~0.5 m）就自动收走 —— 屋顶 3 m 高，人上不去，
-##     所以判定是「贴着屋檐走一圈就能拿」，不是要跳上屋顶；
+##   · **必须站在屋顶、卡的正上方**才收得到（水平 1.5 m 内、脚落在屋顶高度附近，
+##     而且 `is_on_floor()` 为真）—— 用户 2026-10-20：「为什么站这里都能捡到 5090，
+##     必须站房顶 5090 正上方才行」。所以从屋檐下面、从空中掠过都收不到；
 ##   · 收走后 `assets_yuan += 59999`，走 `ParkourFutures.add_asset()`，和内存条同一本账；
-##   · 底下有个金色呼吸圈，远远能看见「这儿有件大货」。
+##   · 屋顶底下那个金色呼吸圈已经删掉（同一天用户：「黄色圆圈去掉」）。
 ##
 ## ⚠️ 模型轴不确定（OBJ 可能是 Y-up / Z-up），所以 `_build()` 里**按包围盒的最长轴**
-##    自动转成「长边沿 X、平放」，再按最长边缩到 0.34 m（真卡 30~35 cm）。
+##    自动转成「长边沿 X、平放」，再按最长边缩到 `LONG_SIDE`。
 const MODEL := "res://models/rtx5090/RTX5090simplified.obj"
 ## 全新正版现价（用户 2026-10-20 给的数）
 const PRICE := 59999
 const DISPLAY_NAME := "RTX 5090 24G"
-## 收走判定
-const PICK_RADIUS := 2.4     # 房檐外一圈都够得着
-const PICK_DY_MIN := -3.2     # 人站在房檐下（比屋顶低 2.5 m）也能收
-const PICK_DY_MAX := 0.5
+## 摆放长度（m）。真卡 30~35 cm，但玩家在空中抓拍时「太小了」——
+## 用户 2026-10-20：「5090 也太小了，加大 3 倍」→ 0.34 × 3 = 1.02 m。
+const LONG_SIDE := 1.02
+## 收走判定：水平 / 竖直窗口都收得很紧，保证「只有站屋顶正上方」才够得着
+const PICK_RADIUS := 1.5
+const PICK_DY_MIN := -0.25    # 比屋顶低 25 cm 以上（= 站在屋檐下）就收不到
+const PICK_DY_MAX := 1.20
 
 var _holder: Node3D
 var _taken := false
@@ -60,34 +64,16 @@ func _build() -> void:
 	mi.mesh = mesh
 	_holder.add_child(mi)
 
-	# 旋转后的局部包围盒 → 统一缩放到「长边 0.34 m」，并把底面对齐到 y = 0
+	# 旋转后的局部包围盒 → 统一缩放到「长边 LONG_SIDE」，并把底面对齐到 y = 0
 	var after := Transform3D(Basis.from_euler(_holder.rotation), Vector3.ZERO) * box
-	var s := 0.34 / maxf(maxf(after.size.x, after.size.y), maxf(after.size.z, 0.001))
+	var s := LONG_SIDE / maxf(maxf(after.size.x, after.size.y), maxf(after.size.z, 0.001))
 	_holder.scale = Vector3(s, s, s)
 	_holder.position = Vector3(-after.get_center().x * s, -after.position.y * s,
 		-after.get_center().z * s)
 
-	# 金色呼吸圈（和地上内存条同款材质做法）
-	var ring := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.28
-	cyl.bottom_radius = 0.28
-	cyl.height = 0.02
-	cyl.radial_segments = 28
-	ring.mesh = cyl
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(1.0, 0.84, 0.36, 0.45)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.76, 0.25)
-	mat.emission_energy_multiplier = 2.0
-	ring.material_override = mat
-	ring.position = Vector3(0.0, 0.02, 0.0)
-	add_child(ring)
 	rotate_y(0.6)            # 稍微斜放，别正对一条棱
-	print("[Rtx5090] 屋顶 5090 就位：模型原始尺寸 %s → 缩放 %.2f（长边 0.34 m）"
-		% [str(box.size.snappedf(0.01)), s])
+	print("[Rtx5090] 屋顶 5090 就位：模型原始尺寸 %s → 缩放 %.2f（长边 %.2f m）"
+		% [str(box.size.snappedf(0.01)), s, LONG_SIDE])
 
 
 ## 没有 OBJ 时的占位卡：一块黑 PCB + 银灰罩子 + 两个风扇圈（尺寸和真卡对齐）。
@@ -125,7 +111,9 @@ func _build_placeholder() -> void:
 		fan.material_override = black
 		fan.position = Vector3(sx, 0.046, 0.0)
 		add_child(fan)
-	print("[Rtx5090] 占位卡就位（0.34 × 0.05 m，两个风扇）")
+	# 和真模型一样放大 3 倍（0.34 → 1.02 m）
+	scale = Vector3.ONE * (LONG_SIDE / 0.34)
+	print("[Rtx5090] 占位卡就位（%.2f m 长，两个风扇）" % LONG_SIDE)
 
 
 func _physics_process(delta: float) -> void:
@@ -137,7 +125,15 @@ func _physics_process(delta: float) -> void:
 		return
 	var fut := _futures()
 	var d := player.global_position - global_position
-	var near := Vector2(d.x, d.z).length() <= PICK_RADIUS 		and d.y >= PICK_DY_MIN and d.y <= PICK_DY_MAX
+	var flat := Vector2(d.x, d.z).length()
+	# ⚠️ 三件事同时成立才算「站在屋顶正上方」：
+	#   ① 水平 1.5 m 内（人就在卡的上方）
+	#   ② 脚的高度 = 屋顶高度（±0.25 m）—— 站在屋檐下时 d.y ≈ −2.5，够不着
+	#   ③ 真的踩在东西上（`is_on_floor()`）—— 从空中掠过、跳起来那一下都不算
+	var body := player as CharacterBody3D
+	var standing := body != null and body.is_on_floor()
+	var near: bool = flat <= PICK_RADIUS \
+		and d.y >= PICK_DY_MIN and d.y <= PICK_DY_MAX and standing
 	if near and not _confirming:
 		if fut != null:
 			fut.ask_prompt(self, "按 F 拾取 RTX 5090（¥59,999）")

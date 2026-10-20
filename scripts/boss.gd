@@ -64,6 +64,10 @@ enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
 @export var height := 4.5
 @export var max_health := 3000.0
 @export var respawn_time := 6.0
+## 倒下后要不要站起来。默认 true（练枪木桩 / 比纳以外的那几位）；
+## 2026-10-20 的剧情 Boss 倭瓜优香设成 false —— 用户：「倭瓜优香不能复活」，
+## 它一倒下牢笼就解开，这场架只有一次。
+@export var respawn_on_death := true
 ## 想只留身体（隐藏光环/胸牌/球/方块）就打开
 @export var hide_accessories := false
 ## 贴图之上的着色（白 = 用贴图原色）
@@ -474,6 +478,8 @@ func _die(by_damage: float) -> void:
 	tw.set_parallel(true)
 	tw.tween_property(model, "rotation:x", deg_to_rad(72.0), 0.55).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_property(model, "position:y", model.position.y - visual_size.y * 0.06, 0.55)
+	if not respawn_on_death:
+		return
 	tw.chain().tween_interval(respawn_time)
 	tw.chain().tween_callback(_respawn)
 

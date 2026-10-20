@@ -22,8 +22,11 @@ extends CharacterBody3D
 signal aim_changed(aiming: bool)
 signal health_changed(current: float, maximum: float)
 
-@export var max_health := 100.0
-var health := 100.0
+@export var max_health := 250.0
+var health := 250.0
+## 2026-10-20 用户：「爱丽丝增强，血量变成 250」—— 原来是 100（盖特 Boss 一下 26、
+## 倭瓜优香的天降一击 40，所以 250 才够吃几下）。注意 `health` 的初值也要跟着改，
+## 否则 `_ready()` 里 `health = max_health` 之前 HUD 会闪一帧 100。
 
 # --- 移动手感（米 / 秒）---
 #
@@ -129,6 +132,9 @@ var _fire_held := false
 var _aim_held := false
 ## 滚轮调出来的「腰射距离」，独立于 hip_distance（开镜时仍然走 aim_distance）
 var _zoom_distance := 0.0
+## 剧情镜头锁定：还剩多少秒（0 = 没锁）／要盯着看的目标（例如登场的倭瓜优香）
+var _lock_target: Node3D
+var _lock_left := 0.0
 
 @onready var rig: Node3D = $CameraRig
 @onready var spring: SpringArm3D = $CameraRig/SpringArm3D
@@ -334,8 +340,14 @@ func _physics_process(delta: float) -> void:
 	# 转到位之前武器系统不会开火（见 Weapon.is_aim_aligned()）。
 	# 等式右侧是「相机视线方向」= _yaw + PI（相机挂在 rig 的 +Z 侧看向 -Z，
 	# 见 CAMERA_FORWARD_OFFSET 那段注释），别写成 _yaw（那样是背对准星）。
+	# 剧情锁定（拾到 5090 → 镜头自动怼到倭瓜优香身上 1 秒，见 `look_at_node()`）
+	_update_look_lock(delta)
+
+	var locked := _lock_left > 0.0
 	var want_face_aim := aiming or _fire_held
-	if want_face_aim:
+	if locked:
+		pass                     # 锁定期间朝向由 `_update_look_lock()` 决定
+	elif want_face_aim:
 		_facing_yaw = _yaw + CAMERA_FORWARD_OFFSET
 	elif dir.length_squared() > 0.01:
 		# ⚠️ 有输入就**立刻朝意图方向**，不要等速度转过来 —— 速度受加速度限制，
@@ -348,8 +360,8 @@ func _physics_process(delta: float) -> void:
 		# （那正是 `_facing_yaw` 那段注释里踩过的坑：松手后角色自己转回去面对镜头）
 		_facing_yaw = atan2(horiz.x, horiz.z)
 
-	# 开火转身要快一点，不然「点了没反应」的感觉很明显
-	var turn_speed := TURN_SMOOTH_FIRE if want_face_aim else TURN_SMOOTH
+	# 开火转身要快一点，不然「点了没反应」的感觉很明显（剧情锁定也用快的那档）
+	var turn_speed := TURN_SMOOTH_FIRE if (want_face_aim or locked) else TURN_SMOOTH
 	model_root.rotation.y = _lerp_angle_smooth(model_root.rotation.y, _facing_yaw, turn_speed, delta)
 	rig.rotation.y = _yaw
 
@@ -391,6 +403,53 @@ func min_zoom_for_full_body() -> float:
 	return hip_height / tan(half) + 0.30
 
 
+## 剧情演出：**强制镜头看向某个物体**（默认 1 秒），期间鼠标转不动。
+##
+## 2026-10-20 用户：「真正拾取 5090 后视角强制锁定倭瓜优香一秒钟」——
+## `parkour.gd::_spawn_avenger()` 在倭瓜优香出场那一帧调用它。
+##
+## ⚠️ 角度换算（改之前先看 `_apply_camera()` 里那条推导）：
+##    相机挂在 rig 的 +Z 侧、看向 −Z，所以**视线方向** = −(sin yaw, 0, cos yaw)；
+##    俯仰 p 时视线 = (sin yaw·cos p 的横向分量, **sin p**, …)，即竖直分量就是 sin p。
+##    于是「看向 d」⇔ `yaw = atan2(−d.x, −d.z)`、`pitch = asin(d.y)`。
+##    （写成 atan2(d.x, d.z) 会正好差 180°，镜头会怼到反方向 —— 和
+##    `CAMERA_FORWARD_OFFSET` 那条坑同源。）
+func look_at_node(target: Node3D, duration := 1.0) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	_lock_target = target
+	_lock_left = maxf(duration, 0.01)
+
+
+## 镜头现在是不是被剧情锁着（自检 / HUD 用）
+func look_locked() -> bool:
+	return _lock_left > 0.0
+
+
+## 每帧把 `_yaw` / `_pitch` 拉向目标。用 16/s 的指数逼近而不是瞬移，
+## 1 秒里大约 0.3 s 就转到，剩下 0.7 s 稳稳盯着 —— 比硬切好看，也不会转晕。
+func _update_look_lock(delta: float) -> void:
+	if _lock_left <= 0.0:
+		return
+	_lock_left = maxf(_lock_left - delta, 0.0)
+	if _lock_target == null or not is_instance_valid(_lock_target):
+		_lock_left = 0.0
+		return
+	# 盯胸口偏上（Boss 高 4.5 m，盯脚会看成一堵墙；太顶又会出画）
+	var aim := _lock_target.global_position + Vector3(0.0, 1.6, 0.0)
+	var d := aim - cam.global_position
+	if d.length_squared() < 0.04:
+		return
+	d = d.normalized()
+	var want_yaw := atan2(-d.x, -d.z)
+	var want_pitch := clampf(asin(clampf(d.y, -1.0, 1.0)), pitch_min, pitch_max)
+	var t := clampf(16.0 * delta, 0.0, 1.0)
+	_yaw = lerp_angle(_yaw, want_yaw, t)
+	_pitch = lerpf(_pitch, want_pitch, t)
+	# 人也转过去（锁定期间 `_physics_process` 不会再用移动输入覆盖朝向）
+	_facing_yaw = atan2(d.x, d.z)
+
+
 func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> void:
 	if amount <= 0.0 or health <= 0.0:
 		return
@@ -400,6 +459,10 @@ func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> v
 		away.y = 0.0
 		if away.length_squared() > 0.001:
 			velocity += away.normalized() * knockback
+		else:
+			# 正好站在爆心（天降砸脚下）：随机往一边弹 —— 否则「大力击退」会变成原地不动
+			var a := randf() * TAU
+			velocity += Vector3(cos(a), 0.0, sin(a)) * knockback
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
 		# 教学沙盒不做死亡画面：1 秒后**原地**回满血（只清速度 + 回血，不搬位置）。

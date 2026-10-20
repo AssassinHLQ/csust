@@ -2017,11 +2017,28 @@ func _test_ram_loot() -> void:
 	if gpu != null:
 		var a0 := fut.assets_yuan
 		var gp := gpu.global_position
+		# 2026-10-20 用户：「为什么站这里都能捡到 5090，必须站房顶 5090 正上方才行」
+		# → 先站到**屋檐下面**（比屋顶低 2.5 m）确认收不到，再上屋顶。
 		_put(gp.x + 2.2, gp.y - 2.5, gp.z)
-		await _wait_ms(160)
+		await _wait_ms(400)
 		var prompt := fut.get_node_or_null("FuturesHUD/Prompt") as Label
+		_check(prompt == null or prompt.text.strip_edges() == "",
+			"站在屋檐下面**收不到** 5090（提示：「%s」）"
+			% (prompt.text if prompt != null else ""))
+		# 屋顶有碰撞盒（用户：「房顶怎么没有碰撞箱，跳上去掉下来了」）+ 有台阶能上去
+		var shed := _pk.get_node_or_null("Island/Props/Shed") as Node3D
+		_check(shed != null and shed.get_node_or_null("RoofSolid") != null,
+			"房顶补上了碰撞盒（RoofSolid）")
+		var steps := shed.get_node_or_null("RoofSteps") if shed != null else null
+		_check(steps != null and steps.get_child_count() >= 3,
+			"屋顶西侧有三级台阶（能跳上 2.5 m 的屋顶）")
+		# 站到屋顶、卡的正上方 → 提示
+		_put(gp.x + 0.35, gp.y + 0.10, gp.z + 0.35)
+		await _wait_ms(500)
+		_check(_p.is_on_floor() and absf(_p.global_position.y - gp.y) < 0.15,
+			"屋顶**站得住**（脚底 %.2f / 卡底 %.2f）" % [_p.global_position.y, gp.y])
 		_check(prompt != null and prompt.text.contains("按 F 拾取"),
-			"靠近 5090 → 提示「按 F 拾取」（实测：%s）"
+			"站到屋顶正上方 → 提示「按 F 拾取」（实测：%s）"
 			% (prompt.text if prompt != null else "没有提示"))
 		await _press_key(KEY_F)
 		_check(prompt != null and prompt.text.contains("真的要拾取吗"),
@@ -2031,13 +2048,74 @@ func _test_ram_loot() -> void:
 		_check(fut.assets_yuan == a0 + 59999,
 			"第二次 F 确认 → 资产 +¥59,999（合计 ¥%d）" % fut.assets_yuan)
 		var game := _pk.get_parent()
-		_check(game.get_node_or_null("TrapCage") != null,
-			"确认后牢笼从信号塔顶滑下来罩住传送台（TrapCage）")
+		var cage := game.get_node_or_null("TrapCage")
+		var bars := 0
+		if cage != null:
+			for c in cage.get_children():
+				if c is MeshInstance3D:
+					bars += 1
+		_check(cage != null and bars >= 60,
+			"牢笼从信号塔顶滑下来罩住传送台，**更密**（%d 根钢条，原来 30）" % bars)
 		var squash: Node = null
 		for c in game.get_children():
 			if c is Boss and String(c.name).to_lower().contains("squash"):
 				squash = c
 		_check(squash != null, "牢笼落地后 **倭瓜优香** 登场（BossSquash）")
+		if squash != null:
+			# 2026-10-20 用户：「真正拾取 5090 后视角强制锁定倭瓜优香一秒钟」
+			var to_boss := ((squash as Node3D).global_position + Vector3(0, 1.6, 0)
+				- _p.cam.global_position).normalized()
+			_check(_p.look_locked() and _p.camera_forward().dot(to_boss) > 0.70,
+				"拾取后镜头强制锁定倭瓜优香 1 秒（视线点积 %.2f）"
+				% _p.camera_forward().dot(to_boss))
+			# 两个技能：① 压扁天降（40 + 16 击退）② 原来那套原地重砸
+			_check(absf(float(squash.get("max_health")) - 2200.0) < 0.1,
+				"血量 %.0f" % float(squash.get("max_health")))
+			_check(not bool(squash.get("respawn_on_death")),
+				"`respawn_on_death = false` —— 倭瓜优香不会复活")
+			var sd := float(squash.get("slam_damage"))
+			var sk := float(squash.get("slam_knockback"))
+			_check(is_equal_approx(sd, 40.0) and is_equal_approx(sk, 16.0),
+				"技能一：天降 %.0f 伤害 / %.0f 击退" % [sd, sk])
+			# 第一下就是天降（next_skill 已经是 1 = 下一招重砸）
+			var island := _pk.get_node("Island") as Node3D
+			var mid := island.global_position + Vector3(0.0, 0.62, 0.0)
+			_put(mid.x, mid.y, mid.z)
+			var mark_seen := false
+			var max_knock := 0.0
+			var hp0 := _p.health
+			var t_mark := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - t_mark < 8000:
+				await process_frame
+				if _p.global_position.y < 6.0:
+					_put(mid.x, mid.y, mid.z)
+				# 击退会在几帧内被地面摩擦吃掉，所以**每帧记峰值**而不是只看结算那一帧
+				max_knock = maxf(max_knock,
+					Vector2(_p.velocity.x, _p.velocity.z).length())
+				if not mark_seen and bool(squash.call("mark_visible")):
+					mark_seen = true
+					var mp := (squash.get_node("SlamMark") as Node3D).global_position
+					# ⚠️ 站**圈内但别站爆心**：正好站在落点上时倭瓜会把人压进自己的碰撞体，
+					#    `move_and_slide` 会把击退速度直接吃掉（实测 0.0 m/s 假红）。
+					#    2.4 m 在红圈（半径 3.0）以内、又在它身体外面。
+					_put(mp.x + 2.4, mp.y + 0.05, mp.z)
+				if mark_seen and _p.health < hp0:
+					break
+			_check(mark_seen, "技能一：天上开始往下砸时地面亮起**红色预警圈**（SlamMark）")
+			_check(absf((hp0 - _p.health) - 40.0) < 0.5,
+				"红圈里挨一下 = **40 伤害**（%.0f → %.0f）" % [hp0, _p.health])
+			_check(max_knock > 6.0,
+				"天降**大力击退**（水平速度峰值 %.1f m/s）" % max_knock)
+			# 打死 → 牢笼解除、不复活
+			squash.take_damage(99999.0)
+			await _wait_ms(1200)
+			_check(game.get_node_or_null("TrapCage") == null,
+				"打败倭瓜优香 → **牢笼解除**（TrapCage 已消失）")
+			await _wait_ms(1500)
+			_check(float(squash.get("health")) <= 0.0, "倭瓜优香**不能复活**（1.5 s 后血量仍 %.0f）"
+				% float(squash.get("health")))
+	# 爱丽丝增强：血量 250（2026-10-20 用户）
+	_check(is_equal_approx(_p.max_health, 250.0), "爱丽丝血量 250（实测 %.0f）" % _p.max_health)
 	# ⑪ 结算区：站进小屋 → 资产+保证金进银行卡、自动还债
 	fut.assets_yuan = 1234
 	fut.margin = 5.0
@@ -2046,7 +2124,11 @@ func _test_ram_loot() -> void:
 	_check(sp != null, "小屋里有结算台（Settlement）")
 	if sp != null:
 		_put(sp.global_position.x, sp.global_position.y, sp.global_position.z)
-		await _wait_ms(300)
+		# 陷阱那一节里人可能已经被扫过结算台（自动结算过一次 + 3 s 冷却），
+		# 这里先把冷却与「在里面」状态归零，否则 0.3 s 内不会再结算 —— 会假红。
+		sp.set("_cool", 0.0)
+		sp.set("_inside", false)
+		await _wait_ms(500)
 		_check(fut.assets_yuan == 0 and fut.margin == 0.0 and fut.bank_yuan > 0,
 			"资产+保证金 → 银行卡 ¥%d" % fut.bank_yuan)
 		_check(fut.debt == 0,

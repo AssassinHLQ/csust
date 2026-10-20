@@ -235,7 +235,7 @@ func _fit_render_scale() -> void:
 func _apply_render() -> void:
 	var vp := get_viewport()
 	# ① 3D 渲染缩放：只**乘**自动上限（窗口极大时 _auto_scale 会小于 1），不放大过 1.0
-	var res := float(String(GameSettings.value("resolution_scale")))
+	var res := float(GameSettings.value("resolution_scale"))
 	var target := clampf(_auto_scale * res, 0.25, 1.0)
 	if not is_equal_approx(vp.scaling_3d_scale, target):
 		vp.scaling_3d_scale = target
@@ -264,8 +264,8 @@ func _apply_render() -> void:
 		% [target, _auto_scale,
 			"垂直同步" if bool(GameSettings.value("vsync")) else "不开垂直同步",
 			"不限帧" if fps <= 0 else "%d fps" % fps,
-			GameSettings.choice_label("aa_mode", GameSettings.value("aa_mode")),
-			GameSettings.choice_label("shadow_quality", GameSettings.value("shadow_quality"))]
+			GameSettings.value_text("aa_mode", GameSettings.value("aa_mode")),
+			GameSettings.value_text("shadow_quality", GameSettings.value("shadow_quality"))]
 		+ "SSAO %s  辉光 %s  SSR %s  雾 %s  %s" % [
 			"开" if bool(GameSettings.value("ssao")) else "关",
 			"开" if bool(GameSettings.value("glow")) else "关",
@@ -274,32 +274,32 @@ func _apply_render() -> void:
 			GameSettings.choice_label("window_mode", GameSettings.value("window_mode"))])
 
 
-## `fps_limit` 的值是字符串（"60" / "unlimited"）——`0` 交给引擎表示不限帧
+## `fps_limit` 现在是**滑块数值**：0（最左）= 不限帧，其余当上限。
 func _fps_limit() -> int:
-	var s := String(GameSettings.value("fps_limit"))
-	return 0 if s == "unlimited" else int(s)
+	var v := int(round(float(GameSettings.value("fps_limit"))))
+	return maxi(v, 0)
 
 
-## 抗锯齿：MSAA（关/2×/4×/8×）、FXAA、TAA 三选一。
+## 抗锯齿：滑块 6 档 —— 0 关 / 1 FXAA / 2 MSAA2× / 3 MSAA4× / 4 MSAA8× / 5 TAA。
 ## ⚠️ 三者互斥：TAA 打开时必须把 MSAA 和屏幕空间 AA 都关掉，否则后处理链打架。
 func _apply_aa(vp: Viewport) -> void:
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.use_taa = false
-	match String(GameSettings.value("aa_mode")):
-		"fxaa":
+	match clampi(int(round(float(GameSettings.value("aa_mode")))), 0, 5):
+		1:
 			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
-		"msaa2":
+		2:
 			vp.msaa_3d = Viewport.MSAA_2X
-		"msaa4":
+		3:
 			vp.msaa_3d = Viewport.MSAA_4X
-		"msaa8":
+		4:
 			vp.msaa_3d = Viewport.MSAA_8X
-		"taa":
+		5:
 			vp.use_taa = true
 
 
-## 阴影质量：关 / 低 40 m / 中 60 m / 高 120 m（平行光的远裁距离）。
+## 阴影质量（滑块 0~3）：关 / 低 40 m / 中 60 m / 高 120 m（平行光的远裁距离）。
 ##
 ## ⚠️ 只**恢复/关闭场景原本的投影状态**，不强行把「本来不投影」的灯打开：
 ##    路线上的地标灯本来就是「关阴影省电」，自检 §1 钉着这一条。
@@ -307,12 +307,12 @@ func _apply_aa(vp: Viewport) -> void:
 func _apply_shadows() -> void:
 	var dist := 120.0
 	var off := false
-	match String(GameSettings.value("shadow_quality")):
-		"off":
+	match clampi(int(round(float(GameSettings.value("shadow_quality")))), 0, 3):
+		0:
 			off = true
-		"low":
+		1:
 			dist = 40.0
-		"medium":
+		2:
 			dist = 60.0
 	for n in find_children("*", "Light3D", true, false):
 		var l := n as Light3D
@@ -325,19 +325,45 @@ func _apply_shadows() -> void:
 
 
 ## 窗口模式。**headless 下直接跳过**（`--headless` 没有真窗口，调了只会刷警告）。
+##
+## 2026-10-20 晚：
+##   · **删掉「独占全屏」**（用户：「独占全屏怎么变成这样子了，去掉这个选项」）——
+##     切进 `WINDOW_MODE_EXCLUSIVE_FULLSCREEN` 之后窗口会留在全屏坐标系里，
+##     再选「窗口」只得到**黑边包围的一小块画面**（用户截图就是这个）；
+##   · 全屏只留 `WINDOW_MODE_FULLSCREEN`（无边框全屏），切回窗口时**显式重设尺寸 +
+##     居中**，否则从全屏回来也常常卡在「一小块」。
+var _last_window_mode := ""
+
+
 func _apply_window_mode() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	var mode := String(GameSettings.value("window_mode"))
 	var want := DisplayServer.WINDOW_MODE_MAXIMIZED
-	match String(GameSettings.value("window_mode")):
+	match mode:
 		"windowed":
 			want = DisplayServer.WINDOW_MODE_WINDOWED
 		"fullscreen":
 			want = DisplayServer.WINDOW_MODE_FULLSCREEN
-		"exclusive":
-			want = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+		_:
+			want = DisplayServer.WINDOW_MODE_MAXIMIZED
+	var changed := _last_window_mode != "" and _last_window_mode != mode
+	_last_window_mode = mode
 	if DisplayServer.window_get_mode() != want:
 		DisplayServer.window_set_mode(want)
+		changed = true
+	if changed and want == DisplayServer.WINDOW_MODE_WINDOWED:
+		# 回到窗口模式后重新给一个尺寸并摆回屏幕中间：从全屏 / 最大化回来时，
+		# 窗口的矩形往往还是全屏那套，画面就成了「左上角一小块」。
+		var screen := DisplayServer.screen_get_usable_rect(
+			DisplayServer.window_get_current_screen())
+		var size := Vector2i(1600, 900)
+		if screen.size.x > 0:
+			size.x = mini(size.x, screen.size.x - 40)
+			size.y = mini(size.y, screen.size.y - 80)
+		DisplayServer.window_set_size(size)
+		DisplayServer.window_set_position(
+			screen.position + (screen.size - size) / 2)
 
 
 ## 设置变了：画面相关的键统统走 `_apply_render`（其余设置由各自的系统自己 listen）。

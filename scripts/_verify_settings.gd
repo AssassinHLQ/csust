@@ -102,30 +102,56 @@ func _run() -> void:
 	_check(GameSettings.RENDER_KEYS.size() >= 10,
 		"画面旋钮 %d 个（缩放/帧率/垂直同步/AA/阴影/SSAO/辉光/SSR/雾/窗口）"
 		% GameSettings.RENDER_KEYS.size())
+	# 2026-10-20 晚：用户要求「帧率上限 / 3D 渲染缩放 / 抗锯齿 / 阴影质量」全部是
+	# **滑块**（不再是分段按钮），并且窗口模式里删掉「独占全屏」。
+	var rows: Dictionary = menu.get("_rows")
+	var as_slider := true
+	var still_choice := ""
+	for key in ["resolution_scale", "fps_limit", "aa_mode", "shadow_quality"]:
+		var row: Dictionary = rows.get(key, {})
+		if not (row.get("control") is HSlider):
+			as_slider = false
+		if GameSettings.is_choice(key):
+			still_choice = key
+	_check(as_slider, "四个画面旋钮在界面上都是**滑块**（HSlider）")
+	_check(still_choice == "", "它们都不再是分段按钮（实测：%s）"
+		% (still_choice if still_choice != "" else "（无）"))
+	_check(not ("exclusive" in GameSettings.choices("window_mode")),
+		"窗口模式里**没有**「独占全屏」（可选：%s）"
+		% str(GameSettings.choices("window_mode")))
+	_check(GameSettings.value_text("fps_limit", 0.0) == "不限"
+		and GameSettings.value_text("aa_mode", 2.0) == "MSAA 2×"
+		and GameSettings.value_text("resolution_scale", 0.5) == "0.50×",
+		"滑块右侧的当前值显示人话（不限 / MSAA 2× / 0.50×）")
+	var header_ok := false
+	for n in menu.find_children("*", "Label", true, false):
+		if (n as Label).text == "画面":
+			header_ok = true
+	_check(header_ok, "分组标题就叫「画面」（不再带「每个都能单独调」那串括号）")
 	var vp := game.get_viewport()
-	GameSettings.set_value("resolution_scale", "0.60")
+	GameSettings.set_value("resolution_scale", 0.60)
 	await _wait(2)
 	_check(absf(vp.scaling_3d_scale - 0.60) < 0.02,
 		"渲染缩放 0.60 → scaling_3d_scale %.2f" % vp.scaling_3d_scale)
-	GameSettings.set_value("fps_limit", "30")
+	GameSettings.set_value("fps_limit", 30.0)
 	await _wait(2)
 	_check(Engine.max_fps == 30, "帧率上限 30 → Engine.max_fps %d" % Engine.max_fps)
-	GameSettings.set_value("aa_mode", "msaa4")
+	GameSettings.set_value("aa_mode", 3.0)
 	await _wait(2)
-	_check(vp.msaa_3d == Viewport.MSAA_4X, "抗锯齿 MSAA 4× 真的打开")
-	GameSettings.set_value("aa_mode", "taa")
+	_check(vp.msaa_3d == Viewport.MSAA_4X, "抗锯齿滑块第 3 档 = MSAA 4×（真的打开）")
+	GameSettings.set_value("aa_mode", 5.0)
 	await _wait(2)
 	_check(vp.use_taa and vp.msaa_3d == Viewport.MSAA_DISABLED,
-		"切到 TAA 时 MSAA 自动关（三者互斥）")
-	GameSettings.set_value("aa_mode", "off")
-	GameSettings.set_value("shadow_quality", "off")
+		"切到第 5 档 TAA 时 MSAA 自动关（三者互斥）")
+	GameSettings.set_value("aa_mode", 0.0)
+	GameSettings.set_value("shadow_quality", 0.0)
 	await _wait(2)
 	var shadows_off := true
 	for n in game.find_children("*", "Light3D", true, false):
 		if (n as Light3D).shadow_enabled:
 			shadows_off = false
-	_check(shadows_off, "阴影质量选「关」→ 场上所有灯都不投影")
-	GameSettings.set_value("shadow_quality", "high")
+	_check(shadows_off, "阴影质量滑到「关」→ 场上所有灯都不投影")
+	GameSettings.set_value("shadow_quality", 3.0)
 	GameSettings.set_value("ssao", false)
 	await _wait(2)
 	var we := game.get_node_or_null("WorldEnvironment") as WorldEnvironment

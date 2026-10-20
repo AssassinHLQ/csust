@@ -308,28 +308,30 @@ func _report_floor_coverage(room: Node) -> void:
 ## 2026-10-20 起没有「画质档位」了（拆成独立旋钮），所以这里改成逐项扫。
 func _sweep_quality(game: Node) -> void:
 	var vp := root
-	var before_res := str(GameSettings.value("resolution_scale"))
-	var before_aa := str(GameSettings.value("aa_mode"))
-	var before_fps := str(GameSettings.value("fps_limit"))
-	print("[shot] ── 画面旋钮扫描（切换后读回真实值）──")
-	for aa in ["off", "fxaa", "msaa4", "taa"]:
+	var before_res := float(GameSettings.value("resolution_scale"))
+	var before_aa := float(GameSettings.value("aa_mode"))
+	var before_fps := float(GameSettings.value("fps_limit"))
+	print("[shot] ── 画面旋钮扫描（切换后读回真实值；2026-10-20 晚起全是滑块数值）──")
+	for aa in [0.0, 1.0, 3.0, 5.0]:
 		GameSettings.set_value("aa_mode", aa)
 		await process_frame
 		print("[shot]   AA %-6s → msaa_3d %d  screen_aa %d  taa %s" % [
-			aa, vp.msaa_3d, vp.screen_space_aa, str(vp.use_taa)])
-	for res in ["0.50", "0.60", "1.00"]:
+			GameSettings.value_text("aa_mode", aa), vp.msaa_3d, vp.screen_space_aa,
+			str(vp.use_taa)])
+	for res in [0.50, 0.60, 1.00]:
 		GameSettings.set_value("resolution_scale", res)
 		await process_frame
-		print("[shot]   缩放 %s → scaling_3d_scale %.3f" % [res, vp.scaling_3d_scale])
-	for fps in ["30", "60", "unlimited"]:
+		print("[shot]   缩放 %.2f → scaling_3d_scale %.3f" % [res, vp.scaling_3d_scale])
+	for fps in [30.0, 60.0, 0.0]:
 		GameSettings.set_value("fps_limit", fps)
 		await process_frame
-		print("[shot]   限帧 %-9s → Engine.max_fps %d" % [fps, Engine.max_fps])
+		print("[shot]   限帧 %-9s → Engine.max_fps %d"
+			% [GameSettings.value_text("fps_limit", fps), Engine.max_fps])
 	GameSettings.set_value("resolution_scale", before_res)
 	GameSettings.set_value("aa_mode", before_aa)
 	GameSettings.set_value("fps_limit", before_fps)
 	await process_frame
-	print("[shot]   已还原（%s / %s / %s）" % [before_res, before_aa, before_fps])
+	print("[shot]   已还原（%.2f / %.0f / %.0f）" % [before_res, before_aa, before_fps])
 
 
 ## 打印准星各元素落在**物理像素**上的矩形，并按覆盖规则算出真正被点亮的像素区间。

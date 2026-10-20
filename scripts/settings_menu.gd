@@ -198,7 +198,7 @@ func _build() -> void:
 		if key in GameSettings.RENDER_KEYS and not render_header_done:
 			render_header_done = true
 			var h := Label.new()
-			h.text = "画面（每个都能单独调）"
+			h.text = "画面"
 			h.add_theme_font_size_override("font_size", 14)
 			h.add_theme_color_override("font_color", _skin["subtext"])
 			rows.add_child(HSeparator.new())
@@ -593,14 +593,10 @@ func _on_off(on: bool) -> String:
 	return "开" if on else "关"
 
 
+## 右侧那列「当前值」。格式化**只写在 `GameSettings.value_text()` 一处** ——
+## 游戏里（日志 / HUD）和这里必须用同一套写法人话，不然「1.00×」和「1×」会打架。
 func _format(key: String, v: float) -> String:
-	match key:
-		"mouse_sensitivity":
-			return "%.4f" % v
-		"master_volume":
-			return "%d%%" % int(round(v * 100.0))
-		_:
-			return "%.0f" % v
+	return GameSettings.value_text(key, v)
 
 
 ## 当前用的皮肤目录（自检/调试用）

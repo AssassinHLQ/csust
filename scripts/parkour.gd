@@ -103,6 +103,7 @@ func _ready() -> void:
 	_load_run()
 	_spawn_roof_gpu()
 	_spawn_settlement()
+	_ensure_roof_solid()
 
 
 ## 最后平台的掩体屋顶上放一块 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……
@@ -117,6 +118,64 @@ func _spawn_roof_gpu() -> void:
 	gpu.name = "RTX5090"
 	gpu.position = Vector3(0.0, 2.5, 0.0)      # 屋顶顶面（2.4 + 0.2 / 2）
 	shed.add_child(gpu)
+
+
+## 房顶必须**能站人**（2026-10-20 用户：「房顶怎么没有碰撞箱，跳上去掉下来了」）——
+## 而且既然 5090 现在「必须站房顶正上方」才能捡（`rtx5090.gd::PICK_*`），就得有路上去。
+##
+## 补两样，都是**运行时生成**（屋顶 / 台阶跟着掩体走，改房子不会漂）：
+##   · `RoofSolid`：4.4 × 0.2 × 3.4 的碰撞盒，和 `Roof` 网格完全重合（顶面 y = 2.5）；
+##   · `RoofSteps`：西侧三级木箱（0.5 / 1.0 / 1.5 m）—— 最后一级到屋顶只差 1 m，
+##     跳跃高度 1.26 m，一跳就上得去。
+func _ensure_roof_solid() -> void:
+	var shed := get_node_or_null("Island/Props/Shed") as Node3D
+	if shed == null:
+		return
+	if shed.get_node_or_null("RoofSolid") == null:
+		var body := StaticBody3D.new()
+		body.name = "RoofSolid"
+		var cs := CollisionShape3D.new()
+		var bx := BoxShape3D.new()
+		bx.size = Vector3(4.4, 0.2, 3.4)
+		cs.shape = bx
+		cs.position = Vector3(0.0, 2.4, 0.0)
+		body.add_child(cs)
+		shed.add_child(body)
+	if shed.get_node_or_null("RoofSteps") != null:
+		return
+	var steps := StaticBody3D.new()
+	steps.name = "RoofSteps"
+	var wall := shed.get_node_or_null("WallN") as MeshInstance3D
+	var roof := shed.get_node_or_null("Roof") as MeshInstance3D
+	var wood: Material = wall.material_override if wall != null else null
+	if wood == null and roof != null:
+		wood = roof.material_override
+	# 台阶：x / z 是**掩体局部坐标**（掩体在 (0,0,0) 时西墙在 x = −1.9）
+	var spec := [
+		[Vector3(-3.0, 0.25, 1.4), 0.5],
+		[Vector3(-3.4, 0.50, 0.6), 1.0],
+		[Vector3(-3.0, 0.75, -0.2), 1.5],
+	]
+	for i in spec.size():
+		var pos: Vector3 = spec[i][0]
+		var h: float = spec[i][1]
+		var mi := MeshInstance3D.new()
+		mi.name = "Step%d" % i
+		var bm := BoxMesh.new()
+		bm.size = Vector3(1.2, h, 1.2)
+		mi.mesh = bm
+		if wood != null:
+			mi.material_override = wood
+		mi.position = pos
+		steps.add_child(mi)
+		var cs := CollisionShape3D.new()
+		var bx := BoxShape3D.new()
+		bx.size = bm.size
+		cs.shape = bx
+		cs.position = pos
+		steps.add_child(cs)
+	shed.add_child(steps)
+	print("[Parkour] 房顶补上碰撞 + 西侧三级台阶（0.5 / 1.0 / 1.5 m）")
 
 
 # --- 路线 ---------------------------------------------------------------------
@@ -549,6 +608,8 @@ func _spawn_settlement() -> void:
 ## 牢笼罩住 `ReturnPad`（回初始平台的传送台）—— 它本来就是唯一的退路，罩住就回不去。
 ## 信号塔现在也挪到了同一个位置（`Island/Props/Tower`），牢笼就是从塔顶滑下来的。
 var _trap_done := false
+var _cage: Node3D
+var _avenger: Boss
 
 
 func trap_sequence() -> void:
@@ -559,9 +620,9 @@ func trap_sequence() -> void:
 	if pad == null:
 		push_warning("[Parkour] 找不到 ReturnPad，牢笼跳过")
 		return
-	var cage := _build_cage(pad)
+	_cage = _build_cage(pad)
 	var tw := create_tween()
-	tw.tween_property(cage, "global_position",
+	tw.tween_property(_cage, "global_position",
 		pad.global_position + Vector3(0.0, 0.02, 0.0), 0.45) 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
 		Sfx.play("ui_open", 4.0)
@@ -581,8 +642,12 @@ func _build_cage(pad: Node3D) -> Node3D:
 	steel.roughness = 0.4
 	var half := 1.5
 	var h := 2.6
-	var bar := 0.09
-	var offs := [-1.2, -0.6, 0.0, 0.6, 1.2]
+	var bar := 0.07
+	# 2026-10-20 用户：「牢笼密集一点」—— 间距从 0.6 m 收到 **0.3 m**
+	# （每面 11 根、顶盖 22 根，合计 66 根；之前是每面 5 根、顶 10 根）
+	var offs: Array[float] = []
+	for k in range(-5, 6):
+		offs.append(float(k) * 0.3)
 	for side in 4:
 		for t in offs:
 			var pos := Vector3(t, h * 0.5, half)
@@ -634,11 +699,34 @@ func _spawn_avenger(pad: Node3D) -> void:
 	get_parent().add_child(boss)
 	boss.global_position = pad.global_position + Vector3(3.5, 0.0, 2.0)
 	boss.rotation.y = PI
+	# 用户 2026-10-20：「打败倭瓜优香后牢笼解除，倭瓜优香不能复活」
+	boss.respawn_on_death = false
+	_avenger = boss
+	if not boss.died.is_connected(_on_avenger_died):
+		boss.died.connect(_on_avenger_died)
 	var game := get_parent()
 	if game != null and game.has_method("_on_gate_boss"):
 		game.call("_on_gate_boss", boss)
 	holder.queue_free()
+	# 用户：「真正拾取 5090 后视角强制锁定倭瓜优香一秒钟」
+	var player := get_tree().get_first_node_in_group("player") as Player
+	if player != null:
+		player.look_at_node(boss, 1.0)
 	var fut := get_tree().get_first_node_in_group("futures")
 	if fut != null and fut.has_method("boss_line"):
 		fut.call("boss_line", "爱丽丝还我十万美刀！！！")
 	print("[Parkour] 倭瓜优香登场：爱丽丝还我十万美刀！！！")
+
+
+## 倭瓜优香倒下：牢笼升回去消失（用户：「打败倭瓜优香后牢笼解除」），它本人不复活
+## （`respawn_on_death = false`，见 `boss.gd::_die()`）。
+func _on_avenger_died(_by_damage: float) -> void:
+	if _cage != null and is_instance_valid(_cage):
+		var cage := _cage
+		_cage = null
+		var tw := create_tween()
+		tw.tween_property(cage, "global_position",
+			cage.global_position + Vector3(0.0, 9.0, 0.0), 0.5) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(cage.queue_free)
+		Sfx.play("ui_open", 4.0)
+	print("[Parkour] 倭瓜优香倒下 → 牢笼解除")
