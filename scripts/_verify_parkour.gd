@@ -1904,13 +1904,26 @@ func _test_ram_loot() -> void:
 	_check(freq_ok, "同代同容量下频率越高越贵（DDR3 1333 < 1600 < 1866；DDR5 4800 < 5600 < 6400 < 7200）")
 	var top := RamSpec.price_yuan({"ddr": "DDR5", "freq": 7200, "gb": 64, "ecc": true})
 	var low := RamSpec.price_yuan({"ddr": "DDR3", "freq": 1333, "gb": 2, "ecc": false})
-	_check(top >= 13000 and low < 200,
+	_check(top >= 22000 and low <= 20,
 		"价格跨度 ¥%d（DDR3 1333 2G 非ECC）~ ¥%d（DDR5 7200 64G ECC）" % [low, top])
+	# 用户 2026-10-20 拿实际成交价逐项核对后的**锚点**（这一条以前把 DDR3 报高了 2~5 倍）
+	var d3_8 := RamSpec.price_yuan({"ddr": "DDR3", "freq": 1600, "gb": 8, "ecc": false})
+	var d3_4 := RamSpec.price_yuan({"ddr": "DDR3", "freq": 1600, "gb": 4, "ecc": false})
+	_check(d3_8 == 70 and d3_4 == 20,
+		"DDR3 1600 8G = ¥%d、4G = ¥%d（用户实测：8G 70 / 4G 20，网上常组 4×4 代替 8×2）"
+		% [d3_8, d3_4])
 	var d5_16 := RamSpec.price_yuan({"ddr": "DDR5", "freq": 5600, "gb": 16, "ecc": false})
 	var d4_16 := RamSpec.price_yuan({"ddr": "DDR4", "freq": 2666, "gb": 16, "ecc": false})
-	_check(d5_16 >= 1200 and d4_16 >= 500,
-		"贴着 2026-10 行情：DDR5 5600 16G ¥%d、DDR4 2666 16G ¥%d（华强北最低价 1400+ / 600+）"
+	_check(d5_16 >= 1200 and d5_16 <= 1800 and d4_16 >= 389 and d4_16 <= 759,
+		"贴着 2026-10 行情：DDR5 5600 16G ¥%d（1200~1800）、DDR4 2666 16G ¥%d（389~759）"
 		% [d5_16, d4_16])
+	# DDR5 64G：**消费级与 ECC 是两个世界**（这是上一版最大的坑：上限 11480 连 ECC 下限的 62% 都不到）
+	var d5_64 := RamSpec.price_yuan({"ddr": "DDR5", "freq": 5600, "gb": 64, "ecc": false})
+	var d5_64e := RamSpec.price_yuan({"ddr": "DDR5", "freq": 5600, "gb": 64, "ecc": true})
+	_check(absf(d5_64 - 8000) <= 100,
+		"DDR5 5600 64G 消费级 ¥%d（威刚实付 7994）" % d5_64)
+	_check(d5_64e >= 18500 and d5_64e <= 19200,
+		"DDR5 5600 64G **ECC RDIMM** ¥%d（公开标价 18595~18999）" % d5_64e)
 	# ③ 第 9 / 10 段的起点牌（用户 2026-10-20：「第九段内存条的提示怎么没显示」——
 	#    生成器只给第 3~8 段立了桅杆，这两段一直没有起点牌，运行时补的）
 	var ram := _pk.get_node_or_null("RamMarket") as RamMarket
