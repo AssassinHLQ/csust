@@ -53,7 +53,17 @@ func _run() -> void:
 	var island := pk.get_node("Island") as Node3D
 	var mid := island.global_position + Vector3(0.0, 0.62, 0.0)
 	var c := shed.global_position
+	var gpu := shed.get_node_or_null("RTX5090") as Rtx5090
+	var sign_node := shed.get_node_or_null("BankSign") as BankSign
+	print("[shots] 5090：%d 面" % (gpu.triangle_count() if gpu != null else -1))
+	if sign_node != null:
+		print("[shots] BANK：%.2f × %.2f m，%d 面，yaw %.0f°" % [
+			sign_node.width, sign_node.height, sign_node.sign_tris,
+			rad_to_deg(sign_node.rotation.y)])
 	await _shot(out, "1_roof_gpu", c + Vector3(5.0, 3.6, -6.2), c + Vector3(-0.2, 2.7, 0.2))
+	# 从**落点方向**（岛东侧）看过去：BANK 招牌应该正对镜头
+	await _shot(out, "1b_bank", c + Vector3(10.5, 3.2, 4.2), c + Vector3(0.6, 2.9, 0.2))
+	await _shot(out, "1c_bank_close", c + Vector3(3.6, 3.4, 3.2), c + Vector3(1.2, 2.9, 0.2))
 	await _shot(out, "2_roof_side", c + Vector3(-8.0, 2.2, -4.0), c + Vector3(-0.8, 2.2, 0.4))
 	await _shot(out, "3_steps", c + Vector3(-7.4, 2.0, 3.6), c + Vector3(-2.2, 1.0, -0.2))
 

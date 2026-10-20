@@ -61,9 +61,20 @@ const ENTRIES := [
 		"author": "爱给网（aigei.com）用户上传，作者未署名",
 		"license": "爱给网模型：仅限学习交流，不可商用；本仓库不分发，克隆者需自行合法取得",
 		"distributed": false,
-		"source": "https://www.aigei.com/（用户本地下载的 RTX5090simplified.obj）",
+		"source": "https://www.aigei.com/（用户本地下载的 RTX5090.obj，4.5 MB / 29,480 面）",
 		"license_file": "",
-		"note": "2026-10-20 用户提供；`.gitignore` 排除了整个目录。缺这个文件时屋顶只是没有卡，游戏照常跑",
+		"note": "2026-10-20 用户提供并当天换成高模（同目录还留着 945 KB 的 RTX5090simplified.obj）；`.gitignore` 排除了整个目录。缺这个文件时屋顶用程序化占位卡，游戏照常跑",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/bank",
+		"title": "BANK 招牌（最后平台小屋屋顶）",
+		"author": "使用者自制（Rhino 导出 OBJ）",
+		"license": "归使用者所有，可随仓库分发",
+		"distributed": true,
+		"source": "用户 2026-10-20 提供的桌面文件 BANK.obj",
+		"license_file": "",
+		"note": "1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 没给出来，仓库补了一份最小 `BANK.mtl`",
 	},
 	# ---------- 代码与插件 ----------
 	{

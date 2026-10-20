@@ -3,7 +3,9 @@ extends Node3D
 ## 屋顶上的 **RTX 5090**（2026-10-20 用户：「房子上面放一个 5090……5090 也是加入
 ## 资产的，全新正版现价 59999」）。
 ##
-## 模型：`models/rtx5090/RTX5090simplified.obj`（用户从爱给网下的 OBJ，945 KB 简化版）。
+## 模型：`models/rtx5090/RTX5090.obj`（用户 2026-10-20 换的高模，4.5 MB / **2.9 万面**，
+## 原来是同目录的 `RTX5090simplified.obj`。用户原话：「5090 换这个好看些虽然更加消耗性能，
+## 但是反正我们都上高斯泼溅了，不管了」）。
 ## 摆位：由 `parkour.gd::_spawn_roof_gpu()` 挂到 `Island/Props/Shed`（最后平台的掩体）
 ## 屋顶上，局部 y = 2.4（屋顶顶面）。
 ##
@@ -16,7 +18,7 @@ extends Node3D
 ##
 ## ⚠️ 模型轴不确定（OBJ 可能是 Y-up / Z-up），所以 `_build()` 里**按包围盒的最长轴**
 ##    自动转成「长边沿 X、平放」，再按最长边缩到 `LONG_SIDE`。
-const MODEL := "res://models/rtx5090/RTX5090simplified.obj"
+const MODEL := "res://models/rtx5090/RTX5090.obj"
 ## 全新正版现价（用户 2026-10-20 给的数）
 const PRICE := 59999
 const DISPLAY_NAME := "RTX 5090 24G"
@@ -72,8 +74,8 @@ func _build() -> void:
 		-after.get_center().z * s)
 
 	rotate_y(0.6)            # 稍微斜放，别正对一条棱
-	print("[Rtx5090] 屋顶 5090 就位：模型原始尺寸 %s → 缩放 %.2f（长边 %.2f m）"
-		% [str(box.size.snappedf(0.01)), s, LONG_SIDE])
+	print("[Rtx5090] 屋顶 5090 就位：模型原始尺寸 %s → 缩放 %.4f（长边 %.2f m，%d 个三角面）"
+		% [str(box.size.snappedf(0.01)), s, LONG_SIDE, triangle_count()])
 
 
 ## 没有 OBJ 时的占位卡：一块黑 PCB + 银灰罩子 + 两个风扇圈（尺寸和真卡对齐）。
@@ -194,6 +196,23 @@ func _take() -> void:
 ## 自检用
 func price() -> int:
 	return PRICE
+
+
+## 现在挂着的模型有多少三角面（自检用：确认换成的是 2.9 万面的高模，
+## 不是又退回 945 KB 的 `RTX5090simplified`）。
+func triangle_count() -> int:
+	var n := 0
+	for h in get_children():
+		for c in h.get_children():
+			var mi := c as MeshInstance3D
+			if mi == null or mi.mesh == null:
+				continue
+			for s in mi.mesh.get_surface_count():
+				var arr := mi.mesh.surface_get_arrays(s)
+				var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+				var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+				n += (idx.size() / 3) if not idx.is_empty() else (verts.size() / 3)
+	return n
 
 
 func taken() -> bool:

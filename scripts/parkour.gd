@@ -102,6 +102,7 @@ func _ready() -> void:
 	_load_best()
 	_load_run()
 	_spawn_roof_gpu()
+	_spawn_bank_sign()
 	_spawn_settlement()
 	_ensure_roof_solid()
 
@@ -118,6 +119,22 @@ func _spawn_roof_gpu() -> void:
 	gpu.name = "RTX5090"
 	gpu.position = Vector3(0.0, 2.5, 0.0)      # 屋顶顶面（2.4 + 0.2 / 2）
 	shed.add_child(gpu)
+
+
+## 屋顶的 **BANK 招牌**（2026-10-20 用户：「在这个房顶上面放一个 BANK 的牌子，
+## 我已经做好模型放桌面了，你来缩放一下适配大小，这样子一个简单的银行就做好了」）。
+##
+## 站在屋顶**东侧**、正面朝**第 12 段下降链的落点**（岛东缘那一带）——
+## 玩家从跑酷链走过来第一眼就看见它；同时不压住屋顶中间的 5090。
+func _spawn_bank_sign() -> void:
+	var shed := get_node_or_null("Island/Props/Shed") as Node3D
+	if shed == null or shed.get_node_or_null("BankSign") != null:
+		return
+	var sign := BankSign.new()
+	sign.name = "BankSign"
+	sign.position = Vector3(1.35, 2.5, 0.2)     # 屋顶顶面
+	shed.add_child(sign)
+	sign.face_towards(Vector3(-583.5, sign.global_position.y, -9.5))
 
 
 ## 房顶必须**能站人**（2026-10-20 用户：「房顶怎么没有碰撞箱，跳上去掉下来了」）——

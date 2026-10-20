@@ -2032,6 +2032,17 @@ func _test_ram_loot() -> void:
 		var steps := shed.get_node_or_null("RoofSteps") if shed != null else null
 		_check(steps != null and steps.get_child_count() >= 3,
 			"屋顶西侧有三级台阶（能跳上 2.5 m 的屋顶）")
+		# 2026-10-20 晚：屋顶再立一块 **BANK 招牌**（用户的 Rhino 模型），
+		# 并且 5090 换成 2.9 万面的高模。
+		var bank := _pk.get_node_or_null("Island/Props/Shed/BankSign") as BankSign
+		_check(bank != null and absf(bank.width - 2.6) < 0.05,
+			"屋顶立着 **BANK 招牌**（%.2f × %.2f m）"
+			% [bank.width if bank != null else -1.0, bank.height if bank != null else -1.0])
+		_check(bank != null and bank.sign_tris < 5000,
+			"招牌只留字面 %d 面（`Default` 包围盒已剔除）"
+			% (bank.sign_tris if bank != null else -1))
+		_check(gpu.triangle_count() > 20000,
+			"房顶的 5090 是**高模**（%d 个三角面）" % gpu.triangle_count())
 		# 站到屋顶、卡的正上方 → 提示
 		_put(gp.x + 0.35, gp.y + 0.10, gp.z + 0.35)
 		await _wait_ms(500)
@@ -2149,7 +2160,8 @@ func _inside_decor(n: Node) -> bool:
 		if cur == null:
 			return false
 		var nm := String(cur.name)
-		if nm == "RamMarket" or nm == "ReadyZone" or nm == "RTX5090":
+		if nm == "RamMarket" or nm == "ReadyZone" or nm == "RTX5090" \
+				or nm == "BankSign":
 			return true
 	return false
 
