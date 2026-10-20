@@ -94,6 +94,7 @@ func _run() -> void:
 	var ram0 := _pk.get_node_or_null("RamMarket") as RamMarket
 	if ram0 != null:
 		ram0.rain_enabled = false
+		ram0.loot_enabled = false       # 地上那几根也别捡：前面几节会把玩家到处瞬移
 	# ⚠️ 这一套会**真的跑完一次全程**，于是 `parkour.gd` 会把那次用时写进
 	#    `user://parkour_best.cfg` —— 那是玩家真实存档。开跑前备份、收尾时还回去
 	#    （和 `_verify_settings` 测音量时的做法一样）。
@@ -111,6 +112,7 @@ func _run() -> void:
 	await _test_branch()
 	await _test_dark_boss()
 	await _test_ram_market()
+	await _test_ram_loot()
 	await _test_negative()
 	await _test_clash(game)
 	await _test_island()
@@ -1844,11 +1846,121 @@ func _test_ram_market() -> void:
 		% [hp0, _p.health, ram.drops_hit()])
 	# ⑤ 出了范围就停雨（第 8 段暗网那边不该有内存条砸下来）
 	_put(-370.00, 3.00, -1.70)
-	await _wait(6)
+	# ⚠️ 先等在飞的落点圈走完（预警 0.6 s）再采样：离开那一刻已经亮起的圈会照常
+	#    砸下来，立刻采样的话 1.5 s 内会多出一根，看起来像「范围外还在下雨」。
+	await _wait_ms(1200)
 	var before2 := ram.drops_spawned()
 	await _wait_ms(1500)
 	_check(ram.drops_spawned() == before2,
-		"走出范围（x > %.0f 东侧）就停雨（%d 根没变）" % [ram.rain_x_max, before2])
+		"走出范围（x > %.0f 东侧）就停雨（%d → %d 根）"
+		% [ram.rain_x_max, before2, ram.drops_spawned()])
+	ram.rain_enabled = false
+	_pk.enabled = true
+	_release_all()
+
+
+## ── 5h. 地上的内存条：规格 / 估价 / 拾取 → 资产 ──────────────────────────────
+## 用户 2026-10-20：「内存条是可拾取的，每次捡到内存条，随机是 ddr3/ddr4/ddr5，
+## 容量随机 2/4/8/16/32/64G……每次随机是 ECC 服务器条、非 ECC 台式条。捡到的
+## 内存条换算成为资产，价格行情自己查网络。天上掉下来的内存条不算，只有躺在地上
+## 的可以捡」。
+func _test_ram_loot() -> void:
+	print("\n========== 5h. 地上的内存条（可拾取 → 资产）==========")
+	# ① 规格空间：3 代 × 6 容量 × ECC/非ECC
+	_check(RamSpec.combo_count() == 36,
+		"规格空间 = 3 代 × 6 容量 × 2（ECC/非ECC）= **%d 种**" % RamSpec.combo_count())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261020
+	var seen := {}
+	for _i in 6000:
+		var sp := RamSpec.roll(rng)
+		seen[RamSpec.describe(sp, true)] = true
+	_check(seen.size() == 36, "6000 次抽取把 36 种全抽到了（%d/36）" % seen.size())
+	# ② 估价：同一代越大越贵、ECC 比非 ECC 贵；顶配过万、入门两位数
+	var mono := true
+	for ddr in RamSpec.DDRS:
+		var last := 0
+		for gb in RamSpec.SIZES:
+			var pc := RamSpec.price_yuan({"ddr": ddr, "gb": gb, "ecc": false})
+			var ec := RamSpec.price_yuan({"ddr": ddr, "gb": gb, "ecc": true})
+			if pc <= last or ec <= pc:
+				mono = false
+			last = pc
+	_check(mono, "每代都是「容量越大越贵、ECC 比非 ECC 贵」")
+	var top := RamSpec.price_yuan({"ddr": "DDR5", "gb": 64, "ecc": true})
+	var low := RamSpec.price_yuan({"ddr": "DDR3", "gb": 2, "ecc": false})
+	_check(top >= 10000 and low < 200,
+		"价格跨度 ¥%d（DDR3 2G 非ECC）~ ¥%d（DDR5 64G ECC）" % [low, top])
+	var d5_16 := RamSpec.price_yuan({"ddr": "DDR5", "gb": 16, "ecc": false})
+	var d4_16 := RamSpec.price_yuan({"ddr": "DDR4", "gb": 16, "ecc": false})
+	_check(d5_16 >= 1200 and d4_16 >= 500,
+		"贴着 2026-10 行情：DDR5 16G ¥%d、DDR4 16G ¥%d（华强北最低价 1400+ / 600+）"
+		% [d5_16, d4_16])
+	# ③ 地上真的躺着：每根都贴着某块台面，绝不是天上 20 m 掉下来的
+	var ram := _pk.get_node_or_null("RamMarket") as RamMarket
+	_check(ram != null, "有 `RamMarket` 节点")
+	if ram == null:
+		return
+	var n_ground := ram.ground_count()
+	_check(n_ground >= 10, "地上躺着 **%d 根**可捡的内存条" % n_ground)
+	var tops: Array[float] = []
+	for i in range(_pk.segment_start(8), _pk.segment_start(10)):
+		var bb := _pk.box_at(i)
+		if bb.size.x >= 1.0:
+			tops.append(_pk.top_at(i))
+	var lying := 0
+	var worst := 0.0
+	for p in ram.ground_positions():
+		var best := 99.0
+		for t in tops:
+			best = minf(best, absf(p.y - t))
+		worst = maxf(worst, best)
+		if best <= 0.30:
+			lying += 1
+	_check(lying == n_ground and n_ground > 0,
+		"每一根都**躺在台面上**（离台面最远 %.2f m，容差 0.30 m）" % worst)
+	# ④ 捡一根：人站上去 → 资产 += 这一根的价格，节点消失
+	var fut := _pk.get_node_or_null("Futures") as ParkourFutures
+	_check(fut != null, "有 `Futures`（资产账户）")
+	if fut == null:
+		return
+	fut.assets_yuan = 0
+	fut.ram_count = 0
+	fut.ram_inventory.clear()
+	ram.loot_enabled = true
+	var at: Vector3 = ram.ground_positions()[0]
+	var before_n := ram.ground_count()
+	_pk.enabled = false
+	_put(at.x, at.y + 0.02, at.z)
+	await _wait_ms(180)
+	var rec := ram.last_picked()
+	var sp2: Dictionary = rec.get("spec", {})
+	var price := int(rec.get("price", -1))
+	_check(ram.ground_count() == before_n - 1 and ram.loot_picked_count() >= 1,
+		"站上去就捡走（地上 %d → %d 根）" % [before_n, ram.ground_count()])
+	_check(price > 0 and fut.assets_yuan == price and fut.ram_count == 1,
+		"捡到 %s → 资产 +¥%d（合计 ¥%d・%d 根）" % [
+			RamSpec.describe(sp2), price, fut.assets_yuan, fut.ram_count])
+	# ⑤ HUD：三本账都在同一行
+	var hud := fut.get_node_or_null("FuturesHUD/Debt") as Label
+	_check(hud != null and hud.text.contains("资产") and hud.text.contains("保证金")
+		and hud.text.contains("负债"),
+		"HUD 一行三本账：%s" % (hud.text if hud != null else "没有 HUD"))
+	# ⑥ 天上掉下来的**不算**：砸一根下来，资产一分不涨
+	var assets_before_drop := fut.assets_yuan
+	var count_before_drop := fut.ram_count
+	ram.force_drop_now()
+	await _wait_ms(2600)
+	_check(fut.assets_yuan == assets_before_drop and fut.ram_count == count_before_drop,
+		"天降内存条砸下来也**不进资产**（¥%d / %d 根 没变）"
+		% [fut.assets_yuan, fut.ram_count])
+	# ⑦ 补货：捡走之后过一会儿地上再长一根（不然跑一趟就绝版）
+	var n_before_refill := ram.ground_count()
+	ram.force_refill_now()
+	await _wait_ms(120)
+	_check(ram.ground_count() == n_before_refill + 1,
+		"捡走之后会补货（地上 %d → %d 根）" % [n_before_refill, ram.ground_count()])
+	ram.loot_enabled = false
 	ram.rain_enabled = false
 	_pk.enabled = true
 	_release_all()

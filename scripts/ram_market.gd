@@ -43,6 +43,27 @@ const RAM_PATH := "res://models/ram/random_access_memory_ram_ddr4.glb"
 ## 总开关（自检里逐跳回放 / 连续通关要关掉，见 `_verify_parkour.gd`）
 @export var rain_enabled := true
 
+## ── 地上躺着的内存条（可拾取 → 资产，2026-10-20）──
+##
+## 用户原话：「内存条是可拾取的，每次捡到内存条，随机是 ddr3 / ddr4 / ddr5……
+## 捡到的内存条换算成为资产……**天上掉下来的内存条不算，只有躺在地上的可以捡**」。
+##
+## 所以这里跟 `_drops`（内存条雨，砸人）**完全分开**：
+##   · `_ground` 里的每一根都**平躺在站台面上**（y = 台面 + 3 cm），走过来就捡；
+##   · `_drops` 里的一根**永远不会**变成资产（自检 §5h 专门盯这条）。
+## 捡走一根，过 `refill_interval` 秒市场里再长一根（最多长回初始条数），
+## 这样来回跑也能刷，但不是「站着不动就无限刷」。
+signal ram_picked(spec: Dictionary, price: int)
+
+## 拾取半径（m，水平距离）/ 允许的高度差
+@export var pickup_radius := 1.25
+@export var pickup_dy := 1.60
+## 捡走一根之后隔多久再长一根 / 最多同时躺几根（0 = 用初始条数）
+@export var refill_interval := 7.0
+@export var ground_cap := 0
+## 自检用总开关：早期几节回放会把人瞬移过去，先关掉免得凭空涨资产
+@export var loot_enabled := true
+
 const PCB_COL := Color(0.03, 0.22, 0.12)
 const GOLD_COL := Color(1.0, 0.78, 0.30)
 const STEEL_COL := Color(0.13, 0.14, 0.16)
@@ -66,9 +87,23 @@ var _dropped := 0
 var _hits := 0
 var _built := false
 
+## 地上躺着的（可捡）：{node, ring, spec, price, at, t}
+var _ground: Array[Dictionary] = []
+## 这里捡过的：{spec, price}，自检靠它核对「资产 += 这一根的价格」
+var _picked_log: Array[Dictionary] = []
+var _picked := 0
+var _picked_value := 0
+var _loot_serial := 0
+var _refill_t := 0.0
+var _plate_idx: Array[int] = []
+var _fut: ParkourFutures
+var _loot_rng := RandomNumberGenerator.new()
+var _glow_mat: StandardMaterial3D
+
 
 func _ready() -> void:
 	_pk = get_parent() as Parkour
+	_loot_rng.randomize()
 	# 路线要等 Parkour._ready() 才建好，而子节点先 ready —— 推到下一帧
 	_build.call_deferred()
 
@@ -77,6 +112,7 @@ func _physics_process(delta: float) -> void:
 	if not _built:
 		return
 	_tick_rain(delta)
+	_tick_ground(delta)
 
 
 # --- 建场景 -------------------------------------------------------------------
@@ -94,9 +130,10 @@ func _build() -> void:
 	_build_truss()
 	_build_hanging_racks()
 	_build_tower_fins()
+	_build_ground_loot(first, last)
 	_flush_multimeshes()
-	print("[RamMarket] 内存条市场就位：%d 根装饰条（x %.1f ~ %.1f）"
-		% [_xf.size(), rain_x_min, rain_x_max])
+	print("[RamMarket] 内存条市场就位：%d 根装饰条（x %.1f ~ %.1f）、地上 %d 根可捡"
+		% [_xf.size(), rain_x_min, rain_x_max, _ground.size()])
 
 
 ## 量 GLB：把两个 MeshInstance3D 的包围盒合起来（**含 GLB 根节点的缩放**）。
@@ -402,7 +439,190 @@ func _tick_drops(delta: float) -> void:
 	_drops = keep
 
 
+## --- 地上躺着的内存条（可拾取 → 资产）------------------------------------------
+##
+## ⚠️ 跟上面的「内存条雨」是两套东西：雨里的 `_drops` 是**危险物**（砸掉血、碰完就没），
+##    这里 `_ground` 才是**可拾取物**。用户 2026-10-20 特别强调：
+##    「天上掉下来的内存条不算，只有躺在地上的可以捡」—— 所以 `_pick()` 只从
+##    `_ground` 里删，雨滴就算砸断腿也不会进资产账户（自检 §5h 的第 ⑥ 条盯着）。
+
+func _build_ground_loot(first: int, last: int) -> void:
+	_glow_mat = StandardMaterial3D.new()
+	_glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_glow_mat.albedo_color = Color(1.0, 0.80, 0.35, 0.30)
+	_glow_mat.emission_enabled = true
+	_glow_mat.emission = Color(1.0, 0.72, 0.22)
+	_glow_mat.emission_energy_multiplier = 1.6
+	_plate_idx.clear()
+	for i in range(first, last + 1):
+		var b := _pk.box_at(i)
+		if b.size.x < 1.0 or b.size.z < 0.6:
+			continue                 # 太窄的落脚点（螺旋塔内侧）不放，免得整根悬空
+		_plate_idx.append(i)
+	if _plate_idx.is_empty():
+		push_warning("[RamMarket] 第 9~10 段没有能放内存条的台子")
+		return
+	for i in _plate_idx:
+		_spawn_ground(i)
+	if ground_cap <= 0:
+		ground_cap = _ground.size()
+	print("[RamMarket] 地上内存条：%d 根躺在 %d 块台上（捡走 %.0f s 后补一根）"
+		% [_ground.size(), _plate_idx.size(), refill_interval])
+
+
+## 在 1 号站台上放一根：平躺（模型本来就是「长边沿 x」的姿态，不用转），
+## 底下垫一个金色呼吸圈当「可拾取」标记。
+func _spawn_ground(i: int) -> Dictionary:
+	var b := _pk.box_at(i)
+	var top := _pk.top_at(i)
+	var c := b.position + b.size * 0.5
+	var at := Vector3(c.x + randf_range(-0.22, 0.22), top + 0.03,
+		c.z + randf_range(-0.18, 0.18))
+	var root := Node3D.new()
+	root.name = "Loot_%d" % _loot_serial
+	_loot_serial += 1
+	root.position = at
+	root.rotation = Vector3(0.0, randf_range(0.0, TAU), 0.0)
+	# 8 倍 → 一根 1.46 m 长，比装饰条（10 倍）小一号，躺在 2.4~3.7 m 的台上刚好
+	var s := 8.0
+	for part in _parts:
+		var mi := MeshInstance3D.new()
+		mi.mesh = part["mesh"]
+		if part["mat"] != null:
+			mi.material_override = part["mat"]
+		mi.transform = Transform3D(Basis.from_scale(Vector3(s, s, s)), Vector3.ZERO) \
+			* (part["rel"] as Transform3D)
+		root.add_child(mi)
+	var ring := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.62
+	cyl.bottom_radius = 0.62
+	cyl.height = 0.02
+	cyl.radial_segments = 24
+	ring.mesh = cyl
+	ring.material_override = _glow_mat
+	ring.position = Vector3(0.0, -0.012, 0.0)
+	root.add_child(ring)
+	add_child(root)
+	# 抽规格：3 代 × 6 容量 × ECC/非ECC = 36 种（见 `RamSpec`）
+	var spec := RamSpec.roll(_loot_rng)
+	var price := RamSpec.price_yuan(spec)
+	var rec := {"node": root, "ring": ring, "spec": spec, "price": price,
+		"at": at, "t": randf_range(0.0, TAU)}
+	_ground.append(rec)
+	return rec
+
+
+func _tick_ground(delta: float) -> void:
+	if not loot_enabled:
+		return
+	if _player == null:
+		_player = get_tree().get_first_node_in_group("player") as Player
+		if _player == null:
+			return
+	var p := _player.global_position
+	var keep: Array[Dictionary] = []
+	var picked: Array[Dictionary] = []
+	for g in _ground:
+		var n := g["node"] as Node3D
+		if not is_instance_valid(n):
+			continue
+		g["t"] = float(g["t"]) + delta
+		var ring := g["ring"] as MeshInstance3D
+		if is_instance_valid(ring):
+			ring.scale = Vector3.ONE * (1.0 + 0.10 * sin(float(g["t"]) * 2.6))
+		var d := p - (g["at"] as Vector3)
+		if Vector2(d.x, d.z).length() <= pickup_radius and absf(d.y) <= pickup_dy:
+			picked.append(g)
+			continue
+		keep.append(g)
+	_ground = keep
+	for g in picked:
+		_pick(g)
+	_tick_refill(delta)
+
+
+func _pick(g: Dictionary) -> void:
+	var n := g["node"] as Node3D
+	if is_instance_valid(n):
+		n.queue_free()
+	var spec: Dictionary = g["spec"]
+	var price := int(g["price"])
+	_picked += 1
+	_picked_value += price
+	_picked_log.append({"spec": spec, "price": price})
+	ram_picked.emit(spec, price)
+	if _fut == null:
+		_fut = _pk.get_node_or_null("Futures") as ParkourFutures
+	if _fut != null:
+		_fut.add_ram(spec, price)
+	Sfx.play("ui_slider", 0.0)
+	print("[RamMarket] 捡到 %s → ¥%d（累计 %d 根 / ¥%d）"
+		% [RamSpec.describe(spec, true), price, _picked, _picked_value])
+
+
+## 捡走一根就少一根：`refill_interval` 秒后在不贴着玩家的台上再长一根。
+func _tick_refill(delta: float) -> void:
+	if _plate_idx.is_empty() or _ground.size() >= ground_cap:
+		_refill_t = refill_interval
+		return
+	_refill_t -= delta
+	if _refill_t > 0.0:
+		return
+	_refill_t = refill_interval
+	_spawn_far_from_player()
+
+
+func _spawn_far_from_player() -> void:
+	var p := _player.global_position if _player != null else Vector3.ZERO
+	for _try in 10:
+		var i := _plate_idx[randi() % _plate_idx.size()]
+		var b := _pk.box_at(i)
+		var c := b.position + b.size * 0.5
+		if Vector2(c.x - p.x, c.z - p.z).length() < 2.6:
+			continue
+		_spawn_ground(i)
+		return
+	_spawn_ground(_plate_idx[randi() % _plate_idx.size()])
+
+
 ## --- 自检用 ---
+func ground_count() -> int:
+	return _ground.size()
+
+
+func ground_positions() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for g in _ground:
+		out.append(g["at"] as Vector3)
+	return out
+
+
+func ground_specs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for g in _ground:
+		out.append(g["spec"] as Dictionary)
+	return out
+
+
+func loot_picked_count() -> int:
+	return _picked
+
+
+func loot_picked_value() -> int:
+	return _picked_value
+
+
+func last_picked() -> Dictionary:
+	return _picked_log[-1] if not _picked_log.is_empty() else {}
+
+
+func force_refill_now() -> void:
+	if loot_enabled and _ground.size() < ground_cap:
+		_spawn_far_from_player()
+
+
 func stick_count() -> int:
 	return _xf.size()
 

@@ -81,6 +81,17 @@ var margin := 10.0
 var debt := 0
 var liquidations := 0
 var collapses := 0
+## ── 资产（实物，2026-10-20）──
+##
+## 用户原话：「除了保证金、负债，还要新增资产，内存条那边……捡到的内存条换算成为资产」。
+## 所以第三本账是**元**（内存条几百到一万多，用「万」看太糊）：
+##   `assets_yuan` 累计金额 / `ram_count` 根数 / `ram_inventory` 每种规格各几根。
+##
+## ⚠️ 强平（爆仓）**只归零保证金**：内存条是你兜里的货，爆仓不清算、不抵债、也不
+##    会被「重新开仓」那 0.9 s 的补钱覆盖。三本账各管各的。
+var assets_yuan := 0
+var ram_count := 0
+var ram_inventory := {}
 ## 结算过几次 / 最近一次结算的文案
 var settlements := 0
 var _last_settle := ""
@@ -500,7 +511,7 @@ func _build_hud() -> void:
 	_debt_label.name = "Debt"
 	_debt_label.anchor_left = 1.0
 	_debt_label.anchor_right = 1.0
-	_debt_label.offset_left = -620.0
+	_debt_label.offset_left = -960.0
 	_debt_label.offset_right = -28.0
 	_debt_label.offset_top = 100.0
 	_debt_label.offset_bottom = 136.0
@@ -509,8 +520,8 @@ func _build_hud() -> void:
 	_debt_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.62, 1))
 	_debt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_debt_label.add_theme_constant_override("outline_size", 6)
-	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥0 万　强平 0 次" % margin
 	_hud_layer.add_child(_debt_label)
+	_update_hud_text()
 
 	# 第二行：最近一次结算（踩板时 +2.31% / −3.87% 就写在这儿，钱也跟着变）
 	_result_label = Label.new()
@@ -821,11 +832,49 @@ func liquidate(reason := "强制平仓") -> void:
 	liquidated.emit(debt, loss)
 
 
+## 捡到一根内存条 → 记进资产账。由 `RamMarket._pick()` 调（规格与价格都算好了）。
+##
+## 价格用 `RamSpec.price_yuan()`（2026-10 行情，见那个脚本顶部的注释）。
+func add_ram(spec: Dictionary, price: int) -> void:
+	var yuan := maxi(price, 0)
+	assets_yuan += yuan
+	ram_count += 1
+	var key := RamSpec.describe(spec, true)
+	ram_inventory[key] = int(ram_inventory.get(key, 0)) + 1
+	_update_hud_text()
+	if _result_label != null:
+		_result_label.text = "刚捡到：%s　+¥%s　（资产 ¥%s・%d 根）" % [
+			RamSpec.describe(spec), _fmt_yuan(yuan),
+			_fmt_yuan(assets_yuan), ram_count]
+		_result_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55, 1))
+	_banner_text("拾到 %s → 资产 +¥%s（合计 ¥%s）" % [
+		RamSpec.describe(spec), _fmt_yuan(yuan), _fmt_yuan(assets_yuan)],
+		Color(1.0, 0.86, 0.42))
+
+
+## 三本账合起来：保证金（万→元）+ 实物资产 − 负债
+func net_worth_yuan() -> int:
+	return int(round(margin * 10000.0)) + assets_yuan - debt * 10000
+
+
+## "12650" → "12,650"（HUD 上的钱要能一眼数清位数）
+static func _fmt_yuan(v: int) -> String:
+	var s := str(v)
+	var out := ""
+	var n := s.length()
+	for i in n:
+		if i > 0 and (n - i) % 3 == 0:
+			out += ","
+		out += s[i]
+	return out
+
+
 func _update_hud_text() -> void:
 	if _debt_label == null:
 		return
-	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　强平 %d 次%s" % [
-		margin, debt, liquidations, "　对冲✓" if hedged else ""]
+	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根）　强平 %d 次%s" % [
+		margin, debt, _fmt_yuan(assets_yuan), ram_count, liquidations,
+		"　对冲✓" if hedged else ""]
 
 
 func _banner_text(text: String, col: Color) -> void:
