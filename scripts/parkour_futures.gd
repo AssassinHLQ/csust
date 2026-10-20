@@ -92,6 +92,8 @@ var collapses := 0
 var assets_yuan := 0
 var ram_count := 0
 var ram_inventory := {}
+## 非内存条的实物件数（现在只有屋顶那块 RTX 5090）
+var gpu_count := 0
 ## 结算过几次 / 最近一次结算的文案
 var settlements := 0
 var _last_settle := ""
@@ -129,6 +131,7 @@ var _flash: ColorRect
 
 
 func _ready() -> void:
+	add_to_group("futures")
 	_rng.seed = 2067
 	_lot_rng.seed = 2068          # 独立流，见 `_lot_rng` 的注释
 	margin = start_margin
@@ -836,19 +839,28 @@ func liquidate(reason := "强制平仓") -> void:
 ##
 ## 价格用 `RamSpec.price_yuan()`（2026-10 行情，见那个脚本顶部的注释）。
 func add_ram(spec: Dictionary, price: int) -> void:
-	var yuan := maxi(price, 0)
-	assets_yuan += yuan
-	ram_count += 1
 	var key := RamSpec.describe(spec, true)
 	ram_inventory[key] = int(ram_inventory.get(key, 0)) + 1
+	ram_count += 1
+	_add_asset(RamSpec.describe(spec), price)
+
+
+## 非内存条的资产（现在只有屋顶那块 RTX 5090，¥59,999）——同一本账。
+func add_asset(label: String, price: int) -> void:
+	gpu_count += 1
+	_add_asset(label, price)
+
+
+func _add_asset(label: String, price: int) -> void:
+	var yuan := maxi(price, 0)
+	assets_yuan += yuan
 	_update_hud_text()
 	if _result_label != null:
-		_result_label.text = "刚捡到：%s　+¥%s　（资产 ¥%s・%d 根）" % [
-			RamSpec.describe(spec), _fmt_yuan(yuan),
-			_fmt_yuan(assets_yuan), ram_count]
+		_result_label.text = "刚捡到：%s　+¥%s　（资产 ¥%s）" % [
+			label, _fmt_yuan(yuan), _fmt_yuan(assets_yuan)]
 		_result_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55, 1))
 	_banner_text("拾到 %s → 资产 +¥%s（合计 ¥%s）" % [
-		RamSpec.describe(spec), _fmt_yuan(yuan), _fmt_yuan(assets_yuan)],
+		label, _fmt_yuan(yuan), _fmt_yuan(assets_yuan)],
 		Color(1.0, 0.86, 0.42))
 
 
@@ -872,8 +884,9 @@ static func _fmt_yuan(v: int) -> String:
 func _update_hud_text() -> void:
 	if _debt_label == null:
 		return
-	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根）　强平 %d 次%s" % [
-		margin, debt, _fmt_yuan(assets_yuan), ram_count, liquidations,
+	var extra := "" if gpu_count <= 0 else " + %d 件" % gpu_count
+	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根%s）　强平 %d 次%s" % [
+		margin, debt, _fmt_yuan(assets_yuan), ram_count, extra, liquidations,
 		"　对冲✓" if hedged else ""]
 
 

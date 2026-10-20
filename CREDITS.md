@@ -26,6 +26,8 @@
 | 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
 |---|---|---|---|---|---|
 | 全部 GDScript 代码、场景、着色器 | 本项目作者 | MIT | ✅ | `scripts/`、`scenes/`、`project.godot` | 见 [LICENSE](LICENSE) |
+| 全景天空盒（粉/日/夜/黄昏） | AllSky Free（Richard Whitelock） | MIT | ✅ | `assets/sky/`，[AllSkyFree_Godot](https://github.com/rpgwhitelock/AllSkyFree_Godot) | 原图 8192~16384 缩到 4096×2048 JPEG |
+| 空地地砖贴图 + 法线图 | 本项目作者（程序生成） | MIT | ✅ | `assets/tex/`，`tools/make_lot_paver.py` | 完全可平铺 |
 | [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | ReconWorldLab | MIT | ✅ | `addons/gdgs/` | 高斯泼溅渲染插件；原许可保留在 `addons/gdgs/LICENSE` |
 
 ## 二、角色与 Boss 模型（**全部不随仓库分发**）
@@ -43,6 +45,7 @@
 | 飞猪优香（第二位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_pig/`，来源 `飞猪优香 (2)_by_一个睿智.zip` | `猪猪优香.fbx`；`uv/` 里两张是作者的成品渲染图，已挪到 `ref/` 当贴图基准 |
 | 霸王龙优香（第一位 Boss） | Blue Archive 玩家二创（原作者未标注） | 专有 | ❌ | `models/boss/` | `优香霸王龙.fbx`，73 骨、无动画 |
 | 七名同伴（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/companions/`，来源 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包，整理者 lihaohong6 / Peterli） | 均取初始形态；凯伊用 `Kei_ext.glb` |
+| RTX 5090 显卡模型（最后平台房顶的资产） | 爱给网（aigei.com）用户上传，作者未署名 | 专有（仅限学习交流，不可商用） | ❌ | `models/rtx5090/`，来源：爱给网下载的 `RTX5090simplified.obj` | 945 KB 简化版；2026-10-20 用户提供；`.gitignore` 排除了整个目录，缺它时屋顶只是没有卡 |
 | 主角 Arisu 模型与贴图、校园碰撞网格 | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/Arisu*.glb`、`Arisu*.png`、`school.collision.glb`，来源同上 | 贴图由 Godot 导入 glb 时自动解包 |
 | 校园 / 画室609 高斯泼溅扫描 | 由使用者提供，**权利状态未核实** | 未核实 | ❌ | `splatdata/*.sogdata` | 拍摄权、场地权、肖像权、再分发权均未确认；缺失时用 `-- --splat=off` |
 | 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |

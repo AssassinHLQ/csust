@@ -273,9 +273,13 @@ func _build_hanging_racks() -> void:
 		var z := -4.9 + sin(float(row) * 0.9) * 1.4
 		_add_slab(Vector3(x, 11.4, z), Vector3(0.10, 4.6, 0.10), _steel_mat)
 		for k in 5:
-			var dz := (float(k) - 2.0) * 0.55
-			# 倒吊：yaw 绕 Y，tilt = PI 让它翻过来（尖端朝下）。**不可拾取**（10 m 高）
-			_add_stick(Vector3(x, 10.2, z + dz), PI * 0.5, PI - 0.08, 12.0, false)
+			# ⚠️ 2026-10-20 用户截图：「你这个地方是内存条叠在一起吗，z-fighting 了」——
+			#    原来 5 根都是 yaw = 90°（长边沿 z，约 2.2 m），间距却只有 0.55 m，
+			#    比条子本身的宽度（0.61 m）还窄 → 五根互相穿模。
+			#    现在长边沿 x（和桁架同向），沿 z 并排、间距 0.72 m（> 0.61 m）。
+			var dz := (float(k) - 2.0) * 0.72
+			# 倒吊：tilt = PI 让它翻过来。**不可拾取**（10 m 高）
+			_add_stick(Vector3(x, 10.2, z + dz), 0.0, PI - 0.08, 12.0, false)
 		x -= 6.0
 		row += 1
 

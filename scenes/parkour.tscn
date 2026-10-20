@@ -2673,44 +2673,44 @@ omni_range = 22.0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -4)
 
 [node name="WallN" type="MeshInstance3D" parent="Island/Props/Shed" unique_id=1250884394]
-transform = Transform3D(4, 0, 0, 0, 2.6, 0, 0, 0, 0.2, 0, 1.3, -1.5)
+transform = Transform3D(4, 0, 0, 0, 2.3, 0, 0, 0, 0.2, 0, 1.15, -1.5)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
 [node name="ColN" type="CollisionShape3D" parent="Island/Props/Shed" unique_id=2113724600]
-transform = Transform3D(4, 0, 0, 0, 2.6, 0, 0, 0, 0.2, 0, 1.3, -1.5)
+transform = Transform3D(4, 0, 0, 0, 2.3, 0, 0, 0, 0.2, 0, 1.15, -1.5)
 shape = SubResource("Shape_unit")
 
 [node name="WallW" type="MeshInstance3D" parent="Island/Props/Shed" unique_id=138133880]
-transform = Transform3D(0.2, 0, 0, 0, 2.6, 0, 0, 0, 3, -1.9, 1.3, 0)
+transform = Transform3D(0.2, 0, 0, 0, 2.3, 0, 0, 0, 3, -1.9, 1.15, 0)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
 [node name="ColW" type="CollisionShape3D" parent="Island/Props/Shed" unique_id=1736994012]
-transform = Transform3D(0.2, 0, 0, 0, 2.6, 0, 0, 0, 3, -1.9, 1.3, 0)
+transform = Transform3D(0.2, 0, 0, 0, 2.3, 0, 0, 0, 3, -1.9, 1.15, 0)
 shape = SubResource("Shape_unit")
 
 [node name="WallE" type="MeshInstance3D" parent="Island/Props/Shed" unique_id=765673836]
-transform = Transform3D(0.2, 0, 0, 0, 2.6, 0, 0, 0, 3, 1.9, 1.3, 0)
+transform = Transform3D(0.2, 0, 0, 0, 2.3, 0, 0, 0, 3, 1.9, 1.15, 0)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
 [node name="ColE" type="CollisionShape3D" parent="Island/Props/Shed" unique_id=430426220]
-transform = Transform3D(0.2, 0, 0, 0, 2.6, 0, 0, 0, 3, 1.9, 1.3, 0)
+transform = Transform3D(0.2, 0, 0, 0, 2.3, 0, 0, 0, 3, 1.9, 1.15, 0)
 shape = SubResource("Shape_unit")
 
 [node name="Roof" type="MeshInstance3D" parent="Island/Props/Shed" unique_id=975943420]
-transform = Transform3D(4.4, 0, 0, 0, 0.2, 0, 0, 0, 3.4, 0, 2.7, 0)
+transform = Transform3D(4.4, 0, 0, 0, 0.2, 0, 0, 0, 3.4, 0, 2.4, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Box_unit")
 
 [node name="Lamp" type="MeshInstance3D" parent="Island/Props/Shed" unique_id=884180079]
-transform = Transform3D(0.5, 0, 0, 0, 0.1, 0, 0, 0, 0.5, 0, 2.45, 0)
+transform = Transform3D(0.5, 0, 0, 0, 0.1, 0, 0, 0, 0.5, 0, 2.15, 0)
 material_override = SubResource("Mat_lamp")
 mesh = SubResource("Box_unit")
 
 [node name="Light" type="OmniLight3D" parent="Island/Props/Shed" unique_id=933648364]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0)
 light_color = Color(1, 0.93, 0.8, 1)
 light_energy = 2.0
 omni_range = 9.0

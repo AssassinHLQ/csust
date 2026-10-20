@@ -32,6 +32,39 @@ const GROUPS := [
 ]
 
 const ENTRIES := [
+	{
+		"group": "界面与字体",
+		"path": "assets/sky",
+		"title": "全景天空盒（粉 / 日 / 夜 / 黄昏四张）",
+		"author": "AllSky Free（Richard Whitelock）",
+		"license": "MIT（可分发、可商用）",
+		"distributed": true,
+		"source": "https://github.com/rpgwhitelock/AllSkyFree_Godot",
+		"license_file": "",
+		"note": "8192~16384 原图缩到 4096×2048 JPEG；`--sky=` 切换",
+	},
+	{
+		"group": "界面与字体",
+		"path": "assets/tex",
+		"title": "空地地砖贴图 + 法线图",
+		"author": "本项目作者（程序生成）",
+		"license": "MIT",
+		"distributed": true,
+		"source": "",
+		"license_file": "LICENSE",
+		"note": "`tools/make_lot_paver.py` 生成，完全可平铺，不依赖外网素材",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/rtx5090",
+		"title": "RTX 5090 显卡模型（最后平台房顶那件资产）",
+		"author": "爱给网（aigei.com）用户上传，作者未署名",
+		"license": "爱给网模型：仅限学习交流，不可商用；本仓库不分发，克隆者需自行合法取得",
+		"distributed": false,
+		"source": "https://www.aigei.com/（用户本地下载的 RTX5090simplified.obj）",
+		"license_file": "",
+		"note": "2026-10-20 用户提供；`.gitignore` 排除了整个目录。缺这个文件时屋顶只是没有卡，游戏照常跑",
+	},
 	# ---------- 代码与插件 ----------
 	{
 		"group": "代码与插件",

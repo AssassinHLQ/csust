@@ -68,3 +68,6 @@ __pycache__/
 /tools/aholo/node_modules/
 /tools/aholo/out/
 /tools/aholo/_probe.png
+
+# RTX 5090 模型：爱给网下载，仅限本地学习使用（不可再分发）
+/models/rtx5090/

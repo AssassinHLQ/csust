@@ -101,6 +101,21 @@ func _ready() -> void:
 	_build_route()
 	_load_best()
 	_load_run()
+	_spawn_roof_gpu()
+
+
+## 最后平台的掩体屋顶上放一块 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……
+## 5090 也是加入资产的，全新正版现价 59999」）。
+##
+## **运行时生成**、不写进场景：屋顶位置跟着掩体走，写死绝对坐标以后一改房子就漂。
+func _spawn_roof_gpu() -> void:
+	var shed := get_node_or_null("Island/Props/Shed")
+	if shed == null or shed.get_node_or_null("RTX5090") != null:
+		return
+	var gpu := Rtx5090.new()
+	gpu.name = "RTX5090"
+	gpu.position = Vector3(0.0, 2.5, 0.0)      # 屋顶顶面（2.4 + 0.2 / 2）
+	shed.add_child(gpu)
 
 
 # --- 路线 ---------------------------------------------------------------------

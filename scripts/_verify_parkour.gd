@@ -2009,6 +2009,18 @@ func _test_ram_loot() -> void:
 	await _wait_ms(8000)
 	_check(ram.pickable_count() == n_before,
 		"捡走之后**不补货**（等 8 s，可捡 %d → %d 根）" % [n_before, ram.pickable_count()])
+	# ⑩ 最后平台房顶的 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……也是加入
+	#    资产的，全新正版现价 59999」）。它挂在 `Island/Props/Shed` 下，￥59999。
+	var gpu := _pk.get_node_or_null("Island/Props/Shed/RTX5090") as Rtx5090
+	_check(gpu != null and gpu.price() == 59999,
+		"最后平台的房顶上有 **RTX 5090**（¥%d）" % (gpu.price() if gpu != null else -1))
+	if gpu != null:
+		var a0 := fut.assets_yuan
+		var gp := gpu.global_position
+		_put(gp.x + 1.0, gp.y - 2.5, gp.z)
+		await _wait_ms(220)
+		_check(fut.assets_yuan == a0 + 59999,
+			"走到房檐下就收走 → 资产 +¥59,999（合计 ¥%d）" % fut.assets_yuan)
 	ram.loot_enabled = false
 	ram.rain_enabled = false
 	_pk.enabled = true
@@ -2025,7 +2037,7 @@ func _inside_decor(n: Node) -> bool:
 		if cur == null:
 			return false
 		var nm := String(cur.name)
-		if nm == "RamMarket" or nm == "ReadyZone":
+		if nm == "RamMarket" or nm == "ReadyZone" or nm == "RTX5090":
 			return true
 	return false
 
