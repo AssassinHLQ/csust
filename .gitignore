@@ -62,3 +62,9 @@ __pycache__/
 
 # ---- 如果你自己加了原创模型/场景，想让它进仓库，
 #      就把上面 /models/*.glb 那几行改成显式排除 ----
+
+# ---- Aholo CLI（tools/aholo）----
+# 依赖与临时产物不进仓库；密钥只走环境变量 AHOLO_API_KEY
+/tools/aholo/node_modules/
+/tools/aholo/out/
+/tools/aholo/_probe.png

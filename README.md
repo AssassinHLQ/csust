@@ -2779,6 +2779,7 @@ _arisu_learn/
 │  ├─ splat_compositor.gd    autoload：给当前相机自动挂 CompositorEffect（Compute 后端必需），§6.11
 │  └─ _probe_*.gd           [工具] 一次性探针（口型/枪口/时间线/泼溅渲染/FPS）
 ├─ tools/
+│  ├─ aholo/                [工具] Aholo 3DGS 重建/生成 CLI：实拍照片 → PLY/SPZ → `.sogdata`，见 `tools/aholo/README.md`
 │  ├─ make_flush_section.py [工具] 生成跑酷第 3 段「同花顺 K 线区」（12 根红绿蜡烛）+ 后 4 段西移，§1.16
 │  ├─ make_lot_paver.py     [工具] 程序生成空地地砖贴图 + 法线图（§1.14）
 │  └─ font/                 [工具] 查字体有没有你要的那些字（纯标准库 Python，§9.5 坑 1）
