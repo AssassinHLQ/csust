@@ -94,6 +94,14 @@ var ram_count := 0
 var ram_inventory := {}
 ## 非内存条的实物件数（现在只有屋顶那块 RTX 5090）
 var gpu_count := 0
+## 银行卡（元）：结算区把「资产 + 保证金」转进来，负债也从这里扣。
+var bank_yuan := 0
+
+## 交互提示（「按 F …」）：同一时刻只允许一个 owner，免得两个可交互物抢提示。
+var _prompt_owner: Object = null
+var _prompt_label: Label
+## Boss 出场台词（大号居中，4 s 淡出）
+var _line_label: Label
 ## 结算过几次 / 最近一次结算的文案
 var settlements := 0
 var _last_settle := ""
@@ -560,6 +568,44 @@ func _build_hud() -> void:
 	_banner.modulate.a = 0.0
 	_hud_layer.add_child(_banner)
 
+	# 交互提示（「按 F 拾取…」）：屏幕下方居中，常驻直到 clear_prompt()
+	_prompt_label = Label.new()
+	_prompt_label.name = "Prompt"
+	_prompt_label.anchor_left = 0.5
+	_prompt_label.anchor_right = 0.5
+	_prompt_label.anchor_top = 1.0
+	_prompt_label.anchor_bottom = 1.0
+	_prompt_label.offset_left = -420.0
+	_prompt_label.offset_right = 420.0
+	_prompt_label.offset_top = -150.0
+	_prompt_label.offset_bottom = -104.0
+	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt_label.add_theme_font_size_override("font_size", 24)
+	_prompt_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.55, 1))
+	_prompt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
+	_prompt_label.add_theme_constant_override("outline_size", 8)
+	_prompt_label.modulate.a = 0.0
+	_prompt_label.text = ""
+	_hud_layer.add_child(_prompt_label)
+
+	# Boss 台词（「爱丽丝还我十万美刀！！！」）：大字、居中、淡出
+	_line_label = Label.new()
+	_line_label.name = "BossLine"
+	_line_label.anchor_left = 0.5
+	_line_label.anchor_right = 0.5
+	_line_label.offset_left = -560.0
+	_line_label.offset_right = 560.0
+	_line_label.offset_top = 300.0
+	_line_label.offset_bottom = 400.0
+	_line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_line_label.add_theme_font_size_override("font_size", 54)
+	_line_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 1))
+	_line_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
+	_line_label.add_theme_constant_override("outline_size", 12)
+	_line_label.modulate.a = 0.0
+	_line_label.text = ""
+	_hud_layer.add_child(_line_label)
+
 	_flash = ColorRect.new()
 	_flash.name = "Flash"
 	_flash.color = Color(0.85, 0.93, 1.0, 0.0)
@@ -864,6 +910,75 @@ func _add_asset(label: String, price: int) -> void:
 		Color(1.0, 0.86, 0.42))
 
 
+## ── 结算区（2026-10-20）──
+##
+## 用户：「这个房子是结算区，可以将资产转银行卡……保证金可以退回银行卡了，转化完毕
+## 后，负债可以用银行卡里面扣钱抵押」。所以一次结算 = 三件事，顺序固定：
+##   ① 资产（内存条 + 5090）按面值全部卖进银行卡；
+##   ② 保证金退回银行卡（结算完保证金归 0，要跑下一轮得重新开仓）；
+##   ③ 用银行卡余额还负债（不够就还到 0 为止，剩下的债继续挂着）。
+## 返回一句人话总结，调用方（结算台）拿去弹横幅。
+func settle_all() -> String:
+	if assets_yuan <= 0 and margin <= 0.0 and bank_yuan <= 0 and debt <= 0:
+		return "没有可结算的东西"
+	var sold := assets_yuan
+	var refund := int(round(margin * 10000.0))
+	bank_yuan += sold + refund
+	assets_yuan = 0
+	ram_count = 0
+	gpu_count = 0
+	ram_inventory.clear()
+	margin = 0.0
+	var paid := mini(bank_yuan, debt * 10000)
+	bank_yuan -= paid
+	debt -= int(round(float(paid) / 10000.0))
+	_update_hud_text()
+	var msg := "结算：资产 ¥%s + 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
+		_fmt_yuan(sold), _fmt_yuan(refund), _fmt_yuan(bank_yuan),
+		_fmt_yuan(paid), debt]
+	_banner_text(msg, Color(0.55, 1.0, 0.7))
+	Sfx.play("ui_slider", 2.0)
+	print("[Futures] " + msg)
+	return msg
+
+
+## ── 交互提示 / Boss 台词 ──
+##
+## `owner` 是发起提示的节点：同一时刻只有一个，别的可交互物调 `ask_prompt` 会被拒绝，
+## 免得「按 F 拾取」和「按 F 结算」两句话叠在一起。
+func ask_prompt(owner: Object, text: String) -> void:
+	if _prompt_label == null:
+		return
+	if _prompt_owner != null and _prompt_owner != owner:
+		return
+	_prompt_owner = owner
+	_prompt_label.text = text
+	_prompt_label.modulate.a = 1.0
+
+
+func clear_prompt(owner: Object) -> void:
+	if _prompt_label == null or _prompt_owner != owner:
+		return
+	_prompt_owner = null
+	_prompt_label.text = ""
+	_prompt_label.modulate.a = 0.0
+
+
+func prompt_owner() -> Object:
+	return _prompt_owner
+
+
+## Boss 出场台词：大字居中，4 秒后淡出。
+func boss_line(text: String) -> void:
+	if _line_label == null:
+		return
+	_line_label.text = text
+	_line_label.modulate.a = 1.0
+	var tw := create_tween()
+	tw.tween_interval(2.8)
+	tw.tween_property(_line_label, "modulate:a", 0.0, 1.2)
+
+
 ## 三本账合起来：保证金（万→元）+ 实物资产 − 负债
 func net_worth_yuan() -> int:
 	return int(round(margin * 10000.0)) + assets_yuan - debt * 10000
@@ -885,8 +1000,9 @@ func _update_hud_text() -> void:
 	if _debt_label == null:
 		return
 	var extra := "" if gpu_count <= 0 else " + %d 件" % gpu_count
-	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根%s）　强平 %d 次%s" % [
-		margin, debt, _fmt_yuan(assets_yuan), ram_count, extra, liquidations,
+	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根%s）　银行卡 ¥%s 元　强平 %d 次%s" % [
+		margin, debt, _fmt_yuan(assets_yuan), ram_count, extra,
+		_fmt_yuan(bank_yuan), liquidations,
 		"　对冲✓" if hedged else ""]
 
 

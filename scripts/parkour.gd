@@ -102,6 +102,7 @@ func _ready() -> void:
 	_load_best()
 	_load_run()
 	_spawn_roof_gpu()
+	_spawn_settlement()
 
 
 ## 最后平台的掩体屋顶上放一块 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……
@@ -527,3 +528,117 @@ static func air_hop_reach(rise: float) -> float:
 	if t <= t_acc:
 		return 0.5 * Player.ACCEL_AIR * t * t
 	return 0.5 * Player.ACCEL_AIR * t_acc * t_acc + Player.SPEED_RUN * (t - t_acc)
+
+
+## 小屋里的结算台（2026-10-20）：站在屋里就自动把资产+保证金结算进银行卡并还债。
+func _spawn_settlement() -> void:
+	var shed := get_node_or_null("Island/Props/Shed")
+	if shed == null or shed.get_node_or_null("Settlement") != null:
+		return
+	var sp := SettlementPad.new()
+	sp.name = "Settlement"
+	sp.position = Vector3(0.0, 0.0, 0.4)
+	shed.add_child(sp)
+
+
+## ── 陷阱：牢笼 + 倭瓜优香（2026-10-20）──
+##
+## 用户：「5090 两次 F 确认后，信号塔上方会突然滑下来牢笼让我们回不去，然后出现
+## 神秘 boss 倭瓜优香，boss 出场提示是：爱丽丝还我十万美刀!!!」
+##
+## 牢笼罩住 `ReturnPad`（回初始平台的传送台）—— 它本来就是唯一的退路，罩住就回不去。
+## 信号塔现在也挪到了同一个位置（`Island/Props/Tower`），牢笼就是从塔顶滑下来的。
+var _trap_done := false
+
+
+func trap_sequence() -> void:
+	if _trap_done:
+		return
+	_trap_done = true
+	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
+	if pad == null:
+		push_warning("[Parkour] 找不到 ReturnPad，牢笼跳过")
+		return
+	var cage := _build_cage(pad)
+	var tw := create_tween()
+	tw.tween_property(cage, "global_position",
+		pad.global_position + Vector3(0.0, 0.02, 0.0), 0.45) 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		Sfx.play("ui_open", 4.0)
+		_spawn_avenger(pad))
+	Sfx.play("ui_close", 2.0)
+	print("[Parkour] 牢笼从信号塔顶滑下，罩住传送台")
+
+
+func _build_cage(pad: Node3D) -> Node3D:
+	var cage := Node3D.new()
+	cage.name = "TrapCage"
+	get_parent().add_child(cage)           # 挂到 game 下：牢笼不随 Parkour 的局部变换
+	cage.global_position = pad.global_position + Vector3(0.0, 7.6, 0.0)  # 塔顶平台下沿
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = Color(0.20, 0.21, 0.24)
+	steel.metallic = 0.8
+	steel.roughness = 0.4
+	var half := 1.5
+	var h := 2.6
+	var bar := 0.09
+	var offs := [-1.2, -0.6, 0.0, 0.6, 1.2]
+	for side in 4:
+		for t in offs:
+			var pos := Vector3(t, h * 0.5, half)
+			match side:
+				1: pos = Vector3(t, h * 0.5, -half)
+				2: pos = Vector3(half, h * 0.5, t)
+				3: pos = Vector3(-half, h * 0.5, t)
+			_add_cage_bar(cage, pos, Vector3(bar, h, bar), steel)
+	# 顶：横竖两组，像笼子盖
+	for t in offs:
+		_add_cage_bar(cage, Vector3(t, h, 0.0), Vector3(bar, bar, 2.0 * half), steel)
+		_add_cage_bar(cage, Vector3(0.0, h, t), Vector3(2.0 * half, bar, bar), steel)
+	# 碰撞：四面薄墙（不封顶，掉下来时玩家还在里面也无所谓 —— 反正出不去）
+	var body := StaticBody3D.new()
+	body.name = "Col"
+	cage.add_child(body)
+	for side in 4:
+		var cs := CollisionShape3D.new()
+		var bx := BoxShape3D.new()
+		bx.size = Vector3(2.0 * half + bar, h, 0.16) if side < 2 			else Vector3(0.16, h, 2.0 * half + bar)
+		cs.shape = bx
+		cs.position = Vector3(0.0, h * 0.5, half) if side == 0 			else Vector3(0.0, h * 0.5, -half) if side == 1 			else Vector3(half, h * 0.5, 0.0) if side == 2 			else Vector3(-half, h * 0.5, 0.0)
+		body.add_child(cs)
+	return cage
+
+
+func _add_cage_bar(parent: Node3D, pos: Vector3, size: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
+func _spawn_avenger(pad: Node3D) -> void:
+	var ps := load("res://scenes/bosses_standby.tscn") as PackedScene
+	if ps == null:
+		push_warning("[Parkour] 没有 bosses_standby.tscn，倭瓜优香来不了")
+		return
+	var holder := ps.instantiate()
+	var boss := holder.get_node_or_null("BossSquash") as Boss
+	if boss == null:
+		holder.queue_free()
+		return
+	boss.owner = null
+	holder.remove_child(boss)
+	get_parent().add_child(boss)
+	boss.global_position = pad.global_position + Vector3(3.5, 0.0, 2.0)
+	boss.rotation.y = PI
+	var game := get_parent()
+	if game != null and game.has_method("_on_gate_boss"):
+		game.call("_on_gate_boss", boss)
+	holder.queue_free()
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.has_method("boss_line"):
+		fut.call("boss_line", "爱丽丝还我十万美刀！！！")
+	print("[Parkour] 倭瓜优香登场：爱丽丝还我十万美刀！！！")

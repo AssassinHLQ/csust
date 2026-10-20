@@ -2017,10 +2017,40 @@ func _test_ram_loot() -> void:
 	if gpu != null:
 		var a0 := fut.assets_yuan
 		var gp := gpu.global_position
-		_put(gp.x + 1.0, gp.y - 2.5, gp.z)
-		await _wait_ms(220)
+		_put(gp.x + 2.2, gp.y - 2.5, gp.z)
+		await _wait_ms(160)
+		var prompt := fut.get_node_or_null("FuturesHUD/Prompt") as Label
+		_check(prompt != null and prompt.text.contains("按 F 拾取"),
+			"靠近 5090 → 提示「按 F 拾取」（实测：%s）"
+			% (prompt.text if prompt != null else "没有提示"))
+		await _press_key(KEY_F)
+		_check(prompt != null and prompt.text.contains("真的要拾取吗"),
+			"第一次 F → 弹确认「真的要拾取吗？」")
+		await _press_key(KEY_F)
+		await _wait_ms(900)          # 牢笼落地 0.45 s + 0.2 s 才轮到 Boss 出场
 		_check(fut.assets_yuan == a0 + 59999,
-			"走到房檐下就收走 → 资产 +¥59,999（合计 ¥%d）" % fut.assets_yuan)
+			"第二次 F 确认 → 资产 +¥59,999（合计 ¥%d）" % fut.assets_yuan)
+		var game := _pk.get_parent()
+		_check(game.get_node_or_null("TrapCage") != null,
+			"确认后牢笼从信号塔顶滑下来罩住传送台（TrapCage）")
+		var squash: Node = null
+		for c in game.get_children():
+			if c is Boss and String(c.name).to_lower().contains("squash"):
+				squash = c
+		_check(squash != null, "牢笼落地后 **倭瓜优香** 登场（BossSquash）")
+	# ⑪ 结算区：站进小屋 → 资产+保证金进银行卡、自动还债
+	fut.assets_yuan = 1234
+	fut.margin = 5.0
+	fut.debt = 2
+	var sp := _pk.get_node_or_null("Island/Props/Shed/Settlement") as SettlementPad
+	_check(sp != null, "小屋里有结算台（Settlement）")
+	if sp != null:
+		_put(sp.global_position.x, sp.global_position.y, sp.global_position.z)
+		await _wait_ms(300)
+		_check(fut.assets_yuan == 0 and fut.margin == 0.0 and fut.bank_yuan > 0,
+			"资产+保证金 → 银行卡 ¥%d" % fut.bank_yuan)
+		_check(fut.debt == 0,
+			"银行卡够还债 → 负债清零（剩 ¥%d）" % fut.bank_yuan)
 	ram.loot_enabled = false
 	ram.rain_enabled = false
 	_pk.enabled = true
@@ -2511,6 +2541,22 @@ func _exit_dist(b: AABB, from: Vector3, d: Vector2) -> float:
 		t = minf(t, ((b.position.z + b.size.z - from.z) / d.y) if d.y > 0.0
 			else ((b.position.z - from.z) / d.y))
 	return maxf(t, 0.0)
+
+
+## 走**真实输入路径**按一下某个键（F 拾取 / 确认都靠它）
+func _press_key(code: Key) -> void:
+	var down := InputEventKey.new()
+	down.keycode = code
+	down.physical_keycode = code
+	down.pressed = true
+	Input.parse_input_event(down)
+	await _wait(3)
+	var up := InputEventKey.new()
+	up.keycode = code
+	up.physical_keycode = code
+	up.pressed = false
+	Input.parse_input_event(up)
+	await _wait(2)
 
 
 func _put(x: float, y: float, z: float) -> void:

@@ -20,12 +20,14 @@ const MODEL := "res://models/rtx5090/RTX5090simplified.obj"
 const PRICE := 59999
 const DISPLAY_NAME := "RTX 5090 24G"
 ## 收走判定
-const PICK_RADIUS := 2.0
+const PICK_RADIUS := 2.4     # 房檐外一圈都够得着
 const PICK_DY_MIN := -3.2     # 人站在房檐下（比屋顶低 2.5 m）也能收
 const PICK_DY_MAX := 0.5
 
 var _holder: Node3D
 var _taken := false
+var _prompting := false
+var _confirming := false
 var _t := 0.0
 
 
@@ -133,23 +135,62 @@ func _physics_process(delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player == null:
 		return
+	var fut := _futures()
 	var d := player.global_position - global_position
-	if Vector2(d.x, d.z).length() > PICK_RADIUS:
+	var near := Vector2(d.x, d.z).length() <= PICK_RADIUS 		and d.y >= PICK_DY_MIN and d.y <= PICK_DY_MAX
+	if near and not _confirming:
+		if fut != null:
+			fut.ask_prompt(self, "按 F 拾取 RTX 5090（¥59,999）")
+		_prompting = true
+	elif not near and _prompting:
+		_prompting = false
+		_confirming = false
+		if fut != null:
+			fut.clear_prompt(self)
+
+
+## 第一次 F：弹「真的要拾取吗？」；第二次 F：确认收走 → 触发牢笼 + 倭瓜优香。
+## 走开（离开范围）会把确认状态取消。
+func _input(event: InputEvent) -> void:
+	if _taken or not _prompting:
 		return
-	if d.y < PICK_DY_MIN or d.y > PICK_DY_MAX:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or key.keycode != KEY_F:
 		return
-	_take()
+	var fut := _futures()
+	if fut == null or fut.prompt_owner() != self:
+		return
+	if not _confirming:
+		_confirming = true
+		fut.ask_prompt(self, "真的要拾取吗？再按 F 确认（走开取消）")
+		Sfx.play("ui_toggle", 0.0)
+	else:
+		_take()
+	get_viewport().set_input_as_handled()
+
+
+func _futures() -> ParkourFutures:
+	return get_tree().get_first_node_in_group("futures") as ParkourFutures
 
 
 func _take() -> void:
 	_taken = true
-	var fut := get_tree().get_first_node_in_group("futures")
-	if fut != null and fut.has_method("add_asset"):
-		fut.call("add_asset", DISPLAY_NAME, PRICE)
+	_confirming = false
+	_prompting = false
+	if _futures() != null:
+		_futures().clear_prompt(self)
+	if _futures() != null:
+		_futures().call("add_asset", DISPLAY_NAME, PRICE)
 	else:
 		push_warning("[Rtx5090] 场上没有 Futures，59999 没进资产账")
 	Sfx.play("ui_toggle", 6.0)
 	print("[Rtx5090] 收走屋顶的 RTX 5090 → 资产 +¥%d" % PRICE)
+	# 触发陷阱：牢笼从信号塔顶滑下来 + 倭瓜优香出场（在 Parkour 那边实现）
+	var n: Node = get_parent()
+	while n != null and not (n is Parkour):
+		n = n.get_parent()
+	if n != null and n.has_method("trap_sequence"):
+		n.call("trap_sequence")
 	visible = false
 	queue_free()
 
