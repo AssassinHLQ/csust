@@ -229,6 +229,11 @@ func _test_structure(game: Node) -> void:
 			continue      # 移动平台**在动**：它的 position 每帧都变，查两个端点即可（见下）
 		if _inside_boss(node) or _inside_decor(node):
 			continue      # Boss 的 FBX / 内存条市场的装饰件不在 0.05 m 网格上
+		# 房顶那两件（5090 / BANK 招牌）是**用户在编辑器里用 gizmo 手摆的**
+		# （2026-10-21：他把 5090 转了 37°、招牌也挪了位置，scale 还带 0.99999 的零头），
+		# 它们是装饰、不是路线几何 —— 用网格纪律去卡它们只会天天假红。
+		if String(node.name) in ["RTX5090", "BankSign"]:
+			continue
 		var xf := (node as Node3D).transform
 		for v in [xf.origin, xf.basis.get_scale()]:
 			for c in 3:
@@ -2088,6 +2093,17 @@ func _test_ram_loot() -> void:
 			var sk := float(squash.get("slam_knockback"))
 			_check(is_equal_approx(sd, 40.0) and is_equal_approx(sk, 16.0),
 				"技能一：天降 %.0f 伤害 / %.0f 击退" % [sd, sk])
+			# 2026-10-21 用户「倭瓜优香普通攻击范围太大了」：技能二单独一套圈，
+			# 不能连累天降（天降仍然是 attack_radius = 3.0 的那个大红圈）。
+			var hr := float(squash.get("heavy_radius"))
+			var hreach := float(squash.get("heavy_reach"))
+			var ar := float(squash.get("attack_radius"))
+			_check(is_equal_approx(hr, 1.9) and is_equal_approx(hreach, 2.2),
+				"技能二（普通攻击）圈收到半径 %.2f + 前移 %.2f → 正面最远 %.2f m（原来 6.20 m，面积 −%.0f%%）"
+				% [hr, hreach, hr + hreach,
+					(1.0 - (hr * hr) / (3.0 * 3.0)) * 100.0])
+			_check(is_equal_approx(ar, 3.0),
+				"天降那个大红圈**没被带小**（attack_radius 仍是 %.1f）" % ar)
 			# 第一下就是天降（next_skill 已经是 1 = 下一招重砸）
 			var island := _pk.get_node("Island") as Node3D
 			var mid := island.global_position + Vector3(0.0, 0.62, 0.0)

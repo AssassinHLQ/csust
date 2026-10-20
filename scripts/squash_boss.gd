@@ -28,6 +28,19 @@ const SKILL_HEAVY := 1
 @export var slam_knockback := 16.0
 ## 滞空高度（m）
 @export var slam_height := 7.0
+## 普通攻击（技能二「原地重砸」）的预警圈：圆心在正面 `heavy_reach` 处、半径 `heavy_radius`（m）。
+##
+## ⚠️ 为什么单独开两个字段、而不是直接改 `attack_radius`：天降（`_skill_slam`）的红圈和
+##    伤害半径用的也是 `attack_radius`，改它会把两个技能一起缩小。
+##
+## 用户 2026-10-21：「倭瓜优香普通攻击范围太大了」。量过模型：
+##    `models/boss_squash/倭瓜优香.obj` 的 AABB 是 3.560 × 3.920 × 3.364，
+##    `height = 3.0` 归一化后身体 **宽 2.72 m / 深 2.57 m（半宽 1.36 m）**。
+##    原来是 reach 3.2 + radius 3.0 ⇒ 正面能打到 **6.2 m 外**（比它自己身体宽出一倍多），
+##    面积 π·3.0² ≈ 28.3 m²；现在 2.2 + 1.9 ⇒ 正面最远 **4.1 m**，面积 11.3 m²（−60%），
+##    圈还是比它半宽 1.36 m 大一圈，画在脚前不会缩进身体里。
+@export var heavy_radius := 1.9
+@export var heavy_reach := 2.2
 
 ## 压扁用的基准（`model` 缩放 / 位置 / 脚底）
 var _base_scale := Vector3.ONE
@@ -97,7 +110,16 @@ func _attack(player: Player) -> void:
 		await _skill_slam(player)
 	else:
 		_next_skill = SKILL_SLAM
+		# 技能二用它自己那套圈（`heavy_radius` / `heavy_reach`），见文件头的注释：
+		# `super._attack()` 读的是基类的 `attack_radius` / `attack_reach`，而那两个字段
+		# 同时被天降用着，所以这里临时换掉、await 完再换回来。
+		var keep_radius := attack_radius
+		var keep_reach := attack_reach
+		attack_radius = heavy_radius
+		attack_reach = heavy_reach
 		await super._attack(player)
+		attack_radius = keep_radius
+		attack_reach = keep_reach
 
 
 ## 技能一：压扁 → 弹起 → 滞空 → 天降

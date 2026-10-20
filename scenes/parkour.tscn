@@ -6,18 +6,12 @@
 [ext_resource type="Script" uid="uid://d1x88v01siag7" path="res://scripts/parkour_portal.gd" id="4_portal"]
 [ext_resource type="Script" uid="uid://ca6g6jmv58ihx" path="res://scripts/parkour_updraft.gd" id="5_updraft"]
 [ext_resource type="Script" uid="uid://cofxw1dso3b58" path="res://scripts/parkour_mover.gd" id="6_mover"]
-
-[ext_resource type="Script" path="res://scripts/parkour_futures.gd" id="7_futures"]
-
-[ext_resource type="Script" path="res://scripts/dark_gate.gd" id="10_darkgate"]
-
-[ext_resource type="Script" path="res://scripts/ram_market.gd" id="11_rammarket"]
-
-[ext_resource type="Script" path="res://scripts/parkour_ready_zone.gd" id="12_readyzone"]
-
-[ext_resource type="Script" uid="uid://bek4ly48vca40" path="res://scripts/rtx5090.gd" id="13_rtx5090"]
-
+[ext_resource type="Script" uid="uid://d3qhngnxfwxis" path="res://scripts/parkour_futures.gd" id="7_futures"]
+[ext_resource type="Script" uid="uid://dbc2gvp8e4hr2" path="res://scripts/dark_gate.gd" id="10_darkgate"]
+[ext_resource type="Script" uid="uid://chb73imxq1eti" path="res://scripts/ram_market.gd" id="11_rammarket"]
+[ext_resource type="Script" uid="uid://cd58xekuheewx" path="res://scripts/parkour_ready_zone.gd" id="12_readyzone"]
 [ext_resource type="Script" uid="uid://dybw1fchrcaex" path="res://scripts/bank_sign.gd" id="13_banksign"]
+[ext_resource type="Script" uid="uid://bek4ly48vca40" path="res://scripts/rtx5090.gd" id="13_rtx5090"]
 
 [sub_resource type="StandardMaterial3D" id="Mat_runway"]
 albedo_color = Color(0.25, 0.26, 0.29, 1)
@@ -25,13 +19,6 @@ metallic = 0.2
 roughness = 0.85
 
 [sub_resource type="BoxMesh" id="Box_unit"]
-
-[sub_resource type="StandardMaterial3D" id="Mat_mark"]
-albedo_color = Color(0.95, 0.6, 0.22, 1)
-roughness = 0.6
-emission_enabled = true
-emission = Color(0.95, 0.55, 0.18, 1)
-emission_energy_multiplier = 1.8
 
 [sub_resource type="StandardMaterial3D" id="Mat_tower"]
 albedo_color = Color(0.31, 0.33, 0.37, 1)
@@ -60,10 +47,53 @@ albedo_color = Color(0.44, 0.46, 0.5, 1)
 metallic = 0.7
 roughness = 0.45
 
-[sub_resource type="StandardMaterial3D" id="Mat_mech"]
-albedo_color = Color(0.86, 0.72, 0.28, 1)
-metallic = 0.35
+[sub_resource type="StandardMaterial3D" id="Mat_k_up_a"]
+albedo_color = Color(0.78, 0.13, 0.17, 1)
+metallic = 0.1
 roughness = 0.45
+emission_enabled = true
+emission = Color(0.42, 0.05, 0.07, 1)
+emission_energy_multiplier = 0.28
+
+[sub_resource type="StandardMaterial3D" id="Mat_k_wick"]
+albedo_color = Color(0.24, 0.26, 0.31, 1)
+metallic = 0.35
+roughness = 0.5
+
+[sub_resource type="BoxMesh" id="Box_wick"]
+size = Vector3(0.15, 1, 0.15)
+
+[sub_resource type="StandardMaterial3D" id="Mat_k_up_b"]
+albedo_color = Color(0.55, 0.09, 0.13, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.3, 0.03, 0.05, 1)
+emission_energy_multiplier = 0.22
+
+[sub_resource type="StandardMaterial3D" id="Mat_k_unknown"]
+albedo_color = Color(0.34, 0.3, 0.46, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.3, 0.24, 0.55, 1)
+emission_energy_multiplier = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Mat_k_dn_b"]
+albedo_color = Color(0.07, 0.38, 0.2, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.02, 0.2, 0.09, 1)
+emission_energy_multiplier = 0.2
+
+[sub_resource type="StandardMaterial3D" id="Mat_k_dn_a"]
+albedo_color = Color(0.1, 0.55, 0.28, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.03, 0.28, 0.12, 1)
+emission_energy_multiplier = 0.25
 
 [sub_resource type="CylinderMesh" id="Cyl_mast"]
 top_radius = 0.1
@@ -71,10 +101,6 @@ bottom_radius = 0.1
 height = 5.0
 radial_segments = 12
 rings = 1
-
-[sub_resource type="CylinderShape3D" id="Shape_mast"]
-height = 5.0
-radius = 0.1
 
 [sub_resource type="StandardMaterial3D" id="Mat_beacon"]
 albedo_color = Color(1, 0.36, 0.3, 1)
@@ -86,6 +112,111 @@ emission_energy_multiplier = 2.6
 [sub_resource type="SphereMesh" id="Sphere_beacon"]
 radial_segments = 16
 rings = 8
+
+[sub_resource type="CylinderShape3D" id="Shape_mast"]
+height = 5.0
+radius = 0.1
+
+[sub_resource type="StandardMaterial3D" id="Mat_b_spot"]
+albedo_color = Color(0.9, 0.85, 0.66, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.45, 0.4, 0.24, 1)
+emission_energy_multiplier = 0.18
+
+[sub_resource type="StandardMaterial3D" id="Mat_b_swap"]
+albedo_color = Color(0.95, 0.56, 0.12, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.55, 0.26, 0.03, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Mat_b_btc"]
+albedo_color = Color(0.88, 0.33, 0.05, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.45, 0.1, 0.02, 1)
+emission_energy_multiplier = 0.34
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_opt_prem"]
+albedo_color = Color(0.45, 0.3, 0.75, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.2, 0.12, 0.45, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_opt_exer"]
+albedo_color = Color(0.15, 0.75, 0.85, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.05, 0.4, 0.5, 1)
+emission_energy_multiplier = 0.35
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_up"]
+albedo_color = Color(0.85, 0.12, 0.14, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.45, 0.04, 0.05, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_lei"]
+albedo_color = Color(0.72, 0.1, 0.45, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.36, 0.03, 0.2, 1)
+emission_energy_multiplier = 0.32
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_ash_dn"]
+albedo_color = Color(0.08, 0.55, 0.22, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.02, 0.28, 0.1, 1)
+emission_energy_multiplier = 0.28
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx"]
+albedo_color = Color(0.95, 0.8, 0.2, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.5, 0.4, 0.06, 1)
+emission_energy_multiplier = 0.28
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx_lev"]
+albedo_color = Color(1, 0.52, 0.05, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.55, 0.24, 0.01, 1)
+emission_energy_multiplier = 0.36
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_fx_crash"]
+albedo_color = Color(0.55, 0.05, 0.08, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.3, 0.01, 0.02, 1)
+emission_energy_multiplier = 0.4
+
+[sub_resource type="StandardMaterial3D" id="Mat_s_dark"]
+albedo_color = Color(0.16, 0.13, 0.24, 1)
+metallic = 0.1
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.42, 0.13, 0.78, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Mat_mech"]
+albedo_color = Color(0.86, 0.72, 0.28, 1)
+metallic = 0.35
+roughness = 0.45
 
 [sub_resource type="StandardMaterial3D" id="Mat_move"]
 albedo_color = Color(0.34, 0.52, 0.62, 1)
@@ -159,131 +290,13 @@ emission_energy_multiplier = 2.0
 [sub_resource type="BoxShape3D" id="Shape_crate"]
 size = Vector3(0.9, 0.9, 0.9)
 
-[sub_resource type="StandardMaterial3D" id="Mat_k_up_a"]
-albedo_color = Color(0.78, 0.13, 0.17, 1)
-metallic = 0.1
-roughness = 0.45
+[sub_resource type="StandardMaterial3D" id="Mat_mark"]
+albedo_color = Color(0.95, 0.6, 0.22, 1)
+roughness = 0.6
 emission_enabled = true
-emission = Color(0.42, 0.05, 0.07, 1)
-emission_energy_multiplier = 0.28
-[sub_resource type="StandardMaterial3D" id="Mat_k_up_b"]
-albedo_color = Color(0.55, 0.09, 0.13, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.3, 0.03, 0.05, 1)
-emission_energy_multiplier = 0.22
-[sub_resource type="StandardMaterial3D" id="Mat_k_dn_a"]
-albedo_color = Color(0.1, 0.55, 0.28, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.03, 0.28, 0.12, 1)
-emission_energy_multiplier = 0.25
-[sub_resource type="StandardMaterial3D" id="Mat_k_dn_b"]
-albedo_color = Color(0.07, 0.38, 0.2, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.02, 0.2, 0.09, 1)
-emission_energy_multiplier = 0.2
-[sub_resource type="StandardMaterial3D" id="Mat_k_wick"]
-albedo_color = Color(0.24, 0.26, 0.31, 1)
-metallic = 0.35
-roughness = 0.5
-[sub_resource type="BoxMesh" id="Box_wick"]
-size = Vector3(0.15, 1, 0.15)
-[sub_resource type="StandardMaterial3D" id="Mat_k_unknown"]
-albedo_color = Color(0.34, 0.3, 0.46, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.3, 0.24, 0.55, 1)
-emission_energy_multiplier = 0.45
-[sub_resource type="StandardMaterial3D" id="Mat_b_spot"]
-albedo_color = Color(0.9, 0.85, 0.66, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.45, 0.4, 0.24, 1)
-emission_energy_multiplier = 0.18
-[sub_resource type="StandardMaterial3D" id="Mat_b_swap"]
-albedo_color = Color(0.95, 0.56, 0.12, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.55, 0.26, 0.03, 1)
-emission_energy_multiplier = 0.3
-[sub_resource type="StandardMaterial3D" id="Mat_b_btc"]
-albedo_color = Color(0.88, 0.33, 0.05, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.45, 0.1, 0.02, 1)
-emission_energy_multiplier = 0.34
-[sub_resource type="StandardMaterial3D" id="Mat_s_opt_prem"]
-albedo_color = Color(0.45, 0.3, 0.75, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.2, 0.12, 0.45, 1)
-emission_energy_multiplier = 0.3
-[sub_resource type="StandardMaterial3D" id="Mat_s_opt_exer"]
-albedo_color = Color(0.15, 0.75, 0.85, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.05, 0.4, 0.5, 1)
-emission_energy_multiplier = 0.35
-[sub_resource type="StandardMaterial3D" id="Mat_s_ash_up"]
-albedo_color = Color(0.85, 0.12, 0.14, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.45, 0.04, 0.05, 1)
-emission_energy_multiplier = 0.3
-[sub_resource type="StandardMaterial3D" id="Mat_s_ash_dn"]
-albedo_color = Color(0.08, 0.55, 0.22, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.02, 0.28, 0.1, 1)
-emission_energy_multiplier = 0.28
-[sub_resource type="StandardMaterial3D" id="Mat_s_ash_lei"]
-albedo_color = Color(0.72, 0.1, 0.45, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.36, 0.03, 0.2, 1)
-emission_energy_multiplier = 0.32
-[sub_resource type="StandardMaterial3D" id="Mat_s_fx"]
-albedo_color = Color(0.95, 0.8, 0.2, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.5, 0.4, 0.06, 1)
-emission_energy_multiplier = 0.28
-[sub_resource type="StandardMaterial3D" id="Mat_s_fx_lev"]
-albedo_color = Color(1.0, 0.52, 0.05, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.55, 0.24, 0.01, 1)
-emission_energy_multiplier = 0.36
-[sub_resource type="StandardMaterial3D" id="Mat_s_fx_crash"]
-albedo_color = Color(0.55, 0.05, 0.08, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.3, 0.01, 0.02, 1)
-emission_energy_multiplier = 0.4
-[sub_resource type="StandardMaterial3D" id="Mat_s_dark"]
-albedo_color = Color(0.16, 0.13, 0.24, 1)
-metallic = 0.1
-roughness = 0.45
-emission_enabled = true
-emission = Color(0.42, 0.13, 0.78, 1)
-emission_energy_multiplier = 0.3
+emission = Color(0.95, 0.55, 0.18, 1)
+emission_energy_multiplier = 1.8
+
 [node name="Parkour" type="Node3D" unique_id=1943431392]
 script = ExtResource("1_parkour")
 route = [NodePath("Launch"), NodePath("Route/P1"), NodePath("Route/P2"), NodePath("Route/P3"), NodePath("Route/P4"), NodePath("Route/P5"), NodePath("Route/P6"), NodePath("Route/P7"), NodePath("Route/C1"), NodePath("Route/B1"), NodePath("Route/BA"), NodePath("Route/S1"), NodePath("Route/BB"), NodePath("Route/T1"), NodePath("Route/T2"), NodePath("Route/T3"), NodePath("Route/T4"), NodePath("Route/T5"), NodePath("Route/T6"), NodePath("Route/C2"), NodePath("Route/K1"), NodePath("Route/K2"), NodePath("Route/K3"), NodePath("Route/K4"), NodePath("Route/K5"), NodePath("Route/K6"), NodePath("Route/K7"), NodePath("Route/K8"), NodePath("Route/K9"), NodePath("Route/K10"), NodePath("Route/K11"), NodePath("Route/K12"), NodePath("Route/K13"), NodePath("Route/J0"), NodePath("Route/SP1"), NodePath("Route/SP2"), NodePath("Route/SP3"), NodePath("Route/M0"), NodePath("Route/OPT1"), NodePath("Route/OPT2"), NodePath("Route/OPT3"), NodePath("Route/OPT4"), NodePath("Route/AS1"), NodePath("Route/AS2"), NodePath("Route/AS3"), NodePath("Route/AS4"), NodePath("Route/FX1"), NodePath("Route/FX2"), NodePath("Route/FX3"), NodePath("Route/FX4"), NodePath("Route/FX5"), NodePath("Route/FX6"), NodePath("Route/FX7"), NodePath("Route/DK1"), NodePath("Route/DK2"), NodePath("Route/DK3"), NodePath("Route/DK4"), NodePath("Route/DK5"), NodePath("Route/DK6"), NodePath("Route/DK7"), NodePath("Route/X1"), NodePath("Route/X2"), NodePath("Route/X3"), NodePath("Route/X4"), NodePath("Route/X5"), NodePath("Route/F1"), NodePath("Route/F2"), NodePath("Route/C3"), NodePath("Route/W1"), NodePath("Route/W2"), NodePath("Route/W3"), NodePath("Route/W4"), NodePath("Route/W5"), NodePath("Route/W6"), NodePath("Route/W7"), NodePath("Route/C4"), NodePath("Route/E1"), NodePath("Route/Q1"), NodePath("Route/H1"), NodePath("Route/V1"), NodePath("Route/V2"), NodePath("Route/V3"), NodePath("Route/V4"), NodePath("Route/L1"), NodePath("Route/U1"), NodePath("Route/U2"), NodePath("Route/Q2"), NodePath("Route/H2"), NodePath("Route/C5"), NodePath("Route/R1"), NodePath("Route/R2"), NodePath("Route/R3"), NodePath("Route/R4"), NodePath("Route/R5"), NodePath("Route/J1"), NodePath("Route/J2"), NodePath("Route/J3"), NodePath("Route/J4"), NodePath("Island")]
@@ -556,24 +569,29 @@ mesh = SubResource("Box_unit")
 transform = Transform3D(4.3, 0, 0, 0, 0.5, 0, 0, 0, 4.3, 0, 0, 0)
 shape = SubResource("Shape_unit")
 
-[node name="K1" type="StaticBody3D" parent="Route"]
+[node name="K1" type="StaticBody3D" parent="Route" unique_id=1570797780]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -142.85, 1.4, -4.9)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K1"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K1" unique_id=983678205]
 transform = Transform3D(3.6, 0, 0, 0, 1.2, 0, 0, 0, 3.8, 0, 0, 0)
 material_override = SubResource("Mat_k_up_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K1" unique_id=752817693]
 transform = Transform3D(3.6, 0, 0, 0, 1.2, 0, 0, 0, 3.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K1"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K1" unique_id=155305244]
 transform = Transform3D(1, 0, 0, 0, 1.2, 0, 0, 0, 1, 0, -1.2, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K1"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K1" unique_id=2022838251]
 transform = Transform3D(1, 0, 0, 0, 1.4, 0, 0, 0, 1, -1.8, 1.3, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K1"]
+
+[node name="Pct" type="Label3D" parent="Route/K1" unique_id=849374997]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.006
 billboard = 1
@@ -581,25 +599,30 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+0.00%"
 font_size = 48
-outline_size = 12
-[node name="K2" type="StaticBody3D" parent="Route"]
+
+[node name="K2" type="StaticBody3D" parent="Route" unique_id=855548243]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -148.85, 1.7, -8.2)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K2"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K2" unique_id=414346632]
 transform = Transform3D(3, 0, 0, 0, 1.8, 0, 0, 0, 3.2, 0, 0, 0)
 material_override = SubResource("Mat_k_up_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K2"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K2" unique_id=1169808284]
 transform = Transform3D(3, 0, 0, 0, 1.8, 0, 0, 0, 3.2, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K2"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K2" unique_id=299923675]
 transform = Transform3D(1, 0, 0, 0, 0.6, 0, 0, 0, 1, 0, -1.2, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K2"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K2" unique_id=1174606610]
 transform = Transform3D(1, 0, 0, 0, 0.4, 0, 0, 0, 1, -1.5, 1.1, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K2"]
+
+[node name="Pct" type="Label3D" parent="Route/K2" unique_id=295615310]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.5, 0)
 pixel_size = 0.006
 billboard = 1
@@ -607,25 +630,30 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+2.31%"
 font_size = 48
-outline_size = 12
-[node name="K3" type="StaticBody3D" parent="Route"]
+
+[node name="K3" type="StaticBody3D" parent="Route" unique_id=1616280200]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -153.65, 2.1, -3.9)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K3"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K3" unique_id=1983673575]
 transform = Transform3D(3, 0, 0, 0, 2.4, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_k_up_b")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K3"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K3" unique_id=848060658]
 transform = Transform3D(3, 0, 0, 0, 2.4, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K3"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K3" unique_id=1530699935]
 transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, 0, -1.55, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K3"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K3" unique_id=873490551]
 transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, -1.5, 1.45, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K3"]
+
+[node name="Pct" type="Label3D" parent="Route/K3" unique_id=371128215]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.8, 0)
 pixel_size = 0.006
 billboard = 1
@@ -633,25 +661,30 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+3.52%"
 font_size = 48
-outline_size = 12
-[node name="K4" type="StaticBody3D" parent="Route"]
+
+[node name="K4" type="StaticBody3D" parent="Route" unique_id=814479489]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -157.35, 3.5, -9.2)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K4"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K4" unique_id=745645958]
 transform = Transform3D(2.6, 0, 0, 0, 0.8, 0, 0, 0, 2.6, 0, 0, 0)
 material_override = SubResource("Mat_k_up_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K4"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K4" unique_id=2102398566]
 transform = Transform3D(2.6, 0, 0, 0, 0.8, 0, 0, 0, 2.6, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K4"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K4" unique_id=533322296]
 transform = Transform3D(1, 0, 0, 0, 2, 0, 0, 0, 1, 0, -1.4, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K4"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K4" unique_id=1053782299]
 transform = Transform3D(1, 0, 0, 0, 1.8, 0, 0, 0, 1, -1.3, 1.3, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K4"]
+
+[node name="Pct" type="Label3D" parent="Route/K4" unique_id=315481322]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 pixel_size = 0.006
 billboard = 1
@@ -659,25 +692,30 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+2.24%"
 font_size = 48
-outline_size = 12
-[node name="K5" type="StaticBody3D" parent="Route"]
+
+[node name="K5" type="StaticBody3D" parent="Route" unique_id=1784709436]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -161.65, 3.1, -4.9)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K5"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K5" unique_id=163431103]
 transform = Transform3D(3.2, 0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_k_up_b")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K5"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K5" unique_id=1582542650]
 transform = Transform3D(3.2, 0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K5"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K5" unique_id=532044668]
 transform = Transform3D(1, 0, 0, 0, 0.6, 0, 0, 0, 1, 0, -1.8, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K5"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K5" unique_id=750691061]
 transform = Transform3D(1, 0, 0, 0, 0.3, 0, 0, 0, 1, -1.6, 1.65, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K5"]
+
+[node name="Pct" type="Label3D" parent="Route/K5" unique_id=1126165067]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.1, 0)
 pixel_size = 0.006
 billboard = 1
@@ -685,21 +723,25 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+3.31%"
 font_size = 48
-outline_size = 12
-[node name="K6" type="StaticBody3D" parent="Route"]
+
+[node name="K6" type="StaticBody3D" parent="Route" unique_id=964497309]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -171.25, 5.75, -8.4)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K6"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K6" unique_id=1971278333]
 transform = Transform3D(4, 0, 0, 0, 0.9, 0, 0, 0, 2, 0, 0, 0)
 material_override = SubResource("Mat_k_up_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K6"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K6" unique_id=1970808285]
 transform = Transform3D(4, 0, 0, 0, 0.9, 0, 0, 0, 2, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K6"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K6" unique_id=223463297]
 transform = Transform3D(1, 0, 0, 0, 0.4, 0, 0, 0, 1, 0, -0.65, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K6"]
+
+[node name="Pct" type="Label3D" parent="Route/K6" unique_id=1921862288]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.05, 0)
 pixel_size = 0.006
 billboard = 1
@@ -707,26 +749,31 @@ alpha_cut = 1
 modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+3.76%"
 font_size = 48
-outline_size = 12
-[node name="K7" type="StaticBody3D" parent="Route"]
+
+[node name="K7" type="StaticBody3D" parent="Route" unique_id=1346799601]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -177.45, 6, -6.2)
 metadata/schrodinger = true
-[node name="Mesh" type="MeshInstance3D" parent="Route/K7"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K7" unique_id=1832063884]
 transform = Transform3D(2.8, 0, 0, 0, 1.6, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_k_unknown")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K7"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K7" unique_id=736468942]
 transform = Transform3D(2.8, 0, 0, 0, 1.6, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K7"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K7" unique_id=296812924]
 transform = Transform3D(1, 0, 0, 0, 0.9, 0, 0, 0, 1, 0, -1.25, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K7"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K7" unique_id=1253117467]
 transform = Transform3D(1, 0, 0, 0, 0.9, 0, 0, 0, 1, -1.4, 1.25, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K7"]
+
+[node name="Pct" type="Label3D" parent="Route/K7" unique_id=533251530]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 0)
 pixel_size = 0.006
 billboard = 1
@@ -734,25 +781,30 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "+2.90%"
 font_size = 48
-outline_size = 12
-[node name="K8" type="StaticBody3D" parent="Route"]
+
+[node name="K8" type="StaticBody3D" parent="Route" unique_id=1553749481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -186.75, 4.8, -10.2)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K8"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K8" unique_id=953975814]
 transform = Transform3D(3.4, 0, 0, 0, 2.8, 0, 0, 0, 3.2, 0, 0, 0)
 material_override = SubResource("Mat_k_dn_b")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K8"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K8" unique_id=1921827735]
 transform = Transform3D(3.4, 0, 0, 0, 2.8, 0, 0, 0, 3.2, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K8"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K8" unique_id=1623610394]
 transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, -1.65, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K8"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K8" unique_id=133160517]
 transform = Transform3D(1, 0, 0, 0, 0.8, 0, 0, 0, 1, -1.7, 1.8, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K8"]
+
+[node name="Pct" type="Label3D" parent="Route/K8" unique_id=1488569237]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
 pixel_size = 0.006
 billboard = 1
@@ -760,26 +812,31 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-3.48%"
 font_size = 48
-outline_size = 12
-[node name="K9" type="StaticBody3D" parent="Route"]
+
+[node name="K9" type="StaticBody3D" parent="Route" unique_id=1107941631]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -193.55, 4.7, -5.9)
 metadata/schrodinger = true
-[node name="Mesh" type="MeshInstance3D" parent="Route/K9"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K9" unique_id=7062409]
 transform = Transform3D(3.2, 0, 0, 0, 1.4, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_k_unknown")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K9"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K9" unique_id=1456013042]
 transform = Transform3D(3.2, 0, 0, 0, 1.4, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K9"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K9" unique_id=1514480524]
 transform = Transform3D(1, 0, 0, 0, 1.3, 0, 0, 0, 1, 0, -1.35, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K9"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K9" unique_id=169927701]
 transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, -1.6, 1.05, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K9"]
+
+[node name="Pct" type="Label3D" parent="Route/K9" unique_id=903537790]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.3, 0)
 pixel_size = 0.006
 billboard = 1
@@ -787,25 +844,30 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-2.10%"
 font_size = 48
-outline_size = 12
-[node name="K10" type="StaticBody3D" parent="Route"]
+
+[node name="K10" type="StaticBody3D" parent="Route" unique_id=1143796609]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -200.25, 3.3, -10.2)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K10"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K10" unique_id=1411605355]
 transform = Transform3D(3, 0, 0, 0, 2.6, 0, 0, 0, 2.6, 0, 0, 0)
 material_override = SubResource("Mat_k_dn_b")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K10"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K10" unique_id=1306200856]
 transform = Transform3D(3, 0, 0, 0, 2.6, 0, 0, 0, 2.6, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K10"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K10" unique_id=676714167]
 transform = Transform3D(1, 0, 0, 0, 0.6, 0, 0, 0, 1, 0, -1.6, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K10"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K10" unique_id=1058360217]
 transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, -1.5, 1.65, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K10"]
+
+[node name="Pct" type="Label3D" parent="Route/K10" unique_id=1144067919]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.9, 0)
 pixel_size = 0.006
 billboard = 1
@@ -813,25 +875,30 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-4.61%"
 font_size = 48
-outline_size = 12
-[node name="K11" type="StaticBody3D" parent="Route"]
+
+[node name="K11" type="StaticBody3D" parent="Route" unique_id=1118577785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -207.15, 2.9, -6.3)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K11"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K11" unique_id=763802871]
 transform = Transform3D(3.2, 0, 0, 0, 1.4, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_k_dn_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K11"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K11" unique_id=857050210]
 transform = Transform3D(3.2, 0, 0, 0, 1.4, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K11"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K11" unique_id=435526534]
 transform = Transform3D(1, 0, 0, 0, 1.6, 0, 0, 0, 1, 0, -1.5, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K11"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K11" unique_id=1262977435]
 transform = Transform3D(1, 0, 0, 0, 0.9, 0, 0, 0, 1, -1.6, 1.15, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K11"]
+
+[node name="Pct" type="Label3D" parent="Route/K11" unique_id=771010843]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.3, 0)
 pixel_size = 0.006
 billboard = 1
@@ -839,26 +906,31 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-3.49%"
 font_size = 48
-outline_size = 12
-[node name="K12" type="StaticBody3D" parent="Route"]
+
+[node name="K12" type="StaticBody3D" parent="Route" unique_id=603199744]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -214.45, 2.2, -9.5)
 metadata/schrodinger = true
-[node name="Mesh" type="MeshInstance3D" parent="Route/K12"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K12" unique_id=587569708]
 transform = Transform3D(2.8, 0, 0, 0, 0.8, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_k_unknown")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K12"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K12" unique_id=607125230]
 transform = Transform3D(2.8, 0, 0, 0, 0.8, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K12"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K12" unique_id=1354756469]
 transform = Transform3D(1, 0, 0, 0, 2.2, 0, 0, 0, 1, 0, -1.5, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K12"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K12" unique_id=1493751140]
 transform = Transform3D(1, 0, 0, 0, 0.8, 0, 0, 0, 1, -1.4, 0.8, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K12"]
+
+[node name="Pct" type="Label3D" parent="Route/K12" unique_id=829113401]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 pixel_size = 0.006
 billboard = 1
@@ -866,25 +938,30 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "+1.80%"
 font_size = 48
-outline_size = 12
-[node name="K13" type="StaticBody3D" parent="Route"]
+
+[node name="K13" type="StaticBody3D" parent="Route" unique_id=241661930]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -220.25, 1.2, -4.6)
-[node name="Mesh" type="MeshInstance3D" parent="Route/K13"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/K13" unique_id=581437377]
 transform = Transform3D(3.2, 0, 0, 0, 1.6, 0, 0, 0, 3.4, 0, 0, 0)
 material_override = SubResource("Mat_k_dn_a")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/K13"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/K13" unique_id=2120000267]
 transform = Transform3D(3.2, 0, 0, 0, 1.6, 0, 0, 0, 3.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="WickDown" type="MeshInstance3D" parent="Route/K13"]
+
+[node name="WickDown" type="MeshInstance3D" parent="Route/K13" unique_id=1382211998]
 transform = Transform3D(1, 0, 0, 0, 0.6, 0, 0, 0, 1, 0, -1.1, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="WickUp" type="MeshInstance3D" parent="Route/K13"]
+
+[node name="WickUp" type="MeshInstance3D" parent="Route/K13" unique_id=2027841305]
 transform = Transform3D(1, 0, 0, 0, 0.8, 0, 0, 0, 1, -1.6, 1.2, 0)
 material_override = SubResource("Mat_k_wick")
 mesh = SubResource("Box_wick")
-[node name="Pct" type="Label3D" parent="Route/K13"]
+
+[node name="Pct" type="Label3D" parent="Route/K13" unique_id=1758972342]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 0)
 pixel_size = 0.006
 billboard = 1
@@ -892,21 +969,25 @@ alpha_cut = 1
 modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 48
-outline_size = 12
-[node name="Beacon_K1" type="StaticBody3D" parent="Route"]
+
+[node name="Beacon_K1" type="StaticBody3D" parent="Route" unique_id=669295107]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -144.05, 1.5, -2.1)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_K1"]
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_K1" unique_id=512516209]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_K1"]
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_K1" unique_id=1640259640]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
 material_override = SubResource("Mat_beacon")
 mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_K1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_K1" unique_id=391708348]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_K1"]
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_K1" unique_id=439521477]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
@@ -914,285 +995,20 @@ alpha_cut = 1
 text = "第 3 段 · 同花顺期货通"
 font_size = 64
 outline_size = 14
-[node name="Futures" type="Node3D" parent="."]
-script = ExtResource("7_futures")
-[node name="J0" type="StaticBody3D" parent="Route"]
+
+[node name="J0" type="StaticBody3D" parent="Route" unique_id=1388218658]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -227.55, 1.4, -9.5)
-[node name="Mesh" type="MeshInstance3D" parent="Route/J0"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/J0" unique_id=1305961151]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
 material_override = SubResource("Mat_b_spot")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/J0"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/J0" unique_id=1591006229]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="M0" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -256.65, 1.4, -9.5)
-[node name="Mesh" type="MeshInstance3D" parent="Route/M0"]
-transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
-material_override = SubResource("Mat_b_spot")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/M0"]
-transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="SP1" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -1)
-metadata/pct_kind = "spot"
-metadata/pct_seq = "3.00"
-metadata/pct_period = 0
-metadata/pct_phase = 0
-metadata/lane = "A"
-[node name="Mesh" type="MeshInstance3D" parent="Route/SP1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_spot")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/SP1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/SP1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+3.00%"
-font_size = 56
-outline_size = 14
-[node name="SP2" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 1.8, -1)
-metadata/pct_kind = "spot"
-metadata/pct_seq = "3.00"
-metadata/pct_period = 0
-metadata/pct_phase = 0.6
-metadata/lane = "A"
-[node name="Mesh" type="MeshInstance3D" parent="Route/SP2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_spot")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/SP2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/SP2"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+3.00%"
-font_size = 56
-outline_size = 14
-[node name="SP3" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 1.8, -1)
-metadata/pct_kind = "spot"
-metadata/pct_seq = "3.00"
-metadata/pct_period = 0
-metadata/pct_phase = 1.2
-metadata/lane = "A"
-[node name="Mesh" type="MeshInstance3D" parent="Route/SP3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_spot")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/SP3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/SP3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+3.00%"
-font_size = 56
-outline_size = 14
-[node name="PP1" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -10)
-metadata/pct_kind = "swap"
-metadata/pct_seq = "8.00,-5.00"
-metadata/pct_period = 3
-metadata/pct_phase = 0
-metadata/lane = "B"
-[node name="Mesh" type="MeshInstance3D" parent="Route/PP1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_swap")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/PP1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/PP1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+8.00%"
-font_size = 56
-outline_size = 14
-[node name="PP2" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 2, -10)
-metadata/pct_kind = "swap"
-metadata/pct_seq = "8.00,-5.00"
-metadata/pct_period = 3
-metadata/pct_phase = 0.6
-metadata/lane = "B"
-[node name="Mesh" type="MeshInstance3D" parent="Route/PP2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_swap")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/PP2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/PP2"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+8.00%"
-font_size = 56
-outline_size = 14
-[node name="PP3" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 2.6, -10)
-metadata/pct_kind = "swap"
-metadata/pct_seq = "8.00,-5.00"
-metadata/pct_period = 3
-metadata/pct_phase = 1.2
-metadata/lane = "B"
-[node name="Mesh" type="MeshInstance3D" parent="Route/PP3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-material_override = SubResource("Mat_b_swap")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/PP3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/PP3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.95, 0.25, 0.25, 1)
-text = "+8.00%"
-font_size = 56
-outline_size = 14
-[node name="BC1" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -19)
-metadata/pct_kind = "btc"
-metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
-metadata/pct_period = 1.6
-metadata/pct_phase = 0
-metadata/lane = "C"
-[node name="Mesh" type="MeshInstance3D" parent="Route/BC1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-material_override = SubResource("Mat_b_btc")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/BC1"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/BC1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-14.00%"
-font_size = 56
-outline_size = 14
-[node name="BC2" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 1.6, -19)
-metadata/pct_kind = "btc"
-metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
-metadata/pct_period = 1.6
-metadata/pct_phase = 0.6
-metadata/lane = "C"
-[node name="Mesh" type="MeshInstance3D" parent="Route/BC2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-material_override = SubResource("Mat_b_btc")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/BC2"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/BC2"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-14.00%"
-font_size = 56
-outline_size = 14
-[node name="BC3" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 1.6, -19)
-metadata/pct_kind = "btc"
-metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
-metadata/pct_period = 1.6
-metadata/pct_phase = 1.2
-metadata/lane = "C"
-[node name="Mesh" type="MeshInstance3D" parent="Route/BC3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-material_override = SubResource("Mat_b_btc")
-mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/BC3"]
-transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
-shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/BC3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-modulate = Color(0.25, 0.9, 0.45, 1)
-text = "-14.00%"
-font_size = 56
-outline_size = 14
-[node name="Beacon_J0" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -226.25, 1.5, -9.5)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_J0"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_J0"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_J0"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
-shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_J0"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 4 段 · 同花顺期货通 · 比特币"
-font_size = 64
-outline_size = 14
-[node name="Sign_A" type="Label3D" parent="Route/SP1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "A · 现货道
-每块 +3.00% 固定
-理论 10.93 万（最差 10.93）"
-font_size = 44
-outline_size = 12
-[node name="Sign_B" type="Label3D" parent="Route/PP1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "B · 永续道
-每块 +8.00% / -5.00% 交替
-理论 12.60 万（最差 8.57）"
-font_size = 44
-outline_size = 12
-[node name="Sign_C" type="Label3D" parent="Route/BC1"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
-pixel_size = 0.0075
-billboard = 1
-alpha_cut = 1
-text = "C · 币圈道
-每块 -14% ~ +22% 四档
-理论 18.16 万（最差 6.36）"
-font_size = 44
-outline_size = 12
-[node name="Sign_J0" type="Label3D" parent="Route/J0"]
+
+[node name="Sign_J0" type="Label3D" parent="Route/J0" unique_id=98339146]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1200,8 +1016,20 @@ alpha_cut = 1
 text = "结算门槛：保证金 ≥ 11 万 → 解锁「对冲」
 未解锁：强平块 = 爆仓送回"
 font_size = 46
-outline_size = 12
-[node name="Sign_M0" type="Label3D" parent="Route/M0"]
+
+[node name="M0" type="StaticBody3D" parent="Route" unique_id=386322354]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -256.65, 1.4, -9.5)
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/M0" unique_id=1497696102]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
+material_override = SubResource("Mat_b_spot")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/M0" unique_id=377588079]
+transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 22, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Sign_M0" type="Label3D" parent="Route/M0" unique_id=696229476]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.009
 billboard = 1
@@ -1210,21 +1038,324 @@ text = "结算台
 本段结算：—"
 font_size = 56
 outline_size = 14
-[node name="OPT1" type="StaticBody3D" parent="Route"]
+
+[node name="SP1" type="StaticBody3D" parent="Route" unique_id=1935675643]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -1)
+metadata/pct_kind = "spot"
+metadata/pct_seq = "3.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0
+metadata/lane = "A"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/SP1" unique_id=155773539]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_spot")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/SP1" unique_id=1785218196]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/SP1" unique_id=895418270]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+3.00%"
+font_size = 56
+outline_size = 14
+
+[node name="Sign_A" type="Label3D" parent="Route/SP1" unique_id=1833182955]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "A · 现货道
+每块 +3.00% 固定
+理论 10.93 万（最差 10.93）"
+font_size = 44
+
+[node name="SP2" type="StaticBody3D" parent="Route" unique_id=1930930974]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 1.8, -1)
+metadata/pct_kind = "spot"
+metadata/pct_seq = "3.00"
+metadata/pct_period = 0
+metadata/pct_phase = 0.6
+metadata/lane = "A"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/SP2" unique_id=1220546875]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_spot")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/SP2" unique_id=1918272784]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/SP2" unique_id=522575701]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+3.00%"
+font_size = 56
+outline_size = 14
+
+[node name="SP3" type="StaticBody3D" parent="Route" unique_id=829124860]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 1.8, -1)
+metadata/pct_kind = "spot"
+metadata/pct_seq = "3.00"
+metadata/pct_period = 0
+metadata/pct_phase = 1.2
+metadata/lane = "A"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/SP3" unique_id=1312383154]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_spot")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/SP3" unique_id=437375036]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/SP3" unique_id=2120787894]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+3.00%"
+font_size = 56
+outline_size = 14
+
+[node name="PP1" type="StaticBody3D" parent="Route" unique_id=1726199571]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -10)
+metadata/pct_kind = "swap"
+metadata/pct_seq = "8.00,-5.00"
+metadata/pct_period = 3
+metadata/pct_phase = 0
+metadata/lane = "B"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/PP1" unique_id=1086331467]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_swap")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/PP1" unique_id=1184510464]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/PP1" unique_id=1005878925]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+8.00%"
+font_size = 56
+outline_size = 14
+
+[node name="Sign_B" type="Label3D" parent="Route/PP1" unique_id=144571218]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "B · 永续道
+每块 +8.00% / -5.00% 交替
+理论 12.60 万（最差 8.57）"
+font_size = 44
+
+[node name="PP2" type="StaticBody3D" parent="Route" unique_id=181782895]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 2, -10)
+metadata/pct_kind = "swap"
+metadata/pct_seq = "8.00,-5.00"
+metadata/pct_period = 3
+metadata/pct_phase = 0.6
+metadata/lane = "B"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/PP2" unique_id=1061897181]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_swap")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/PP2" unique_id=517192831]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/PP2" unique_id=1850887293]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+8.00%"
+font_size = 56
+outline_size = 14
+
+[node name="PP3" type="StaticBody3D" parent="Route" unique_id=379309724]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 2.6, -10)
+metadata/pct_kind = "swap"
+metadata/pct_seq = "8.00,-5.00"
+metadata/pct_period = 3
+metadata/pct_phase = 1.2
+metadata/lane = "B"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/PP3" unique_id=724101704]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+material_override = SubResource("Mat_b_swap")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/PP3" unique_id=261956757]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/PP3" unique_id=423729995]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.95, 0.25, 0.25, 1)
+text = "+8.00%"
+font_size = 56
+outline_size = 14
+
+[node name="BC1" type="StaticBody3D" parent="Route" unique_id=99322417]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -234.55, 1.4, -19)
+metadata/pct_kind = "btc"
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
+metadata/pct_phase = 0
+metadata/lane = "C"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/BC1" unique_id=53370123]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+material_override = SubResource("Mat_b_btc")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/BC1" unique_id=853596938]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/BC1" unique_id=630066712]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-14.00%"
+font_size = 56
+outline_size = 14
+
+[node name="Sign_C" type="Label3D" parent="Route/BC1" unique_id=1309536318]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
+pixel_size = 0.0075
+billboard = 1
+alpha_cut = 1
+text = "C · 币圈道
+每块 -14% ~ +22% 四档
+理论 18.16 万（最差 6.36）"
+font_size = 44
+
+[node name="BC2" type="StaticBody3D" parent="Route" unique_id=92440555]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -240.15, 1.6, -19)
+metadata/pct_kind = "btc"
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
+metadata/pct_phase = 0.6
+metadata/lane = "C"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/BC2" unique_id=1625712328]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+material_override = SubResource("Mat_b_btc")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/BC2" unique_id=131698424]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/BC2" unique_id=658039846]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-14.00%"
+font_size = 56
+outline_size = 14
+
+[node name="BC3" type="StaticBody3D" parent="Route" unique_id=70240093]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -249.15, 1.6, -19)
+metadata/pct_kind = "btc"
+metadata/pct_seq = "-14.00,-3.00,+9.00,+22.00"
+metadata/pct_period = 1.6
+metadata/pct_phase = 1.2
+metadata/lane = "C"
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/BC3" unique_id=1572259136]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+material_override = SubResource("Mat_b_btc")
+mesh = SubResource("Box_unit")
+
+[node name="Col" type="CollisionShape3D" parent="Route/BC3" unique_id=1045379564]
+transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
+shape = SubResource("Shape_unit")
+
+[node name="Pct" type="Label3D" parent="Route/BC3" unique_id=1941662744]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.008
+billboard = 1
+alpha_cut = 1
+modulate = Color(0.25, 0.9, 0.45, 1)
+text = "-14.00%"
+font_size = 56
+outline_size = 14
+
+[node name="Beacon_J0" type="StaticBody3D" parent="Route" unique_id=56676231]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -226.25, 1.5, -9.5)
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_J0" unique_id=1359264697]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+material_override = SubResource("Mat_tower")
+mesh = SubResource("Cyl_mast")
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_J0" unique_id=1234113022]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
+material_override = SubResource("Mat_beacon")
+mesh = SubResource("Sphere_beacon")
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_J0" unique_id=1537650381]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+shape = SubResource("Shape_mast")
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_J0" unique_id=22735915]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
+pixel_size = 0.01
+billboard = 1
+alpha_cut = 1
+text = "第 4 段 · 同花顺期货通 · 比特币"
+font_size = 64
+outline_size = 14
+
+[node name="OPT1" type="StaticBody3D" parent="Route" unique_id=797143631]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -263.65, 1.4, -1.7)
 metadata/pct_kind = "opt_prem"
 metadata/pct_seq = "-1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0
 metadata/lane = "OP"
-[node name="Mesh" type="MeshInstance3D" parent="Route/OPT1"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT1" unique_id=1246604087]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_opt_prem")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/OPT1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/OPT1" unique_id=1575749018]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/OPT1"]
+
+[node name="Pct" type="Label3D" parent="Route/OPT1" unique_id=2057742094]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1233,21 +1364,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-1.00%"
 font_size = 56
 outline_size = 14
-[node name="OPT2" type="StaticBody3D" parent="Route"]
+
+[node name="OPT2" type="StaticBody3D" parent="Route" unique_id=1558581537]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -269.45, 1.6, -1.7)
 metadata/pct_kind = "opt_prem"
 metadata/pct_seq = "-1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.4
 metadata/lane = "OP"
-[node name="Mesh" type="MeshInstance3D" parent="Route/OPT2"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT2" unique_id=1286007401]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_opt_prem")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/OPT2"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/OPT2" unique_id=104166415]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/OPT2"]
+
+[node name="Pct" type="Label3D" parent="Route/OPT2" unique_id=670080643]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1256,7 +1391,8 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-1.00%"
 font_size = 56
 outline_size = 14
-[node name="OPT3" type="StaticBody3D" parent="Route"]
+
+[node name="OPT3" type="StaticBody3D" parent="Route" unique_id=1637868314]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -275.45, 2, -1.7)
 metadata/pct_kind = "opt_exer"
 metadata/pct_seq = "25.00"
@@ -1264,14 +1400,17 @@ metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "OP"
 metadata/deadline = 8
-[node name="Mesh" type="MeshInstance3D" parent="Route/OPT3"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT3" unique_id=1270299291]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_opt_exer")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/OPT3"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/OPT3" unique_id=1701360613]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/OPT3"]
+
+[node name="Pct" type="Label3D" parent="Route/OPT3" unique_id=1628737239]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1280,7 +1419,8 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+25.00%"
 font_size = 56
 outline_size = 14
-[node name="OPT4" type="StaticBody3D" parent="Route"]
+
+[node name="OPT4" type="StaticBody3D" parent="Route" unique_id=1342600741]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -281.25, 1.8, -1.7)
 metadata/pct_kind = "opt_exer"
 metadata/pct_seq = "60.00"
@@ -1288,14 +1428,17 @@ metadata/pct_period = 0
 metadata/pct_phase = 1.2
 metadata/lane = "OP"
 metadata/deadline = 8
-[node name="Mesh" type="MeshInstance3D" parent="Route/OPT4"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/OPT4" unique_id=131510748]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_opt_exer")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/OPT4"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/OPT4" unique_id=775571499]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/OPT4"]
+
+[node name="Pct" type="Label3D" parent="Route/OPT4" unique_id=1599551383]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1304,20 +1447,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+60.00%"
 font_size = 56
 outline_size = 14
-[node name="Beacon_期权交易" type="StaticBody3D" parent="Route"]
+
+[node name="Beacon_期权交易" type="StaticBody3D" parent="Route" unique_id=448681228]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -263.35, 1.5, 2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_期权交易"]
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_期权交易" unique_id=1291652914]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_期权交易"]
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_期权交易" unique_id=750396382]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
 material_override = SubResource("Mat_beacon")
 mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_期权交易"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_期权交易" unique_id=661264247]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_期权交易"]
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_期权交易" unique_id=1815266154]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
@@ -1325,21 +1473,25 @@ alpha_cut = 1
 text = "第 5 段 · 期权交易"
 font_size = 60
 outline_size = 14
-[node name="AS1" type="StaticBody3D" parent="Route"]
+
+[node name="AS1" type="StaticBody3D" parent="Route" unique_id=1169541466]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -288.25, 1.4, -1.7)
 metadata/pct_kind = "ash_up"
 metadata/pct_seq = "20.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0
 metadata/lane = "AS"
-[node name="Mesh" type="MeshInstance3D" parent="Route/AS1"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS1" unique_id=195015934]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
 material_override = SubResource("Mat_s_ash_up")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/AS1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/AS1" unique_id=1804686612]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/AS1"]
+
+[node name="Pct" type="Label3D" parent="Route/AS1" unique_id=14657501]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1348,21 +1500,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+20.00%"
 font_size = 56
 outline_size = 14
-[node name="AS2" type="StaticBody3D" parent="Route"]
+
+[node name="AS2" type="StaticBody3D" parent="Route" unique_id=1793522161]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -296.55, 1.6, -1.7)
 metadata/pct_kind = "ash_lei"
 metadata/pct_seq = "20.00,-20.00"
 metadata/pct_period = 0.9
 metadata/pct_phase = 0.4
 metadata/lane = "AS"
-[node name="Mesh" type="MeshInstance3D" parent="Route/AS2"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS2" unique_id=691488369]
 transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
 material_override = SubResource("Mat_s_ash_lei")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/AS2"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/AS2" unique_id=2039270036]
 transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/AS2"]
+
+[node name="Pct" type="Label3D" parent="Route/AS2" unique_id=840004653]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1371,21 +1527,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+20.00%"
 font_size = 56
 outline_size = 14
-[node name="AS3" type="StaticBody3D" parent="Route"]
+
+[node name="AS3" type="StaticBody3D" parent="Route" unique_id=383446894]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -305.55, 1.8, -1.7)
 metadata/pct_kind = "ash_dn"
 metadata/pct_seq = "-20.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "AS"
-[node name="Mesh" type="MeshInstance3D" parent="Route/AS3"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS3" unique_id=2055450503]
 transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
 material_override = SubResource("Mat_s_ash_dn")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/AS3"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/AS3" unique_id=2123708770]
 transform = Transform3D(6, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/AS3"]
+
+[node name="Pct" type="Label3D" parent="Route/AS3" unique_id=1543469646]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1394,21 +1554,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-20.00%"
 font_size = 56
 outline_size = 14
-[node name="AS4" type="StaticBody3D" parent="Route"]
+
+[node name="AS4" type="StaticBody3D" parent="Route" unique_id=2060592465]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -313.85, 1.6, -1.7)
 metadata/pct_kind = "ash_lei"
 metadata/pct_seq = "20.00,-20.00"
 metadata/pct_period = 0.9
 metadata/pct_phase = 1.2
 metadata/lane = "AS"
-[node name="Mesh" type="MeshInstance3D" parent="Route/AS4"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/AS4" unique_id=1715071712]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
 material_override = SubResource("Mat_s_ash_lei")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/AS4"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/AS4" unique_id=107824206]
 transform = Transform3D(5, 0, 0, 0, 1.2, 0, 0, 0, 1.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/AS4"]
+
+[node name="Pct" type="Label3D" parent="Route/AS4" unique_id=655022654]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1417,20 +1581,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+20.00%"
 font_size = 56
 outline_size = 14
-[node name="Beacon_A股" type="StaticBody3D" parent="Route"]
+
+[node name="Beacon_A股" type="StaticBody3D" parent="Route" unique_id=1260127983]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -286.95, 1.5, 1.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_A股"]
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_A股" unique_id=1678597286]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_A股"]
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_A股" unique_id=2143050269]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
 material_override = SubResource("Mat_beacon")
 mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_A股"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_A股" unique_id=1104042611]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_A股"]
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_A股" unique_id=212746711]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
@@ -1438,21 +1607,25 @@ alpha_cut = 1
 text = "第 6 段 · A股"
 font_size = 60
 outline_size = 14
-[node name="FX1" type="StaticBody3D" parent="Route"]
+
+[node name="FX1" type="StaticBody3D" parent="Route" unique_id=344984908]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.85, 1.4, -1.7)
 metadata/pct_kind = "fx"
 metadata/pct_seq = "15.00,-15.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 0
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX1"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX1" unique_id=193313362]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_fx")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX1" unique_id=29412309]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX1"]
+
+[node name="Pct" type="Label3D" parent="Route/FX1" unique_id=810101879]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1461,21 +1634,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+15.00%"
 font_size = 56
 outline_size = 14
-[node name="FX2" type="StaticBody3D" parent="Route"]
+
+[node name="FX2" type="StaticBody3D" parent="Route" unique_id=1603306186]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -326.65, 1.7, -1.7)
 metadata/pct_kind = "fx_lev"
 metadata/pct_seq = "40.00,-40.00"
 metadata/pct_period = 0.3
 metadata/pct_phase = 0.4
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX2"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX2" unique_id=2091353135]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_s_fx_lev")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX2"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX2" unique_id=856004392]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX2"]
+
+[node name="Pct" type="Label3D" parent="Route/FX2" unique_id=803321837]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1484,21 +1661,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+40.00%"
 font_size = 56
 outline_size = 14
-[node name="FX3" type="StaticBody3D" parent="Route"]
+
+[node name="FX3" type="StaticBody3D" parent="Route" unique_id=882947066]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -332.65, 1.4, -1.7)
 metadata/pct_kind = "fx_crash"
 metadata/pct_seq = "-30.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX3"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX3" unique_id=2139960225]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_s_fx_crash")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX3"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX3" unique_id=1600541710]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX3"]
+
+[node name="Pct" type="Label3D" parent="Route/FX3" unique_id=1265036657]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1507,21 +1688,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-30.00%"
 font_size = 56
 outline_size = 14
-[node name="FX4" type="StaticBody3D" parent="Route"]
+
+[node name="FX4" type="StaticBody3D" parent="Route" unique_id=1057954375]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -338.45, 1.6, -1.7)
 metadata/pct_kind = "fx"
 metadata/pct_seq = "15.00,-15.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 1.2
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX4"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX4" unique_id=1131333602]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_fx")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX4"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX4" unique_id=1583286001]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX4"]
+
+[node name="Pct" type="Label3D" parent="Route/FX4" unique_id=1988358863]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1530,21 +1715,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+15.00%"
 font_size = 56
 outline_size = 14
-[node name="FX5" type="StaticBody3D" parent="Route"]
+
+[node name="FX5" type="StaticBody3D" parent="Route" unique_id=589368442]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.45, 1.4, -1.7)
 metadata/pct_kind = "fx_lev"
 metadata/pct_seq = "40.00,-40.00"
 metadata/pct_period = 0.4
 metadata/pct_phase = 1.6
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX5"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX5" unique_id=899338675]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_s_fx_lev")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX5"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX5" unique_id=1633733089]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX5"]
+
+[node name="Pct" type="Label3D" parent="Route/FX5" unique_id=880183658]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1553,21 +1742,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+40.00%"
 font_size = 56
 outline_size = 14
-[node name="FX6" type="StaticBody3D" parent="Route"]
+
+[node name="FX6" type="StaticBody3D" parent="Route" unique_id=70943705]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -350.45, 1.6, -1.7)
 metadata/pct_kind = "fx_crash"
 metadata/pct_seq = "-30.00"
 metadata/pct_period = 0
 metadata/pct_phase = 2
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX6"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX6" unique_id=1604235093]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_fx_crash")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX6"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX6" unique_id=854637332]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX6"]
+
+[node name="Pct" type="Label3D" parent="Route/FX6" unique_id=677651056]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1576,21 +1769,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-30.00%"
 font_size = 56
 outline_size = 14
-[node name="FX7" type="StaticBody3D" parent="Route"]
+
+[node name="FX7" type="StaticBody3D" parent="Route" unique_id=96242541]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -356.45, 1.4, -1.7)
 metadata/pct_kind = "fx"
 metadata/pct_seq = "15.00,-15.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 2.4
 metadata/lane = "FX"
-[node name="Mesh" type="MeshInstance3D" parent="Route/FX7"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/FX7" unique_id=315804385]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_fx")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/FX7"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/FX7" unique_id=1731786480]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/FX7"]
+
+[node name="Pct" type="Label3D" parent="Route/FX7" unique_id=1459684538]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1599,20 +1796,25 @@ modulate = Color(0.95, 0.25, 0.25, 1)
 text = "+15.00%"
 font_size = 56
 outline_size = 14
-[node name="Beacon_外汇" type="StaticBody3D" parent="Route"]
+
+[node name="Beacon_外汇" type="StaticBody3D" parent="Route" unique_id=867556663]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.55, 1.5, 2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_外汇"]
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_外汇" unique_id=1848799197]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_外汇"]
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_外汇" unique_id=1562785565]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
 material_override = SubResource("Mat_beacon")
 mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_外汇"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_外汇" unique_id=1520432023]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_外汇"]
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_外汇" unique_id=92679401]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
@@ -1620,21 +1822,25 @@ alpha_cut = 1
 text = "第 7 段 · 外汇"
 font_size = 60
 outline_size = 14
-[node name="DK1" type="StaticBody3D" parent="Route"]
+
+[node name="DK1" type="StaticBody3D" parent="Route" unique_id=1868797275]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -362.45, 1.4, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 0
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK1"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK1" unique_id=939410466]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3.4, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK1"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK1" unique_id=1851265118]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK1"]
+
+[node name="Pct" type="Label3D" parent="Route/DK1" unique_id=712590289]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1643,21 +1849,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK2" type="StaticBody3D" parent="Route"]
+
+[node name="DK2" type="StaticBody3D" parent="Route" unique_id=875592905]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -368.45, 1.8, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 0.4
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK2"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK2" unique_id=1569939054]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK2"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK2" unique_id=1115390348]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK2"]
+
+[node name="Pct" type="Label3D" parent="Route/DK2" unique_id=1059820068]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1666,21 +1876,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK3" type="StaticBody3D" parent="Route"]
+
+[node name="DK3" type="StaticBody3D" parent="Route" unique_id=937978225]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -374.25, 1.4, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK3"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK3" unique_id=1292038953]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK3"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK3" unique_id=513528290]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK3"]
+
+[node name="Pct" type="Label3D" parent="Route/DK3" unique_id=1996750400]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1689,21 +1903,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK4" type="StaticBody3D" parent="Route"]
+
+[node name="DK4" type="StaticBody3D" parent="Route" unique_id=1040180840]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -380.25, 2, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 1.2
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK4"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK4" unique_id=1991377532]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK4"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK4" unique_id=1040572940]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK4"]
+
+[node name="Pct" type="Label3D" parent="Route/DK4" unique_id=1771153573]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1712,21 +1930,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK5" type="StaticBody3D" parent="Route"]
+
+[node name="DK5" type="StaticBody3D" parent="Route" unique_id=2097227785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -386.25, 2.4, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 1.6
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK5"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK5" unique_id=1858780774]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK5"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK5" unique_id=917284551]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 2.8, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK5"]
+
+[node name="Pct" type="Label3D" parent="Route/DK5" unique_id=1805184859]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1735,21 +1957,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK6" type="StaticBody3D" parent="Route"]
+
+[node name="DK6" type="StaticBody3D" parent="Route" unique_id=1345927580]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -392.05, 2, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 2
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK6"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK6" unique_id=99658320]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3.4, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK6"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK6" unique_id=1287473815]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3.4, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK6"]
+
+[node name="Pct" type="Label3D" parent="Route/DK6" unique_id=790549471]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1758,21 +1984,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="DK7" type="StaticBody3D" parent="Route"]
+
+[node name="DK7" type="StaticBody3D" parent="Route" unique_id=345173754]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -398.05, 1.6, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
 metadata/pct_phase = 2.4
 metadata/lane = "DK"
-[node name="Mesh" type="MeshInstance3D" parent="Route/DK7"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Route/DK7" unique_id=485627002]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 material_override = SubResource("Mat_s_dark")
 mesh = SubResource("Box_unit")
-[node name="Col" type="CollisionShape3D" parent="Route/DK7"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/DK7" unique_id=2080605708]
 transform = Transform3D(3, 0, 0, 0, 1.2, 0, 0, 0, 3, 0, 0, 0)
 shape = SubResource("Shape_unit")
-[node name="Pct" type="Label3D" parent="Route/DK7"]
+
+[node name="Pct" type="Label3D" parent="Route/DK7" unique_id=972981353]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
 pixel_size = 0.008
 billboard = 1
@@ -1781,20 +2011,25 @@ modulate = Color(0.25, 0.9, 0.45, 1)
 text = "-0.80%"
 font_size = 56
 outline_size = 14
-[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route"]
+
+[node name="Beacon_暗网黑市交易" type="StaticBody3D" parent="Route" unique_id=611009696]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -362.15, 1.5, 2.2)
-[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
+
+[node name="Mast" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易" unique_id=1065395004]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 material_override = SubResource("Mat_tower")
 mesh = SubResource("Cyl_mast")
-[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易"]
+
+[node name="Head" type="MeshInstance3D" parent="Route/Beacon_暗网黑市交易" unique_id=1973233158]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.3, 0)
 material_override = SubResource("Mat_beacon")
 mesh = SubResource("Sphere_beacon")
-[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易"]
+
+[node name="Col" type="CollisionShape3D" parent="Route/Beacon_暗网黑市交易" unique_id=1710914204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("Shape_mast")
-[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易"]
+
+[node name="Sign" type="Label3D" parent="Route/Beacon_暗网黑市交易" unique_id=1715721271]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
 pixel_size = 0.01
 billboard = 1
@@ -1802,17 +2037,12 @@ alpha_cut = 1
 text = "第 8 段 · 暗网黑市交易"
 font_size = 60
 outline_size = 14
-[node name="DarkGate" type="Node3D" parent="Route"]
+
+[node name="DarkGate" type="Node3D" parent="Route" unique_id=1492480499]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -358.95, 2, -1.7)
 script = ExtResource("10_darkgate")
 trigger_x = -358.95
-spawn_offset = Vector3(-12, 10, 0)
-[node name="RamMarket" type="Node3D" parent="."]
-script = ExtResource("11_rammarket")
-[node name="ReadyZone" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, 4)
-script = ExtResource("12_readyzone")
-zone_size = Vector3(14, 3, 8)
+
 [node name="X1" type="StaticBody3D" parent="Route" unique_id=899126870]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -404.9, 1.75, -1.7)
 
@@ -2447,6 +2677,16 @@ text = "第 11 段 · 终点"
 font_size = 64
 outline_size = 14
 
+[node name="Futures" type="Node3D" parent="." unique_id=702721212]
+script = ExtResource("7_futures")
+
+[node name="RamMarket" type="Node3D" parent="." unique_id=401517361]
+script = ExtResource("11_rammarket")
+
+[node name="ReadyZone" type="Area3D" parent="." unique_id=744031162]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, 4)
+script = ExtResource("12_readyzone")
+
 [node name="Movers" type="Node3D" parent="." unique_id=1395881251]
 
 [node name="MoverA" type="AnimatableBody3D" parent="Movers" unique_id=1649987381]
@@ -2719,47 +2959,47 @@ light_color = Color(1, 0.93, 0.8, 1)
 light_energy = 2.0
 omni_range = 9.0
 
-[node name="RoofSolid" type="StaticBody3D" parent="Island/Props/Shed"]
+[node name="RoofSolid" type="StaticBody3D" parent="Island/Props/Shed" unique_id=777836659]
 
-[node name="Col" type="CollisionShape3D" parent="Island/Props/Shed/RoofSolid"]
+[node name="Col" type="CollisionShape3D" parent="Island/Props/Shed/RoofSolid" unique_id=1086302026]
 transform = Transform3D(4.4, 0, 0, 0, 0.2, 0, 0, 0, 3.4, 0, 2.4, 0)
 shape = SubResource("Shape_unit")
 
-[node name="RoofSteps" type="StaticBody3D" parent="Island/Props/Shed"]
+[node name="RoofSteps" type="StaticBody3D" parent="Island/Props/Shed" unique_id=1867080617]
 
-[node name="Mesh0" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps"]
+[node name="Mesh0" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps" unique_id=2037711674]
 transform = Transform3D(1.2, 0, 0, 0, 0.5, 0, 0, 0, 1.2, -3, 0.25, 1.4)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
-[node name="Col0" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps"]
+[node name="Col0" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps" unique_id=176996989]
 transform = Transform3D(1.2, 0, 0, 0, 0.5, 0, 0, 0, 1.2, -3, 0.25, 1.4)
 shape = SubResource("Shape_unit")
 
-[node name="Mesh1" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps"]
-transform = Transform3D(1.2, 0, 0, 0, 1.0, 0, 0, 0, 1.2, -3.4, 0.5, 0.6)
+[node name="Mesh1" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps" unique_id=1907851177]
+transform = Transform3D(1.2, 0, 0, 0, 1, 0, 0, 0, 1.2, -3.4, 0.5, 0.6)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
-[node name="Col1" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps"]
-transform = Transform3D(1.2, 0, 0, 0, 1.0, 0, 0, 0, 1.2, -3.4, 0.5, 0.6)
+[node name="Col1" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps" unique_id=1602901114]
+transform = Transform3D(1.2, 0, 0, 0, 1, 0, 0, 0, 1.2, -3.4, 0.5, 0.6)
 shape = SubResource("Shape_unit")
 
-[node name="Mesh2" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps"]
+[node name="Mesh2" type="MeshInstance3D" parent="Island/Props/Shed/RoofSteps" unique_id=1073537528]
 transform = Transform3D(1.2, 0, 0, 0, 1.5, 0, 0, 0, 1.2, -3, 0.75, -0.2)
 material_override = SubResource("Mat_shed")
 mesh = SubResource("Box_unit")
 
-[node name="Col2" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps"]
+[node name="Col2" type="CollisionShape3D" parent="Island/Props/Shed/RoofSteps" unique_id=441168211]
 transform = Transform3D(1.2, 0, 0, 0, 1.5, 0, 0, 0, 1.2, -3, 0.75, -0.2)
 shape = SubResource("Shape_unit")
 
-[node name="RTX5090" type="Node3D" parent="Island/Props/Shed"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.1, 2.5, 0.2)
+[node name="RTX5090" type="Node3D" parent="Island/Props/Shed" unique_id=221593037]
+transform = Transform3D(0.7933533, 0, -0.6087614, 0, 1, 0, 0.6087614, 0, 0.7933533, -0.08465576, 2.5, 1.0256414)
 script = ExtResource("13_rtx5090")
 
-[node name="BankSign" type="Node3D" parent="Island/Props/Shed"]
-transform = Transform3D(0.3256, 0, 0.9455, 0, 1, 0, -0.9455, 0, 0.3256, -0.9, 2.5, 0.1)
+[node name="BankSign" type="Node3D" parent="Island/Props/Shed" unique_id=1564920170]
+transform = Transform3D(0.9999929, 0, 0, 0, 1, 0, 0, 0, 0.9999929, 0.033081055, 2.5, 1.389699)
 script = ExtResource("13_banksign")
 
 [node name="Crates" type="StaticBody3D" parent="Island/Props" unique_id=244722476]

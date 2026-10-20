@@ -420,19 +420,44 @@ func _on_setting_changed(key: String, _value: Variant) -> void:
 #     godot --path . -- --sky=day      晴空
 #     godot --path . -- --sky=night    月夜星空
 #     godot --path . -- --sky=dusk     深暮（很暗，只适合夜景测试）
+#
+# 2026-10-21 用户「天空盒之前是 4 个，总共 10 个，现在想把 10 个天空盒都加入备用」：
+# AllSky Free 那一包**刚好 10 张**，现在全在里面了（`_sky_convert.py` 统一缩到
+# 4096×2048 转 JPEG，一张 83 ~ 889 KB）。多出来的 6 张是**备用**，默认仍然是 pink，
+# 想换随时 `--sky=<key>`，不用改代码：
+#     overcast   阴天（灰白云层，最平）
+#     space      异星太空（地平线有行星）
+#     cartoon    卡通夜空（插画感的深蓝 + 星）
+#     coldnight  寒夜（几乎是纯黑 + 冷调）
+#     coldsunset 冷色日落（灰蓝橙，雾很厚）
+#     bluesunset 蓝调日落（橙地平线 + 蓝顶，对比最强）
 const SKIES := {
 	"pink": "res://assets/sky/sky_pink.jpg",
 	"day": "res://assets/sky/sky_day.jpg",
 	"night": "res://assets/sky/sky_night.jpg",
 	"dusk": "res://assets/sky/sky_dusk.jpg",
+	"overcast": "res://assets/sky/sky_overcast.jpg",
+	"space": "res://assets/sky/sky_space.jpg",
+	"cartoon": "res://assets/sky/sky_cartoon.jpg",
+	"coldnight": "res://assets/sky/sky_coldnight.jpg",
+	"coldsunset": "res://assets/sky/sky_coldsunset.jpg",
+	"bluesunset": "res://assets/sky/sky_bluesunset.jpg",
 }
 const SKY_DEFAULT := "pink"
 ## 每张天空配一个雾色：雾是把远处的板子往「天色」里压，配色不一致会显得脏。
+## 后 6 条是**量出来的**：取全景图「地平线那一带」（纵向 42%~56%）的平均色再压暗 15%
+## （雾色比天色略深，远景才有层次），数值见 `_arisu_captures/_sky_convert.py` 的输出。
 const SKY_FOG := {
 	"pink": Color(0.62, 0.48, 0.55),
 	"day": Color(0.55, 0.62, 0.72),
 	"night": Color(0.10, 0.11, 0.18),
 	"dusk": Color(0.26, 0.18, 0.20),
+	"overcast": Color(0.54, 0.53, 0.52),
+	"space": Color(0.08, 0.07, 0.08),
+	"cartoon": Color(0.19, 0.31, 0.49),
+	"coldnight": Color(0.05, 0.08, 0.13),
+	"coldsunset": Color(0.55, 0.58, 0.60),
+	"bluesunset": Color(0.36, 0.45, 0.57),
 }
 
 
@@ -444,7 +469,12 @@ func _setup_sky() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--sky="):
 			key = a.substr(6).strip_edges().to_lower()
-	var path: String = SKIES.get(key, SKIES[SKY_DEFAULT])
+	# 打错名字不要静默回退到默认 —— 10 个 key 记不住，把可用的直接打到日志里
+	if not SKIES.has(key):
+		push_warning("[Game] 没有叫「%s」的天空盒，用默认 %s。可用的 %d 个：%s"
+			% [key, SKY_DEFAULT, SKIES.size(), ", ".join(SKIES.keys())])
+		key = SKY_DEFAULT
+	var path: String = SKIES[key]
 	var tex := load(path) as Texture2D
 	if tex == null:
 		push_warning("[Game] 天空贴图加载失败：%s" % path)
@@ -867,6 +897,10 @@ const ROOM_DOOR_SCAN_STEP := 0.05
 const ROOM_DOOR_MIN_WIDTH := 0.80
 ## 门板高度（到平台面算起）。门洞本身是全高的，上面那截用墙材质补成「门楣」
 const ROOM_DOOR_HEIGHT := 2.6
+## 门楣（门洞上方的墙板）比墙面**往外凸**多少（m）。
+## 2026-10-21：原来往里缩 4 cm，门框上方留一道暗缝；改成齐平之后缩到 3 mm ——
+## 只为了两块的表面不重合（不然 z-fighting 闪烁），肉眼就是一个平面。
+const ROOM_DOOR_LINTEL_PROUD := 0.003
 const ROOM_ROOF_COLOR := Color(0.27, 0.28, 0.30)
 const ROOM_ROOF_THICKNESS := 0.3
 
@@ -1040,23 +1074,31 @@ func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: M
 	_put_door_box(proxy, "DoorPanel", axis, plane, floor_y, door_top, center, w, thick,
 		_door_mat(ROOM_DOOR_COLOR, false, 0.45))
 	if door_top < top_y:
-		# 门楣比门扇**靠外**，只往里缩 4 cm：缩得太深（11 cm）会在门框上方留一道
-		# 一直拉到屋顶的暗缝，斜看像墙没接上。也不能齐平 —— 齐平会和代理墙面
-		# 共面打架（z-fighting），而且超过墙顶会露出屋顶轮廓外一小截。
+		# 门楣：把门洞上方那截补齐到墙顶。
+		#
+		# ⚠️ 2026-10-21 用户「门这里上面有破绽要去除」—— 原来门楣比墙面**缩进去 4 cm**
+		#    （为了不和代理墙共面打架），结果门框横条顶上多出一条 4 cm 深的台阶，
+		#    从门外斜着看就是门框上方一道**暗缝**，一直横到两边墙。
+		#    现在门楣的**外表面与墙面齐平**（再往外 3 mm，只为了不同面重合），
+		#    门洞上方就是一块连续的、和墙同色同平面的墙板，没有缝也没有台阶；
+		#    3 mm 的凸出小于一个像素，看不出台阶，又绝对不会 z-fighting。
 		_put_door_box(proxy, "DoorLintel", axis,
-			outer - out_sign * (0.04 + thick * 0.5), door_top,
+			outer + out_sign * (ROOM_DOOR_LINTEL_PROUD - thick * 0.5), door_top,
 			top_y + ROOM_DOOR_OVERLAP, center, w, thick, wall_mat)
 	# 门框：四根比墙厚的条，贴在墙外表面上收口（门扇缩在墙里，四条边全靠它遮住）
 	var bar := 0.14
 	var bar_d := 0.12
 	var n_face := outer
 	var frame_mat := _door_mat(ROOM_DOOR_COLOR.darkened(0.35), false, 0.15)
-	_put_door_box(proxy, "DoorFrameL", axis, n_face, floor_y - 0.02, door_top + 0.07,
+	# 2026-10-21：竖框顶到 `door_top + bar`（= 横条顶面），四角才是**严丝合缝的直角**；
+	# 原来竖框只到 `door_top + 0.07`，横条比它高出 7 cm，两个上角各留一个小台阶。
+	_put_door_box(proxy, "DoorFrameL", axis, n_face, floor_y - 0.02, door_top + bar,
 		t_lo, bar, bar_d, frame_mat)
-	_put_door_box(proxy, "DoorFrameR", axis, n_face, floor_y - 0.02, door_top + 0.07,
+	_put_door_box(proxy, "DoorFrameR", axis, n_face, floor_y - 0.02, door_top + bar,
 		t_hi, bar, bar_d, frame_mat)
+	# 横条宽度 = 洞口 + 两根竖条（不多那 2 cm），端头与竖框外沿齐平，不再探出小尾巴
 	_put_door_box(proxy, "DoorFrameT", axis, n_face, door_top, door_top + bar,
-		center, gap + bar + 0.02, bar_d, frame_mat)
+		center, gap + bar, bar_d, frame_mat)
 	# 把手：一颗小圆柱，让这块黄板一眼看得出是「门」而不是刷了漆的墙
 	var knob := MeshInstance3D.new()
 	knob.name = "DoorKnob"

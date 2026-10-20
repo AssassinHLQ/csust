@@ -35,13 +35,13 @@ const ENTRIES := [
 	{
 		"group": "界面与字体",
 		"path": "assets/sky",
-		"title": "全景天空盒（粉 / 日 / 夜 / 黄昏四张）",
+		"title": "全景天空盒（10 张全收录）",
 		"author": "AllSky Free（Richard Whitelock）",
 		"license": "MIT（可分发、可商用）",
 		"distributed": true,
 		"source": "https://github.com/rpgwhitelock/AllSkyFree_Godot",
 		"license_file": "",
-		"note": "8192~16384 原图缩到 4096×2048 JPEG；`--sky=` 切换",
+		"note": "8192~16384 原图缩到 4096×2048 JPEG（83~889 KB/张）；`--sky=` 在 10 张里切换，默认 pink",
 	},
 	{
 		"group": "界面与字体",

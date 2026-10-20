@@ -104,21 +104,31 @@ func _test_structure(game: Node, hut: Node3D) -> void:
 		kinds[op] = int(kinds.get(op, 0)) + 1
 		if op == CSGShape3D.OPERATION_SUBTRACTION:
 			subs += 1
-	_check(csg.get_child_count() == 7, "屋壳 7 个子节点（实测 %d）" % csg.get_child_count())
+	_check(csg.get_child_count() == 6, "屋壳 6 个子节点（实测 %d）" % csg.get_child_count())
 	_check(subs == 4, "其中 4 个是 SUBTRACTION：掏空 + 门 + 两窗（实测 %d）" % subs)
-	_check(int(kinds.get(CSGShape3D.OPERATION_UNION, 0)) == 3,
-		"3 个 UNION：外壳 + 屋顶 + 雨篷")
+	_check(int(kinds.get(CSGShape3D.OPERATION_UNION, 0)) == 2,
+		"2 个 UNION：外壳 + 屋顶（雨篷 2026-10-21 按用户要求删了）")
 
-	# 布尔顺序：**掏空必须排在屋顶/雨篷之前**。顺序错了不会崩、模型也还在，
+	# 布尔顺序：**掏空必须排在屋顶之前**。顺序错了不会崩、模型也还在，
 	# 只是屋顶中间会多一个和屋子一样大的洞（在编辑器里相当不显眼），所以两头都验：
 	# 先看子节点下标，再用一条**垂直射线**看屋顶到底通不通。
 	var idx := {}
 	for i in csg.get_child_count():
 		idx[String(csg.get_child(i).name)] = i
-	_check(int(idx.get("Cavity", 99)) < int(idx.get("Roof", -1)) \
-		and int(idx.get("Cavity", 99)) < int(idx.get("Canopy", -1)),
-		"掏空排在屋顶/雨篷之前（子节点下标 %d < %d / %d）"
-		% [int(idx.get("Cavity", 99)), int(idx.get("Roof", -1)), int(idx.get("Canopy", -1))])
+	_check(int(idx.get("Cavity", 99)) < int(idx.get("Roof", -1)),
+		"掏空排在屋顶之前（子节点下标 %d < %d）"
+		% [int(idx.get("Cavity", 99)), int(idx.get("Roof", -1))])
+	# 2026-10-21 用户「门这里上面有破绽要去除」：减法会把**它之前**累积的东西一起挖掉，
+	# 门洞顶 2.20 与屋顶/雨篷在高度上重叠 —— 门必须排在屋顶**之前**，否则会咬掉屋顶/雨篷
+	# 靠墙那一截，门框正上方就留一道缝。
+	_check(csg.get_node_or_null("Canopy") == null,
+		"雨篷 Canopy 已删除（用户：「房子顶上的板子也要删掉」）")
+	_check(int(idx.get("Door", 99)) < int(idx.get("Roof", -1)) \
+		and int(idx.get("WindowA", 99)) < int(idx.get("Roof", -1)) \
+		and int(idx.get("WindowB", 99)) < int(idx.get("Roof", -1)),
+		"门与两窗排在屋顶**之前**（下标 门 %d / 窗 A %d / 窗 B %d < 屋顶 %d）—— 减法挖不到屋顶/雨篷"
+		% [int(idx.get("Door", 99)), int(idx.get("WindowA", 99)),
+			int(idx.get("WindowB", 99)), int(idx.get("Roof", -1))])
 	_check(int(idx.get("Door", -1)) > int(idx.get("Walls", 99)) \
 		and int(idx.get("WindowA", -1)) > int(idx.get("Walls", 99)) \
 		and int(idx.get("WindowB", -1)) > int(idx.get("Walls", 99)),
@@ -132,10 +142,34 @@ func _test_structure(game: Node, hut: Node3D) -> void:
 		"从正上方垂直往下打，先被屋顶挡住（命中 y = %.2f，屋顶顶面 y = %.2f）→ 屋顶没有洞"
 		% [roof_y, want_y])
 
+	# 2026-10-21 用户「门这里上面有破绽要去除」的**几何复验**（只看节点顺序不够，
+	# 得真的打两条射线）：
+	#   y = 2.35（门洞顶 2.20 与墙顶 2.50 之间）→ 必须**打在家门口的墙面上**
+	#                                              = 门框上方是实墙，不是缝/不是穿到屋里；
+	#   y = 2.05（门洞里）                       → 必须**打到屋里远处的墙**，
+	#                                              中间不许有别的块（原来那 1.60 m 深的雨篷就在这儿）。
+	var dfx := hut.global_position.x - 3.3
+	var base := Vector3(dfx - 2.0, 0.0, hut.global_position.z)
+	var hit_above := _ray(base + Vector3(0, 2.35, 0), base + Vector3(5.0, 2.35, 0))
+	# ⚠️ 这条要打**长一点**（12 m）：门洞是通的，射线会一路穿到屋里 8.4 m 外的对面墙。
+	#    长度只有 5 m 的话它谁也打不到，反而被判失败（第一版就是这样）。
+	var hit_door := _ray(base + Vector3(0, 2.05, 0), base + Vector3(12.0, 2.05, 0))
+	var x_above := Vector3(hit_above["position"]).x if not hit_above.is_empty() else -99.0
+	var x_door := Vector3(hit_door["position"]).x if not hit_door.is_empty() else -99.0
+	_check(absf(x_above - dfx) < 0.02,
+		"门框上方（y = 2.35）是**实墙**：射线在 x = %.2f 就停住（墙面 x = %.2f）"
+		% [x_above, dfx])
+	_check(x_door > dfx + 5.0,
+		"门洞里（y = 2.05）一路通到屋里：射线走了 %.2f m（原来 0.60 m 就撞上雨篷）"
+		% (x_door - base.x))
+
 	# 整份场景只有一个箱体网格资源 —— 「网格化搭建」的另一半定义
+	# （运行时挂进来的道具不参与：它们不是 `.tscn` 里手摆的方块）
 	var meshes := {}
 	var cylinders := 0
 	for n in _all(hut, "MeshInstance3D"):
+		if _is_prop(n, hut):
+			continue
 		var m := (n as MeshInstance3D).mesh
 		if m is CylinderMesh:
 			cylinders += 1
@@ -171,6 +205,8 @@ func _test_grid(hut: Node3D) -> void:
 	var nodes := 0
 	var sizes := 0
 	for n in _all(hut, "Node3D"):
+		if _is_prop(n, hut):
+			continue
 		nodes += 1
 		if not _on_grid((n as Node3D).position):
 			bad_pos.append("%s %s" % [n.name, str((n as Node3D).position)])
@@ -497,6 +533,21 @@ func _ray(from: Vector3, to: Vector3) -> Dictionary:
 
 
 # --- 工具 ---------------------------------------------------------------------
+
+## 运行时挂进来的道具（`game.gd` 的「召唤同伴」台）：不是 `.tscn` 里手摆的方块，
+## 「单一 BoxMesh 资源」「position 落在 0.05 网格上」这些搭建纪律对它没有意义。
+const RUNTIME_PROPS := ["SummonPad"]
+
+
+## 这个节点是不是某个运行时道具的后代（含自己）
+func _is_prop(node: Node, root_node: Node) -> bool:
+	var n := node
+	while n != null and n != root_node:
+		if String(n.name) in RUNTIME_PROPS:
+			return true
+		n = n.get_parent()
+	return false
+
 
 ## 递归收某类型的后代（不含自己）
 func _all(root_node: Node, cls: String) -> Array:
