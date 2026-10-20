@@ -179,13 +179,36 @@ func _build() -> void:
 
 	# 三种控件：离散型给分段按钮、数值型给滑块、其余给开关 ——
 	# 判据全在 GameSettings 里（CHOICES / RANGES）
+	#
+	# 2026-10-20：设置项从 6 条涨到 15 条（画面拆成 10 个独立旋钮），一屏放不下，
+	# 所以装进一个固定高度的 `ScrollContainer`。
+	var scroll := ScrollContainer.new()
+	scroll.name = "SettingsScroll"
+	scroll.custom_minimum_size = Vector2(0.0, 560.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 6)
+	scroll.add_child(rows)
+
+	var render_header_done := false
 	for key in GameSettings.keys():
+		if key in GameSettings.RENDER_KEYS and not render_header_done:
+			render_header_done = true
+			var h := Label.new()
+			h.text = "画面（每个都能单独调）"
+			h.add_theme_font_size_override("font_size", 14)
+			h.add_theme_color_override("font_color", _skin["subtext"])
+			rows.add_child(HSeparator.new())
+			rows.add_child(h)
 		if GameSettings.is_choice(key):
-			_add_choice(vbox, key)
+			_add_choice(rows, key)
 		elif GameSettings.is_numeric(key):
-			_add_slider(vbox, key)
+			_add_slider(rows, key)
 		else:
-			_add_check(vbox, key)
+			_add_check(rows, key)
 
 	vbox.add_child(HSeparator.new())
 
@@ -313,8 +336,11 @@ func _add_choice(parent: Node, key: String) -> void:
 
 	var group := ButtonGroup.new()
 	group.allow_unpress = false
-	var seg := HBoxContainer.new()
-	seg.add_theme_constant_override("separation", 4)
+	# 分段按钮用 **HFlowContainer**：抗锯齿有 6 档、帧率有 8 档，一行塞不下就自动换行
+	# （普通 HBox 会被挤成「MS… / M…」，字都看不清）。
+	var seg := HFlowContainer.new()
+	seg.add_theme_constant_override("h_separation", 4)
+	seg.add_theme_constant_override("v_separation", 4)
 	seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(seg)
 
@@ -325,10 +351,8 @@ func _add_choice(parent: Node, key: String) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = (String(choice) == current)
-		# 五个档位挤一行，按钮比原来的对话框按钮小一圈
-		b.custom_minimum_size = Vector2(0.0, 32.0)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 14)
+		b.custom_minimum_size = Vector2(58.0, 30.0)
+		b.add_theme_font_size_override("font_size", 13)
 		b.pressed.connect(_on_choice_pressed.bind(key, choice))
 		seg.add_child(b)
 		buttons[String(choice)] = b
@@ -348,13 +372,9 @@ func _on_choice_pressed(key: String, choice: Variant) -> void:
 	GameSettings.set_value(key, choice)
 
 
-## 分段按钮右侧那列数值：画质档位显示成「1.00× · 60 fps」，比只重复一遍档位名有用
+## 分段按钮右侧那列数值：就是当前选中项的人话名字（列表换行后也能一眼看到现在是什么）
 func _choice_value_text(key: String) -> String:
-	if key == "render_quality":
-		var q := GameSettings.quality_spec()
-		var fps := int(q["fps"])
-		return "%.2f× · %s" % [float(q["scale"]), "vsync" if fps <= 0 else "%d fps" % fps]
-	return str(GameSettings.value(key))
+	return GameSettings.choice_label(key, GameSettings.value(key))
 
 
 func _make_button(text: String, handler: Callable) -> Button:

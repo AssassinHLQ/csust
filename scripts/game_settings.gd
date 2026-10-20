@@ -26,7 +26,20 @@ const DEFAULTS := {
 	"master_volume": 1.0,
 	"companion_fire": true,
 	"boss_attack": true,
-	"render_quality": "high",
+	# ── 画面：2026-10-20 用户要求 **不再用「一档画质全包」** ──
+	# 「画质不要这样子调，要单独调帧率、单独调分辨率、单独调抗锯齿之类的。」
+	# 于是原来的 `render_quality`（极致/高/中/低/省电，一档同时改缩放+SSAO+辉光+限帧）
+	# 被拆成下面这些**各自独立**的旋钮，互不覆盖。
+	"resolution_scale": "1.00",
+	"fps_limit": "60",
+	"vsync": true,
+	"aa_mode": "off",
+	"shadow_quality": "high",
+	"ssao": true,
+	"glow": true,
+	"ssr": false,
+	"fog": true,
+	"window_mode": "maximized",
 }
 
 ## 数值型设置的 [最小值, 最大值, 步长]
@@ -36,35 +49,27 @@ const RANGES := {
 	"master_volume": [0.0, 1.0, 0.05],
 }
 
-## ── 画质档位 ──
+## ── 画面各旋钮的取值 ──
 ##
-## 为什么要有这个：GPU 占用完全由「每帧要画多少像素」决定，而那个旋钮
-## （`Viewport.scaling_3d_scale`）以前是代码里写死的。实测：2560×1440 + 原生 +
-## Compute 后端下 GPU 恒在 100%（每帧 16.2 ms / 预算 16.67 ms，刚好追得上 60 fps），
-## 所以「降一档」能直接换回一半的功耗。
+## 为什么拆开：GPU 占用几乎只由「每帧画多少像素」决定，而像素数 = 分辨率缩放 ×
+## 抗锯齿的采样倍数 × 阴影图。以前它们被绑成一个「画质档位」，想单独把 MSAA 关掉
+## 降发热就必须连缩放一起掉；用户明确说不要这样。
 ##
-## 字段含义：
-##   scale  乘到 `scaling_3d_scale` 上（1.0 = 原生；只乘，不会被放大过 1.0）
-##   ssao   屏幕空间环境光遮蔽（全屏 pass）
-##   glow   辉光
-##   fps    `Engine.max_fps`；0 = 不限帧（交给垂直同步）
-##
-## ⚠️ `ultra`/`high` 就是本工程验证过的画面（README §6.6 / §6.11 的对照图）；
-##    `medium` 以下只是为省电，画质会明显下降。
-const QUALITY := {
-	"ultra": {"label": "极致", "scale": 1.00, "ssao": true, "glow": true, "fps": 0},
-	"high": {"label": "高", "scale": 1.00, "ssao": true, "glow": true, "fps": 60},
-	"medium": {"label": "中", "scale": 0.85, "ssao": false, "glow": true, "fps": 60},
-	"low": {"label": "低", "scale": 0.70, "ssao": false, "glow": false, "fps": 60},
-	"saver": {"label": "省电", "scale": 0.60, "ssao": false, "glow": false, "fps": 30},
-}
-## 界面上的先后顺序（也是默认档 `high` 的位置：第二档）
-const QUALITY_ORDER := ["ultra", "high", "medium", "low", "saver"]
+## 每个键都**独立**落盘、独立生效（`game.gd::_apply_render` 里一个个读）。
+## 默认值对应以前的高档：原生缩放 + 60 fps + 无 AA + 高阴影 + SSAO/辉光/雾开。
+const RES_CHOICES := ["0.50", "0.60", "0.75", "0.85", "1.00"]
+const FPS_CHOICES := ["30", "45", "60", "90", "120", "144", "240", "unlimited"]
+const AA_CHOICES := ["off", "fxaa", "msaa2", "msaa4", "msaa8", "taa"]
+const SHADOW_CHOICES := ["off", "low", "medium", "high"]
+const WINDOW_CHOICES := ["windowed", "maximized", "fullscreen", "exclusive"]
 
 ## 离散型设置：值只能取列表里的那些。设置界面据此画**分段按钮**而不是滑块/开关。
-## ⚠️ 顺序有讲究：`QUALITY_ORDER` 必须先于它声明。
 const CHOICES := {
-	"render_quality": QUALITY_ORDER,
+	"resolution_scale": RES_CHOICES,
+	"fps_limit": FPS_CHOICES,
+	"aa_mode": AA_CHOICES,
+	"shadow_quality": SHADOW_CHOICES,
+	"window_mode": WINDOW_CHOICES,
 }
 
 ## 设置界面里显示的名字
@@ -74,8 +79,21 @@ const LABELS := {
 	"master_volume": "主音量",
 	"companion_fire": "同伴开火",
 	"boss_attack": "Boss 攻击",
-	"render_quality": "画质",
+	"resolution_scale": "3D 渲染缩放",
+	"fps_limit": "帧率上限",
+	"vsync": "垂直同步",
+	"aa_mode": "抗锯齿",
+	"shadow_quality": "阴影质量",
+	"ssao": "环境光遮蔽 SSAO",
+	"glow": "辉光",
+	"ssr": "屏幕空间反射 SSR",
+	"fog": "雾",
+	"window_mode": "窗口模式",
 }
+
+## 「画面」分组：设置界面在这些键之前插一个小标题
+const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
+	"shadow_quality", "ssao", "glow", "ssr", "fog", "window_mode"]
 
 static var _values := {}
 static var _loaded := false
@@ -143,19 +161,23 @@ static func choices(key: String) -> Array:
 	return CHOICES.get(key, [])
 
 
-## 离散型的显示名（画质档位 -> 「极致 / 高 / 中 / 低 / 省电」）
+## 离散型的显示名（内部值是代号，界面上要写人话）
 static func choice_label(key: String, v: Variant) -> String:
-	if key == "render_quality":
-		return String((QUALITY.get(str(v), {}) as Dictionary).get("label", str(v)))
-	return str(v)
-
-
-## 当前画质档位的参数表。值非法（比如手改过 settings.cfg）就退回默认档。
-static func quality_spec() -> Dictionary:
-	var key := str(value("render_quality"))
-	if not QUALITY.has(key):
-		key = str(DEFAULTS["render_quality"])
-	return QUALITY[key]
+	var s := str(v)
+	match key:
+		"resolution_scale":
+			return "%s×" % s
+		"fps_limit":
+			return "不限" if s == "unlimited" else "%s fps" % s
+		"aa_mode":
+			return {"off": "关", "fxaa": "FXAA", "msaa2": "MSAA 2×",
+				"msaa4": "MSAA 4×", "msaa8": "MSAA 8×", "taa": "TAA"}.get(s, s)
+		"shadow_quality":
+			return {"off": "关", "low": "低", "medium": "中", "high": "高"}.get(s, s)
+		"window_mode":
+			return {"windowed": "窗口", "maximized": "最大化",
+				"fullscreen": "全屏", "exclusive": "独占全屏"}.get(s, s)
+	return s
 
 
 static func label(key: String) -> String:

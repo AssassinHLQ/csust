@@ -94,6 +94,45 @@ func _run() -> void:
 	await _wait(2)
 	_check(not _boss_attack_off(bosses), "打开后恢复攻击")
 
+	print("\n========== 3b. 画面旋钮**各自独立**生效 ==========")
+	# 2026-10-20 用户：「画质不要这样子调，要单独调帧率、单独调分辨率、单独调抗锯齿
+	# 之类的」—— 这一节就是盯「拆开以后每一项都真的落到 Viewport / Engine 上」。
+	_check(not GameSettings.DEFAULTS.has("render_quality"),
+		"旧的「画质」一档全包已删（表里没有 render_quality）")
+	_check(GameSettings.RENDER_KEYS.size() >= 10,
+		"画面旋钮 %d 个（缩放/帧率/垂直同步/AA/阴影/SSAO/辉光/SSR/雾/窗口）"
+		% GameSettings.RENDER_KEYS.size())
+	var vp := game.get_viewport()
+	GameSettings.set_value("resolution_scale", "0.60")
+	await _wait(2)
+	_check(absf(vp.scaling_3d_scale - 0.60) < 0.02,
+		"渲染缩放 0.60 → scaling_3d_scale %.2f" % vp.scaling_3d_scale)
+	GameSettings.set_value("fps_limit", "30")
+	await _wait(2)
+	_check(Engine.max_fps == 30, "帧率上限 30 → Engine.max_fps %d" % Engine.max_fps)
+	GameSettings.set_value("aa_mode", "msaa4")
+	await _wait(2)
+	_check(vp.msaa_3d == Viewport.MSAA_4X, "抗锯齿 MSAA 4× 真的打开")
+	GameSettings.set_value("aa_mode", "taa")
+	await _wait(2)
+	_check(vp.use_taa and vp.msaa_3d == Viewport.MSAA_DISABLED,
+		"切到 TAA 时 MSAA 自动关（三者互斥）")
+	GameSettings.set_value("aa_mode", "off")
+	GameSettings.set_value("shadow_quality", "off")
+	await _wait(2)
+	var shadows_off := true
+	for n in game.find_children("*", "Light3D", true, false):
+		if (n as Light3D).shadow_enabled:
+			shadows_off = false
+	_check(shadows_off, "阴影质量选「关」→ 场上所有灯都不投影")
+	GameSettings.set_value("shadow_quality", "high")
+	GameSettings.set_value("ssao", false)
+	await _wait(2)
+	var we := game.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	_check(we != null and not we.environment.ssao_enabled, "SSAO 单独关掉（不影响缩放/帧率）")
+	GameSettings.set_value("ssao", true)
+	await _wait(2)
+
 	print("\n========== 4. 落盘 ==========")
 	GameSettings.set_value("fov", 71.0)
 	await _wait(2)

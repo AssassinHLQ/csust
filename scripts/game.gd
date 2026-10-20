@@ -76,8 +76,8 @@ var _floor_carved := false
 var _room_scene: SplatScene = null
 ## `_fit_render_scale` 算出来的**自动上限**（只看窗口尺寸，默认 1.0）
 var _auto_scale := 1.0
-## 当前画质档位的参数表（`GameSettings.QUALITY` 的一项）。见 `_apply_quality()`。
-var _quality: Dictionary = {}
+## 每盏灯**原本**投不投影（`instance_id -> bool`）：阴影质量只恢复/关闭，不擅自打开
+var _shadow_authored := {}
 
 var _player: Player
 var _weapon: Weapon
@@ -220,43 +220,130 @@ func _fit_render_scale() -> void:
 	if ratio < RENDER_SCALE_AREA_RATIO_MIN:
 		s = clampf(sqrt(ratio), 0.5, 1.0)
 	# 这里算出来的只是**上限**（窗口别太大）；真正的档位由设置里的「画质」决定，
-	# 两者在 _apply_quality() 里相乘。
+	# 两者在 _apply_render() 里相乘。
 	_auto_scale = s
 	print("[Game] _fit_render_scale：渲染尺寸 %s → 自动上限 %.3f" % [str(size), s])
-	_apply_quality()
+	_apply_render()
 
 
-## 画质档位 → 实际渲染参数。设置界面一改就立刻生效（走 `GameSettings.listen`）。
+## 画面旋钮 → 实际渲染参数。设置界面一改就立刻生效（走 `GameSettings.listen`）。
 ##
-## 为什么把「省电」做成档位而不是写死：GPU 占用几乎只由**每帧画多少像素**决定。
-## 实测 2560×1440 + 原生 + Compute 后端时 GPU 恒在 100%（每帧 16.2 ms / 预算
-## 16.67 ms，刚好追得上 60 fps），所以降一档能直接换回一大截功耗。旋钮见
-## `GameSettings.QUALITY`。
-func _apply_quality() -> void:
-	var q := GameSettings.quality_spec()
-	_quality = q
+## 2026-10-20 用户：「画质不要这样子调，要单独调帧率、单独调分辨率、单独调抗锯齿
+## 之类的，还有什么可以单独调的也写上去」—— 所以这里**一项一项读**，互不覆盖：
+##   3D 渲染缩放 / 帧率上限 / 垂直同步 / 抗锯齿 / 阴影质量 / SSAO / 辉光 / SSR / 雾 /
+##   窗口模式。以前那个「一档全包」的 `render_quality` 已经删掉了。
+func _apply_render() -> void:
 	var vp := get_viewport()
-	# ⚠️ 只**乘**、不放大过 1.0：窗口极大时 _auto_scale 会小于 1，两者取小
-	var target := clampf(_auto_scale * float(q["scale"]), 0.25, 1.0)
+	# ① 3D 渲染缩放：只**乘**自动上限（窗口极大时 _auto_scale 会小于 1），不放大过 1.0
+	var res := float(String(GameSettings.value("resolution_scale")))
+	var target := clampf(_auto_scale * res, 0.25, 1.0)
 	if not is_equal_approx(vp.scaling_3d_scale, target):
 		vp.scaling_3d_scale = target
-	Engine.max_fps = int(q["fps"])
+	# ② 帧率上限 / 垂直同步（两个独立旋钮）
+	var fps := _fps_limit()
+	Engine.max_fps = fps
+	DisplayServer.window_set_vsync_mode(
+		DisplayServer.VSYNC_ENABLED if bool(GameSettings.value("vsync"))
+		else DisplayServer.VSYNC_DISABLED)
+	# ③ 抗锯齿（互斥：TAA 打开时 MSAA / FXAA 必须全关）
+	_apply_aa(vp)
+	# ④ 阴影
+	_apply_shadows()
+	# ⑤ 后处理 + 雾
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if we != null and we.environment != null:
-		we.environment.ssao_enabled = bool(q["ssao"])
-		we.environment.glow_enabled = bool(q["glow"])
-	# 打一行：GPU 占用直接跟这个数走，排查「怎么突然很烫」时先看它
-	print("[Game] 画质 = %s：3D 缩放 %.2f（自动上限 %.2f × 档位 %.2f）  SSAO %s  辉光 %s  限帧 %s" % [
-		GameSettings.choice_label("render_quality", GameSettings.value("render_quality")),
-		target, _auto_scale, float(q["scale"]),
-		"开" if q["ssao"] else "关", "开" if q["glow"] else "关",
-		"垂直同步" if int(q["fps"]) <= 0 else "%d fps" % int(q["fps"])])
+		var env := we.environment
+		env.ssao_enabled = bool(GameSettings.value("ssao"))
+		env.glow_enabled = bool(GameSettings.value("glow"))
+		env.ssr_enabled = bool(GameSettings.value("ssr"))
+		env.fog_enabled = bool(GameSettings.value("fog"))
+	# ⑥ 窗口模式
+	_apply_window_mode()
+	# 打一行：GPU 占用直接跟这些数走，排查「怎么突然很烫」时先看它
+	print("[Game] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  阴影 %s  "
+		% [target, _auto_scale,
+			"垂直同步" if bool(GameSettings.value("vsync")) else "不开垂直同步",
+			"不限帧" if fps <= 0 else "%d fps" % fps,
+			GameSettings.choice_label("aa_mode", GameSettings.value("aa_mode")),
+			GameSettings.choice_label("shadow_quality", GameSettings.value("shadow_quality"))]
+		+ "SSAO %s  辉光 %s  SSR %s  雾 %s  %s" % [
+			"开" if bool(GameSettings.value("ssao")) else "关",
+			"开" if bool(GameSettings.value("glow")) else "关",
+			"开" if bool(GameSettings.value("ssr")) else "关",
+			"开" if bool(GameSettings.value("fog")) else "关",
+			GameSettings.choice_label("window_mode", GameSettings.value("window_mode"))])
 
 
-## 设置变了：只有画质需要在这里落地（其余设置由各自的系统自己 listen）。
+## `fps_limit` 的值是字符串（"60" / "unlimited"）——`0` 交给引擎表示不限帧
+func _fps_limit() -> int:
+	var s := String(GameSettings.value("fps_limit"))
+	return 0 if s == "unlimited" else int(s)
+
+
+## 抗锯齿：MSAA（关/2×/4×/8×）、FXAA、TAA 三选一。
+## ⚠️ 三者互斥：TAA 打开时必须把 MSAA 和屏幕空间 AA 都关掉，否则后处理链打架。
+func _apply_aa(vp: Viewport) -> void:
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+	vp.use_taa = false
+	match String(GameSettings.value("aa_mode")):
+		"fxaa":
+			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+		"msaa2":
+			vp.msaa_3d = Viewport.MSAA_2X
+		"msaa4":
+			vp.msaa_3d = Viewport.MSAA_4X
+		"msaa8":
+			vp.msaa_3d = Viewport.MSAA_8X
+		"taa":
+			vp.use_taa = true
+
+
+## 阴影质量：关 / 低 40 m / 中 60 m / 高 120 m（平行光的远裁距离）。
+##
+## ⚠️ 只**恢复/关闭场景原本的投影状态**，不强行把「本来不投影」的灯打开：
+##    路线上的地标灯本来就是「关阴影省电」，自检 §1 钉着这一条。
+##    `_shadow_authored` 第一次见到某盏灯时记下它的原始值。
+func _apply_shadows() -> void:
+	var dist := 120.0
+	var off := false
+	match String(GameSettings.value("shadow_quality")):
+		"off":
+			off = true
+		"low":
+			dist = 40.0
+		"medium":
+			dist = 60.0
+	for n in find_children("*", "Light3D", true, false):
+		var l := n as Light3D
+		var id := l.get_instance_id()
+		if not _shadow_authored.has(id):
+			_shadow_authored[id] = l.shadow_enabled
+		l.shadow_enabled = false if off else bool(_shadow_authored[id])
+		if l is DirectionalLight3D and not off:
+			(l as DirectionalLight3D).directional_shadow_max_distance = dist
+
+
+## 窗口模式。**headless 下直接跳过**（`--headless` 没有真窗口，调了只会刷警告）。
+func _apply_window_mode() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var want := DisplayServer.WINDOW_MODE_MAXIMIZED
+	match String(GameSettings.value("window_mode")):
+		"windowed":
+			want = DisplayServer.WINDOW_MODE_WINDOWED
+		"fullscreen":
+			want = DisplayServer.WINDOW_MODE_FULLSCREEN
+		"exclusive":
+			want = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if DisplayServer.window_get_mode() != want:
+		DisplayServer.window_set_mode(want)
+
+
+## 设置变了：画面相关的键统统走 `_apply_render`（其余设置由各自的系统自己 listen）。
 func _on_setting_changed(key: String, _value: Variant) -> void:
-	if key == "render_quality":
-		_apply_quality()
+	if key in GameSettings.RENDER_KEYS:
+		_apply_render()
 
 
 # --- 天空盒 ---------------------------------------------------------------------
@@ -329,7 +416,7 @@ func _ready() -> void:
 	if not vp.size_changed.is_connected(_fit_render_scale):
 		vp.size_changed.connect(_fit_render_scale)
 	# 画质档位（设置界面里可调）：先注册监听，再走一次 _fit_render_scale ——
-	# 它会算出自动上限并顺带调 _apply_quality()，两条路径共用同一处落地逻辑。
+	# 它会算出自动上限并顺带调 _apply_render()，两条路径共用同一处落地逻辑。
 	GameSettings.listen(_on_setting_changed)
 	_fit_render_scale()
 	_watch_input()
