@@ -620,9 +620,9 @@ SECTIONS = [
                   width=3.0, depth=3.0, gap=3.00),
              dict(nm="DK5", kind="spot", seq="-0.80", period=0.0, top=3.00,
                   width=2.8, depth=3.0, gap=3.00),
-             dict(nm="DK6", kind="spot", seq="-0.80", period=0.0, top=2.40,
+             dict(nm="DK6", kind="spot", seq="-0.80", period=0.0, top=2.60,
                   width=3.4, depth=3.0, gap=2.80),
-             dict(nm="DK7", kind="spot", seq="-0.80", period=0.0, top=2.00,
+             dict(nm="DK7", kind="spot", seq="-0.80", period=0.0, top=2.20,
                   width=3.0, depth=3.0, gap=3.00),
              dict(nm="DK8", kind="spot", seq="-0.80", period=0.0, top=2.40,
                   width=3.0, depth=3.0, gap=2.80),
@@ -904,9 +904,9 @@ EXT_READYZONE = ('[ext_resource type="Script" path="res://scripts/parkour_ready_
 # 2026-10-20：6×4 只盖住跑道东口，从屋子那边绕过来踩不到 → 扩到 13×8
 # （x −19 ~ −6、z 0 ~ 8：整条 10 m 跑道几乎都在垫子上）
 READY_ZONE_NODE = ('[node name="ReadyZone" type="Area3D" parent="."]' + chr(10)
-                   + 'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0, 4)' + chr(10)
+                   + 'transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, 4)' + chr(10)
                    + 'script = ExtResource("12_readyzone")' + chr(10)
-                   + 'zone_size = Vector3(13, 3, 8)')
+                   + 'zone_size = Vector3(14, 3, 8)')
 
 
 def build_subresources() -> list:

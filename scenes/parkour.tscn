@@ -293,11 +293,6 @@ transform = Transform3D(10, 0, 0, 0, 0.05, 0, 0, 0, 3, -15, 0, 4)
 material_override = SubResource("Mat_runway")
 mesh = SubResource("Box_unit")
 
-[node name="LaunchMark" type="MeshInstance3D" parent="." unique_id=3760744]
-transform = Transform3D(0.6, 0, 0, 0, 0.05, 0, 0, 0, 3, -19.7, 0, 4)
-material_override = SubResource("Mat_mark")
-mesh = SubResource("Box_unit")
-
 [node name="SignPost" type="StaticBody3D" parent="." unique_id=1100274878]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11.5, 0, 6.2)
 
@@ -1691,7 +1686,7 @@ text = "-0.80%"
 font_size = 56
 outline_size = 14
 [node name="DK6" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -380.05, 1.8, -1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -380.05, 2, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
@@ -1714,7 +1709,7 @@ text = "-0.80%"
 font_size = 56
 outline_size = 14
 [node name="DK7" type="StaticBody3D" parent="Route"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -386.05, 1.4, -1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -386.05, 1.6, -1.7)
 metadata/pct_kind = "spot"
 metadata/pct_seq = "-0.80"
 metadata/pct_period = 0
@@ -1811,9 +1806,9 @@ spawn_offset = Vector3(-12, 10, 0)
 [node name="RamMarket" type="Node3D" parent="."]
 script = ExtResource("11_rammarket")
 [node name="ReadyZone" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.5, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, 4)
 script = ExtResource("12_readyzone")
-zone_size = Vector3(13, 3, 8)
+zone_size = Vector3(14, 3, 8)
 [node name="X1" type="StaticBody3D" parent="Route" unique_id=899126870]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -404.7, 1.75, -1.7)
 

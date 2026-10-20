@@ -362,7 +362,10 @@ func _physics_process(delta: float) -> void:
 ## 相机平滑：开镜时拉近、抬高、右肩偏移、缩 FOV
 func _apply_camera(delta: float) -> void:
 	var t := clampf(cam_lerp * delta, 0.0, 1.0)
-	spring.spring_length = lerpf(spring.spring_length, aim_distance if aiming else _zoom_distance, t)
+	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
+	#    见 `min_zoom_for_full_body()`。
+	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body())
+	spring.spring_length = lerpf(spring.spring_length, want, t)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else hip_shoulder), t)
 	rig.position.y = lerpf(rig.position.y, aim_height if aiming else hip_height, t)
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)
@@ -373,6 +376,19 @@ func _apply_camera(delta: float) -> void:
 	spring.rotation.x = _pitch + _recoil_pitch
 	spring.rotation.y = _recoil_yaw
 	rig.rotation.y = _yaw
+
+
+## 滚轮能拉到多近，还能看见**全身**。
+##
+## 相机在 `hip_height`（1.62 m）高度平视，脚在它正下方 1.62 m 处；
+## 要在垂直半视角 θ = fov/2 里看见脚，水平距离至少 `hip_height / tan(θ)`。
+## fov 62° → 2.70 m（再加 0.30 m 余量 = 3.0 m）。用户把 FOV 调小（视野拉近）时
+## 这个数会变大，所以最近距离**必须跟着 FOV 走** —— 固定 1.8 m 时相机已经贴到
+## 后背，画面只剩头发和肩膀（用户 2026-10-20：「fov 拉近就看不见爱丽丝全身了，
+## 要能够看见全身的」）。
+func min_zoom_for_full_body() -> float:
+	var half := deg_to_rad(clampf(hip_fov, 20.0, 120.0) * 0.5)
+	return hip_height / tan(half) + 0.30
 
 
 func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> void:

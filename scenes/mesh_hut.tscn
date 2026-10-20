@@ -92,30 +92,34 @@ size = Vector3(0.2, 3.4, 0.2)
 
 ; ══ 屋壳：外壳 ∪ 屋顶 ∪ 雨篷 − 掏空 − 门 − 两窗 ══
 ; 顺序要紧：CSG 按**子节点顺序**依次合并。掏空必须在外壳之后、屋顶之前/之后都行
-; （屋顶在 y ≥ 3.00，掏空只到 y = 3.40，靠高度错开），但门与窗必须**在最后**，
+; （屋顶在 y ≥ 2.80，掏空只到 y = 3.20，靠高度错开），但门与窗必须**在最后**，
 ; 否则会被后面的 UNION 补回去。
+;
+; 2026-10-20 用户「最后这个平台的房子，矮一点点」：墙 3.00 → **2.80**、屋顶
+; 3.10 → **2.90**、雨篷 2.55 → **2.35**、窗 1.85 → **1.75**（全部仍在 0.05 网格上，
+; 门 2.20 高不变）。`_verify_mesh_hut.gd` 的屋顶射线是**按节点算**的，不用改数。
 [node name="Hut" type="CSGCombiner3D" parent="."]
 use_collision = true
 
 [node name="Walls" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.5, 0)
-size = Vector3(6.6, 3, 5.6)
+position = Vector3(0, 1.4, 0)
+size = Vector3(6.6, 2.8, 5.6)
 material = SubResource("Mat_wall")
 
 ; 掏空：比外壳小 0.2（= 墙厚），但**上下都捅穿** —— 上捅穿是为了让屋顶当盖子，
 ; 下捅穿是为了**不留地板**（见文件头第 1 个坑）。
 [node name="Cavity" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.6, 0)
-size = Vector3(6.2, 3.6, 5.2)
+position = Vector3(0, 1.5, 0)
+size = Vector3(6.2, 3.4, 5.2)
 operation = 2
 
 [node name="Roof" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 3.1, 0)
+position = Vector3(0, 2.9, 0)
 size = Vector3(7.4, 0.2, 6.4)
 material = SubResource("Mat_roof")
 
 [node name="Canopy" type="CSGBox3D" parent="Hut"]
-position = Vector3(-3.9, 2.55, 0)
+position = Vector3(-3.9, 2.35, 0)
 size = Vector3(1.6, 0.1, 1)
 material = SubResource("Mat_roof")
 
@@ -132,13 +136,13 @@ operation = 2
 material = SubResource("Mat_trim")
 
 [node name="WindowA" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.85, 2.8)
+position = Vector3(0, 1.75, 2.8)
 size = Vector3(1.2, 0.9, 0.6)
 operation = 2
 material = SubResource("Mat_trim")
 
 [node name="WindowB" type="CSGBox3D" parent="Hut"]
-position = Vector3(3.3, 1.85, 0)
+position = Vector3(3.3, 1.75, 0)
 size = Vector3(0.6, 0.9, 1.2)
 operation = 2
 material = SubResource("Mat_trim")

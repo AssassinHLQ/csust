@@ -43,24 +43,23 @@ const RAM_PATH := "res://models/ram/random_access_memory_ram_ddr4.glb"
 ## 总开关（自检里逐跳回放 / 连续通关要关掉，见 `_verify_parkour.gd`）
 @export var rain_enabled := true
 
-## ── 地上躺着的内存条（可拾取 → 资产，2026-10-20）──
+## ── 可拾取的内存条（→ 资产，2026-10-20）──
 ##
-## 用户原话：「内存条是可拾取的，每次捡到内存条，随机是 ddr3 / ddr4 / ddr5……
-## 捡到的内存条换算成为资产……**天上掉下来的内存条不算，只有躺在地上的可以捡**」。
+## 用户原话：「内存条是可拾取的……**天上掉下来的内存条不算，只有躺在地上的可以捡**」，
+## 第二轮又补：「**这些看见的都要可以捡，但是不要刷新了**」。
 ##
-## 所以这里跟 `_drops`（内存条雨，砸人）**完全分开**：
-##   · `_ground` 里的每一根都**平躺在站台面上**（y = 台面 + 3 cm），走过来就捡；
-##   · `_drops` 里的一根**永远不会**变成资产（自检 §5h 专门盯这条）。
-## 捡走一根，过 `refill_interval` 秒市场里再长一根（最多长回初始条数），
-## 这样来回跑也能刷，但不是「站着不动就无限刷」。
+## 所以「能捡的」= 三批，全部**只减不增**（没有补货，捡完就没了）：
+##   · `_ground`  —— 平躺在台面上的 16 根（y = 台面 + 3 cm，带金色呼吸圈）
+##   · `_decor`   —— 平台东西两侧**插在边上**的 26 根 + 螺旋塔每层的 3 根鳍片 21 根
+##                   （它们本来就是「看得见」的装饰，走过来就能捡走，捡走的那一根
+##                    在 MultiMesh 里缩到 0 —— 不重建 buffer，也不多一个节点）
+## 头顶吊架（y ≈ 10.2）那 65 根**够不着**，仍然是纯装饰。
+## `_drops`（内存条雨）跟这三批**无关**：砸到人只掉血，永远不会进资产。
 signal ram_picked(spec: Dictionary, price: int)
 
 ## 拾取半径（m，水平距离）/ 允许的高度差
 @export var pickup_radius := 1.25
 @export var pickup_dy := 1.60
-## 捡走一根之后隔多久再长一根 / 最多同时躺几根（0 = 用初始条数）
-@export var refill_interval := 7.0
-@export var ground_cap := 0
 ## 自检用总开关：早期几节回放会把人瞬移过去，先关掉免得凭空涨资产
 @export var loot_enabled := true
 
@@ -75,6 +74,8 @@ var _parts: Array[Dictionary] = []
 ## 内存条在 GLB 根空间里的包围盒（原始尺寸：x 0.183 / y 0.006 / z 0.051）
 var _box := AABB()
 var _xf: Array[Transform3D] = []
+## 装饰用的两个 MultiMeshInstance3D（`_xf` 的下标就是实例下标）
+var _batches: Array[MultiMeshInstance3D] = []
 
 var _pcb_mat: StandardMaterial3D
 var _gold_mat: StandardMaterial3D
@@ -87,14 +88,15 @@ var _dropped := 0
 var _hits := 0
 var _built := false
 
-## 地上躺着的（可捡）：{node, ring, spec, price, at, t}
+## 平躺在台面上的（可捡）：{node, ring, spec, price, at, t}
 var _ground: Array[Dictionary] = []
+## 插在台边的 / 塔身鳍片（可捡）：{idx, at, spec, price, hidden}
+var _decor: Array[Dictionary] = []
 ## 这里捡过的：{spec, price}，自检靠它核对「资产 += 这一根的价格」
 var _picked_log: Array[Dictionary] = []
 var _picked := 0
 var _picked_value := 0
 var _loot_serial := 0
-var _refill_t := 0.0
 var _plate_idx: Array[int] = []
 var _fut: ParkourFutures
 var _loot_rng := RandomNumberGenerator.new()
@@ -211,8 +213,16 @@ func _stick_xf(at: Vector3, yaw: float, tilt: float, s: float) -> Transform3D:
 	return Transform3D(b, at - b * anchor)
 
 
-func _add_stick(at: Vector3, yaw: float, tilt: float, s: float) -> void:
+## 加一根装饰条。`pickable = true` 就同时登记成可拾取（台边插的 / 塔身鳍片）；
+## 头顶吊架那批传 false —— 它们挂在 10 m 高，人够不着，只能当背景。
+func _add_stick(at: Vector3, yaw: float, tilt: float, s: float, pickable := true) -> void:
+	var idx := _xf.size()
 	_xf.append(_stick_xf(at, yaw, tilt, s))
+	if not pickable:
+		return
+	var spec := RamSpec.roll(_loot_rng)
+	_decor.append({"idx": idx, "at": at, "spec": spec,
+		"price": RamSpec.price_yuan(spec), "hidden": false})
 
 
 ## 每块站台：顶面压一层 PCB + 两条金手指，东西两侧各插一根内存条（往外倒）
@@ -264,8 +274,8 @@ func _build_hanging_racks() -> void:
 		_add_slab(Vector3(x, 11.4, z), Vector3(0.10, 4.6, 0.10), _steel_mat)
 		for k in 5:
 			var dz := (float(k) - 2.0) * 0.55
-			# 倒吊：yaw 绕 Y，tilt = PI 让它翻过来（尖端朝下）
-			_add_stick(Vector3(x, 10.2, z + dz), PI * 0.5, PI - 0.08, 12.0)
+			# 倒吊：yaw 绕 Y，tilt = PI 让它翻过来（尖端朝下）。**不可拾取**（10 m 高）
+			_add_stick(Vector3(x, 10.2, z + dz), PI * 0.5, PI - 0.08, 12.0, false)
 		x -= 6.0
 		row += 1
 
@@ -319,6 +329,17 @@ func _flush_multimeshes() -> void:
 		if part["mat"] != null:
 			mmi.material_override = part["mat"]
 		add_child(mmi)
+		_batches.append(mmi)
+
+
+## 捡走一根插在台边的：把它在两个 surface 的实例变换都缩到 0（同一实例下标）。
+## 不重建 MultiMesh、不删节点 —— 一百多根只丢一根时，重建 buffer 比缩成 0 贵得多。
+func _hide_decor(idx: int) -> void:
+	var zero := Transform3D(Basis.from_scale(Vector3(0.001, 0.001, 0.001)),
+		Vector3(0.0, -500.0, 0.0))
+	for mmi in _batches:
+		if mmi.multimesh != null and idx >= 0 and idx < mmi.multimesh.instance_count:
+			mmi.multimesh.set_instance_transform(idx, zero)
 
 
 # --- 内存条雨 -------------------------------------------------------------------
@@ -452,7 +473,7 @@ func _tick_drops(delta: float) -> void:
 func _build_seg_signs() -> void:
 	var specs := [
 		{"seg": 8, "col": Color(1.0, 0.86, 0.42), "text":
-			"第 9 段 · 内存条市场・横跳\n地上的内存条能捡（天上掉的不算）\n每根随机：DDR3/4/5 × 2~64G × ECC/非ECC"},
+			"第 9 段 · 内存条市场・横跳\n地上的、插在台边的都能捡（天上掉的不算）\n每根随机：代 / 频率 / 2~64G / ECC·非ECC（132 种）"},
 		{"seg": 9, "col": Color(0.86, 0.92, 1.0), "text": "第 10 段 · 内存条螺旋塔"},
 	]
 	for spec in specs:
@@ -503,10 +524,8 @@ func _build_ground_loot(first: int, last: int) -> void:
 		return
 	for i in _plate_idx:
 		_spawn_ground(i)
-	if ground_cap <= 0:
-		ground_cap = _ground.size()
-	print("[RamMarket] 地上内存条：%d 根躺在 %d 块台上（捡走 %.0f s 后补一根）"
-		% [_ground.size(), _plate_idx.size(), refill_interval])
+	print("[RamMarket] 可拾取：地上 %d 根 + 台边/鳍片 %d 根（共 %d 根，捡完不补）"
+		% [_ground.size(), _decor.size(), pickable_count()])
 
 
 ## 在 1 号站台上放一根：平躺（模型本来就是「长边沿 x」的姿态，不用转），
@@ -543,7 +562,7 @@ func _spawn_ground(i: int) -> Dictionary:
 	ring.position = Vector3(0.0, -0.012, 0.0)
 	root.add_child(ring)
 	add_child(root)
-	# 抽规格：3 代 × 6 容量 × ECC/非ECC = 36 种（见 `RamSpec`）
+	# 抽规格：11 个（代, 频率）组合 × 6 容量 × ECC/非ECC = 132 种（见 `RamSpec`）
 	var spec := RamSpec.roll(_loot_rng)
 	var price := RamSpec.price_yuan(spec)
 	var rec := {"node": root, "ring": ring, "spec": spec, "price": price,
@@ -560,6 +579,7 @@ func _tick_ground(delta: float) -> void:
 		if _player == null:
 			return
 	var p := _player.global_position
+	# ① 平躺在台面上的：呼吸圈 + 近身就捡
 	var keep: Array[Dictionary] = []
 	var picked: Array[Dictionary] = []
 	for g in _ground:
@@ -570,23 +590,45 @@ func _tick_ground(delta: float) -> void:
 		var ring := g["ring"] as MeshInstance3D
 		if is_instance_valid(ring):
 			ring.scale = Vector3.ONE * (1.0 + 0.10 * sin(float(g["t"]) * 2.6))
-		var d := p - (g["at"] as Vector3)
-		if Vector2(d.x, d.z).length() <= pickup_radius and absf(d.y) <= pickup_dy:
+		if _near(p, g["at"] as Vector3):
 			picked.append(g)
 			continue
 		keep.append(g)
 	_ground = keep
 	for g in picked:
-		_pick(g)
-	_tick_refill(delta)
+		_pick_ground(g)
+	# ② 插在台边的 / 塔身鳍片：同样近身就捡；捡走的那一根在 MultiMesh 里缩成 0
+	#    ⚠️ 不补货（用户 2026-10-20：「不要刷新了」）—— 这批捡完就真没了。
+	var left: Array[Dictionary] = []
+	for d in _decor:
+		if bool(d["hidden"]):
+			continue
+		if _near(p, d["at"] as Vector3):
+			_pick_decor(d)
+			continue
+		left.append(d)
+	_decor = left
 
 
-func _pick(g: Dictionary) -> void:
+func _near(p: Vector3, at: Vector3) -> bool:
+	var d := p - at
+	return Vector2(d.x, d.z).length() <= pickup_radius and absf(d.y) <= pickup_dy
+
+
+func _pick_ground(g: Dictionary) -> void:
 	var n := g["node"] as Node3D
 	if is_instance_valid(n):
 		n.queue_free()
-	var spec: Dictionary = g["spec"]
-	var price := int(g["price"])
+	_credit(g["spec"] as Dictionary, int(g["price"]))
+
+
+func _pick_decor(d: Dictionary) -> void:
+	d["hidden"] = true
+	_hide_decor(int(d["idx"]))
+	_credit(d["spec"] as Dictionary, int(d["price"]))
+
+
+func _credit(spec: Dictionary, price: int) -> void:
 	_picked += 1
 	_picked_value += price
 	_picked_log.append({"spec": spec, "price": price})
@@ -600,47 +642,49 @@ func _pick(g: Dictionary) -> void:
 		% [RamSpec.describe(spec, true), price, _picked, _picked_value])
 
 
-## 捡走一根就少一根：`refill_interval` 秒后在不贴着玩家的台上再长一根。
-func _tick_refill(delta: float) -> void:
-	if _plate_idx.is_empty() or _ground.size() >= ground_cap:
-		_refill_t = refill_interval
-		return
-	_refill_t -= delta
-	if _refill_t > 0.0:
-		return
-	_refill_t = refill_interval
-	_spawn_far_from_player()
-
-
-func _spawn_far_from_player() -> void:
-	var p := _player.global_position if _player != null else Vector3.ZERO
-	for _try in 10:
-		var i := _plate_idx[randi() % _plate_idx.size()]
-		var b := _pk.box_at(i)
-		var c := b.position + b.size * 0.5
-		if Vector2(c.x - p.x, c.z - p.z).length() < 2.6:
-			continue
-		_spawn_ground(i)
-		return
-	_spawn_ground(_plate_idx[randi() % _plate_idx.size()])
-
-
 ## --- 自检用 ---
 func ground_count() -> int:
 	return _ground.size()
 
 
-func ground_positions() -> Array[Vector3]:
+func decor_count() -> int:
+	var n := 0
+	for d in _decor:
+		if not bool(d["hidden"]):
+			n += 1
+	return n
+
+
+## 现在还能捡的根数（躺着 + 台边/鳍片）
+func pickable_count() -> int:
+	return _ground.size() + decor_count()
+
+
+func pickable_positions() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for g in _ground:
 		out.append(g["at"] as Vector3)
+	for d in _decor:
+		if not bool(d["hidden"]):
+			out.append(d["at"] as Vector3)
 	return out
 
 
-func ground_specs() -> Array[Dictionary]:
+func decor_positions() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for d in _decor:
+		if not bool(d["hidden"]):
+			out.append(d["at"] as Vector3)
+	return out
+
+
+func pickable_specs() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for g in _ground:
 		out.append(g["spec"] as Dictionary)
+	for d in _decor:
+		if not bool(d["hidden"]):
+			out.append(d["spec"] as Dictionary)
 	return out
 
 
@@ -654,11 +698,6 @@ func loot_picked_value() -> int:
 
 func last_picked() -> Dictionary:
 	return _picked_log[-1] if not _picked_log.is_empty() else {}
-
-
-func force_refill_now() -> void:
-	if loot_enabled and _ground.size() < ground_cap:
-		_spawn_far_from_player()
 
 
 func stick_count() -> int:

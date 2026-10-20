@@ -26,13 +26,14 @@ func _run() -> void:
 		print("[loot] 没有 RamMarket")
 		quit(1)
 		return
-	var ps := ram.ground_positions()
-	print("[loot] 地上 %d 根；装饰 %d 根" % [ps.size(), ram.stick_count()])
+	var ps := ram.pickable_positions()
+	print("[loot] 可捡 %d 根（地上 %d + 台边/鳍片 %d）；装饰总数 %d"
+		% [ps.size(), ram.ground_count(), ram.decor_count(), ram.stick_count()])
 	if ps.is_empty():
 		quit(1)
 		return
 	for i in mini(3, ps.size()):
-		var sp: Dictionary = ram.ground_specs()[i]
+		var sp: Dictionary = ram.pickable_specs()[i]
 		print("[loot] #%d @ %s  %s  ¥%d" % [i, str(ps[i].snappedf(0.01)),
 			RamSpec.describe(sp), RamSpec.price_yuan(sp)])
 
