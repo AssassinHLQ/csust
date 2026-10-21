@@ -23,18 +23,21 @@ extends CanvasLayer
 
 ## 准星随瞄准/移动扩张。
 ##
-## ── 尺寸一律按「**物理像素**」给，厚度必须取偶数 ──
+## ── 尺寸一律按「**物理像素**」给 ──
 ##
-## ⚠️ 为什么这么较真：`canvas_items` 拉伸的缩放是 **1.4822 这种非整数**。
+## ⚠️ 为什么这么较真：`canvas_items` 拉伸的缩放是 **1.4822 / 1.6 这种非整数**。
 ##    原来中心点写 `offset = -1.5..1.5`（3 逻辑 px）、十字条 `-1..1`（2 逻辑 px），
 ##    换算到物理像素是 4.45 与 2.96 —— **两者被栅格化时取整方式不同**，中心点会
 ##    整体偏到十字右边约半个逻辑像素。放大截图一眼就能看出来（用户就是这么发现的）。
 ##
-##    治法：把准星原点**吸附到整数物理像素**，所有厚度都按物理像素给**偶数**，
-##    这样中心点与十字条共享同一个中心、左右边界严格镜像。
-##    下面三个常量就是「想在 1440p 上画多少物理像素」，改它们即可，不用碰逻辑坐标。
-const CROSS_DOT_PX := 4.0     ## 中心点边长（物理像素，必须偶数）
-const CROSS_THICK_PX := 2.0   ## 十字条粗细（物理像素，必须偶数）
+## ⚠️ 2026-10-21 第二个坑（用户：「编辑器里是一像素点，实机却多了三个像素变成 2×2」）：
+##    把**中心**吸到整数物理像素、再用偶数厚度 —— 对 2 px 的线成立，对 1 px 不成立：
+##    1 px 的矩形若中心落在整数坐标上，左右边就落在 n±0.5，**跨两个像素、各 50% 透明**，
+##    渲染出来正是 2×2 的灰块。正确做法是让**四条边**都落在整数上（占满 [n, n+1) 这一格），
+##    也就是把原点当「像素格角」而不是「格心」。现在 `_layout_crosshair()` 就是这么做的：
+##    原点吸到整数格角，所有元素按**整数设备像素**摆，1 px 就是真 1 px。
+const CROSS_DOT_PX := 1.0     ## 中心点边长（物理像素；1 = 单像素点）
+const CROSS_THICK_PX := 1.0   ## 十字条粗细（物理像素；1 = 单像素线）
 const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多远由扩散量决定）
 
 ## 血条描边宽度（逻辑 px）。见 `_make_bar_stack()` 那段关于 `ProgressBar` 的注释。
@@ -612,10 +615,12 @@ func _on_ammo(current: int, maximum: int) -> void:
 	ammo.modulate = Color(1, 0.45, 0.4) if current == 0 else Color.WHITE
 
 
-## 把准星摆到「中心落在整数物理像素、厚度为偶数物理像素」的位置上。
+## 把准星摆到「所有边都在整数物理像素上」的位置。
 ##
-## 见 CROSS_DOT_PX 上方那段注释。`_spread` 仍然按**逻辑单位**给（保持原来的手感），
-## 只有厚度与臂长按物理像素换算。
+## 见 CROSS_DOT_PX 上方那两段注释。要点：
+##   ① 原点吸到**整数像素格角**（不是格心）—— 1 px 的线只有占满 [n, n+1) 才是 1 px；
+##   ② 点、粗细、臂长、间隙全部先换成**整数设备像素**，再除以缩放换回逻辑坐标；
+##   ③ 间隙（`_spread`）也取整，避免每帧在两种取整之间抖。
 func _layout_crosshair() -> void:
 	var vp := get_viewport()
 	if vp == null or crosshair == null:
@@ -624,39 +629,38 @@ func _layout_crosshair() -> void:
 	var scale := maxf(xf.get_scale().x, 0.0001)
 	var canvas := vp.get_visible_rect().size
 
-	# 1) 准星原点吸附到整数物理像素 —— 对齐的关键就在这一步
-	var center_px := (xf * (canvas * 0.5)).round()
-	var d := xf.affine_inverse() * center_px - canvas * 0.5
+	# 1) 准星原点吸附到整数**物理像素格角**
+	var origin_px := (xf * (canvas * 0.5)).round()
+	var d := xf.affine_inverse() * origin_px - canvas * 0.5
 	crosshair.offset_left = d.x
 	crosshair.offset_right = d.x
 	crosshair.offset_top = d.y
 	crosshair.offset_bottom = d.y
 
-	# 2) 厚度与中心点尺寸按物理像素给，÷scale 换算回逻辑坐标
-	var hd := CROSS_DOT_PX * 0.5 / scale
-	dot.offset_left = -hd
-	dot.offset_right = hd
-	dot.offset_top = -hd
-	dot.offset_bottom = hd
-	var ht := CROSS_THICK_PX * 0.5 / scale
-	for c in [t, b]:
-		c.offset_left = -ht
-		c.offset_right = ht
-	for c in [l, r]:
-		c.offset_top = -ht
-		c.offset_bottom = ht
+	# 2) 全部按整数设备像素摆（相对原点）
+	var dot_px := maxi(int(round(CROSS_DOT_PX)), 1)
+	var thick_px := maxi(int(round(CROSS_THICK_PX)), 1)
+	var arm_px := maxi(int(round(CROSS_ARM_PX)), 1)
+	var gap_px := maxi(int(round(_spread * scale)), 0)
+	var dh := dot_px / 2          # 奇数时向下取整：1 px 就是 [0, 1) 这一格
+	var th := thick_px / 2
 
-	# 3) 扩散量仍是逻辑单位，臂长按物理像素
-	var gap := _spread
-	var arm := CROSS_ARM_PX / scale
-	t.offset_top = -gap - arm
-	t.offset_bottom = -gap
-	b.offset_top = gap
-	b.offset_bottom = gap + arm
-	l.offset_left = -gap - arm
-	l.offset_right = -gap
-	r.offset_left = gap
-	r.offset_right = gap + arm
+	_set_px_rect(dot, Rect2(-dh, -dh, dot_px, dot_px))
+	_set_px_rect(t, Rect2(-th, -gap_px - arm_px, thick_px, arm_px))
+	_set_px_rect(b, Rect2(-th, gap_px, thick_px, arm_px))
+	_set_px_rect(l, Rect2(-gap_px - arm_px, -th, arm_px, thick_px))
+	_set_px_rect(r, Rect2(gap_px, -th, arm_px, thick_px))
+
+
+## 把一个**整数设备像素**矩形（相对准星原点）换成 Control 的逻辑偏移。
+func _set_px_rect(c: Control, px: Rect2) -> void:
+	if c == null:
+		return
+	var s := crosshair_scale()
+	c.offset_left = px.position.x / s
+	c.offset_top = px.position.y / s
+	c.offset_right = (px.position.x + px.size.x) / s
+	c.offset_bottom = (px.position.y + px.size.y) / s
 
 
 ## 当前「画布逻辑单位 → 物理像素」的缩放。探针/自检拿它判断对齐。
