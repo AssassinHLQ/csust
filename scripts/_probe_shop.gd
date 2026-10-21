@@ -149,6 +149,30 @@ func _run() -> void:
 	_check(label != null and label.text == str(shop.get("sign_text")),
 		"招牌字 =「%s」" % str(shop.get("sign_text")))
 
+	# ── 店员小空 ──
+	var clerk := shop.get_node_or_null("ClerkSora") as Node3D
+	print("\n── 店员 ──")
+	if clerk == null:
+		_check(false, "场景里有店员 ClerkSora")
+	else:
+		var cmodel := clerk.get("model") as Node3D
+		var cbox := _world_aabb(cmodel)
+		print("  小空：%s　骨架 %d 骨　手骨高度 L=%.2f R=%.2f m" % [
+			"模型已就位" if cmodel != null else "**模型缺失**",
+			int(clerk.get("bone_count")),
+			float((clerk.get("hand_y") as Dictionary).get("l", -1.0)),
+			float((clerk.get("hand_y") as Dictionary).get("r", -1.0))])
+		print("  台面 1.04 m → 双手%s" % (
+			"在台面以下（A-pose 也被柜台挡住）"
+			if float((clerk.get("hand_y") as Dictionary).get("l", 99.0)) < 1.04
+			else "**露在台面上**"))
+		_check(cmodel != null, "小空模型已加载")
+		_check(cbox.size.y > 1.3 and cbox.size.y < 1.9,
+			"小空身高 %.2f m 在合理区间（1.3~1.9）" % cbox.size.y)
+		_check(float((clerk.get("hand_y") as Dictionary).get("l", 99.0)) < 1.04
+			and float((clerk.get("hand_y") as Dictionary).get("r", 99.0)) < 1.04,
+			"双手都在台面（1.04 m）以下")
+
 	# ── 出图 ──
 	var out_dir := ProjectSettings.globalize_path("res://").path_join("..").simplify_path() \
 		.path_join("_arisu_captures").path_join(OUT_DIR)
@@ -167,6 +191,12 @@ func _run() -> void:
 			Vector3(mid_x + 5.4, 0.9, mid_z - 1.2)],
 		["93_door.png", Vector3(mid_x + 4.2, 1.7, mid_z - 1.4),
 			Vector3(mid_x, 1.5, mid_z + 2.8)],
+		# 收银台 + 小空（收银台在世界 x≈32.2，店员 x≈33.2）
+		["95_counter_clerk.png", Vector3(mid_x + 2.6, 1.55, mid_z + 1.2),
+			Vector3(mid_x + 5.9, 1.05, mid_z + 0.2)],
+		# 抬头看天花板接缝：验 z-fighting 有没有修掉
+		["96_ceiling.png", Vector3(mid_x - 2.0, 1.55, mid_z - 0.6),
+			Vector3(mid_x + 1.5, 2.5, mid_z + 1.8)],
 	]
 	for s in shots:
 		_cam.global_position = s[1]
@@ -181,6 +211,33 @@ func _run() -> void:
 	print("\n出图目录：%s" % out_dir)
 	print("[probe] 通过 %d、失败 %d" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
+
+
+## 节点下所有可见网格的世界 AABB（量小空的身高/臂展用）
+func _world_aabb(node: Node) -> AABB:
+	var out := AABB()
+	var first := true
+	if node == null:
+		return out
+	for n in _all(node, "MeshInstance3D"):
+		var gi := n as GeometryInstance3D
+		if not gi.visible:
+			continue
+		var box := gi.global_transform * gi.get_aabb()
+		out = box if first else out.merge(box)
+		first = false
+	return out
+
+
+func _all(node: Node, cls: String) -> Array:
+	var out: Array = []
+	if node == null:
+		return out
+	if node.is_class(cls):
+		out.append(node)
+	for c in node.get_children():
+		out.append_array(_all(c, cls))
+	return out
 
 
 func _ray(from: Vector3, to: Vector3) -> Dictionary:

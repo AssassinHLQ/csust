@@ -51,6 +51,7 @@
 | 校园 / 画室609 高斯泼溅扫描 | 由使用者提供，**权利状态未核实** | 未核实 | ❌ | `splatdata/*.sogdata` | 拍摄权、场地权、肖像权、再分发权均未确认；缺失时用 `-- --splat=off` |
 | 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |
 | 老师（sensei）旧版模型与贴图 | **食小派蒙辣** | 专有（Blue Archive 二创） | ❌ | 已换成上面的卡通版；旧文件留在 `_sensei_out/sensei_tex.glb` | MMD/PMX 导出，313 骨、0 动作；本工程曾重导出为 `sensei.glb`（删 307 个刚体、贴图降到 1024、材质重建 —— MMD 材质树 glTF 导出器认不出，会静默丢贴图） |
+| **天使24 店员「小空」（Sora）** | **薛定谔的小问号** | 专有（Blue Archive 二创） | ❌ | `models/npc/sora/`，来源 `kong_by_薛定谔的小问号`（`小空1donzuo.blend`，2023-12） | 338 骨 A-pose rig、**0 条动作**；本工程用 **Blender 5.0 无头**导出 `sora.glb`（`cs_*` 控制块全剔、当前姿态当静止姿态）。站在商店柜台后，双手 0.89 / 0.69 m 低于台面 1.04 m，A-pose 看不见；待机是程序化的，见 `scripts/shop_clerk.gd` |
 
 ## 三、界面与字体
 

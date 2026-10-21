@@ -33,6 +33,11 @@ extends Node3D
 ## ⚠️ 墙、家具全部是「一个数字 → 网格 + 碰撞盒各一份」（`_box()`），不走 CSG ——
 ##    见 README §1.13 ⑦「删了网格 ≠ 删了碰撞」。
 
+## 贴面重叠量：两个盒子「正好贴着」= 两个面共面 = z-fighting。
+## 用户 2026-10-21：「天使24 出现了 z-fighting」。所以凡是相邻的两个箱子，
+## 一律让它们**互相插进去 2 cm**（墙插进地板/屋顶、门柱插进横梁、家具插进地板）。
+const TUCK := 0.02
+
 ## ── 地块参照（找不到就退回默认值，不会崩）──
 @export_group("地块参照")
 @export var hut_path: NodePath = ^"../MeshHut"
@@ -211,6 +216,18 @@ func _make_materials() -> void:
 	glow.emission_energy_multiplier = 2.4
 	_mat["glow"] = glow
 
+	# ── 收银台用的四种料 ──
+	# 柜体：暖橡木；前脸嵌板浅一号；台面是米白人造石；压条/小铃是黄铜
+	_mat["counter"] = _std(Color(0.58, 0.42, 0.28), 0.65)
+	_mat["counter_light"] = _std(Color(0.68, 0.53, 0.37), 0.60)
+	_mat["counter_top"] = _std(Color(0.88, 0.86, 0.82), 0.28, 0.10)
+	_mat["brass"] = _std(Color(0.78, 0.62, 0.28), 0.30, 0.85)
+	var screen := _std(Color(0.18, 0.34, 0.48), 0.20)
+	screen.emission_enabled = true
+	screen.emission = Color(0.35, 0.72, 0.95)
+	screen.emission_energy_multiplier = 0.8
+	_mat["screen"] = screen
+
 	# 天花板：屋顶底面本来是深灰（0.26），店里的灯只照到墙、照不到顶上，
 	# 从店里抬头就是一块黑板。贴一层浅色顶板（不挡人）。
 	_mat["ceiling"] = _std(Color(0.86, 0.85, 0.82), 0.90)
@@ -283,17 +300,22 @@ func _build_shell() -> void:
 	var H := hut_height
 	var t := wall_thickness
 	var door_w := door_width
+	var e := TUCK
 
 	# 屋顶：沿用小屋的挑檐
 	var roof := Vector3(L + roof_overhang * 2.0, 0.2, D + roof_overhang * 2.0)
 	_box("Roof", Vector3(0.0, H + 0.1, 0.0), roof, _mat["roof"])
 
-	# 西墙（朝小屋）、东墙、南墙：实墙
-	_box("WallWest", Vector3(-L * 0.5 + t * 0.5, H * 0.5, 0.0), Vector3(t, H, D),
+	# 三面实墙：**下伸进地板、上伸进屋顶各 2 cm**（`TUCK`）。
+	# 用户 2026-10-21：「天使24 出现了 z-fighting」——根因就是墙顶面 2.50 与屋顶底面 2.50
+	# 正好同一平面、墙底面 0.00 与地板顶面 0.00 也同一平面，两个面抢同一块像素。
+	var wall_h := H + e * 2.0
+	var wall_y := wall_h * 0.5 - e
+	_box("WallWest", Vector3(-L * 0.5 + t * 0.5, wall_y, 0.0), Vector3(t, wall_h, D),
 		_mat["wall"])
-	_box("WallEast", Vector3(L * 0.5 - t * 0.5, H * 0.5, 0.0), Vector3(t, H, D),
+	_box("WallEast", Vector3(L * 0.5 - t * 0.5, wall_y, 0.0), Vector3(t, wall_h, D),
 		_mat["wall"])
-	_box("WallSouth", Vector3(0.0, H * 0.5, -D * 0.5 + t * 0.5), Vector3(L, H, t),
+	_box("WallSouth", Vector3(0.0, wall_y, -D * 0.5 + t * 0.5), Vector3(L, wall_h, t),
 		_mat["wall"])
 
 	# 北墙 = 店面：两根门柱 + 两扇大玻璃 + 门上方一根横梁（横梁就是门楣）
@@ -304,27 +326,27 @@ func _build_shell() -> void:
 	for sx in sides:
 		_box("Pier%s" % ("W" if sx < 0.0 else "E"),
 			Vector3(sx * (half_door + pier * 0.5), door_height * 0.5, z_out),
-			Vector3(pier, door_height, t), _mat["trim"])
-	# 横梁：从门顶（2.30）盖到墙顶（2.50）
+			Vector3(pier, door_height + e * 2.0, t), _mat["trim"])
+	# 横梁：门顶 2.28 一直盖到墙顶 + 2 cm（同样是为了不共面）
 	_box("Lintel", Vector3(0.0, (door_height + H) * 0.5, z_out),
-		Vector3(L, H - door_height, t), _mat["trim"])
-	# 玻璃：门两侧各一扇，从 0.10 到门顶
+		Vector3(L, H - door_height + e * 2.0, t), _mat["trim"])
+	# 玻璃：门两侧各一扇，上下各插 2 cm 进门柱/横梁
 	var bay_x0 := half_door + pier
 	var bay_w := L * 0.5 - bay_x0 - t
-	var glass_h := door_height - 0.1
+	var glass_h := door_height - 0.1 + e
 	for sx in sides:
 		_box("Glass%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * (bay_x0 + bay_w * 0.5), 0.1 + glass_h * 0.5, z_out),
+			Vector3(sx * (bay_x0 + bay_w * 0.5), 0.1 - e * 0.5 + glass_h * 0.5, z_out),
 			Vector3(bay_w, glass_h, 0.06), _mat["glass"])
 	# 玻璃分隔条：让店面读起来像「橱窗 + 门」，而不是一个空洞
 	for sx in sides:
 		_box_decor("Mullion%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * 3.6, 0.1 + glass_h * 0.5, z_out), Vector3(0.08, glass_h, 0.10),
-			_mat["trim"])
+			Vector3(sx * 3.6, 0.1 - e * 0.5 + glass_h * 0.5, z_out),
+			Vector3(0.08, glass_h, 0.10), _mat["trim"])
 
-	# 天花板顶板（浅色，见 `_make_materials()` 里那段）
-	_box_decor("Ceiling", Vector3(0.0, H - 0.03, 0.0),
-		Vector3(L - 0.5, 0.03, D - 0.5), _mat["ceiling"])
+	# 天花板顶板：铺满内框（两侧压进墙里 3 cm），上沿顶进屋顶 1 cm
+	_box_decor("Ceiling", Vector3(0.0, H - 0.02, 0.0),
+		Vector3(L - t * 2.0 + 0.06, 0.06, D - t * 2.0 + 0.06), _mat["ceiling"])
 
 	# 门框（装饰，不挡人）：两根竖梃 + 一根门头
 	for sx in sides:
@@ -357,13 +379,7 @@ func _build_interior() -> void:
 	var L := shop_len
 	var D := shop_depth
 
-	# 柜台：贴着东墙，面朝门口
-	_box("Counter", Vector3(L * 0.5 - 0.55, 0.525, 0.2), Vector3(0.7, 1.05, 3.6),
-		_mat["wood"])
-	_box("CounterTop", Vector3(L * 0.5 - 0.55, 1.09, 0.2), Vector3(0.9, 0.08, 3.8),
-		_mat["steel"])
-	_box("Register", Vector3(L * 0.5 - 0.55, 1.26, -0.8), Vector3(0.32, 0.26, 0.45),
-		_mat["dark"])
+	_build_counter()
 
 	# 两排货架：贴南墙
 	for i in 2:
@@ -381,14 +397,14 @@ func _build_interior() -> void:
 				Vector3(0.18, 0.18, 0.26), _mat[goods[(j + 2) % 3]])
 
 	# 冰柜：贴西墙（进门左手边），发光的门面
-	_box("Fridge", Vector3(-L * 0.5 + 0.55, 0.95, -1.6), Vector3(0.65, 1.9, 1.0),
+	_box_standing("Fridge", Vector2(-L * 0.5 + 0.55, -1.6), Vector3(0.65, 1.9, 1.0),
 		_mat["fridge"])
 	_box_decor("FridgeGlass", Vector3(-L * 0.5 + 0.90, 1.0, -1.6),
 		Vector3(0.04, 1.6, 0.86), _mat["glow"])
 
 	# 「5090 展示柜」：玻璃罩里一张发光的显卡（剧情梗）
 	var case_x := -3.4
-	_box("Showcase", Vector3(case_x, 0.42, -0.6), Vector3(1.2, 0.84, 0.62),
+	_box_standing("Showcase", Vector2(case_x, -0.6), Vector3(1.2, 0.84, 0.62),
 		_mat["wood"])
 	_box_decor("ShowcaseGlass", Vector3(case_x, 1.12, -0.6), Vector3(1.16, 0.56, 0.58),
 		_mat["glass"])
@@ -396,10 +412,8 @@ func _build_interior() -> void:
 		_mat["glow"])
 
 	# 靠柜台堆的两只货箱
-	_box("Crate0", Vector3(L * 0.5 - 1.6, 0.45, -2.1), Vector3(0.9, 0.9, 0.9),
-		_mat["crate"])
-	_box("Crate1", Vector3(L * 0.5 - 1.6, 0.45, -1.1), Vector3(0.9, 0.9, 0.9),
-		_mat["crate"])
+	_box_standing("Crate0", Vector2(2.6, -2.1), Vector3(0.9, 0.9, 0.9), _mat["crate"])
+	_box_standing("Crate1", Vector2(2.6, -1.1), Vector3(0.9, 0.9, 0.9), _mat["crate"])
 
 	# 天花板灯管（装饰）
 	for sx in [-1.0, 1.0]:
@@ -407,10 +421,87 @@ func _build_interior() -> void:
 			Vector3(sx * 2.6, hut_height - 0.08, 0.0), Vector3(1.8, 0.06, 0.4),
 			_mat["lamp"])
 
+	# 店员：小空（2026-10-21 用户给的 .blend，Blender 转 GLB；署名见 CREDITS.md）
+	_build_clerk()
+
 	# 留给高斯泼溅的空位：**故意不加载**（70 MB 的 .sog 一进场景显存就炸）
 	var slot := Node3D.new()
 	slot.name = "SplatSlot"
 	add_child(slot)
+
+
+## ── 收银台（2026-10-21 用户：「你给做个好看点的收银台吧」）──
+##
+## 原来是一个 0.7×1.05×3.6 的橙盒子加一块灰板，太像「一个箱子」。
+## 现在按真实收银台拆成六件：踢脚（内缩）→ 柜体 → 台面（前后各出 7 cm 檐）→
+## 前沿不锈钢压条 → 收银机（底座 + 屏幕 + 键盘）→ 刷卡机/小铃/提示牌。
+## 位置也从「贴东墙」挪到 x = 4.90：原来柜体和东墙之间只剩 0.55 m，小空站不进去。
+func _build_counter() -> void:
+	var cx := 4.90          # 柜体中心 x
+	var cz := 0.20          # 柜体中心 z
+	var cw := 0.72          # 柜体进深（x）
+	var cl := 3.60          # 柜体长度（z）
+	var floor_y := -TUCK
+
+	# 踢脚：内缩 5 cm，让柜体看起来是「浮」在地上的
+	_box("CounterKick", Vector3(cx, floor_y + 0.06, cz),
+		Vector3(cw - 0.10, 0.12 + TUCK, cl - 0.20), _mat["dark"])
+
+	# 柜体（橡木）
+	var body_h := 0.86
+	_box("Counter", Vector3(cx, floor_y + 0.12 + body_h * 0.5, cz),
+		Vector3(cw, body_h + TUCK, cl), _mat["counter"])
+
+	# 前脸嵌板（朝顾客那面 -X）：浅一号，凹进去 2 cm
+	_box_decor("CounterPanel", Vector3(cx - cw * 0.5 - 0.01, 0.60, cz),
+		Vector3(0.03, 0.62, cl - 0.36), _mat["counter_light"])
+	# 前脸两道压条（装饰）
+	for dz in [-1.0, 1.0]:
+		_box_decor("CounterTrim%s" % ("A" if dz < 0.0 else "B"),
+			Vector3(cx - cw * 0.5 - 0.02, 0.60, cz + dz * (cl * 0.5 - 0.18)),
+			Vector3(0.05, 0.62, 0.05), _mat["steel"])
+
+	# 台面：1.04 高、6 cm 厚，前后各出檐 7 cm
+	var top_h := 1.04
+	_box("CounterTop", Vector3(cx, top_h - 0.03, cz),
+		Vector3(cw + 0.14, 0.06 + TUCK, cl + 0.16), _mat["counter_top"])
+	# 前沿不锈钢压条（顾客那一侧）
+	_box_decor("CounterEdge", Vector3(cx - cw * 0.5 - 0.07, top_h - 0.03, cz),
+		Vector3(0.02, 0.06, cl + 0.16), _mat["steel"])
+
+	# 收银机：底座 + 屏幕（自发光）+ 键盘
+	_box("Register", Vector3(cx + 0.04, top_h + 0.03, cz - 0.55),
+		Vector3(0.36, 0.10, 0.30), _mat["dark"])
+	_box_decor("RegisterScreen", Vector3(cx + 0.10, top_h + 0.19, cz - 0.55),
+		Vector3(0.03, 0.22, 0.32), _mat["screen"])
+	_box_decor("RegisterKeys", Vector3(cx - 0.12, top_h + 0.03, cz - 0.55),
+		Vector3(0.24, 0.03, 0.28), _mat["steel"])
+
+	# 刷卡机（顾客侧）+ 小铃 + 提示牌
+	_box_decor("CardReader", Vector3(cx - cw * 0.5 - 0.02, top_h + 0.10, cz + 1.05),
+		Vector3(0.10, 0.14, 0.12), _mat["dark"])
+	_box_decor("Bell", Vector3(cx - cw * 0.5 + 0.05, top_h + 0.04, cz + 1.45),
+		Vector3(0.10, 0.06, 0.10), _mat["brass"])
+	_box_decor("BellTop", Vector3(cx - cw * 0.5 + 0.05, top_h + 0.09, cz + 1.45),
+		Vector3(0.05, 0.04, 0.05), _mat["brass"])
+
+	# 柜台后面的墙架（放货）。
+	# ⚠️ 必须整块留**离墙 2 cm**：之前 x = L/2-0.16（外沿 6.55）直接捅穿东墙内表面
+	# （6.40），墙内表面与架板上下表面相交，从店里看就是一排锯齿（用户报的 z-fighting）。
+	var sh_x := shop_len * 0.5 - 0.33
+	for i in 3:
+		_box_decor("WallShelf", Vector3(sh_x, 1.30 + float(i) * 0.32, cz),
+			Vector3(0.22, 0.04, 2.6), _mat["counter"])
+
+
+## 店员：小空站在柜台后面，朝顾客（-X）。
+func _build_clerk() -> void:
+	var clerk := ShopClerk.new()
+	clerk.name = "ClerkSora"
+	clerk.position = Vector3(5.86, 0.0, 0.20)
+	clerk.rotation.y = -PI * 0.5     # 模型朝 +Z → 转 -90° 朝 -X（柜台外侧）
+	add_child(clerk)
+	decor_count += 1
 
 
 ## 一组货架：两块侧板 + 三块隔板（全部带碰撞，数字只写一遍）
@@ -419,7 +510,7 @@ func _shelf(cx: float, cz: float) -> void:
 	var h := 1.8
 	var d := 0.45
 	for sx in [-1.0, 1.0]:
-		_box("ShelfSide", Vector3(cx + sx * (w * 0.5 - 0.05), h * 0.5, cz),
+		_box_standing("ShelfSide", Vector2(cx + sx * (w * 0.5 - 0.05), cz),
 			Vector3(0.1, h, d), _mat["wood"])
 	for i in 3:
 		_box("ShelfBoard", Vector3(cx, h - 0.2 - float(i) * 0.6, cz),
@@ -493,6 +584,12 @@ func _unique_name(parent: Node, want: String) -> String:
 func _box_decor(node_name: String, center: Vector3, size: Vector3, mat: Material) -> void:
 	_box_into(_decor, node_name, center, size, mat)
 	decor_count += 1
+
+
+## 立在地上的箱子：**往下沉 TUCK**，让底面钻进地板里（贴着放会 z-fighting）
+func _box_standing(node_name: String, xz: Vector2, size: Vector3, mat: Material) -> void:
+	var s := Vector3(size.x, size.y + TUCK, size.z)
+	_box(node_name, Vector3(xz.x, s.y * 0.5 - TUCK, xz.y), s, mat)
 
 
 # ══════════════════════════ 记账 ══════════════════════════

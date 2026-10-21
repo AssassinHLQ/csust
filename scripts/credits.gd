@@ -213,6 +213,17 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/npc/sora",
+		"title": "天使24 店员「小空」（Sora）",
+		"author": "薛定谔的小问号",
+		"license": "专有版权（派生自 Blue Archive，玩家二创）",
+		"distributed": false,
+		"source": "kong_by_薛定谔的小问号（小空1donzuo.blend，2023-12）",
+		"license_file": "",
+		"note": "338 骨 A-pose rig、0 条动作；本工程用 Blender 5.0 无头导出 sora.glb（cs_* 控制块全剔）。站在商店柜台后，双手（0.89 / 0.69 m）低于台面 1.04 m，所以 A-pose 看不见；待机是程序化的（scripts/shop_clerk.gd）",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "splatdata",
 		"title": "校园 / 画室609 高斯泼溅扫描数据",
 		"author": "由使用者提供（权利状态未核实）",
