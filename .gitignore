@@ -14,6 +14,10 @@
 # 校园高斯泼溅扫描与派生碰撞网格（权利状态未核实）
 /splatdata/*.sogdata
 /splatdata/*.sog
+# ⚠️ .sog 一旦躺在 res:// 里，gdgs 插件就会把它烘焙成 2 GB 级的 .res
+#    （2026-10-21 实测 70.8 MB 的 .sog → 2.47 GB），连带 .import 一起别进仓库
+/splatdata/*.import
+/splatdata/*.sog.import
 /models/school*.glb
 /models/school*.glb.import
 # Boss 模型（霸王龙优香，同样派生自 Blue Archive）
