@@ -194,16 +194,19 @@ func _build() -> void:
 	scroll.add_child(rows)
 
 	var render_header_done := false
+	var cross_header_done := false
 	for key in GameSettings.keys():
 		if key in GameSettings.RENDER_KEYS and not render_header_done:
 			render_header_done = true
-			var h := Label.new()
-			h.text = "画面"
-			h.add_theme_font_size_override("font_size", 14)
-			h.add_theme_color_override("font_color", _skin["subtext"])
-			rows.add_child(HSeparator.new())
-			rows.add_child(h)
-		if GameSettings.is_choice(key):
+			_add_header(rows, "画面")
+		if key in GameSettings.CROSSHAIR_KEYS and not cross_header_done:
+			cross_header_done = true
+			_add_header(rows, "准星")
+		# ⚠️ 颜色必须排在 is_choice / is_numeric 之前判 —— 它既不是离散型也不是数值型，
+		#    落到最后的 `else` 会被画成一个毫无意义的开关。
+		if GameSettings.is_color(key):
+			_add_color(rows, key)
+		elif GameSettings.is_choice(key):
 			_add_choice(rows, key)
 		elif GameSettings.is_numeric(key):
 			_add_slider(rows, key)
@@ -244,6 +247,54 @@ func _build() -> void:
 	hint.add_theme_color_override("font_color", _skin["subtext"])
 	hint.add_theme_font_size_override("font_size", 13)
 	vbox.add_child(hint)
+
+
+## 分组小标题（「画面」/「准星」—— 上面压一条分隔线，视觉上和设置项分开）。
+## 抽成函数是因为 2026-10-22 加了第二组「准星」，再抄一遍就该走散了。
+func _add_header(parent: Node, text: String) -> void:
+	var h := Label.new()
+	h.text = text
+	h.add_theme_font_size_override("font_size", 14)
+	h.add_theme_color_override("font_color", _skin["subtext"])
+	parent.add_child(HSeparator.new())
+	parent.add_child(h)
+
+
+## 颜色型（准星颜色 / 渐变第二色）：`ColorPickerButton` —— 点开是引擎自带调色板。
+##
+## ⚠️ 关掉 `edit_alpha`：准星颜色的透明度由「中心点透明度 / 十字臂透明度」两个滑块管，
+##    颜色里再带一个 alpha 就有两个地方能改同一件事，调起来会互相打架。
+func _add_color(parent: Node, key: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	parent.add_child(row)
+
+	var name_label := Label.new()
+	name_label.text = GameSettings.label(key)
+	name_label.custom_minimum_size.x = LABEL_WIDTH
+	name_label.add_theme_color_override("font_color", _skin["text"])
+	row.add_child(name_label)
+
+	var picker := ColorPickerButton.new()
+	picker.color = Color(GameSettings.value(key, Color.WHITE))
+	picker.edit_alpha = false
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.custom_minimum_size = Vector2(0.0, 28.0)
+	picker.add_theme_font_size_override("font_size", 13)
+	picker.add_theme_color_override("font_color", _skin["text"])
+	row.add_child(picker)
+
+	var value_label := Label.new()
+	value_label.text = GameSettings.value_text(key, picker.color)
+	value_label.custom_minimum_size.x = VALUE_WIDTH
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_color_override("font_color", _skin["text"])
+	row.add_child(value_label)
+
+	picker.color_changed.connect(func(c: Color) -> void:
+		Sfx.play("ui_slider")
+		GameSettings.set_value(key, c))
+	_rows[key] = {"control": picker, "value": value_label}
 
 
 func _add_slider(parent: Node, key: String) -> void:
@@ -576,6 +627,12 @@ func _on_setting_changed(key: String, _value: Variant) -> void:
 		var check := control as CheckButton
 		check.set_pressed_no_signal(bool(GameSettings.value(key)))
 		value_label.text = _on_off(check.button_pressed)
+	elif control is ColorPickerButton:
+		# `set_pick_color` 不发 `color_changed`（Godot 源码里只 update + queue_redraw），
+		# 所以不会回到 `set_value` 绕圈；这里只是把颜色和右侧「#RRGGBB」同步过来。
+		var picker := control as ColorPickerButton
+		picker.set_pick_color(Color(GameSettings.value(key, Color.WHITE)))
+		value_label.text = GameSettings.value_text(key, picker.color)
 	elif row.has("buttons"):
 		# ⚠️ 必须 `set_pressed_no_signal`：普通 setter 会再发一次 pressed → set_value → 回到这里
 		var buttons: Dictionary = row["buttons"]

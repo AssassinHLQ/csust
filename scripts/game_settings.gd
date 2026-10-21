@@ -40,6 +40,19 @@ const DEFAULTS := {
 	"ssr": false,
 	"fog": true,
 	"window_mode": "maximized",
+	# ── 准星（2026-10-22 用户：颜色 / 双色渐变 / 粗细 / 每个部件的透明度 都要能调）──
+	# ⚠️ 三个尺寸单位都是**物理像素**（不是逻辑 px）：HUD 会按 `crosshair_scale()`
+	#    换算成逻辑坐标再摆，见 `hud.gd::_layout_crosshair` 那两大段注释。
+	# ⚠️ 两个 alpha 是**乘在颜色自带的 alpha 上**的（`crosshair_color*.a × 部件 alpha`），
+	#    所以颜色选纯白、只动这两个滑块，就是纯粹的「这个部件有多透」。
+	"crosshair_color": Color(1.0, 1.0, 1.0, 1.0),
+	"crosshair_color2": Color(0.35, 0.85, 1.0, 1.0),
+	"crosshair_gradient": false,
+	"crosshair_dot_px": 3.0,
+	"crosshair_thick_px": 3.0,
+	"crosshair_arm_px": 8.0,
+	"crosshair_dot_alpha": 0.95,
+	"crosshair_arm_alpha": 0.75,
 }
 
 ## 数值型设置的 [最小值, 最大值, 步长]
@@ -55,6 +68,12 @@ const RANGES := {
 	"fps_limit": [0.0, 240.0, 10.0],      # 0 = 不限帧
 	"aa_mode": [0.0, 5.0, 1.0],           # 0 关 / 1 FXAA / 2 MSAA2× / 3 4× / 4 8× / 5 TAA
 	"shadow_quality": [0.0, 3.0, 1.0],    # 0 关 / 1 低 / 2 中 / 3 高
+	# ── 准星（单位：物理像素）──
+	"crosshair_dot_px": [1.0, 15.0, 1.0],
+	"crosshair_thick_px": [1.0, 10.0, 1.0],
+	"crosshair_arm_px": [2.0, 24.0, 1.0],
+	"crosshair_dot_alpha": [0.0, 1.0, 0.05],
+	"crosshair_arm_alpha": [0.0, 1.0, 0.05],
 }
 
 ## 抗锯齿 / 阴影的档位名字（滑块取整数值，界面显示这些）
@@ -103,11 +122,30 @@ const LABELS := {
 	"ssr": "屏幕空间反射 SSR",
 	"fog": "雾",
 	"window_mode": "窗口模式",
+	"crosshair_color": "准星颜色",
+	"crosshair_color2": "渐变第二色",
+	"crosshair_gradient": "双色渐变",
+	"crosshair_dot_px": "中心点大小 (px)",
+	"crosshair_thick_px": "准星粗细 (px)",
+	"crosshair_arm_px": "准星臂长 (px)",
+	"crosshair_dot_alpha": "中心点透明度",
+	"crosshair_arm_alpha": "十字臂透明度",
 }
 
 ## 「画面」分组：设置界面在这些键之前插一个小标题
 const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
 	"shadow_quality", "ssao", "glow", "ssr", "fog", "window_mode"]
+
+## 「准星」分组：同上，第一个键之前插小标题「准星」。
+## ⚠️ 顺序就是设置界面里的顺序，DEFAULTS 里也按这个顺序排过一遍 —— 两处别走散。
+const CROSSHAIR_KEYS := ["crosshair_color", "crosshair_color2", "crosshair_gradient",
+	"crosshair_dot_px", "crosshair_thick_px", "crosshair_arm_px",
+	"crosshair_dot_alpha", "crosshair_arm_alpha"]
+
+## 「颜色型」设置。**必须显式列表**，不能靠 `value is Color` 去猜：
+## 读盘失败时 `value()` 会回落到 DEFAULTS，类型是对的；但 `_coerce()` 之前
+## 拿到的可能是字符串，界面按类型分支会在那一瞬间把颜色画成开关。
+const COLOR_KEYS := ["crosshair_color", "crosshair_color2"]
 
 static var _values := {}
 static var _loaded := false
@@ -178,6 +216,11 @@ static func is_choice(key: String) -> bool:
 	return CHOICES.has(key)
 
 
+## 颜色型（界面给 ColorPickerButton，不是开关）
+static func is_color(key: String) -> bool:
+	return key in COLOR_KEYS
+
+
 static func choices(key: String) -> Array:
 	return CHOICES.get(key, [])
 
@@ -210,6 +253,12 @@ static func value_text(key: String, v: Variant) -> String:
 			return AA_NAMES[clampi(int(round(float(v))), 0, AA_NAMES.size() - 1)]
 		"shadow_quality":
 			return SHADOW_NAMES[clampi(int(round(float(v))), 0, SHADOW_NAMES.size() - 1)]
+		"crosshair_dot_px", "crosshair_thick_px", "crosshair_arm_px":
+			return "%d px" % int(round(float(v)))
+		"crosshair_dot_alpha", "crosshair_arm_alpha":
+			return "%d%%" % int(round(float(v) * 100.0))
+	if v is Color:
+		return "#" + (v as Color).to_html(false).to_upper()
 	if v is bool:
 		return "开" if bool(v) else "关"
 	if CHOICES.has(key):
@@ -288,6 +337,13 @@ static func _coerce(key: String, v: Variant) -> Variant:
 		"window_mode":
 			var s := String(v)
 			return "fullscreen" if s == "exclusive" else s
+		# 颜色：老存档/手改的 ini 可能把它存成 "#RRGGBB" 字符串，这里兜住
+		"crosshair_color", "crosshair_color2":
+			if v is String:
+				return Color.from_string(String(v), Color.WHITE)
+			if v is Color:
+				return v
+			return DEFAULTS.get(key, Color.WHITE)
 	return v
 
 

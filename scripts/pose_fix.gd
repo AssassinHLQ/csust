@@ -71,12 +71,53 @@ const META_LID := "pose_fix_lid"
 ## 约 32° 的侧倾**。原因：它用的 `Vector3(1,0,0)` 是**骨架空间**的 X，而骨架节点带
 ## −90° 旋转（世界 +Z 落到骨架空间是 `(0.774, 0.345, 0.531)`），那根轴不是世界的左右轴。
 ##
-## 修法：绕标定轴 `FWD_AXIS`（见下）补 −18.6°。实测：
-##     · `FWD_AXIS` 转 10° → roll 变 −9.76°（≈1:1，干净的滚转，不掺俯仰）
-##     · 补 −18.6° 之后 Move_Ing 的 roll = **+0.26°**（范围 −1.91 ~ +2.26）
-const ROLL_DEG := {
+## ── ⚠️ 2026-10-22：这里原来写死 `{"Bip001 Head": -18.6}`，只对 Arisu 成立 ──
+## 那 −18.6° 是在 **Arisu_ext.glb** 上标出来的，但 `AnimDriver` 对**每一位同伴**都跑
+## （柚子 / 小桃 / 小绿 / 诺亚 / 小雪 / 凯伊 各一份自己的 glb）。
+## `_probe_role_roll.gd` 实测：收完前倾之后各自的侧倾是 **−15° ~ −32°**（各不相同），
+## 套同一个 −18.6° 就变成「都朝同一侧歪」—— 正是用户说的
+## 「柚子小绿小桃跑步时姿势错误，头右倾了」。
+##
+## 现在改成**每具骨架现场标定**（不再有写死的角度）：
+##   ① 用 `AnimationPlayer.seek()` 把这条动作走一遍（`_probe_seek_sync.gd` 验过
+##      seek + `force_update_all_bone_transforms()` **同一帧就能读到新姿势**，
+##      所以 `_ready()` 里同步做完，不用等帧）；
+##   ② 每 1/12 个周期采一点，用两只**眼骨**的世界坐标量 roll，取均值；
+##   ③ 滚转轴**从几何现算**：`world_axis = (eye_R − eye_L) × UP`（= 角色正前方），
+##      再乘 `global_transform.basis⁻¹` 换回骨架空间。不管模型朝哪、rig 有没有转
+##      180°，这根轴都对。**不能**再写死 `FWD_AXIS`（那是 Arisu 一具骨架上的标定值，
+##      在别的骨架上它可能跟真正的滚转轴几乎垂直 —— 实测那样会越修越歪，
+##      还会发散到把脑袋拧 100° 以上）；
+##   ④ 修正量**分摊**给脊柱/颈/头（权重按 `LEAN_DEG` 的角度比例 —— 侧倾是从各段的
+##      错误轴里注入的，哪里注入就在哪里还回去，不然脑袋会在脖子上拧一圈）；
+##   ⑤ 每转一次**重量残差**，超差再补一轮；单条动作总修正量封顶 `ROLL_MAX_DEG`。
+## 结果按骨架实例记在 `_roll_cache` 里，`fix_extra_run_clip()` 复用同一份。
+const HEAD_BONE := "Bip001 Head"
+## 判 roll 用的眼骨。BA 这套 Biped 骨架都有；没有的（凯伊整具骨架只有 6 根骨）
+## 就退回 `ROLL_FALLBACK_DEG`。
+const EYE_L_BONE := "Bip001 eye_L"
+const EYE_R_BONE := "Bip001 eye_R"
+## 一条动作采几个点（和 `_probe_head_roll.gd` 一致）
+const ROLL_SAMPLES := 12
+## 残差小到这个程度就收手（1° 以内肉眼分不出来）
+const ROLL_TOLERANCE := 0.6
+## 最多修几轮（第一轮按几何解，后面几轮只补残差）
+const ROLL_PASSES := 3
+## 单条动作的总修正量上限（度）。实测要把注入的 −32° 还回去需要 30° 出头，
+## 所以保险丝放在 45°：再大就说明标定在发散，宁可留一点歪也别把脖子拧断。
+const ROLL_MAX_DEG := 45.0
+## 修正量分摊给哪些骨 —— 和 `LEAN_DEG` 同一批（**不含骨盆**：转骨盆会把腿带着歪）。
+## 权重直接取 `LEAN_DEG` 的度数比例，见上面 ④。
+const ROLL_BONES := ["Bip001 Spine", "Bip001 Spine1", "Bip001 Neck", "Bip001 Head"]
+## **量不出 roll 时**（没有眼骨的模型）退回的死数。
+## ⚠️ 只对 Arisu_ext.glb 成立；正常路径已经不用它了，留作保险。
+const ROLL_FALLBACK_DEG := {
 	"Bip001 Head": -18.6,
 }
+## 骨架实例 id → 标定结果：
+##     {"deg": 总角度, "axis": 骨架空间的滚转轴, "per": {骨名: 各修多少度}}
+## `fix_extra_run_clip()` 要用**同一份**（那条跑打动作是用未修正的 `Move_Ing` 拼的）。
+static var _roll_cache := {}
 
 ## ── 待机只有**右**眼睑在动 ──
 ## 实测 `Normal_Idle` 里 `Bip001 eye_R_1` 的姿势四元数 y 分量到 **−0.044**（≈5°），
@@ -129,12 +170,39 @@ static func fix_run_lean(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 	return report
 
 
-## 把「跑步时头往左偏 13.9°」掰正。和 `fix_run_lean` 同一套机制，只是轴换成前进轴。
+## 把「跑步时头往左偏」掰正 —— **每具骨架自己量、自己算**（见上面那段注释）。
+##
+## 报告字段（自检 / 日志用）：
+##     applied       bool       有没有真的改
+##     measured      bool       true = 用眼骨量出来了；false = 退回死数
+##     roll_before   float      修之前这条动作的平均 roll（度）
+##     roll_after    float      修之后（最后一轮实测）
+##     deg           float      总共补了多少度（负 = 往另一侧）
+##     passes        int        修了几轮
+##     bones/total/missing       同 `fix_run_lean`
 static func fix_head_roll(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
-	var report := {"applied": false, "bones": {}, "total": 0, "missing": [] as Array}
-	if sk == null or ap == null or ROLL_DEG.is_empty():
+	var report := {"applied": false, "bones": {}, "total": 0, "missing": [] as Array,
+		"measured": false, "roll_before": 0.0, "roll_after": 0.0, "deg": 0.0, "passes": 0}
+	if sk == null or ap == null:
 		return report
-	var changed := 0
+
+	# 要分摊的骨：名字 + 索引 + 权重（权重取 `LEAN_DEG` 的角度比例，见上面 ④）
+	var targets: Array = []
+	var weight_sum := 0.0
+	for bone_name in ROLL_BONES:
+		var idx := sk.find_bone(String(bone_name))
+		if idx >= 0:
+			var w := maxf(float(LEAN_DEG.get(bone_name, 1.0)), 0.1)
+			targets.append([String(bone_name), idx, w])
+			weight_sum += w
+	if targets.is_empty():
+		report["missing"].append(ROLL_BONES[0])
+		return report
+
+	var total := 0
+	var deg_all := 0.0
+	var per_all := {}
+	var axis_all := Vector3.ZERO
 	for clip in CLIPS:
 		if not ap.has_animation(clip):
 			report["missing"].append(clip)
@@ -142,20 +210,118 @@ static func fix_head_roll(sk: Skeleton3D, ap: AnimationPlayer) -> Dictionary:
 		var a := ap.get_animation(clip)
 		if a.has_meta(META_ROLL):
 			continue
-		for bone_name in ROLL_DEG:
-			var idx := sk.find_bone(bone_name)
-			if idx < 0:
-				report["missing"].append(bone_name)
-				continue
-			var delta := _axis_delta(sk, idx, FWD_AXIS, float(ROLL_DEG[bone_name]))
-			var keys := _apply_delta(a, bone_name, delta)
-			if keys > 0:
-				changed += keys
-				report["bones"][bone_name] = {"deg": ROLL_DEG[bone_name], "axis": "Rz", "keys": keys}
+		var keys := 0
+		var per := {}
+		var m := _measure_roll(sk, ap, clip)      # {"roll": 度, "axis": 骨架空间向量}
+		var roll := float(m["roll"])
+		var axis: Vector3 = m["axis"]
+		if is_nan(roll) or axis.length() < 0.5:
+			# 量不出来（没有眼骨的模型）：退回死数，只动头
+			var hi := sk.find_bone(HEAD_BONE)
+			var fb := float(ROLL_FALLBACK_DEG.get(HEAD_BONE, 0.0))
+			if hi >= 0 and not is_zero_approx(fb):
+				keys += _apply_delta(a, HEAD_BONE, _axis_delta(sk, hi, FWD_AXIS, fb))
+				deg_all += fb
+				report["passes"] = maxi(int(report["passes"]), 1)
+		else:
+			report["measured"] = true
+			report["roll_before"] = roll
+			var passes := 0
+			while passes < ROLL_PASSES:
+				if absf(roll) <= ROLL_TOLERANCE or absf(deg_all) >= ROLL_MAX_DEG:
+					break
+				# 绕「角色正前方」转 −roll，眼睛连线就摆平（1:1）
+				var deg := clampf(-roll, -ROLL_MAX_DEG, ROLL_MAX_DEG)
+				for t in targets:
+					var d := deg * float(t[2]) / weight_sum
+					keys += _apply_delta(a, String(t[0]),
+						_axis_delta(sk, int(t[1]), axis, d))
+					per[String(t[0])] = float(per.get(String(t[0]), 0.0)) + d
+				deg_all += deg
+				passes += 1
+				m = _measure_roll(sk, ap, clip)     # 改完重量，看还剩多少
+				roll = float(m["roll"])
+				axis = m["axis"]
+				if axis.length() < 0.5:
+					break
+			report["roll_after"] = roll
+			report["passes"] = maxi(int(report["passes"]), passes)
+			per_all = per
+			axis_all = axis
+		if keys > 0:
+			total += keys
+			for t in targets:
+				report["bones"][String(t[0])] = {"axis": "Rgeo"}
 		a.set_meta(META_ROLL, true)
-	report["applied"] = changed > 0
-	report["total"] = changed
+
+	report["deg"] = deg_all
+	report["total"] = total
+	report["applied"] = total > 0
+	if report["applied"]:
+		_roll_cache[sk.get_instance_id()] = {
+			"deg": deg_all, "axis": axis_all, "per": per_all}
 	return report
+
+
+## 一条动作里头的**平均侧倾**，以及「该绕哪根轴转」—— `{roll: 度, axis: 骨架空间单位向量}`。
+##
+## ⚠️ 四个必须：
+##   1. **同一帧就能读**：`seek(t, true)` + `force_update_all_bone_transforms()`
+##      （`_probe_seek_sync.gd` 对照过「等一帧」和「不等」两种读法，差 < 0.01°）；
+##   2. **换到世界空间**再算：glb 根节点带 −90° X 旋转，在骨架空间里跟「世界上」比
+##      会量出 −36° / −77° 这种鬼数字（踩过）；
+##   3. 轴**从几何现算**：`world_axis = (eye_R − eye_L) × UP`（= 角色正前方），
+##      再乘 `global_transform.basis⁻¹` 换回骨架空间。符号错会越修越歪
+##      （第一次写成 `UP × 眼睛连线` = 正后方，实测 −32° 被修到 −59°）；
+##   4. 量完**把播放器原样放回去**（模式 / 动作 / 位置 / 速度），别在 `_ready()` 里
+##      留下一个正在播 `Move_Ing` 的 AnimationPlayer。
+##
+## 量不出来（没有眼骨、或没有这条动作）时 `roll` 为 `NAN`、`axis` 是零向量。
+static func _measure_roll(sk: Skeleton3D, ap: AnimationPlayer, clip: String) -> Dictionary:
+	var out := {"roll": NAN, "axis": Vector3.ZERO}
+	var eL := sk.find_bone(EYE_L_BONE)
+	var eR := sk.find_bone(EYE_R_BONE)
+	if eL < 0 or eR < 0 or not ap.has_animation(clip):
+		return out
+	var a := ap.get_animation(clip)
+	var prev_mode: int = ap.playback_process_mode
+	var prev_clip := ap.current_animation
+	# ⚠️ 没有正在播的动作时读 `current_animation_position` 会刷一条
+	#    "AnimationPlayer has no current animation" 错误（第一次进游戏必刷一屏）
+	var prev_pos := 0.0
+	if not prev_clip.is_empty():
+		prev_pos = ap.current_animation_position
+	var prev_speed := ap.speed_scale
+	ap.playback_process_mode = AnimationPlayer.ANIMATION_PROCESS_MANUAL
+	ap.speed_scale = 1.0
+	ap.play(clip)
+	var sum := 0.0
+	var axis_sum := Vector3.ZERO
+	var n := maxi(ROLL_SAMPLES, 2)
+	for i in n:
+		ap.seek(a.length * float(i) / float(n), true)
+		sk.force_update_all_bone_transforms()
+		var xf := sk.global_transform
+		var pl: Vector3 = xf * sk.get_bone_global_pose(eL).origin
+		var pr: Vector3 = xf * sk.get_bone_global_pose(eR).origin
+		var right := (pr - pl).normalized()
+		sum += rad_to_deg(asin(clampf(right.y, -1.0, 1.0)))
+		var w := right.cross(Vector3.UP)      # = 角色正前方
+		if w.length() > 0.0001:
+			axis_sum += w.normalized()
+	# 还原播放器
+	ap.playback_process_mode = prev_mode
+	ap.speed_scale = prev_speed
+	if prev_clip.is_empty():
+		ap.stop()
+	else:
+		ap.play(prev_clip)
+		ap.seek(prev_pos, true)
+	sk.force_update_all_bone_transforms()
+	out["roll"] = sum / float(n)
+	if axis_sum.length() > 0.0001:
+		out["axis"] = (sk.global_transform.basis.inverse() * axis_sum.normalized()).normalized()
+	return out
 
 
 ## 把一只眼的眼睑旋转轨道**镜像**到另一只眼。
@@ -310,12 +476,30 @@ static func fix_extra_run_clip(sk: Skeleton3D, ap: AnimationPlayer, clip: String
 			continue
 		total += _apply_delta(a, String(bone_name), _pitch_delta(sk, idx, float(LEAN_DEG[bone_name])))
 		report["bones"].append(String(bone_name))
-	for bone_name in ROLL_DEG:
-		var idx2 := sk.find_bone(String(bone_name))
-		if idx2 < 0:
-			continue
-		total += _apply_delta(a, String(bone_name),
-			_axis_delta(sk, idx2, FWD_AXIS, float(ROLL_DEG[bone_name])))
+	# 用这具骨架**实测**出来的「每根骨各修多少 + 绕哪根轴」
+	# （`fix_head_roll()` 存进 `_roll_cache`）—— 这条动作和 `Move_Ing` 必须是同一个修正量。
+	# 没标定过（例如这条动作在没有 `Move_Ing` 的模型上）才退回死数。
+	var cal: Dictionary = _roll_cache.get(sk.get_instance_id(), {})
+	var per: Dictionary = cal.get("per", {})
+	var axis: Vector3 = cal.get("axis", Vector3.ZERO)
+	if not per.is_empty() and axis.length() > 0.5:
+		for bone_name in per:
+			var idx2 := sk.find_bone(String(bone_name))
+			if idx2 < 0:
+				continue
+			var deg := float(per[bone_name])
+			if is_zero_approx(deg):
+				continue
+			total += _apply_delta(a, String(bone_name), _axis_delta(sk, idx2, axis, deg))
+			report["bones"].append(String(bone_name))
+	else:
+		for bone_name in ROLL_FALLBACK_DEG:
+			var idx3 := sk.find_bone(String(bone_name))
+			if idx3 < 0:
+				continue
+			total += _apply_delta(a, String(bone_name),
+				_axis_delta(sk, idx3, FWD_AXIS, float(ROLL_FALLBACK_DEG[bone_name])))
+			report["bones"].append(String(bone_name))
 	a.set_meta(meta, true)
 	report["applied"] = total > 0
 	report["keys"] = total

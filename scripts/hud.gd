@@ -36,9 +36,36 @@ extends CanvasLayer
 ##    渲染出来正是 2×2 的灰块。正确做法是让**四条边**都落在整数上（占满 [n, n+1) 这一格），
 ##    也就是把原点当「像素格角」而不是「格心」。现在 `_layout_crosshair()` 就是这么做的：
 ##    原点吸到整数格角，所有元素按**整数设备像素**摆，1 px 就是真 1 px。
-const CROSS_DOT_PX := 3.0     ## 中心点边长（物理像素；用户 2026-10-21「1×1 太薄，要 3×3」）
-const CROSS_THICK_PX := 3.0   ## 十字条粗细（物理像素；1 → 3，和中心点一样粗）
-const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多远由扩散量决定）
+## ── 2026-10-22 用户要求「设置里面可以调准星颜色 / 双色渐变 / 粗细 / 每个部件的透明度」──
+##
+## 现在**尺寸与颜色全部来自 `GameSettings`**（`crosshair_*` 那八项），下面三个常量只是
+## 「读到空值时」的兜底，正常路径不会用到它们。改默认值请改 `game_settings.gd::DEFAULTS`。
+##
+## 双色渐变怎么画的：五个 `ColorRect` 各挂同一个 `ShaderMaterial`，片元里按
+## `FRAGCOORD.y`（**设备像素**）在整条准星的高度区间里插值 —— 注意不是按各自节点的
+## UV 插值，否则中心点和四条臂会各画各的渐变，接缝一眼就看出来。
+## ⚠️ 区间（`span_top` / `span_bottom`）也必须是设备像素，和 `_layout_crosshair()` 里
+##    那套「一切按整数物理像素摆」用同一把尺子。
+const CROSS_DOT_PX := 3.0     ## 中心点边长兜底值（物理像素）
+const CROSS_THICK_PX := 3.0   ## 十字条粗细兜底值（物理像素）
+const CROSS_ARM_PX := 8.0     ## 十字条长度兜底值（物理像素）
+
+## 准星着色器：上下两色 + 每个部件自己的 alpha（走 `COLOR.a`，见 `_apply_crosshair_style`）。
+## 关闭渐变时 `hud.gd` 会把两色设成同一个值，所以这里不需要 `if` 分支。
+const CROSSHAIR_SHADER := """
+shader_type canvas_item;
+
+uniform vec4 top_color : source_color = vec4(1.0);
+uniform vec4 bottom_color : source_color = vec4(1.0);
+uniform float span_top = 0.0;
+uniform float span_bottom = 1.0;
+
+void fragment() {
+	float t = clamp((FRAGCOORD.y - span_top) / max(span_bottom - span_top, 1.0), 0.0, 1.0);
+	vec4 g = mix(top_color, bottom_color, t);
+	COLOR = vec4(g.rgb, g.a * COLOR.a);
+}
+"""
 
 ## 血条描边宽度（逻辑 px）。见 `_make_bar_stack()` 那段关于 `ProgressBar` 的注释。
 const BAR_EDGE_PX := 2.0
@@ -113,6 +140,9 @@ var _splat_rows: Array[Dictionary] = []
 ##       c_health/c_died: Callable}——两个回调**存下来**，重新绑定时才能按它们断开。
 ## 中途加载的 Boss（第 8 段比纳）走 `add_boss()` 追加一行。
 var _boss_rows: Array[Dictionary] = []
+## 准星共用的那一个着色器材质（五个 `ColorRect` 挂的是**同一个实例**，
+## 所以「改一次颜色」就全变；也让它们能合批）。
+var _cross_mat: ShaderMaterial
 
 ## SogRuntime 的进度阶段 → 给人看的文案
 const SPLAT_PHASE := {
@@ -131,6 +161,7 @@ func _ready() -> void:
 	# 泼溅状态行不在这里建：见 bind_splats()，要按场上实际有几份场地来排行数。
 	# （校园 615 万点首次要解码约 50 s，不给状态行玩家会以为卡死了。）
 	# Boss 血条同理：见 bind_bosses()，要按场上实际有几位来排行数。
+	_setup_crosshair()
 	print("[HUD] 皮肤 = %s（%s）" % [_skin["label"], _skin["dir"]])
 
 
@@ -637,10 +668,10 @@ func _layout_crosshair() -> void:
 	crosshair.offset_top = d.y
 	crosshair.offset_bottom = d.y
 
-	# 2) 全部按整数设备像素摆（相对原点）
-	var dot_px := maxi(int(round(CROSS_DOT_PX)), 1)
-	var thick_px := maxi(int(round(CROSS_THICK_PX)), 1)
-	var arm_px := maxi(int(round(CROSS_ARM_PX)), 1)
+	# 2) 全部按整数设备像素摆（相对原点）。尺寸/颜色 2026-10-22 起可在设置里调。
+	var dot_px := maxi(int(round(_cross_num("crosshair_dot_px", CROSS_DOT_PX))), 1)
+	var thick_px := maxi(int(round(_cross_num("crosshair_thick_px", CROSS_THICK_PX))), 1)
+	var arm_px := maxi(int(round(_cross_num("crosshair_arm_px", CROSS_ARM_PX))), 1)
 	var gap_px := maxi(int(round(_spread * scale)), 0)
 	var dh := dot_px / 2          # 奇数时向下取整：1 px 就是 [0, 1) 这一格
 	var th := thick_px / 2
@@ -650,6 +681,14 @@ func _layout_crosshair() -> void:
 	_set_px_rect(b, Rect2(-th, gap_px, thick_px, arm_px))
 	_set_px_rect(l, Rect2(-gap_px - arm_px, -th, arm_px, thick_px))
 	_set_px_rect(r, Rect2(gap_px, -th, arm_px, thick_px))
+
+	# 3) 渐变的纵向区间：从「上臂顶边」到「下臂底边」，单位同样是设备像素。
+	#    ⚠️ 用 `origin_px.y`（设备坐标）而不是相对偏移 —— 着色器里的 `FRAGCOORD.y`
+	#       是设备坐标，两者必须同一个坐标系。
+	if _cross_mat != null:
+		var half_px := float(gap_px + arm_px)
+		_cross_mat.set_shader_parameter("span_top", origin_px.y - half_px)
+		_cross_mat.set_shader_parameter("span_bottom", origin_px.y + half_px)
 
 
 ## 把一个**整数设备像素**矩形（相对准星原点）换成 Control 的逻辑偏移。
@@ -687,6 +726,92 @@ func crosshair_physical_rects() -> Dictionary:
 	return out
 
 
+# --- 准星外观（设置驱动）------------------------------------------------------
+
+## 建准星材质 + 接设置广播。只在 `_ready()` 里调一次。
+func _setup_crosshair() -> void:
+	var sh := Shader.new()
+	sh.code = CROSSHAIR_SHADER
+	_cross_mat = ShaderMaterial.new()
+	_cross_mat.shader = sh
+	for c in [dot, t, b, l, r]:
+		if c is ColorRect:
+			(c as ColorRect).material = _cross_mat
+	GameSettings.listen(_on_setting_changed)
+	_apply_crosshair_style()
+	_layout_crosshair()
+	print("[HUD] 准星：点 %d px、粗 %d px、臂 %d px、渐变 %s、色 %s→%s" % [
+		int(round(_cross_num("crosshair_dot_px", CROSS_DOT_PX))),
+		int(round(_cross_num("crosshair_thick_px", CROSS_THICK_PX))),
+		int(round(_cross_num("crosshair_arm_px", CROSS_ARM_PX))),
+		"开" if bool(GameSettings.value("crosshair_gradient", false)) else "关",
+		Color(GameSettings.value("crosshair_color", Color.WHITE)).to_html(false),
+		Color(GameSettings.value("crosshair_color2", Color.WHITE)).to_html(false)])
+
+
+## 把设置里的颜色 / 渐变 / 各部件透明度落到材质与节点上。
+##
+## ⚠️ `ColorRect.color` 这里**只用来带 alpha**，RGB 由着色器给 ——
+##    否则节点自身的 color 会乘在着色器输出上，渐变的两端会被染成同一个颜色。
+func _apply_crosshair_style() -> void:
+	if _cross_mat == null:
+		return
+	var c1: Color = GameSettings.value("crosshair_color", Color.WHITE)
+	var c2: Color = GameSettings.value("crosshair_color2", c1)
+	if not bool(GameSettings.value("crosshair_gradient", false)):
+		c2 = c1           # 关渐变 = 上下同色，着色器里连分支都不用写
+	_cross_mat.set_shader_parameter("top_color", c1)
+	_cross_mat.set_shader_parameter("bottom_color", c2)
+	var da := clampf(_cross_num("crosshair_dot_alpha", 1.0), 0.0, 1.0)
+	var aa := clampf(_cross_num("crosshair_arm_alpha", 1.0), 0.0, 1.0)
+	if dot != null:
+		dot.color = Color(1.0, 1.0, 1.0, da)
+	for c in [t, b, l, r]:
+		if c is ColorRect:
+			(c as ColorRect).color = Color(1.0, 1.0, 1.0, aa)
+
+
+## 设置一变就重画准星（颜色/渐变/粗细/透明度都在这里收口，别在各个 hit 点分散处理）。
+func _on_setting_changed(key: String, _v: Variant) -> void:
+	if not key.begins_with("crosshair_"):
+		return
+	_apply_crosshair_style()
+	_layout_crosshair()
+
+
+## 读一个准星设置并转成 float（读不到就用兜底值）。
+func _cross_num(key: String, fallback: float) -> float:
+	var v: Variant = GameSettings.value(key, fallback)
+	if v is Color or v is bool:
+		return fallback        # 沙雕防线：设置表被写错类型时别把准星撑成 0px
+	return float(v)
+
+
+## 准星当前的实际配置（探针/自检读这个，别自己再去猜设置表里的键名）。
+func crosshair_config() -> Dictionary:
+	var out := {
+		"dot_px": int(round(_cross_num("crosshair_dot_px", CROSS_DOT_PX))),
+		"thick_px": int(round(_cross_num("crosshair_thick_px", CROSS_THICK_PX))),
+		"arm_px": int(round(_cross_num("crosshair_arm_px", CROSS_ARM_PX))),
+		"gradient": bool(GameSettings.value("crosshair_gradient", false)),
+		"color": GameSettings.value("crosshair_color", Color.WHITE),
+		"color2": GameSettings.value("crosshair_color2", Color.WHITE),
+		"dot_alpha": clampf(_cross_num("crosshair_dot_alpha", 1.0), 0.0, 1.0),
+		"arm_alpha": clampf(_cross_num("crosshair_arm_alpha", 1.0), 0.0, 1.0),
+	}
+	if _cross_mat != null:
+		out["span_top"] = float(_cross_mat.get_shader_parameter("span_top"))
+		out["span_bottom"] = float(_cross_mat.get_shader_parameter("span_bottom"))
+		out["top_color"] = _cross_mat.get_shader_parameter("top_color")
+		out["bottom_color"] = _cross_mat.get_shader_parameter("bottom_color")
+	var alphas := {}
+	for pair in [["Dot", dot], ["T", t], ["B", b], ["L", l], ["R", r]]:
+		if pair[1] is ColorRect:
+			alphas[String(pair[0])] = (pair[1] as ColorRect).color.a
+	out["part_alpha"] = alphas
+	return out
+
+
 func _process(_delta: float) -> void:
 	if _player == null:
 		return
@@ -696,7 +821,6 @@ func _process(_delta: float) -> void:
 	var target := 3.0 if _player.aiming else 7.5 + moving * 1.6
 	_spread = lerpf(_spread, target, 0.18)
 	_layout_crosshair()
-	dot.modulate = Color(1, 1, 1, 0.95 if _player.aiming else 0.8)
 
 	if _weapon:
 		reload_bar.value = _weapon.reload_progress()
