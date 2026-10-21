@@ -521,6 +521,8 @@ func _ready() -> void:
 	_hud.bind(_player, _weapon)
 	# 小屋里的「召唤同伴」台（踩上去把跑酷时留在跑道口的同伴召回小屋）
 	_build_summon_pad()
+	# 新区域：商店（初始小屋右边、跨出平台铺一块地板，见 scripts/shop.gd）
+	_build_shop()
 
 	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
 	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
@@ -608,6 +610,8 @@ func _ready() -> void:
 ##     -- --bosses=off            什么都不加（等同不传）
 ## 自检 / 探针也用它：节点名和以前完全一致，所以 `get_node("Boss")` 之类一行都不用改。
 const STANDBY_SCENE := "res://scenes/bosses_standby.tscn"
+## 新区域：商店（初始小屋右边，跨出平台铺一块地板）。见 `scripts/shop.gd`。
+const SHOP_SCENE := "res://scenes/shop.tscn"
 
 
 ## 解析 `--bosses=`：返回空数组 = 不加。
@@ -821,6 +825,28 @@ func _build_summon_pad() -> void:
 	_summon_pad = pad
 	print("[Game] 小屋召唤台就位：世界坐标 %s（踩上去召回全部同伴）"
 		% str(pad.global_position.snappedf(0.01)))
+
+
+## 新区域「商店」：初始小屋右边的平台外面（`scenes/shop.tscn` + `scripts/shop.gd`）。
+##
+## 为什么在代码里 instance、而不是摆进 `game.tscn`：
+##   1. 位置和长度都得**先量小屋**（长 = 2 × 小屋外墙长 6.60 = 13.20 m）再定，
+##      摆进场景只能写死坐标，小屋一挪就错位；
+##   2. 它必须等 `_dress_empty_lot()` 铺完地砖再建 —— 地板材质是**克隆平台那一块**的。
+## 高斯泼溅（`splatdata/shop_raw.sog`，70 MB）**故意不加载**，见 `shop.gd` 文件头。
+func _build_shop() -> void:
+	var ps := load(SHOP_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] 找不到 %s，商店不建" % SHOP_SCENE)
+		return
+	var shop := ps.instantiate() as Shop
+	if shop == null:
+		push_warning("[Game] %s 的根节点不是 Shop" % SHOP_SCENE)
+		return
+	# 先关掉 auto_build：add_child 之后由这里显式 build()（顺序可控，且只建一次）
+	shop.auto_build = false
+	add_child(shop)
+	shop.build()
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
