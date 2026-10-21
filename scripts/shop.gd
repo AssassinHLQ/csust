@@ -324,19 +324,30 @@ func _build_shell() -> void:
 	_box("WallSouth", Vector3(0.0, wall_y, -D * 0.5 + t * 0.5), Vector3(L, wall_h, t),
 		_mat["wall"])
 
-	# 北墙 = 店面：两根门柱 + 两扇大玻璃 + 门上方一根横梁（横梁就是门楣）
+	# 北墙 = 店面：**通高玻璃幕墙**
+	#
+	# 2026-10-22 用户：「上面这灰的变成玻璃幕墙吧」——原来门头以上是**一整块实心横梁**
+	# （`Lintel`，从 2.28 一直盖到 5.00，整片灰），现在换成
+	# 「通高竖梃 + 上部幕墙玻璃 + 三道竖分隔 + 顶部压条」。
+	#
+	# ⚠️ 上部幕墙一律走 `_box_decor`（**不挡人**），原因两条：
+	#   ① 5 m 高的玻璃前面没人会去撞，挡不挡人没有意义；
+	#   ② `built_count` 保持原样 —— `_probe_shop.gd` 那条「每个箱体网格都有同尺寸
+	#      同位置的碰撞盒」是按 `Body` 子节点一一配对的，多塞一堆装饰网格会把判据搅乱。
 	var z_out := D * 0.5 - t * 0.5          # 墙心（外表面在 D/2）
 	var half_door := door_w * 0.5
 	var pier := 0.2
 	var sides := [-1.0, 1.0]
+	var top_band := 0.14                    # 顶部压条（幕墙顶边的框）
+	var head_h := door_height               # 门头：下部玻璃、横梁都对齐它
+	var upper_y0 := head_h + 0.12           # 上部幕墙下沿（横梁之上）
+	var upper_y1 := H - top_band            # 上沿（压条下面）
+	# 通高竖梃：门柱一路顶到屋顶，整面幕墙才有「框」
 	for sx in sides:
 		_box("Pier%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * (half_door + pier * 0.5), door_height * 0.5, z_out),
-			Vector3(pier, door_height + e * 2.0, t), _mat["trim"])
-	# 横梁：门顶 2.28 一直盖到墙顶 + 2 cm（同样是为了不共面）
-	_box("Lintel", Vector3(0.0, (door_height + H) * 0.5, z_out),
-		Vector3(L, H - door_height + e * 2.0, t), _mat["trim"])
-	# 玻璃：门两侧各一扇，上下各插 2 cm 进门柱/横梁
+			Vector3(sx * (half_door + pier * 0.5), wall_y, z_out),
+			Vector3(pier, wall_h, t), _mat["trim"])
+	# 落地窗：门两侧各一扇，上下各插 2 cm 进竖梃/横梁（这一层**有碰撞**，见探针 §4）
 	var bay_x0 := half_door + pier
 	var bay_w := L * 0.5 - bay_x0 - t
 	var glass_h := door_height - 0.1 + e
@@ -344,11 +355,35 @@ func _build_shell() -> void:
 		_box("Glass%s" % ("W" if sx < 0.0 else "E"),
 			Vector3(sx * (bay_x0 + bay_w * 0.5), 0.1 - e * 0.5 + glass_h * 0.5, z_out),
 			Vector3(bay_w, glass_h, 0.06), _mat["glass"])
-	# 玻璃分隔条：让店面读起来像「橱窗 + 门」，而不是一个空洞
+	# 门头横梁（细条）：门洞顶 → 幕墙下沿
+	_box_decor("Transom", Vector3(0.0, head_h + 0.05, z_out),
+		Vector3(L, 0.16, t + 0.02), _mat["trim"])
+	# 上部幕墙玻璃：门头以上一直到顶部压条
+	for sx in sides:
+		_box_decor("CurtainGlass%s" % ("W" if sx < 0.0 else "E"),
+			Vector3(sx * (bay_x0 + bay_w * 0.5), (upper_y0 + upper_y1) * 0.5, z_out),
+			Vector3(bay_w + e * 2.0, upper_y1 - upper_y0, 0.06), _mat["glass"])
+	# 门正上方也补一扇幕墙玻璃：不补的话门洞上方就是个「洞」，
+	# 从街上直接看进店里的后墙（渲图上一眼就是块米色板，与幕墙断开）。
+	# 宽度取「门洞 + 两根竖梃」，两侧压进竖梃里，不会和后墙共面。
+	_box_decor("CurtainGlassDoor", Vector3(0.0, (upper_y0 + upper_y1) * 0.5, z_out),
+		Vector3(door_w + 2.0 * pier + e * 2.0, upper_y1 - upper_y0, 0.06), _mat["glass"])
+	# 门洞正中一道竖梃：门上方那格玻璃背后正好是店里的后墙（米色），
+	# 不加这根竖梃，正面看过去那一整块像「实心板」而不像玻璃。
+	_box_decor("MullionDoor", Vector3(0.0, (upper_y0 + upper_y1) * 0.5, z_out),
+		Vector3(0.08, upper_y1 - upper_y0 + e * 2.0, 0.11), _mat["trim"])
+	# 竖分隔：下部一道（3.6）+ 上部三道（2.2 / 3.6 / 5.0），上下对齐才像幕墙
 	for sx in sides:
 		_box_decor("Mullion%s" % ("W" if sx < 0.0 else "E"),
 			Vector3(sx * 3.6, 0.1 - e * 0.5 + glass_h * 0.5, z_out),
 			Vector3(0.08, glass_h, 0.10), _mat["trim"])
+		for mx in [2.2, 3.6, 5.0]:
+			_box_decor("MullionU%d%s" % [int(mx * 10.0), "W" if sx < 0.0 else "E"],
+				Vector3(sx * mx, (upper_y0 + upper_y1) * 0.5, z_out),
+				Vector3(0.08, upper_y1 - upper_y0 + e * 2.0, 0.10), _mat["trim"])
+	# 顶部压条：幕墙顶边 → 屋顶（上沿插进屋顶 2 cm，避免共面）
+	_box_decor("HeadBand", Vector3(0.0, H - top_band * 0.5 + e * 0.5, z_out),
+		Vector3(L, top_band + e, t + 0.02), _mat["trim"])
 
 	# 天花板顶板：铺满内框（两侧压进墙里 3 cm），上沿顶进屋顶 1 cm
 	_box_decor("Ceiling", Vector3(0.0, H - 0.02, 0.0),
