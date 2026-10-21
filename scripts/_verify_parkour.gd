@@ -1,5 +1,5 @@
 extends SceneTree
-## 验跑酷 v8（12 段 / 99 站 / 84 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 + 期权/A股/外汇 + 暗网比纳 / 571 m）。
+## 验跑酷 v8（12 段 / 99 站 / 84 跳 + 9 处机关 + 5 段「走过去」+ 期货通四机制 + 比特币三线 + 期权/A股/外汇 + 暗网霍德 / 571 m）。
 ##
 ## 和别的自检不一样：这一套的主体是**用真输入开一个真玩家，把 59 跳挨个跳过去**。
 ## 几何对不对可以算，但「人到底跳不跳得过去」只有一个可信的判据：跳给他看。
@@ -84,9 +84,9 @@ func _run() -> void:
 	var fut0 := _pk.get_node_or_null("Futures") as ParkourFutures
 	if fut0 != null:
 		fut0.blue_live = 0.0          # 第 1~4 节只测跳；蓝块由 5c 自己打开
-	# 第 8 段的比纳会朝人打激光/炮弹（带击退）：逐跳回放和连续通关不能被它打断。
+	# 第 8 段的霍德会朝人打激光/炮弹（带击退）：逐跳回放和连续通关不能被它打断。
 	# 它现在**不在场景里**（玩家进黑市才由 `DarkGate` 生成），所以关的是闸门：
-	# 闸门不触发 = 比纳不会出现；§5f 再打开测「延迟加载 + 开火」。
+	# 闸门不触发 = 霍德不会出现；§5f 再打开测「延迟加载 + 开火」。
 	var gate0 := _pk.get_node_or_null("Route/DarkGate") as DarkGate
 	if gate0 != null:
 		gate0.set_physics_process(false)
@@ -1680,17 +1680,17 @@ func _test_branch() -> void:
 	fut.blue_live = 3.0
 
 
-## ── 5f. 第 8 段「暗网黑市交易」：比纳（延迟加载 / 激光 / 炮弹 / 不会复活）───────
+## ── 5f. 第 8 段「暗网黑市交易」：霍德（延迟加载 / 绕飞 / 激光 / 炮弹 / 不会复活）───
 ## 用户要的是「跑酷同时击败 boss，这个 boss 不会复活」，2026-10-19 又补了四条：
 ## 「比纳不能一开始就加载，得进入黑市才加载」「血条增加 3 倍」
-## 「死亡后不要一直残留空血条」「名字就叫比纳，不要后缀」。
+## 「死亡后不要一直残留空血条」；2026-10-21 换成霍德并要求「在爱丽丝附近到处飞来飞去」。
 ## 所以这一节验五件事：开场不在 / 过闸门才出现 / 两套火力 / 打得死 / 死了不站起来且血条收起。
 func _test_dark_boss() -> void:
 	print("
-========== 5f. 暗网黑市：比纳（延迟加载 / 激光 / 炮弹 / 不会复活）==========")
-	# ① 开场**不该有**比纳：模型（44 骨 FBX）+ 12 个凹包碰撞很贵，用户要求进黑市才加载
+========== 5f. 暗网黑市：霍德（延迟加载 / 绕飞 / 激光 / 炮弹 / 不会复活）==========")
+	# ① 开场**不该有**霍德：模型（3 万面 FBX）+ 凹包碰撞很贵，用户要求进黑市才加载
 	_check(_pk.get_node_or_null("Route/DarkBoss") == null,
-		"开场时比纳**没有加载**（Route 下找不到 DarkBoss）")
+		"开场时霍德**没有加载**（Route 下找不到 DarkBoss）")
 	var gate := _pk.get_node_or_null("Route/DarkGate") as DarkGate
 	_check(gate != null, "黑市入口摆的是**空闸门** DarkGate（没有网格、没有碰撞）")
 	if gate == null:
@@ -1703,26 +1703,37 @@ func _test_dark_boss() -> void:
 	gate.set_physics_process(true)
 	await _wait(8)
 	_check(_pk.get_node_or_null("Route/DarkBoss") == null,
-		"在闸门东边 6 m 站着，比纳仍然不加载（闸门按 x 触发）")
+		"在闸门东边 6 m 站着，霍德仍然不加载（闸门按 x 触发）")
 	# ③ 跨过闸门 → 现场生成
 	_put(gate.global_position.x - 1.00, gate.global_position.y + 1.20,
 		gate.global_position.z)
 	await _wait(10)
 	var db := _pk.get_node_or_null("Route/DarkBoss") as DarkBoss
-	_check(db != null and gate.spawned(), "跑进黑市（x ≤ %.2f）→ 比纳才被 instantiate"
+	_check(db != null and gate.spawned(), "跑进黑市（x ≤ %.2f）→ 霍德才被 instantiate"
 		% gate.trigger_x)
 	if db == null:
 		_pk.enabled = true
 		return
 	_check(absf(db.max_health - 2200.0) < 0.1,
 		"血量 %.0f（900 → ×3 的 2700 → 用户嫌肉，削到 2200）" % db.max_health)
-	_check(db.display_name == "比纳", "名字就叫「%s」，没有后缀" % db.display_name)
+	_check(db.display_name == "霍德", "名字就叫「%s」，没有后缀" % db.display_name)
 	var hud := _p.get_parent().get_node_or_null("HUD")
 	if hud != null and hud.has_method("boss_row_shown"):
-		_check(hud.boss_row_shown("比纳"),
-			"HUD 上补出了「比纳」那条血条（中途加载也能接上）")
+		_check(hud.boss_row_shown("霍德"),
+			"HUD 上补出了「霍德」那条血条（中途加载也能接上）")
 	db.set_physics_process(true)
-	# ⑤ 用户 2026-10-19：「如果比纳没打完，也会追过来的」——
+	# 2026-10-21 用户：「不要一直在一个地方，要在爱丽丝附近到处飞来飞去」
+	await _wait_ms(1200)
+	var fp0 := db.global_position
+	await _wait_ms(1500)
+	var fp1 := db.global_position
+	var travel := fp0.distance_to(fp1)
+	var flat_r := Vector2(fp1.x - _p.global_position.x, fp1.z - _p.global_position.z).length()
+	_check(travel > 2.0, "霍德一直在动：1.5 s 位移 %.1f m（不是杵在一个地方）" % travel)
+	_check(flat_r > 2.0 and flat_r < 14.0,
+		"它是**绕着爱丽丝**飞的：水平距离 %.1f m（绕飞半径带 %.1f ~ %.1f m）"
+		% [flat_r, db.fly_radius_min, db.fly_radius_max])
+	# ⑤ 用户 2026-10-19：「如果比纳没打完，也会追过来的」（换霍德后这条仍然要成立）——
 	#    把它丢到 90 m 外、玩家站进**内存条市场**（第 9 段），看它是不是照样飞过来。
 	#    追击**不看距离**，只有开火才看 `engage_range`（见 dark_boss.gd）。
 	db.global_position = Vector3(-320.0, db.global_position.y, -1.7)
@@ -1732,16 +1743,16 @@ func _test_dark_boss() -> void:
 	await _wait_ms(1200)
 	var d1 := db.global_position.distance_to(_p.global_position)
 	_check(d1 < d0 - 3.0,
-		"玩家跑进内存条市场（x = −416），比纳照样追：%.1f → %.1f m（−%.1f）"
+		"玩家跑进内存条市场（x = −416），霍德照样追：%.1f → %.1f m（−%.1f）"
 		% [d0, d1, d0 - d1])
-	# 站到 DK5 上（比纳出场就在这一带上方，正好进交战距离）
+	# 站到 DK5 上（霍德出场就在这一带上方，正好进交战距离）
 	db.global_position = Vector3(-374.00, 12.00, -1.70)
 	var dk := _pk.get_node_or_null("Route/DK5") as Node3D
 	var b := _dark_box(dk)
 	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
 		b.position.z + b.size.z * 0.5)
 	await _wait(4)
-	# ⚠️ 比纳是**刚刚**才生成的，激光相位早已跑过好几轮；只重置 `_t_laser` 不够，
+	# ⚠️ 霍德是**刚刚**才生成的，激光相位早已跑过好几轮；只重置 `_t_laser` 不够，
 	#    必须把 `_laser_state` / `_laser_timer` 一起归零，否则采样时可能刚好在束线熄灭的
 	#    那 2.8 s 空档里（无头模式一帧比一帧快，`_wait_ms` 是**真实时间**，
 	#    模拟时间早就跑出去老远 —— 第一次改完就是这样假红的）。
@@ -1779,8 +1790,8 @@ func _test_dark_boss() -> void:
 	_check(db.killed(), "血量清零 → 倒下")
 	# ④ 用户：「死亡后不要一直残留空血条」→ 名字行 + 血条一起收起
 	if hud != null and hud.has_method("boss_row_shown"):
-		_check(not hud.boss_row_shown("比纳"),
-			"倒下后「比纳」那行血条**收了**（不再留一条空条）")
+		_check(not hud.boss_row_shown("霍德"),
+			"倒下后「霍德」那行血条**收了**（不再留一条空条）")
 	await _wait_ms(1500)
 	_check(db.killed() and db.health <= 0.0,
 		"**不会复活**（等 1.5 s 仍是倒下、血量 %.0f）—— 父类默认 6 s 会站起来" % db.health)
@@ -2035,8 +2046,9 @@ func _test_ram_loot() -> void:
 		_check(shed != null and shed.get_node_or_null("RoofSolid") != null,
 			"房顶补上了碰撞盒（RoofSolid）")
 		var steps := shed.get_node_or_null("RoofSteps") if shed != null else null
-		_check(steps != null and steps.get_child_count() >= 3,
-			"屋顶西侧有三级台阶（能跳上 2.5 m 的屋顶）")
+		_check(steps == null,
+			"西侧那三级台阶已按用户要求删除（RoofSteps 不存在）；屋顶碰撞仍在 ——"
+			+ "注意：现在**没有路能上屋顶**，5090 只能靠跳/机关，方案待定")
 		# 2026-10-20 晚：屋顶再立一块 **BANK 招牌**（用户的 Rhino 模型），
 		# 并且 5090 换成 2.9 万面的高模。
 		var bank := _pk.get_node_or_null("Island/Props/Shed/BankSign") as BankSign

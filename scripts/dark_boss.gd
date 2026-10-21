@@ -1,9 +1,13 @@
 class_name DarkBoss
 extends Boss
-## 第 8 段「暗网黑市交易」的总管 —— **比纳（Binah）**，悬在跑酷路线上方。
+## 第 8 段「暗网黑市交易」的总管 —— **霍德（Hod）**，在爱丽丝附近**绕着飞**。
 ##
 ## 用户原话：「再后面是暗网黑市交易，比纳 boss 将出现向我们发射激光、炮弹。这个更加危险，
 ## 这一阶段也持续久点道路长点，我们需要跑酷同时击败 boss，这个 boss 不会复活。」
+## 2026-10-21 用户：「后面需要改一下黑市的boss，比纳放上去还是很生硬换成霍德，
+## 而且不要一直在一个地方，要在爱丽丝附近到处飞来飞去」——
+##   · 模型换成 `models/boss_hod/HOD_Original.fbx`（3 万面 / 164 骨 / **没有动画**）；
+##   · 走位从「跟着一个固定偏移平移」改成**绕着爱丽丝游走**（见下面 `_fly()`）。
 ##
 ## ── 和竞技场那六位的区别 ──
 ## 那六位是**近战扇形**（`boss_attacker.gd`：预警 → 横扫），玩家站在场地上躲；
@@ -37,8 +41,15 @@ const SHELL_COL := Color(0.95, 0.35, 0.12)
 @export var shell_knockback := 6.0
 ## 只在这个半径里有玩家时才开火（跑酷路线长，别隔着 100 m 打空气）
 @export var engage_range := 46.0
-## 跟着玩家走的水平速度（m/s）
-@export var follow_speed := 7.0
+## 绕着爱丽丝飞的**半径带**（m）：太近会糊住镜头，太远又不像在缠着你
+@export var fly_radius_min := 5.0
+@export var fly_radius_max := 9.5
+## 飞在爱丽丝头顶多高（m）
+@export var fly_height := 6.0
+## 最高飞行速度（m/s）。爱丽丝跑起来约 20 m/s，这个数要够追，但别让她一回头就已经贴脸
+@export var fly_speed_max := 18.0
+## 多久换一个新的「绕飞点」（秒）
+@export var fly_retarget := 2.0
 ## 倒下后多久开始消失 / 消失动画多长（秒）。
 ## 用户 2026-10-19：「比纳死后过一段时间消失」—— 尸体别一直躺在跑道上挡视线。
 @export var vanish_delay := 5.0
@@ -57,24 +68,33 @@ var _shells: Array[Dictionary] = []
 var _shots := 0
 var _player: Player
 var _killed := false
-## 程序化动画（这份 FBX **没有动画**：44 骨、纯静态）——
+## 程序化动画（这份 FBX **没有动画**：164 骨、纯静态、连 AnimationPlayer 都没有）——
 ## 悬停上下浮动 + 缓慢摆头 + 开火时的一下「反冲」。基准值在 `_ready` 里量。
 var _anim_t := 0.0
 var _base_model_pos := Vector3.ZERO
 var _base_model_scale := Vector3.ONE
 var _base_model_yaw := 0.0
+## 绕飞状态（2026-10-21）：当前方位角 / 半径 / 高度偏移 / 实际速度
+var _orbit_angle := 0.0
+var _orbit_radius := 7.0
+var _orbit_dy := 0.0
+var _fly_speed := 0.0
+var _retarget := 0.0
+## 刚才这一帧转了多少弧度（侧倾用，见 `_process`）
+var _orbit_dyaw := 0.0
 
 
 func _init() -> void:
-	# 用户 2026-10-19：「比纳名字就叫比纳，不要后缀」（血条上只写这两个字）
-	display_name = "比纳"
-	model_path = "res://models/boss_binah/Binah_Original.fbx"
+	# 用户 2026-10-21：黑市那只换成霍德（比纳那只放上去"还是很生硬"）
+	display_name = "霍德"
+	model_path = "res://models/boss_hod/HOD_Original.fbx"
+	# key 必须与 FBX 里的材质 `resource_name` 一字不差（`_probe_hod.gd` 量出来的三个）
 	texture_map = {
-		"Binah_Halo": "res://models/boss_binah/Binah_Halo.png",
-		"Binah_Original": "res://models/boss_binah/Binah_Original.png",
-		"Binah_Original_Weapon": "res://models/boss_binah/Binah_Original.png",
+		"HOD_Original": "res://models/boss_hod/HOD_Original.png",
+		"HOD_Original_Halo": "res://models/boss_hod/HOD_Original_Halo.png",
+		"HOD_TemporaryTower": "res://models/boss_hod/HOD_TemporaryTower.png",
 	}
-	collision_factors = Vector3(0.9, 0.9, 0.8)
+	collision_factors = Vector3(0.8, 0.9, 0.8)
 	height = 6.0
 	# 2026-10-19 上午用户：「比纳血条增加 3 倍」→ 900 → 2700；
 	# 同一天下午：「比纳太肉了，削弱一点点血量」→ **2200**（−18.5%）。
@@ -123,7 +143,7 @@ func _vanish() -> void:
 		var c := mat.albedo_color
 		tw.tween_property(mat, "albedo_color", Color(c.r, c.g, c.b, 0.0), vanish_time)
 	tw.chain().tween_callback(queue_free)
-	print("[DarkBoss] 比纳的尸体消失（躺 %.1f s，淡出 %.1f s 后删除节点）"
+	print("[DarkBoss] 霍德的尸体消失（躺 %.1f s，淡出 %.1f s 后删除节点）"
 		% [vanish_delay, vanish_time])
 
 
@@ -135,7 +155,7 @@ func _on_died(_by_damage: float) -> void:
 		if is_instance_valid(n):
 			n.queue_free()
 	_shells.clear()
-	print("[DarkBoss] 比纳被击败（不复活）")
+	print("[DarkBoss] 霍德被击败（不复活）")
 
 
 func _build_fx() -> void:
@@ -159,7 +179,8 @@ func _build_fx() -> void:
 	_shell_mat.emission_energy_multiplier = 2.2
 
 
-## 静止时的「活着」感：上下浮 + 慢慢摆头。**没有骨骼动画**，只能整个模型动。
+## 飞行中的「活着」感：上下浮 + 缓慢摆头 + **侧倾**（转弯时像在飘）。
+## **没有骨骼动画**（FBX 连 AnimationPlayer 都没有），只能整个模型动。
 ## ⚠️ `_dead` 之后不能再动：父类 `_die()` 正在用 tween 把模型往前扑，抢了会打架。
 func _process(delta: float) -> void:
 	if model == null or _dead:
@@ -167,7 +188,10 @@ func _process(delta: float) -> void:
 	_anim_t += delta
 	model.position = _base_model_pos + Vector3(
 		sin(_anim_t * 0.9) * 0.55, sin(_anim_t * 1.7) * 0.28, 0.0)
-	model.rotation.y = _base_model_yaw + sin(_anim_t * 0.62) * 0.14
+	model.rotation.y = _base_model_yaw + sin(_anim_t * 0.62) * 0.10
+	# 侧倾：`_orbit_dyaw` 是刚才这一帧的转向量（`_fly()` 里记的），转得越急倾得越多
+	model.rotation.z = lerpf(model.rotation.z,
+		clampf(-_orbit_dyaw * 6.0, -0.22, 0.22), clampf(delta * 5.0, 0.0, 1.0))
 
 
 ## 开火时的一下反冲：缩一下再弹回来（激光/炮弹都调）
@@ -189,7 +213,7 @@ func _physics_process(delta: float) -> void:
 	# 用户 2026-10-19：「如果比纳没打完，也会追过来的」——
 	# **追击不看距离**：玩家跑过第 8 段、进了内存条市场，它照样跟着飞过去；
 	# 只有**开火**看 `engage_range`（打不到的远处不浪费炮弹）。
-	_follow(pc, delta)
+	_fly(pc, delta)
 	if global_position.distance_to(pc) > engage_range:
 		_beam.visible = false
 		_laser_state = 0
@@ -204,12 +228,48 @@ func _physics_process(delta: float) -> void:
 		_spawn_shell(pc)
 
 
-## 悬在玩家「前上方 7 m」慢慢跟着走 —— 不贴脸，但也不会掉队
-func _follow(pc: Vector3, delta: float) -> void:
-	var want := Vector3(pc.x - 6.0, pc.y + 9.0, pc.z)
-	# y 固定在自己的高度层（不跟着玩家上下抖），xz 追玩家
-	want.y = global_position.y
-	global_position = global_position.move_toward(want, follow_speed * delta)
+## 绕着爱丽丝游走 —— 2026-10-21 用户：「不要一直在一个地方，要在爱丽丝附近到处飞来飞去」。
+##
+## 做法：把「位置」拆成三个**绑在玩家身上**的量 —— 方位角 `_orbit_angle`、半径
+## `_orbit_radius`、高度偏移 `_orbit_dy`。每隔 `fly_retarget` 秒换一组随机值（整圈都去，
+## 不是只在某一侧晃），每帧再拿**爱丽丝当前位置**算目标点，所以玩家一边跑它一边绕，
+## 既不会掉队、也不会永远停在同一个方位。
+## 速度按距离收敛（远了 18 m/s、近了减速）+ 速度平滑 + 转向侧倾 —— 这三层就是从
+## 「贴着一个固定偏移平移」变成「飞」的关键。
+func _fly(pc: Vector3, delta: float) -> void:
+	_retarget -= delta
+	if _retarget <= 0.0:
+		_retarget = fly_retarget * randf_range(0.75, 1.35)
+		_orbit_angle = randf() * TAU
+		_orbit_radius = randf_range(fly_radius_min, fly_radius_max)
+		_orbit_dy = randf_range(-1.0, 1.6)
+	var r := _orbit_radius
+	var want := Vector3(
+		pc.x + cos(_orbit_angle) * r,
+		pc.y + fly_height + _orbit_dy + sin(_anim_t * 1.7) * 0.5,
+		pc.z + sin(_orbit_angle) * r)
+	var to := want - global_position
+	var d := to.length()
+	var want_speed := clampf(d * 1.6, 0.0, fly_speed_max)
+	_fly_speed = lerpf(_fly_speed, want_speed, clampf(delta * 3.5, 0.0, 1.0))
+	if d > 0.001:
+		global_position += to / d * minf(_fly_speed * delta, d)
+	# 换到对面时它是**直线**飞过去的，会从爱丽丝脸前擦过（量到最近 2.9 m，糊镜头）。
+	# 这里兜一道下限：水平距离一旦小于 `fly_radius_min − 1`，直接把它抵回去。
+	var off := Vector3(global_position.x - pc.x, 0.0, global_position.z - pc.z)
+	var hd := off.length()
+	var min_r := maxf(fly_radius_min - 1.0, 0.5)
+	if hd > 0.001 and hd < min_r:
+		global_position += off / hd * (min_r - hd)
+	# 面朝爱丽丝（模型正面 +Z）；同时记下这一帧转了多少，`_process` 拿它做侧倾
+	var flat := Vector3(pc.x - global_position.x, 0.0, pc.z - global_position.z)
+	if flat.length_squared() > 0.04:
+		var before := rotation.y
+		rotation.y = lerp_angle(rotation.y, atan2(flat.x, flat.z),
+			clampf(delta * 5.0, 0.0, 1.0))
+		_orbit_dyaw = wrapf(rotation.y - before, -PI, PI)
+	else:
+		_orbit_dyaw = 0.0
 
 
 func _tick_laser(pc: Vector3, delta: float) -> void:

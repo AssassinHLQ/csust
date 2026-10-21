@@ -142,62 +142,31 @@ func _spawn_bank_sign() -> void:
 	sign.face_towards(Vector3(-583.5, sign.global_position.y, -9.5))
 
 
-## 房顶必须**能站人**（2026-10-20 用户：「房顶怎么没有碰撞箱，跳上去掉下来了」）——
-## 而且既然 5090 现在「必须站房顶正上方」才能捡（`rtx5090.gd::PICK_*`），就得有路上去。
+## 房顶必须**能站人**（2026-10-20 用户：「房顶怎么没有碰撞箱，跳上去掉下来了」）。
 ##
-## 补两样，都是**运行时生成**（屋顶 / 台阶跟着掩体走，改房子不会漂）：
-##   · `RoofSolid`：4.4 × 0.2 × 3.4 的碰撞盒，和 `Roof` 网格完全重合（顶面 y = 2.5）；
-##   · `RoofSteps`：西侧三级木箱（0.5 / 1.0 / 1.5 m）—— 最后一级到屋顶只差 1 m，
-##     跳跃高度 1.26 m，一跳就上得去。
+##   · `RoofSolid`：4.4 × 0.2 × 3.4 的碰撞盒，和 `Roof` 网格完全重合（顶面 y = 2.5）。
+##
+## ⚠️ 2026-10-21 用户：「这五个方块要删掉」—— 截图里那五个白盒子是
+##    **西侧三级台阶（`RoofSteps` 的 3 个 Mesh）** + **掩体旁边那两只木箱（`Crates` 的 2 个 Mesh）**，
+##    五个都已经从 `parkour.tscn` 里删了，所以这里也不再生成台阶（`RoofSolid` 留着）。
+##    代价写在 README §1.16.4f：屋顶 2.5 m、跳跃 1.26 m，**没有台阶就上不去**，
+##    而 5090 要求「站在屋顶正上方」才能捡 —— 需要另找一条上去的路（待用户定方案）。
 func _ensure_roof_solid() -> void:
 	var shed := get_node_or_null("Island/Props/Shed") as Node3D
 	if shed == null:
 		return
-	if shed.get_node_or_null("RoofSolid") == null:
-		var body := StaticBody3D.new()
-		body.name = "RoofSolid"
-		var cs := CollisionShape3D.new()
-		var bx := BoxShape3D.new()
-		bx.size = Vector3(4.4, 0.2, 3.4)
-		cs.shape = bx
-		cs.position = Vector3(0.0, 2.4, 0.0)
-		body.add_child(cs)
-		shed.add_child(body)
-	if shed.get_node_or_null("RoofSteps") != null:
+	if shed.get_node_or_null("RoofSolid") != null:
 		return
-	var steps := StaticBody3D.new()
-	steps.name = "RoofSteps"
-	var wall := shed.get_node_or_null("WallN") as MeshInstance3D
-	var roof := shed.get_node_or_null("Roof") as MeshInstance3D
-	var wood: Material = wall.material_override if wall != null else null
-	if wood == null and roof != null:
-		wood = roof.material_override
-	# 台阶：x / z 是**掩体局部坐标**（掩体在 (0,0,0) 时西墙在 x = −1.9）
-	var spec := [
-		[Vector3(-3.0, 0.25, 1.4), 0.5],
-		[Vector3(-3.4, 0.50, 0.6), 1.0],
-		[Vector3(-3.0, 0.75, -0.2), 1.5],
-	]
-	for i in spec.size():
-		var pos: Vector3 = spec[i][0]
-		var h: float = spec[i][1]
-		var mi := MeshInstance3D.new()
-		mi.name = "Step%d" % i
-		var bm := BoxMesh.new()
-		bm.size = Vector3(1.2, h, 1.2)
-		mi.mesh = bm
-		if wood != null:
-			mi.material_override = wood
-		mi.position = pos
-		steps.add_child(mi)
-		var cs := CollisionShape3D.new()
-		var bx := BoxShape3D.new()
-		bx.size = bm.size
-		cs.shape = bx
-		cs.position = pos
-		steps.add_child(cs)
-	shed.add_child(steps)
-	print("[Parkour] 房顶补上碰撞 + 西侧三级台阶（0.5 / 1.0 / 1.5 m）")
+	var body := StaticBody3D.new()
+	body.name = "RoofSolid"
+	var cs := CollisionShape3D.new()
+	var bx := BoxShape3D.new()
+	bx.size = Vector3(4.4, 0.2, 3.4)
+	cs.shape = bx
+	cs.position = Vector3(0.0, 2.4, 0.0)
+	body.add_child(cs)
+	shed.add_child(body)
+	print("[Parkour] 房顶补上碰撞盒 RoofSolid（台阶已按用户要求删除）")
 
 
 # --- 路线 ---------------------------------------------------------------------

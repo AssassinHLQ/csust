@@ -897,10 +897,6 @@ const ROOM_DOOR_SCAN_STEP := 0.05
 const ROOM_DOOR_MIN_WIDTH := 0.80
 ## 门板高度（到平台面算起）。门洞本身是全高的，上面那截用墙材质补成「门楣」
 const ROOM_DOOR_HEIGHT := 2.6
-## 门楣（门洞上方的墙板）比墙面**往外凸**多少（m）。
-## 2026-10-21：原来往里缩 4 cm，门框上方留一道暗缝；改成齐平之后缩到 3 mm ——
-## 只为了两块的表面不重合（不然 z-fighting 闪烁），肉眼就是一个平面。
-const ROOM_DOOR_LINTEL_PROUD := 0.003
 const ROOM_ROOF_COLOR := Color(0.27, 0.28, 0.30)
 const ROOM_ROOF_THICKNESS := 0.3
 
@@ -928,6 +924,7 @@ func _build_room_proxy() -> void:
 	var hi := Vector3(-INF, -INF, -INF)
 	var walls := 0
 	var wall_boxes: Array[AABB] = []
+	var wall_meshes: Array[MeshInstance3D] = []
 	for c in body.get_children():
 		var cs := c as CollisionShape3D
 		if cs == null or not (cs.shape is BoxShape3D):
@@ -946,10 +943,41 @@ func _build_room_proxy() -> void:
 		lo = lo.min(b.position)
 		hi = hi.max(b.position + b.size)
 		wall_boxes.append(b)
+		wall_meshes.append(mi)
 		walls += 1
 	if walls == 0:
 		proxy.queue_free()
 		return
+
+	# 四面墙的**外表面**对齐到房间矩形。
+	#
+	# ⚠️ 2026-10-21 用户「门那里还是不对」—— 609 的碰撞盒是手摆的，x+ 那一面其实是
+	#    两段墙，外表面一个在 x = 4.856、一个在 4.808，**差 4.8 cm**。代理墙照碰撞盒建，
+	#    于是同一面墙上多出一道 4.8 cm 的台阶：正对着门框上方，从门外斜看就是一条竖线，
+	#    屋顶边缘也缺一块（4.856 的屋顶挑在 4.808 的墙外面）。
+	#    这里只对「厚度 ≤ 0.35 m、外表面离房间矩形 ≤ 10 cm」的墙板做对齐 ——
+	#    碰撞体一律不动（视觉比碰撞凸出几厘米，玩家最多把脸贴进去 4.8 cm，比看见台阶好）。
+	var snapped := 0
+	for i in wall_boxes.size():
+		var b: AABB = wall_boxes[i]
+		var shift := Vector3.ZERO
+		for axis in 3:
+			if b.size[axis] > 0.35:
+				continue
+			var d_max: float = (b.position[axis] + b.size[axis]) - hi[axis]
+			var d_min: float = b.position[axis] - lo[axis]
+			if absf(d_max) > 0.0005 and absf(d_max) <= 0.10:
+				shift[axis] = -d_max
+			elif absf(d_min) > 0.0005 and absf(d_min) <= 0.10:
+				shift[axis] = -d_min
+		if shift != Vector3.ZERO:
+			wall_meshes[i].global_position += shift
+			b.position += shift
+			wall_boxes[i] = b
+			snapped += 1
+	if snapped > 0:
+		print("[Game] 609 代理墙：%d 面墙的外表面被对齐到房间矩形（手摆碰撞盒之间差了几厘米）"
+			% snapped)
 
 	var roof := MeshInstance3D.new()
 	roof.name = "Roof"
@@ -1049,6 +1077,30 @@ func _room_doorway(walls: Array[AABB], room: AABB) -> Dictionary:
 	return best if best_w >= ROOM_DOOR_MIN_WIDTH else {}
 
 
+## 把扫描出来的门洞两条边**订正到墙盒的真实边界**（毫米级）。
+##
+## `_room_doorway` 是沿墙心线每 5 cm 打一个点扫出来的，误差可达一个步长；
+## 门楣要严丝合缝地嵌进那个洞，就不能拿 5 cm 的精度去建（宽 1 cm 是缝、窄 1 cm 会叠着闪）。
+## 做法：在所有墙盒里找「负侧那面墙的 max」和「正侧那面墙的 min」，取离扫描值最近的一个
+## （0.12 m 以内），找不到就保持原值。
+func _snap_door_edges(walls: Array[AABB], axis: int, t_lo: float, t_hi: float) -> Array:
+	var tang := 2 if axis == 0 else 0
+	var best_lo := t_lo
+	var best_hi := t_hi
+	var d_lo := 0.12
+	var d_hi := 0.12
+	for b in walls:
+		var a: float = b.position[tang]
+		var e: float = a + b.size[tang]
+		if absf(e - t_lo) < d_lo:
+			d_lo = absf(e - t_lo)
+			best_lo = e
+		if absf(a - t_hi) < d_hi:
+			d_hi = absf(a - t_hi)
+			best_hi = a
+	return [best_lo, best_hi]
+
+
 func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: Material) -> void:
 	var door := _room_doorway(walls, room)
 	if door.is_empty():
@@ -1059,6 +1111,11 @@ func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: M
 	var outer := float(door["outer"])        # 墙外表面的法向坐标
 	var t_lo := float(door["lo"])
 	var t_hi := float(door["hi"])
+	# 扫描步长 5 cm，只够"找门"，不够"做门楣"：门楣要和两边的墙**严丝合缝**
+	# （宽 1 cm 就是一道缝，窄 1 cm 就是叠着闪）。这里拿墙盒自己的边界把两条边订正到毫米。
+	var exact := _snap_door_edges(walls, axis, t_lo, t_hi)
+	t_lo = float(exact[0])
+	t_hi = float(exact[1])
 	var center := (t_lo + t_hi) * 0.5
 	var gap := t_hi - t_lo
 	# 「往屋外」是法向的哪一边：x+ / z+ 是 +1，x− / z− 是 −1
@@ -1074,17 +1131,19 @@ func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: M
 	_put_door_box(proxy, "DoorPanel", axis, plane, floor_y, door_top, center, w, thick,
 		_door_mat(ROOM_DOOR_COLOR, false, 0.45))
 	if door_top < top_y:
-		# 门楣：把门洞上方那截补齐到墙顶。
+		# 门楣：把门洞上方那截补齐到墙顶，**和墙完全同一块板**。
 		#
-		# ⚠️ 2026-10-21 用户「门这里上面有破绽要去除」—— 原来门楣比墙面**缩进去 4 cm**
-		#    （为了不和代理墙共面打架），结果门框横条顶上多出一条 4 cm 深的台阶，
-		#    从门外斜着看就是门框上方一道**暗缝**，一直横到两边墙。
-		#    现在门楣的**外表面与墙面齐平**（再往外 3 mm，只为了不同面重合），
-		#    门洞上方就是一块连续的、和墙同色同平面的墙板，没有缝也没有台阶；
-		#    3 mm 的凸出小于一个像素，看不出台阶，又绝对不会 z-fighting。
-		_put_door_box(proxy, "DoorLintel", axis,
-			outer + out_sign * (ROOM_DOOR_LINTEL_PROUD - thick * 0.5), door_top,
-			top_y + ROOM_DOOR_OVERLAP, center, w, thick, wall_mat)
+		# ⚠️ 2026-10-21 用户两轮：「门这里上面有破绽要去除」→「门那里还是不对」。
+		#    第一轮把缩进 4 cm 改成外凸 3 mm，缝小了但还在 —— 因为门楣原来是
+		#    **0.08 厚的独立薄板**，两侧还比洞口多压 12 cm，等于在墙面上贴了一块
+		#    「略凸的补丁」，补丁的两条竖边从斜角看就是两道线。
+		#    现在：厚度 = 墙厚（2 × |外表面 − 墙心线|）、法向位置 = 墙心线、
+		#    宽度 = **精确洞口宽**（不多一分），上下顶到墙顶 —— 它就是墙的一部分，
+		#    左右两条边与相邻墙板是**齐平的对接缝**（同一平面、同一材质、不重叠），
+		#    既不共面打架（z-fighting 只发生在重叠处），也没有凸出来的边。
+		var wall_thick := absf(outer - plane) * 2.0
+		_put_door_box(proxy, "DoorLintel", axis, plane, door_top, top_y,
+			center, gap, wall_thick, wall_mat)
 	# 门框：四根比墙厚的条，贴在墙外表面上收口（门扇缩在墙里，四条边全靠它遮住）
 	var bar := 0.14
 	var bar_d := 0.12
