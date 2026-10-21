@@ -304,21 +304,47 @@ func _apply_aa(vp: Viewport) -> void:
 			vp.use_taa = true
 
 
-## 阴影质量（滑块 0~3）：关 / 低 40 m / 中 60 m / 高 120 m（平行光的远裁距离）。
+## 阴影质量（滑块 0~3）：关 / 低 / 中 / 高。
+##
+## ⚠️ 2026-10-21 用户：「阴影怎么感觉高质量比低质量还难看一点点」——
+##    原来三档只改 `directional_shadow_max_distance`（低 40 / 中 60 / 高 120），
+##    而阴影图是固定 4096²：**铺得越远，每个 texel 摊到的地面越大**
+##    （120 m ≈ 29 mm/texel，40 m ≈ 10 mm）。所以「高」反倒是最糊、锯齿最明显的那档，
+##    方向完全搞反了。现在换成「距离收近 + 角直径变大 + 模糊加大」三件套：
+##      低：60 m、硬边（angular 0）、blur 0.6 —— 便宜、边利，但会抖
+##      中：50 m、0.5°、blur 1.1
+##      高：40 m、1.0°、blur 1.4 + 4 段混合 —— PCSS 软阴影，边是半影不是锯齿
+##    ⚠️ 高挡的角直径**别按 1.6° 给**：2026-10-21 实测 1.6° 会在墙面上刷出一层颗粒
+##    （Godot 的 PCSS 采样次数是固定的，半影一宽就噪）。1.0° + blur 1.4 是扫出来的
+##    甜点，见 `_probe_shadow_sweep.gd` 那 4 张对照图。
+##    另外把 `shadow_normal_bias` 从默认 2.0 压到 0.9：默认值会把影子推离物体
+##    （peter-panning，脚下一圈没有影子），那才是「看着不自然」的主因。
 ##
 ## ⚠️ 只**恢复/关闭场景原本的投影状态**，不强行把「本来不投影」的灯打开：
 ##    路线上的地标灯本来就是「关阴影省电」，自检 §1 钉着这一条。
 ##    `_shadow_authored` 第一次见到某盏灯时记下它的原始值。
 func _apply_shadows() -> void:
-	var dist := 120.0
 	var off := false
+	var dist := 40.0
+	var angular := 1.0
+	var blur := 1.4
+	var normal_bias := 0.9
+	var bias := 0.03
 	match clampi(int(round(float(GameSettings.value("shadow_quality")))), 0, 3):
 		0:
 			off = true
 		1:
-			dist = 40.0
-		2:
 			dist = 60.0
+			angular = 0.0
+			blur = 0.6
+			normal_bias = 1.4
+			bias = 0.02
+		2:
+			dist = 50.0
+			angular = 0.5
+			blur = 1.1
+			normal_bias = 1.0
+			bias = 0.025
 	for n in find_children("*", "Light3D", true, false):
 		var l := n as Light3D
 		var id := l.get_instance_id()
@@ -326,7 +352,13 @@ func _apply_shadows() -> void:
 			_shadow_authored[id] = l.shadow_enabled
 		l.shadow_enabled = false if off else bool(_shadow_authored[id])
 		if l is DirectionalLight3D and not off:
-			(l as DirectionalLight3D).directional_shadow_max_distance = dist
+			var d := l as DirectionalLight3D
+			d.directional_shadow_max_distance = dist
+			d.light_angular_distance = angular
+			d.shadow_blur = blur
+			d.shadow_normal_bias = normal_bias
+			d.shadow_bias = bias
+			d.directional_shadow_blend_splits = true
 
 
 ## 窗口模式。**headless 下直接跳过**（`--headless` 没有真窗口，调了只会刷警告）。

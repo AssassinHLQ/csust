@@ -33,6 +33,11 @@ const ACCEL := 14.0
 const FRICTION := 20.0
 ## 转身平滑
 const TURN_SMOOTH := 9.0
+## 模型水平偏移的容忍度：超过这个值就按胯骨把模型拖回胶囊轴线（见 `_center_model_on_capsule()`）。
+## 实测七只里六只偏 ≤ 0.017 m，只有凯伊偏 1.325 m —— 所以阈值定 0.12，别把对的也挪歪。
+const MODEL_CENTER_TOLERANCE := 0.12
+## 找胯骨时依次试这些名字（这批 GLB 都是 `Bip001 Pelvis`）
+const HIPS_CANDIDATES := ["Bip001 Pelvis", "Hips", "Pelvis", "bone_Hips", "pelvis", "Root"]
 
 @export_file("*.glb") var model_path := ""
 @export var display_name := "同伴"
@@ -100,6 +105,9 @@ func _build_model() -> void:
 	rig.add_child(model)
 	# 本体朝 +Z（见文件头的朝向约定），Rig 保持不动 —— 这里**不要**再补 180°
 	rig.rotation.y = 0.0
+	# 用户 2026-10-21：「凯伊的碰撞有问题，右偏了两个身位」
+	# → 把偏得离谱的模型水平拖回胶囊轴线（六只正常的不动）
+	_center_model_on_capsule()
 
 	# 动画驱动：两个 NodePath 故意留空，让它自己在**模型子树**里找
 	# AnimationPlayer / Skeleton3D（三只 GLB 的内部节点名各不相同，写死会互相冲突）
@@ -109,8 +117,62 @@ func _build_model() -> void:
 	print("[Companion %s] 模型就位：%s" % [display_name, model_path.get_file()])
 
 
-## 切「原地待命」。用户 2026-10-19：「一旦进入跑酷准备区，同伴就原地待命」。
-## 打开后：站定、原地待机、**连「掉出平台/被甩 26 m 就拉回」的保险也关掉** ——
+## 把模型在**水平方向**对齐到碰撞胶囊的轴线上。
+##
+## 判据用**胯骨**而不是模型 AABB 中心：凯伊背着大枪和装甲，AABB 中心只偏 0.773 m，
+## 她的胯骨却偏 1.325 m —— 拿 AABB 去对会把枪当成身体，人还是歪的。
+## 只动水平（x/z），y 仍然交给 `model_y_offset`（脚底那条规矩）。
+func _center_model_on_capsule() -> void:
+	var skel := _best_skeleton(model)
+	if skel == null:
+		return
+	var idx := _hips_index(skel)
+	if idx < 0:
+		return
+	var world_hips := skel.global_transform * skel.get_bone_global_pose(idx).origin
+	var local := rig.to_local(world_hips)
+	var d := Vector2(local.x, local.z)
+	if d.length() <= MODEL_CENTER_TOLERANCE:
+		return
+	model.position.x -= d.x
+	model.position.z -= d.y
+	print("[Companion %s] 模型水平偏了 %.3f m（胯骨「%s」）→ 已对回胶囊轴线" % [
+		display_name, d.length(), skel.get_bone_name(idx)])
+
+
+## 骨骼最多的那个 `Skeleton3D`（凯伊有两个骨架，别取到骨头少的那份）
+func _best_skeleton(node: Node) -> Skeleton3D:
+	var best: Skeleton3D = null
+	for s in _skeletons(node):
+		if best == null or s.get_bone_count() > best.get_bone_count():
+			best = s
+	return best
+
+
+func _skeletons(node: Node) -> Array:
+	var out: Array = []
+	if node == null:
+		return out
+	if node is Skeleton3D:
+		out.append(node)
+	for c in node.get_children():
+		out.append_array(_skeletons(c))
+	return out
+
+
+func _hips_index(skel: Skeleton3D) -> int:
+	for want in HIPS_CANDIDATES:
+		for i in skel.get_bone_count():
+			if skel.get_bone_name(i).to_lower() == String(want).to_lower():
+				return i
+	for i in skel.get_bone_count():
+		var n := skel.get_bone_name(i).to_lower()
+		if n.contains("hip") or n.contains("pelvis") or n.contains("waist"):
+			return i
+	return -1
+
+
+## 切「原地待命」。用户 2026-10-19：「一旦进入跑酷准备区，同伴就原地待命」。## 打开后：站定、原地待机、**连「掉出平台/被甩 26 m 就拉回」的保险也关掉** ——
 ## 否则玩家跑到 x = −300 时，同伴会被一条条拉过去，等于没待命。
 func set_standby(on: bool) -> void:
 	if _standby == on:
