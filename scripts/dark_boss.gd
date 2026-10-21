@@ -111,6 +111,7 @@ func _ready() -> void:
 		_base_model_pos = model.position
 		_base_model_scale = model.scale
 		_base_model_yaw = model.rotation.y
+	_setup_rig()
 	died.connect(_on_died)
 	# 父类 `_die()` 末尾会 `chain().tween_interval(respawn_time)` 再回调 `_respawn()`：
 	# 这个数就是「倒下后躺多久」。这里把它接到 `vanish_delay`（导出参数），
@@ -180,7 +181,8 @@ func _build_fx() -> void:
 
 
 ## 飞行中的「活着」感：上下浮 + 缓慢摆头 + **侧倾**（转弯时像在飘）。
-## **没有骨骼动画**（FBX 连 AnimationPlayer 都没有），只能整个模型动。
+## **没有骨骼动画**（FBX 连 AnimationPlayer 都没有），所以这里是**程序化骨骼动画**：
+## 骨架 164 根，挑出能扭的几组（见 `_setup_rig()`），每帧直接写 `set_bone_pose_rotation`。
 ## ⚠️ `_dead` 之后不能再动：父类 `_die()` 正在用 tween 把模型往前扑，抢了会打架。
 func _process(delta: float) -> void:
 	if model == null or _dead:
@@ -192,6 +194,7 @@ func _process(delta: float) -> void:
 	# 侧倾：`_orbit_dyaw` 是刚才这一帧的转向量（`_fly()` 里记的），转得越急倾得越多
 	model.rotation.z = lerpf(model.rotation.z,
 		clampf(-_orbit_dyaw * 6.0, -0.22, 0.22), clampf(delta * 5.0, 0.0, 1.0))
+	_animate_bones(delta)
 
 
 ## 开火时的一下反冲：缩一下再弹回来（激光/炮弹都调）
@@ -201,6 +204,111 @@ func _kick() -> void:
 	var tw := create_tween()
 	tw.tween_property(model, "scale", _base_model_scale * 1.07, 0.06)
 	tw.tween_property(model, "scale", _base_model_scale, 0.22) 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+# --- 程序化骨骼动画（待机 / 瞄准 / 开火）---------------------------------------
+#
+# 这份 FBX **没有动画剪辑**（164 骨、纯静态、连 AnimationPlayer 都没有），所以动画只能
+# 直接扭骨头：每帧写 `Skeleton3D.set_bone_pose_rotation()`（pose 是**相对 rest** 的，
+# 恒等 = 原姿势），全部用正弦叠加，没有任何关键帧资源。
+#
+# 挑的几组骨头（名字来自 `_probe_hod_bones.gd` 的导出）：
+#   · `bone_center`        —— 整只的呼吸俯仰 / 侧摆
+#   · `bone_Head_01/02`    —— 左右看、点头；瞄准时低头对准
+#   · `bone_L/R_Lasergun`  —— 待机轻晃 / 瞄准抬起 / 开火反冲
+#   · `bone_Body_Tentacle_{B,L,LB,R,RB}_00..11` —— 身上五排骨链，行波摆动
+#   · `bone_Tentacle_{L,R}_00..15`             —— 两条主触手，更慢更大，开火时外张
+#
+# ⚠️ 幅度都写得很小（0.03 ~ 0.15 rad）：这是 6 m 高的 Boss，1° 的晃动在屏幕上已经很明显；
+#    早期版本给 0.3 rad，远看像在抽搐。
+
+var _skel: Skeleton3D
+var _b_center := -1
+var _b_head1 := -1
+var _b_head2 := -1
+var _b_gun_l := -1
+var _b_gun_r := -1
+var _chains_body: Array = []
+var _chains_arm: Array = []
+## 瞄准进度 0→1（激光预警段涨上去）、开火脉冲 1→0（0.2 s 内衰掉）
+var _aim := 0.0
+var _pulse := 0.0
+
+
+func _setup_rig() -> void:
+	if model == null:
+		return
+	var sk := model.find_children("*", "Skeleton3D", true, false)
+	if sk.is_empty():
+		return
+	_skel = sk[0] as Skeleton3D
+	_b_center = _skel.find_bone("bone_center")
+	_b_head1 = _skel.find_bone("bone_Head_01")
+	_b_head2 = _skel.find_bone("bone_Head_02")
+	_b_gun_l = _skel.find_bone("bone_L_Lasergun")
+	_b_gun_r = _skel.find_bone("bone_R_Lasergun")
+	for pre in ["bone_Body_Tentacle_B_", "bone_Body_Tentacle_L_", "bone_Body_Tentacle_LB_",
+			"bone_Body_Tentacle_R_", "bone_Body_Tentacle_RB_"]:
+		var ch := _bones_with_prefix(pre)
+		if ch.size() >= 3:
+			_chains_body.append(ch)
+	for pre in ["bone_Tentacle_L_", "bone_Tentacle_R_"]:
+		var ch2 := _bones_with_prefix(pre)
+		if ch2.size() >= 3:
+			_chains_arm.append(ch2)
+	print("[DarkBoss] 霍德骨骼动画就位：%d 排骨链 + %d 条主触手（骨架 %d 根）" % [
+		_chains_body.size(), _chains_arm.size(), _skel.get_bone_count()])
+
+
+## 按前缀收骨头，按名字排序（名字是 `_00 … _15` 两位补零，字典序就是链序）
+func _bones_with_prefix(pre: String) -> Array:
+	var out: Array = []
+	for i in _skel.get_bone_count():
+		if String(_skel.get_bone_name(i)).begins_with(pre):
+			out.append(i)
+	out.sort_custom(func(a, b):
+		return String(_skel.get_bone_name(a)) < String(_skel.get_bone_name(b)))
+	return out
+
+
+func _pose(idx: int, q: Quaternion) -> void:
+	if idx >= 0 and _skel != null:
+		_skel.set_bone_pose_rotation(idx, q)
+
+
+func _animate_bones(delta: float) -> void:
+	if _skel == null:
+		return
+	var t := _anim_t
+	_aim = move_toward(_aim, 1.0 if _laser_state == 1 else 0.0, delta * 4.0)
+	_pulse = maxf(_pulse - delta * 5.0, 0.0)
+	# 身体：呼吸（俯仰）+ 慢摇（侧摆）
+	_pose(_b_center, Quaternion(Vector3.RIGHT, sin(t * 1.1) * 0.035)
+		* Quaternion(Vector3.BACK, sin(t * 0.43) * 0.045))
+	# 头：待机左右看；瞄准时低头对准目标
+	_pose(_b_head1, Quaternion(Vector3.UP, sin(t * 0.31) * 0.16 * (1.0 - _aim))
+		* Quaternion(Vector3.RIGHT, sin(t * 0.57 + 1.0) * 0.05 - 0.34 * _aim))
+	_pose(_b_head2, Quaternion(Vector3.RIGHT, sin(t * 0.9 + 0.7) * 0.03 - 0.12 * _aim))
+	# 两门激光炮：待机轻晃 / 瞄准抬起 / 开火反冲
+	var gun_idle := sin(t * 0.83) * 0.03
+	_pose(_b_gun_l, Quaternion(Vector3.RIGHT, gun_idle - 0.75 * _aim + 0.55 * _pulse))
+	_pose(_b_gun_r, Quaternion(Vector3.RIGHT, -gun_idle - 0.75 * _aim + 0.55 * _pulse))
+	# 身上五排骨链：行波，越靠链尾摆得越大
+	for ch in _chains_body:
+		var n: int = ch.size()
+		for k in n:
+			var ph := t * 1.25 - float(k) * 0.5
+			var amp := 0.035 + 0.045 * float(k) / float(maxi(n - 1, 1))
+			_pose(int(ch[k]), Quaternion(Vector3.RIGHT, sin(ph) * amp)
+				* Quaternion(Vector3.BACK, cos(ph * 0.8) * amp * 0.7))
+	# 两条主触手：更慢更大，开火时往外张
+	for ch in _chains_arm:
+		var n2: int = ch.size()
+		for k in n2:
+			var ph2 := t * 0.9 - float(k) * 0.42
+			var amp2 := 0.07 + 0.06 * float(k) / float(maxi(n2 - 1, 1)) + 0.12 * _pulse
+			_pose(int(ch[k]), Quaternion(Vector3.RIGHT, sin(ph2) * amp2)
+				* Quaternion(Vector3.BACK, cos(ph2 * 0.75) * amp2))
 
 
 func _physics_process(delta: float) -> void:
@@ -289,6 +397,7 @@ func _tick_laser(pc: Vector3, delta: float) -> void:
 				_laser_state = 2
 				_laser_timer = laser_live_time
 				_beam_mat.albedo_color = BEAM_ON
+				_pulse = 1.0
 				_kick()
 				_hit_laser(pc)
 		2:
@@ -314,6 +423,7 @@ func _hit_laser(pc: Vector3) -> void:
 
 func _spawn_shell(pc: Vector3) -> void:
 	_shots += 1
+	_pulse = 1.0
 	_kick()
 	var mi := MeshInstance3D.new()
 	mi.name = "Shell%d" % _shells.size()

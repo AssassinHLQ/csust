@@ -1729,6 +1729,24 @@ func _test_dark_boss() -> void:
 	var fp1 := db.global_position
 	var travel := fp0.distance_to(fp1)
 	var flat_r := Vector2(fp1.x - _p.global_position.x, fp1.z - _p.global_position.z).length()
+	# 2026-10-21 用户：「你可以做霍德动画吗，攻击与待机」——FBX 没有剪辑，
+	# 所以是**程序化骨骼动画**：`_setup_rig()` 找 `Skeleton3D` 并缓存骨链，
+	# `_animate_bones()` 每帧写 `set_bone_pose_rotation`。
+	var skel = db.get("_skel")
+	var chains_body: Array = db.get("_chains_body")
+	var chains_arm: Array = db.get("_chains_arm")
+	_check(skel != null and chains_body.size() == 5 and chains_arm.size() == 2,
+		"骨骼动画就位：骨架 %d 根 / 5 排骨链 / 2 条主触手（实测 %d / %d / %d）"
+		% [(skel as Skeleton3D).get_bone_count() if skel != null else -1,
+			chains_body.size(), chains_arm.size()])
+	if skel != null:
+		var b0: int = int((chains_arm[0] as Array)[0])
+		var q0 := (skel as Skeleton3D).get_bone_pose_rotation(b0)
+		await _wait_ms(400)
+		var q1 := (skel as Skeleton3D).get_bone_pose_rotation(b0)
+		_check(q0.angle_to(q1) > 0.0005,
+			"待机时骨骼真的在动：0.4 s 内主触手根骨转了 %.1f°"
+			% rad_to_deg(q0.angle_to(q1)))
 	_check(travel > 2.0, "霍德一直在动：1.5 s 位移 %.1f m（不是杵在一个地方）" % travel)
 	_check(flat_r > 2.0 and flat_r < 14.0,
 		"它是**绕着爱丽丝**飞的：水平距离 %.1f m（绕飞半径带 %.1f ~ %.1f m）"
