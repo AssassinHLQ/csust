@@ -47,6 +47,8 @@ const TUCK := 0.02
 @export_group("尺寸")
 ## 商店长度 = modules × 初始小屋外墙长。用户要的是「2 个初始房间这么长」。
 @export var modules := 2.0
+## 墙高。0 = 跟初始小屋一样（2.50）。2026-10-21 用户：「商店太矮了」→ 默认 3.20
+@export var wall_height := 3.20
 ## 小屋屋顶外沿 → 商店西墙的空当（走道宽度）
 @export var gap := 3.0
 ## 地板往东铺到哪（世界 x）。2026-10-21 用户圈红框：「是这里地板补齐」——
@@ -69,6 +71,7 @@ const TUCK := 0.02
 var hut_len := 0.0
 var hut_depth := 0.0
 var hut_height := 0.0
+var shop_height := 0.0
 var roof_overhang := 0.4
 var shop_len := 0.0
 var shop_depth := 0.0
@@ -126,6 +129,7 @@ func _measure() -> void:
 
 	shop_len = modules * hut_len
 	shop_depth = hut_depth
+	shop_height = wall_height if wall_height > 0.0 else hut_height
 
 	# 平台：走碰撞盒（BoxShape3D），不走网格 —— 网格在 x 上偏了 5.6 mm
 	var floor_body := _find_3d(floor_path, "Floor")
@@ -297,7 +301,7 @@ func _build_deck() -> void:
 func _build_shell() -> void:
 	var L := shop_len
 	var D := shop_depth
-	var H := hut_height
+	var H := shop_height
 	var t := wall_thickness
 	var door_w := door_width
 	var e := TUCK
@@ -418,7 +422,7 @@ func _build_interior() -> void:
 	# 天花板灯管（装饰）
 	for sx in [-1.0, 1.0]:
 		_box_decor("CeilingTube%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * 2.6, hut_height - 0.08, 0.0), Vector3(1.8, 0.06, 0.4),
+			Vector3(sx * 2.6, shop_height - 0.08, 0.0), Vector3(1.8, 0.06, 0.4),
 			_mat["lamp"])
 
 	# 店员：小空（2026-10-21 用户给的 .blend，Blender 转 GLB；署名见 CREDITS.md）
@@ -523,15 +527,15 @@ func _build_lights() -> void:
 	for sx in [-1.0, 1.0]:
 		var l := OmniLight3D.new()
 		l.name = "ShopLight%s" % ("W" if sx < 0.0 else "E")
-		l.position = Vector3(sx * 2.6, hut_height - 0.30, 0.0)
+		l.position = Vector3(sx * 2.6, shop_height - 0.30, 0.0)
 		l.light_color = Color(1.0, 0.93, 0.82)
 		l.light_energy = 2.2
-		l.omni_range = 10.5
+		l.omni_range = shop_height * 4.2
 		l.shadow_enabled = false
 		add_child(l)
 	var sign_light := OmniLight3D.new()
 	sign_light.name = "SignLight"
-	sign_light.position = Vector3(0.0, hut_height + 0.9, shop_depth * 0.5 + 0.9)
+	sign_light.position = Vector3(0.0, shop_height + 0.9, shop_depth * 0.5 + 0.9)
 	sign_light.light_color = Color(0.62, 0.86, 1.0)
 	sign_light.light_energy = 1.1
 	sign_light.omni_range = 6.0
@@ -599,7 +603,7 @@ func _report() -> void:
 	print("[Shop] 初始小屋：外墙 %.2f × %.2f × %.2f m（挑檐 %.2f m）"
 		% [hut_len, hut_height, hut_depth, roof_overhang])
 	print("[Shop] 商店：长 %.2f（= %.0f × %.2f）、进深 %.2f、墙高 %.2f、门 %.2f × %.2f"
-		% [shop_len, modules, hut_len, shop_depth, hut_height, door_width, door_height])
+		% [shop_len, modules, hut_len, shop_depth, shop_height, door_width, door_height])
 	print("[Shop] 世界位置 (%.2f, %.2f, %.2f)：西墙 x=%.2f、东墙 x=%.2f、z %.2f ~ %.2f"
 		% [p.x, p.y, p.z, p.x - shop_len * 0.5, p.x + shop_len * 0.5,
 			p.z - shop_depth * 0.5, p.z + shop_depth * 0.5])

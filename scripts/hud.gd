@@ -36,8 +36,8 @@ extends CanvasLayer
 ##    渲染出来正是 2×2 的灰块。正确做法是让**四条边**都落在整数上（占满 [n, n+1) 这一格），
 ##    也就是把原点当「像素格角」而不是「格心」。现在 `_layout_crosshair()` 就是这么做的：
 ##    原点吸到整数格角，所有元素按**整数设备像素**摆，1 px 就是真 1 px。
-const CROSS_DOT_PX := 1.0     ## 中心点边长（物理像素；1 = 单像素点）
-const CROSS_THICK_PX := 1.0   ## 十字条粗细（物理像素；1 = 单像素线）
+const CROSS_DOT_PX := 3.0     ## 中心点边长（物理像素；用户 2026-10-21「1×1 太薄，要 3×3」）
+const CROSS_THICK_PX := 3.0   ## 十字条粗细（物理像素；1 → 3，和中心点一样粗）
 const CROSS_ARM_PX := 8.0     ## 十字条长度（物理像素；离中心多远由扩散量决定）
 
 ## 血条描边宽度（逻辑 px）。见 `_make_bar_stack()` 那段关于 `ProgressBar` 的注释。

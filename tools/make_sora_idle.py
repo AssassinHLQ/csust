@@ -1,18 +1,19 @@
-"""给小空做**待机动画**并导出 GLB（Blender 5.0 无头）。
+"""给小空做**待机动画**并导出 GLB（Blender 5.0 无头）—— v3：切到 FK 再摆。
 
-── 这套 rig 到底怎么驱动（探出来的，别再猜）──
-    变形骨 `arm.l` / `forearm.l` / `hand.l` 全都靠 **约束** 从 IK 控制骨复制：
-        forearm_ik.l  ── IK 约束，target = c_hand_ik.l
-        hand.l        ── Copy Rotation ← c_hand_ik.l / Copy Location ← forearm_ik.l
-    FK 那条链（c_arm_fk → arm_fk → arm.l）的 Copy Rotation **influence = 0**，
-    也就是**现在是 IK 模式**。所以掰 FK 一点用都没有（实测 hand 世界坐标纹丝不动），
-    只能**搬 IK 手控骨 `c_hand_ik.l/.r`**。
+── 这套 rig 为什么这么难摆（三轮才摸清）──
+变形骨不是链式父子，全靠约束复制：
+    arm.l      ←arm_ik.l（influence 1）/ ←arm_fk.l（influence 0）
+    forearm.l  ←forearm_ik.l / ←forearm_fk.l
+    hand.l     ←c_hand_ik.l + COPY_LOCATION←forearm_ik.l
+而且 hand.l 的父级是 forearm.l、forearm.l 的父级是 c_traj（根）——**层级是断的**。
+所以：
+  · 掰 FK 控制骨没反应（FK 那条链权重 0，IK 才是 1）→ 必须在脚本里**切到 FK**；
+  · 光切 arm.l 不够，forearm/hand 的 IK 约束也要一起关，否则前臂和手留在原地；
+  · 直接搬 IK 手控骨会被 IK 链路钳住（目标 0.49 只到 0.70，还把手甩到身体中线）。
 
-── 做法 ──
-    1. 用 6 次迭代把两只手"按"到胯高（求解 IK 目标的位置，不是硬塞一个常量）；
-    2. 在 48 帧（2 秒，24 fps）上打关键帧：呼吸（胸椎 ±1.4°）、头慢半拍摆 ±1.8°、
-       两只手随呼吸轻轻起伏 ±1 cm；首尾同帧 → 无缝循环；
-    3. 只导出 `Idle` 一个动作（文件里另有 Cube/rig/rigAction 三个垃圾动作，删掉）。
+v3 做法：把六根变形骨上的 `*_ik` 约束全部归零、`*_fk` 全部置 1，让整条 FK 链
+（c_arm_fk → arm_fk → c_forearm_fk → forearm_fk → c_hand_fk）接管，
+然后用 FK 控制骨摆一个**手自然下垂**的姿势，再打 48 帧呼吸循环。
 
 用法：
     blender.exe --background "<小空1donzuo.blend>" --python tools/make_sora_idle.py -- <out.glb>
@@ -21,7 +22,7 @@ import math
 import sys
 
 import bpy
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Quaternion, Vector
 
 OUT = sys.argv[-1]
 if not OUT.lower().endswith(".glb"):
@@ -29,19 +30,16 @@ if not OUT.lower().endswith(".glb"):
 
 FPS = 24
 FRAMES = 48
-HAND_DROP_Z = 0.40      # 手往下压多少（世界 Z，Blender 是 Z-up）
-HAND_PULL_X = 0.06      # 手往身体内侧收多少
+ARM_DROP = 62.0        # 上臂往下转（FK，度）
+FOREARM_BEND = 8.0     # 肘微屈
 
 rig = bpy.data.objects["rig"]
 scene = bpy.context.scene
 scene.render.fps = FPS
 
-# 控制方块 cs_* 只是可视化，导不进游戏
 for o in list(bpy.data.objects):
     if o.name.startswith("cs_"):
         bpy.data.objects.remove(o, do_unlink=True)
-
-# 清掉文件里自带的垃圾动作，只留我们自己做的
 for act in list(bpy.data.actions):
     if rig.animation_data and rig.animation_data.action == act:
         rig.animation_data.action = None
@@ -52,91 +50,99 @@ def upd():
     bpy.context.view_layer.update()
 
 
-def solve_hand(side, want):
-    """把 c_hand_ik.<side> 挪到让 hand.<side> 的世界坐标 ≈ want（迭代求解）。"""
-    ctrl = rig.pose.bones.get("c_hand_ik." + side)
-    hand = rig.pose.bones.get("hand." + side)
-    if ctrl is None or hand is None:
-        return False
-    for _ in range(8):
-        upd()
-        cur = rig.matrix_world @ hand.head
-        delta = want - cur
-        if delta.length < 0.004:
-            return True
-        ctrl.matrix = Matrix.Translation(delta * 0.85) @ ctrl.matrix
-    upd()
-    return True
+# ── 1) 切 FK ──
+print("=== 切 FK ===")
+for bone_name in ["arm.l", "arm.r", "forearm.l", "forearm.r", "hand.l", "hand.r"]:
+    pb = rig.pose.bones.get(bone_name)
+    if pb is None:
+        continue
+    for c in pb.constraints:
+        if c.type not in {'COPY_ROTATION', 'COPY_LOCATION', 'COPY_SCALE'}:
+            continue
+        sub = (getattr(c, "subtarget", "") or "").lower()
+        if "_ik" in sub:
+            c.influence = 0.0
+        elif "_fk" in sub:
+            c.influence = 1.0
+    print("  %-10s -> %s" % (bone_name,
+          ", ".join("%s<-%s:%.2f" % (c.type[:4], getattr(c, "subtarget", ""), c.influence)
+                    for c in pb.constraints)))
+upd()
 
 
-def hand_world(side):
+def hand_pos(side):
     upd()
     return (rig.matrix_world @ rig.pose.bones["hand." + side].head).copy()
 
 
-rest = {s: hand_world(s) for s in ("l", "r")}
-print("=== rest hands ===", {k: tuple(round(v, 3) for v in p) for k, p in rest.items()})
+print("=== 切 FK 后 hand.l =", tuple(round(v, 3) for v in hand_pos("l")))
+print("=== 切 FK 后 hand.r =", tuple(round(v, 3) for v in hand_pos("r")))
 
-# ── 1) 基础姿势：双手放到胯高，往身体内侧收一点 ──
-for side in ("l", "r"):
-    want = rest[side].copy()
-    want.z -= HAND_DROP_Z
-    want.x -= HAND_PULL_X * (1.0 if rest[side].x > 0 else -1.0)
-    ok = solve_hand(side, want)
-    got = hand_world(side)
-    print("=== 手 %s 目标 (%.3f,%.3f,%.3f) 实际 (%.3f,%.3f,%.3f) %s"
-          % (side, want.x, want.y, want.z, got.x, got.y, got.z, "OK" if ok else "FAIL"))
 
-# 记录摆好之后的基准值
-base_loc = {}
+# ── 2) 摆姿势：上臂往下转，肘微屈 ──
+def local_axis_towards_down(pb):
+    R = pb.bone.matrix_local.to_3x3()
+    arm_dir = (R @ Vector((0.0, 1.0, 0.0))).normalized()
+    axis = arm_dir.cross(Vector((0.0, 0.0, -1.0)))
+    if axis.length < 1e-6:
+        axis = Vector((0.0, 1.0, 0.0))
+    axis.normalize()
+    return (R.inverted() @ axis).normalized()
+
+
 for side in ("l", "r"):
-    pb = rig.pose.bones.get("c_hand_ik." + side)
-    if pb:
+    for name, deg in (("c_arm_fk." + side, ARM_DROP),
+                      ("c_forearm_fk." + side, FOREARM_BEND)):
+        pb = rig.pose.bones.get(name)
+        if pb is None:
+            continue
         pb.rotation_mode = 'QUATERNION'
-        base_loc["c_hand_ik." + side] = pb.location.copy()
+        pb.rotation_quaternion = Quaternion(local_axis_towards_down(pb), math.radians(deg))
+upd()
+print("=== 摆完后 hand.l =", tuple(round(v, 3) for v in hand_pos("l")))
+print("=== 摆完后 hand.r =", tuple(round(v, 3) for v in hand_pos("r")))
 
-# ── 2) 待机关键帧 ──
+# ── 3) 待机关键帧 ──
 rig.animation_data_create()
 action = bpy.data.actions.new("Idle")
 rig.animation_data.action = action
 action.use_fake_user = True
 
-sway = {
-    "c_spine_02.x": (Vector((1, 0, 0)), 1.4),
-    "c_spine_03.x": (Vector((1, 0, 0)), 0.7),
-    "c_head.x": (Vector((0, 1, 0)), 1.8),
-}
 base_q = {}
-for name in sway:
+for name in ["c_spine_01.x", "c_spine_02.x", "c_spine_03.x", "c_head.x",
+             "c_arm_fk.l", "c_arm_fk.r"]:
     pb = rig.pose.bones.get(name)
     if pb:
         pb.rotation_mode = 'QUATERNION'
         base_q[name] = pb.rotation_quaternion.copy()
 
-KEYS = [(1, 0.0), (13, 1.0), (25, 0.0), (37, -1.0), (49, 0.0)]   # (帧, 归一化呼吸相位)
+KEYS = [(1, 0.0), (13, 1.0), (25, 0.0), (37, -1.0), (49, 0.0)]
+
+
+def key_bone(name, axis, deg, frame, ph):
+    pb = rig.pose.bones.get(name)
+    if pb is None or name not in base_q:
+        return
+    pb.rotation_quaternion = base_q[name] @ Quaternion(axis, math.radians(deg * ph))
+    pb.keyframe_insert("rotation_quaternion", frame=frame)
+
 
 for frame, ph in KEYS:
     scene.frame_set(frame)
-    # 脊柱/头：正弦式摆动
-    for name, (axis, deg) in sway.items():
-        pb = rig.pose.bones.get(name)
-        if pb is None:
-            continue
-        pb.rotation_quaternion = base_q[name] @ Quaternion(axis, math.radians(deg * ph))
-        pb.keyframe_insert("rotation_quaternion", frame=frame)
-    # 双手：随呼吸上下起伏 1 cm（IK 目标也跟着动）
+    key_bone("c_spine_02.x", Vector((1, 0, 0)), 1.5, frame, ph)
+    key_bone("c_spine_01.x", Vector((0, 1, 0)), 0.7, frame, ph)
+    key_bone("c_head.x", Vector((0, 1, 0)), 1.8, frame, ph)
     for side in ("l", "r"):
-        pb = rig.pose.bones.get("c_hand_ik." + side)
+        pb = rig.pose.bones.get("c_arm_fk." + side)
         if pb is None:
             continue
-        pb.location = base_loc["c_hand_ik." + side] + Vector((0, 0, 0.01 * ph))
-        pb.keyframe_insert("location", frame=frame)
+        key_bone("c_arm_fk." + side, local_axis_towards_down(pb), 1.6, frame, ph)
 
 scene.frame_start = 1
 scene.frame_end = FRAMES + 1
 scene.frame_set(1)
 
-# ── 3) 导出（只留角色 + 只留 Idle）──
+# ── 4) 导出 ──
 keep = []
 for o in bpy.data.objects:
     if o.type == 'ARMATURE':
