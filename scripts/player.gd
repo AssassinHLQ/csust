@@ -146,7 +146,12 @@ var _lock_left := 0.0
 
 func _ready() -> void:
 	add_to_group("player")
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# 用户 2026-10-21：「每次你运行游戏都会抢占鼠标一瞬间，然后我就点不到下面的任务栏了」
+	# → 两道闸：
+	#   ① 探针 / 自检一律带 `--no-capture`（写在 `--` 之后），**根本不收鼠标**；
+	#   ② 正常启动时，只有窗口**已经拿到焦点**才收 —— 后台起来的窗口不该动用户的鼠标。
+	if _may_capture():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	# 出生朝向：相机绕角 0 → 相机在角色背后（+Z 侧）往场地深处（-Z）看，
 	# 靶区（z = -3 … -16）正好在画面正前方，角色背对镜头面朝靶区。
 	# 这就是「一进场就能看见靶子」的初始视角。
@@ -174,8 +179,22 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		var tree := get_tree()
-		if tree != null and not tree.paused:
+		if tree != null and not tree.paused and _may_capture():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# 失去焦点（Alt+Tab、点任务栏、被别的窗口盖住）→ **立刻放开鼠标**，
+	# 否则鼠标被困在游戏里，任务栏都点不动（用户 2026-10-21 报的就是这个）。
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT \
+			or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## 能不能收鼠标：带 `--no-capture` 的探针/自检永远不收；
+## 正常启动还要求窗口已经拿到焦点（后台窗口不抢鼠标）。
+func _may_capture() -> bool:
+	if OS.get_cmdline_user_args().has("--no-capture"):
+		return false
+	return DisplayServer.window_is_focused()
 
 
 func _input(event: InputEvent) -> void:

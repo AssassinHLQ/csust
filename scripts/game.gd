@@ -114,6 +114,9 @@ var _keys_seen := 0
 func _watch_input() -> void:
 	if OS.get_cmdline_args().has("--script"):
 		return
+	# 探针带 `--no-capture` 时也别自愈式抢鼠标（用户 2026-10-21：跑游戏会抢鼠标）
+	if OS.get_cmdline_user_args().has("--no-capture"):
+		return
 	_report_input.call_deferred()
 
 
