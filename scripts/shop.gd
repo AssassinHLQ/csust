@@ -18,7 +18,13 @@ extends Node3D
 ## ── 盖在哪 ──
 ## 小屋在 (14, 0, -15.5)，屋顶外沿 x = 17.70；
 ## 留 `gap` = 3.0 m 走道 → 商店西墙 x = **20.70**，东墙 x = **33.90**，中心 x = 27.30。
-## 平台只到 x = ±20，所以商店整块都在平台外面 —— 地板从平台边沿 `x = 20.01` 一路铺到 34.40。
+## 平台只到 x = ±20，所以商店整块都在平台外面。
+##
+## ── 地板（2026-10-21 第二次改：用户圈红框「是这里地板补齐」）──
+## 第一版只铺商店脚下那条窄带（x 20.01~34.40、z −19.60~−11.40，14.4 × 8.2 m），
+## 从空中看就是平台东边沿突然断掉、伸出去一条舌头。现在铺成**平台东侧整面带**：
+##   x 20.01 ~ `deck_east_x`（默认 40.00），z −20.00 ~ +20.00（与平台同深）。
+## 即 20.0 × 40.0 m 一整块，边缘和平台齐平。
 ##
 ## ⚠️ 地板为什么不和平台叠着放 —— 平台网格在 x 上偏了 5.6 mm（`Floor/Mesh` 的
 ##    `0.005619049`），两块同高面一重叠就会在接缝处闪（z-fighting），所以地板从
@@ -38,9 +44,11 @@ extends Node3D
 @export var modules := 2.0
 ## 小屋屋顶外沿 → 商店西墙的空当（走道宽度）
 @export var gap := 3.0
-## 地板比商店进深每侧多铺多少（留出沿街走的余地，别一脚踩空）
-@export var walk_pad := 1.3
-## 地板比商店东墙再多铺多少
+## 地板往东铺到哪（世界 x）。2026-10-21 用户圈红框：「是这里地板补齐」——
+## 原来只铺商店脚下那条窄带，平台东边沿之外还是一刀切的虚空；现在铺成整面带，
+## 默认到 x = 40（比商店东墙 33.90 再远 6 m）。嫌大嫌小就调这一个数。
+@export var deck_east_x := 40.0
+## 地板比商店东墙再多铺多少（`deck_east_x` 比它小时用它兜底）
 @export var deck_margin := 0.5
 @export var deck_thickness := 0.5
 @export var door_width := 1.6
@@ -124,9 +132,13 @@ func _measure() -> void:
 		box = shape.shape as BoxShape3D
 	var platform_right := 20.0
 	var platform_top := 0.0
+	var platform_z := 0.0
+	var platform_half_z := 20.0
 	if box != null:
 		platform_right = shape.global_position.x + box.size.x * 0.5
 		platform_top = shape.global_position.y + box.size.y * 0.5
+		platform_z = shape.global_position.z
+		platform_half_z = box.size.z * 0.5
 
 	var hut_x := hut.global_position.x if hut != null else 14.0
 	var hut_z := hut.global_position.z if hut != null else -15.5
@@ -137,11 +149,15 @@ func _measure() -> void:
 	var center_z := hut_z
 	global_position = Vector3(center_x, platform_top, center_z)
 
-	# 地板：从平台边沿（+1 cm 防 z-fighting）铺到商店东墙 + deck_margin
+	# ── 地板（2026-10-21 用户圈红框：「是这里地板补齐」）──
+	# 原来只铺商店脚下那条窄带（14.4 × 8.2 m），平台东边沿之外还是一刀切的虚空，
+	# 从空中看就是平台突然断掉。现在改成**平台东侧整面带**：
+	#   x：平台边沿（+1 cm 防 z-fighting）→ `deck_east_x`（默认 40 m，比商店东墙再远 6 m）
+	#   z：和平台**同深**（−20 ~ +20），边缘跟平台齐平，不再是突出来的一条舌头
 	var x0 := platform_right + 0.01
-	var x1 := center_x + shop_len * 0.5 + deck_margin
-	var z0 := center_z - (shop_depth * 0.5 + walk_pad)
-	var z1 := center_z + (shop_depth * 0.5 + walk_pad)
+	var x1 := maxf(center_x + shop_len * 0.5 + deck_margin, deck_east_x)
+	var z0 := platform_z - platform_half_z
+	var z1 := platform_z + platform_half_z
 	deck_rect = Rect2(Vector2(x0, z0), Vector2(x1 - x0, z1 - z0))
 
 

@@ -77,7 +77,9 @@ func _run() -> void:
 		["平台内", Vector2(18.0, mid_z + 2.5)],
 		["接缝 x=20", Vector2(20.0, mid_z + 2.5)],
 		["地板中 x=25", Vector2(25.0, mid_z + 3.7)],
-		["地板东端 x=34", Vector2(34.0, mid_z + 3.7)],
+		["地板东端 x=39", Vector2(39.0, mid_z + 3.7)],
+		["地板北端 z=+19", Vector2(25.0, 19.0)],
+		["地板南端 z=−19", Vector2(25.0, -19.0)],
 		["店里 x=27.3", Vector2(mid_x, mid_z)],
 	]
 	print("\n── 地板射线（从上往下，应命中 y=0）──")
@@ -88,8 +90,8 @@ func _run() -> void:
 		print("  %-14s %s" % [s[0], "命中 y=%.3f（%s）" % [hit.position.y, hit.collider.name]
 			if not hit.is_empty() else "**没命中**"])
 		_check(ok, "地板 %s 顶面 y=0" % s[0])
-	var void_hit := _ray(Vector3(36.5, 1.5, mid_z), Vector3(36.5, -6.0, mid_z))
-	print("  虚空 x=36.5    %s" % ("不该有东西，却命中 %s" % void_hit.collider.name
+	var void_hit := _ray(Vector3(41.5, 1.5, mid_z), Vector3(41.5, -6.0, mid_z))
+	print("  虚空 x=41.5    %s" % ("不该有东西，却命中 %s" % void_hit.collider.name
 		if not void_hit.is_empty() else "空（正确：地板外仍是虚空）"))
 	_check(void_hit.is_empty(), "地板尽头之外是虚空（没有偷偷铺满）")
 
@@ -170,6 +172,11 @@ func _run() -> void:
 		_cam.global_position = s[1]
 		_cam.look_at(s[2], Vector3.UP)
 		await _shot(out_dir.path_join(s[0]))
+
+	# 高空俯视：直接对应「用户圈红框的那块」——平台东侧整面带是不是都铺上了
+	_cam.global_position = Vector3(28.0, 56.0, 0.01)
+	_cam.look_at(Vector3(28.0, 0.0, 0.0), Vector3.FORWARD)
+	await _shot(out_dir.path_join("94_air.png"))
 
 	print("\n出图目录：%s" % out_dir)
 	print("[probe] 通过 %d、失败 %d" % [_pass, _fail])
