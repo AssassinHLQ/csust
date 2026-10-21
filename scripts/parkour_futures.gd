@@ -588,16 +588,20 @@ func _build_hud() -> void:
 	_prompt_label.text = ""
 	_hud_layer.add_child(_prompt_label)
 
-	# Boss 台词（「爱丽丝还我十万美刀！！！」）：大字、居中、淡出
+	# Boss 台词（两行：「敢动我 5090?！」/「爱丽丝还我十万美刀！！！」）：大字、居中、淡出
 	_line_label = Label.new()
 	_line_label.name = "BossLine"
 	_line_label.anchor_left = 0.5
 	_line_label.anchor_right = 0.5
 	_line_label.offset_left = -560.0
 	_line_label.offset_right = 560.0
-	_line_label.offset_top = 300.0
-	_line_label.offset_bottom = 400.0
+	# 台词框：用户 2026-10-21 把登场词改成**两行**（先「敢动我 5090?!」再讨债），
+	# 所以框高从 100 放到 160、竖直居中 —— 一行 / 两行都在这块区域里居中，
+	# 不会出现「两行往下坠、压到血条」。（autowrap 保持关：换行只认台词里的 \n）
+	_line_label.offset_top = 280.0
+	_line_label.offset_bottom = 440.0
 	_line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_line_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_line_label.add_theme_font_size_override("font_size", 54)
 	_line_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 1))
 	_line_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
@@ -969,6 +973,7 @@ func prompt_owner() -> Object:
 
 
 ## Boss 出场台词：大字居中，4 秒后淡出。
+## 文本里的 `\n` 就是换行（`Label.autowrap` 关着，别指望它自己折行）。
 func boss_line(text: String) -> void:
 	if _line_label == null:
 		return

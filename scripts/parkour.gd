@@ -38,6 +38,11 @@ const ON_TOP := 0.40
 ## （+0.25 m 就滑下去，见 `_verify_parkour.gd` 第 2 节量出来的那张表）。
 const EDGE_MARGIN := 0.30
 
+## 倭瓜优香登场台词。用户 2026-10-21：「从『爱丽丝还我十万美刀.』变成
+## 『敢动我 5090?!』换行『爱丽丝还我十万美刀!!!』」—— 先炸显卡,再讨债。
+## `\n` 是硬换行（`BossLine` 那个 Label 的 autowrap 关着,换行只认这里）。
+const BOSS_LINE := "敢动我5090？！\n爱丽丝还我十万美刀！！！"
+
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
 ## 进度存档：最近踩过的站号（+ 一份最好成绩）。
@@ -705,8 +710,8 @@ func _spawn_avenger(pad: Node3D) -> void:
 		player.look_at_node(boss, 1.0)
 	var fut := get_tree().get_first_node_in_group("futures")
 	if fut != null and fut.has_method("boss_line"):
-		fut.call("boss_line", "爱丽丝还我十万美刀！！！")
-	print("[Parkour] 倭瓜优香登场：爱丽丝还我十万美刀！！！")
+		fut.call("boss_line", BOSS_LINE)
+	print("[Parkour] 倭瓜优香登场：%s" % BOSS_LINE.replace("\n", " / "))
 
 
 ## 倭瓜优香倒下：牢笼升回去消失（用户：「打败倭瓜优香后牢笼解除」），它本人不复活
