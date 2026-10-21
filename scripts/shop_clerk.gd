@@ -32,6 +32,7 @@ var bone_count := 0
 var hand_y := {}
 
 var _t := 0.0
+var _idle: AnimationPlayer
 
 
 func _ready() -> void:
@@ -52,13 +53,27 @@ func _ready() -> void:
 			if idx >= 0:
 				hand_y[side] = (skeleton.global_transform
 					* skeleton.get_bone_global_pose(idx).origin).y
-	print("[Clerk] 小空就位：%s（骨架 %d 骨，手骨高度 L=%.2f R=%.2f m）" % [
+	_play_idle()
+	print("[Clerk] 小空就位：%s（骨架 %d 骨，手骨高度 L=%.2f R=%.2f m，动画 %s）" % [
 		MODEL.get_file(), bone_count,
-		float(hand_y.get("l", -1.0)), float(hand_y.get("r", -1.0))])
+		float(hand_y.get("l", -1.0)), float(hand_y.get("r", -1.0)),
+		"Idle" if _idle != null else "无（保持静止姿势）"])
+
+
+## 播放 GLB 里烘焙好的待机动画（`tools/make_sora_idle.py` 用 Blender 做的）。
+## 有动画就不再程序化晃 model —— 两套一起动会互相打架。
+func _play_idle() -> void:
+	for n in model.find_children("*", "AnimationPlayer", true, false):
+		var ap := n as AnimationPlayer
+		if ap.get_animation_list().has("Idle"):
+			ap.play("Idle")
+			ap.speed_scale = 1.0
+			_idle = ap
+			return
 
 
 func _process(delta: float) -> void:
-	if not idle_sway or model == null:
+	if _idle != null or not idle_sway or model == null:
 		return
 	_t += delta
 	model.rotation.y = deg_to_rad(sway_deg) * sin(_t * TAU * sway_hz)
