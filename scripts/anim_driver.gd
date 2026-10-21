@@ -212,6 +212,8 @@ var roll_fix := {}
 var blink_fix := {}
 ## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
 var face_fix := {}
+## `HaloFix.polish()`：头顶光环改成自发光、不投阴影的报告
+var halo_fix := {}
 ## 「单独一条跑打开火动作」的并入报告（`AnimExtra.merge_glb()`）
 var runfire := {}
 
@@ -330,6 +332,13 @@ func _ready() -> void:
 	if int(face_fix.get("surfaces", 0)) > 0:
 		print("[AnimDriver] 脸部层错开：%d 个 surface / %d 个顶点（跳过 %d 个带形态键的网格）" % [
 			int(face_fix["surfaces"]), int(face_fix["verts"]), int(face_fix.get("skipped", 0))])
+	# 头顶光环：低模环 + 受光 + 不发光 + 还投阴影 → 改成自发光环（不投阴影）。
+	# 用户 2026-10-22：「柚子的光环好像渲染出问题了」。判据见 `halo_fix.gd` 文件头。
+	halo_fix = HaloFix.polish(get_parent() as Node3D)
+	if int(halo_fix.get("meshes", 0)) > 0:
+		print("[AnimDriver] 光环抛光：%d 个网格 / %d 个材质（%s）" % [
+			int(halo_fix["meshes"]), int(halo_fix["applied"]),
+			str(halo_fix.get("names", []))])
 	_check_face_morphs()
 	_setup_upper_layer()
 	# 跑打开火：把 Blender 拼好的**单条**动作并进动作库（见 `extra_glb` 上面那段）。
