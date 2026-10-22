@@ -20,6 +20,14 @@ extends RefCounted
 const PATH := "user://settings.cfg"
 const SECTION := "settings"
 
+## ── 渲染距离的梯子 ──
+## 用户的原话：「滑块到线段上任意一处，后方数字是 100m~1000m 的无极调节，
+## 但实际上分段的：100m, 200m, 300m, 以此类推」。
+## 所以：滑块 min/max/step = 100 / 1000 / 1（连续），生效值 = 对 100 取整。
+const RD_MIN := 100.0
+const RD_MAX := 1000.0
+const RD_STEP := 100.0
+
 const DEFAULTS := {
 	"mouse_sensitivity": 0.0022,
 	"fov": 62.0,
@@ -39,6 +47,11 @@ const DEFAULTS := {
 	"glow": true,
 	"ssr": false,
 	"fog": true,
+	# ── 渲染距离（2026-10-22 用户计划第 2 条，参考 Minecraft）──
+	# 「渲染距离以外的物体、生物不加载（假如该物体或生物一部分包含在渲染距离内也需加载）」
+	# 界面上的滑块是**连续**的（1 m 一格，肉眼看就是无极），但生效值**按 100 m 分段**
+	# （100 / 200 / … / 1000），取整只发生在 `render_distance()` 一处。
+	"render_distance": 300.0,
 	"window_mode": "maximized",
 	# ── 准星（2026-10-22 用户：颜色 / 双色渐变 / 粗细 / 每个部件的透明度 都要能调）──
 	# ⚠️ 三个尺寸单位都是**物理像素**（不是逻辑 px）：HUD 会按 `crosshair_scale()`
@@ -68,6 +81,9 @@ const RANGES := {
 	"fps_limit": [0.0, 240.0, 10.0],      # 0 = 不限帧
 	"aa_mode": [0.0, 5.0, 1.0],           # 0 关 / 1 FXAA / 2 MSAA2× / 3 4× / 4 8× / 5 TAA
 	"shadow_quality": [0.0, 3.0, 1.0],    # 0 关 / 1 低 / 2 中 / 3 高
+	# 渲染距离：滑块 100~1000 m，步长 1 m（**故意不设成 100** —— 那会变成
+	# 「只能停在 10 个刻度上」，用户要的是「能滑到任意一处，数字跳档」）
+	"render_distance": [RD_MIN, RD_MAX, 1.0],
 	# ── 准星（单位：物理像素）──
 	"crosshair_dot_px": [1.0, 15.0, 1.0],
 	"crosshair_thick_px": [1.0, 10.0, 1.0],
@@ -121,6 +137,7 @@ const LABELS := {
 	"glow": "辉光",
 	"ssr": "屏幕空间反射 SSR",
 	"fog": "雾",
+	"render_distance": "渲染距离",
 	"window_mode": "窗口模式",
 	"crosshair_color": "准星颜色",
 	"crosshair_color2": "渐变第二色",
@@ -134,7 +151,7 @@ const LABELS := {
 
 ## 「画面」分组：设置界面在这些键之前插一个小标题
 const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
-	"shadow_quality", "ssao", "glow", "ssr", "fog", "window_mode"]
+	"shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance", "window_mode"]
 
 ## 「准星」分组：同上，第一个键之前插小标题「准星」。
 ## ⚠️ 顺序就是设置界面里的顺序，DEFAULTS 里也按这个顺序排过一遍 —— 两处别走散。
@@ -253,6 +270,10 @@ static func value_text(key: String, v: Variant) -> String:
 			return AA_NAMES[clampi(int(round(float(v))), 0, AA_NAMES.size() - 1)]
 		"shadow_quality":
 			return SHADOW_NAMES[clampi(int(round(float(v))), 0, SHADOW_NAMES.size() - 1)]
+		"render_distance":
+			# 显示的是**生效值**（分段后的），不是滑块的连续位置 —— 否则用户会看到
+			# 「437 m」却感觉不到任何变化（100 m 一档，437 和 400 是同一个东西）。
+			return "%d m" % int(round(snappedf(clampf(float(v), RD_MIN, RD_MAX), RD_STEP)))
 		"crosshair_dot_px", "crosshair_thick_px", "crosshair_arm_px":
 			return "%d px" % int(round(float(v)))
 		"crosshair_dot_alpha", "crosshair_arm_alpha":
@@ -264,6 +285,13 @@ static func value_text(key: String, v: Variant) -> String:
 	if CHOICES.has(key):
 		return choice_label(key, v)
 	return str(v)
+
+
+## 生效的渲染距离（米，**已按 100 m 分段**）。
+## 存的值是滑块的连续位置，用的时候一律走这里 —— 摄像机 `far`、裁切判据、
+## HUD/日志、界面右侧的数字，四者必须同一个数，否则会出现「写着 400、实际 437」。
+static func render_distance() -> float:
+	return snappedf(clampf(float(value("render_distance")), RD_MIN, RD_MAX), RD_STEP)
 
 
 static func label(key: String) -> String:

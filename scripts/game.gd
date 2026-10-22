@@ -84,6 +84,8 @@ var _weapon: Weapon
 var _hud: CanvasLayer
 ## 场上所有泼溅场地（现在是校园 + 画室609 两份；按类型收，不写死节点名）
 var _splats: Array[SplatScene] = []
+## 渲染距离（Minecraft 式「远处不渲染」）。见 `scripts/render_distance.gd`。
+var _rd: RenderDistance
 ## 场上所有 Boss「木桩」（现在是霸王龙优香 + 飞猪优香两位）
 var _bosses: Array[Boss] = []
 var _companions: Array[Companion] = []
@@ -267,13 +269,23 @@ func _apply_render() -> void:
 		env.fog_enabled = bool(GameSettings.value("fog"))
 	# ⑥ 窗口模式
 	_apply_window_mode()
+	# ⑦ 渲染距离：摄像机**远裁剪面**直接等于它（天空盒是无限远，不受影响）。
+	#    两道保险：远裁剪面负责「超出距离的别画」，`RenderDistance` 负责「别进视锥、
+	#    也别投阴影」—— 只靠 `far` 的话，被裁掉的物体**阴影会消失但物体自己还在
+	#    剔除列表里**，而且 `far` 对阴影相机不生效。
+	var rd := GameSettings.render_distance()
+	for n in find_children("*", "Camera3D", true, false):
+		(n as Camera3D).far = maxf(rd, 1.0)
+	if _rd != null:
+		_rd.refresh()
 	# 打一行：GPU 占用直接跟这些数走，排查「怎么突然很烫」时先看它
-	print("[Game] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  阴影 %s  "
+	print("[Game] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  阴影 %s  渲染距离 %d m  "
 		% [target, _auto_scale,
 			"垂直同步" if bool(GameSettings.value("vsync")) else "不开垂直同步",
 			"不限帧" if fps <= 0 else "%d fps" % fps,
 			GameSettings.value_text("aa_mode", GameSettings.value("aa_mode")),
-			GameSettings.value_text("shadow_quality", GameSettings.value("shadow_quality"))]
+			GameSettings.value_text("shadow_quality", GameSettings.value("shadow_quality")),
+			int(rd)]
 		+ "SSAO %s  辉光 %s  SSR %s  雾 %s  %s" % [
 			"开" if bool(GameSettings.value("ssao")) else "关",
 			"开" if bool(GameSettings.value("glow")) else "关",
@@ -630,6 +642,10 @@ func _ready() -> void:
 		if child is Target and not child.is_in_group("targets"):
 			child.died.connect(_on_target_died)
 
+	# 渲染距离：放到**最后**再切簇 —— 商店是代码建的、备用 Boss 是运行时挂的、
+	# 房间泼溅还没解码完，早切了就漏（漏掉的簇不会被裁，只是白占位）。
+	_setup_render_distance()
+
 	# 开场剧情放**最后**：HUD / Boss / 同伴都接好了再演，
 	# 这样对话框一结束世界就是完整可玩的（暂停期间 `splat_scene.gd` 的解码线程
 	# 照常在后台跑，只是 `_process` 里的收尾被推迟到恢复之后）。
@@ -882,6 +898,21 @@ func _build_shop() -> void:
 	shop.auto_build = false
 	add_child(shop)
 	shop.build()
+
+
+## 渲染距离（Minecraft 式「远处不渲染」）。用户 2026-10-22 计划第 2 条。
+##
+## 只做两件事：① 把树切成「对角 ≤ 60 m」的簇并预存包围球；② 每 0.1 s 按
+## `簇的最近点 > 渲染距离` 把远的簇 `visible = false`。
+## 「一部分落在渲染距离内也要显示」这条由「球心距离 − 半径」保证，见 `render_distance.gd` 文件头。
+##
+## ⚠️ 必须**在这里**（`_ready` 末尾）切簇：商店是 `_build_shop()` 代码建的、
+##    备用 Boss 是 `_spawn_standby_bosses()` 挂上去的，早一步就漏。
+func _setup_render_distance() -> void:
+	_rd = RenderDistance.new()
+	_rd.name = "RenderDistance"
+	add_child(_rd)
+	_rd.watch(self)
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
