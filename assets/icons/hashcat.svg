@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  hashcat 图标（本喵手绘占位版）。
+  ⚠️ 官方没有像 simple-icons 那样的矢量 logo 放进公共图标库（simple-icons 里 404），
+     所以这里按 hashcat 的「骷髅 + 撬锁」意象画了一个**几何版**：
+     24×24 视口、单色（currentColor 之外的固定色写死），可以当图标直接用。
+     想换成官方素材，把 hashcat 官网/仓库里的 logo 抠成 SVG 覆盖同名文件即可。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="hashcat">
+  <g fill="none" stroke="#e04b4b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 颅骨 -->
+    <path d="M6.4 9.6a5.6 5.6 0 1 1 11.2 0v3.1c0 .8-.5 1.3-1.2 1.5l-.9.2v1.3c0 .8-.6 1.4-1.4 1.4h-.7v1.2c0 .5-.4.9-.9.9h-1.1c-.5 0-.9-.4-.9-.9v-1.2h-.7c-.8 0-1.4-.6-1.4-1.4v-1.3l-.9-.2c-.7-.2-1.2-.7-1.2-1.5z"/>
+    <!-- 眼窝 -->
+    <circle cx="9.6" cy="10.2" r="1.25" fill="#e04b4b" stroke="none"/>
+    <circle cx="14.4" cy="10.2" r="1.25" fill="#e04b4b" stroke="none"/>
+    <!-- 牙缝 -->
+    <path d="M10.6 16.4v1.6M13.4 16.4v1.6"/>
+  </g>
+  <!-- 撬锁的「钥匙孔」：暗示破 hash -->
+  <circle cx="12" cy="12.4" r="1.05" fill="#e04b4b"/>
+  <path d="M12 13.2l0 2.1" stroke="#e04b4b" stroke-width="1.1" stroke-linecap="round"/>
+</svg>

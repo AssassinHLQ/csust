@@ -27,8 +27,15 @@ extends Node3D
 ##   比爱丽丝（1.47 m）矮一点点，正好是芹香矮个子的设定，不缩放。
 ##   手骨高 0.45 + 0.27 = 0.72 m，柜台台面 1.04 m —— 手藏在柜台后面 ✓
 const MODEL := "res://models/npc/serika/serika.glb"
-## 待机动画名候选。芹香是 `Normal_Idle`；后面几个是给别的模型留的退路。
-const IDLE_CLIPS := ["Normal_Idle", "Cafe_Idle", "Stand_Idle", "Idle"]
+## 待机动画名候选。
+##
+## ⚠️ 顺序是有意的：**`Cafe_Idle` 排第一**。
+##   用户 2026-10-22：「芹香怎么拿着枪，有没有不拿枪的版本」——
+##   `Normal_Idle` 是战斗待机，她双手抱着那把步枪（实拍 `_clerk/clerk.png` 里看得见枪）。
+##   而 `Cafe_*` 这套「咖啡厅模式」的素材本身**把武器骨的 scale 缩到 ≈0**（和
+##   `anim_driver.gd` 里写的爱丽丝/小桃那批完全一样），播 `Cafe_Idle` 枪就没了 ——
+##   正好是店员该有的样子，而且不用改模型、不用抠网格。
+const IDLE_CLIPS := ["Cafe_Idle", "Normal_Idle", "Stand_Idle", "Idle"]
 ## 手骨名候选（`side` = "l" / "r"）。`Bip001` 那套是 Blue Archive 的骨架命名。
 const HAND_BONES := {
 	"l": ["Bip001 L Hand", "hand.l"],

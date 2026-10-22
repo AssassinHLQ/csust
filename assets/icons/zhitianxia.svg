@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  知天下 AI 图标（本喵手绘**占位**版，不是官方 logo）。
+  ⚠️ 「知天下」是主办方/产品名，官方 logo 必须问主办方要源文件，别自己用占位版对外发布。
+     这里只画了个「地球 + 数据节点」的意思：知天下 = 知道世界。
+  想换官方版：覆盖同名 SVG 即可（保持 24×24 视口，UI 里按 1em 缩放）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="知天下 AI">
+  <g fill="none" stroke="#3aa0ff" stroke-width="1.5" stroke-linecap="round">
+    <!-- 地球 -->
+    <circle cx="11" cy="12" r="7.2"/>
+    <ellipse cx="11" cy="12" rx="3.1" ry="7.2"/>
+    <path d="M4.1 9.4h13.8M4.1 14.6h13.8"/>
+  </g>
+  <!-- 数据节点：右上角三颗星 -->
+  <g fill="#7fd4ff">
+    <circle cx="19.6" cy="5.4" r="1.5"/>
+    <circle cx="21.6" cy="9.2" r="0.95"/>
+    <circle cx="17.6" cy="2.9" r="0.8"/>
+  </g>
+  <path d="M17.2 6.4l2.1-2.6M18.2 8.2l2.6 0.7" stroke="#7fd4ff" stroke-width="0.9"/>
+</svg>
