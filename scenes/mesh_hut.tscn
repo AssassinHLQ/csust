@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 ; ── 网格小屋（MeshHut）──────────────────────────────────────────────────────
 ; **手工用基元搭的小场景**，作为「记忆平台」上的第三块场地（前两块是平台本身
@@ -34,6 +34,15 @@ top_radius = 0.1
 bottom_radius = 0.1
 height = 3.4
 radial_segments = 12
+rings = 1
+
+; 吊灯的吊线：细圆柱（r = 0.025、长 1.15）。灯升高到 4.55 之后，靠这一根
+; 把它和屋顶底面（5.70）连起来 —— 没有它，灯就是「悬在半空的发光板」。
+[sub_resource type="CylinderMesh" id="Cyl_cord"]
+top_radius = 0.025
+bottom_radius = 0.025
+height = 1.15
+radial_segments = 8
 rings = 1
 
 [sub_resource type="StandardMaterial3D" id="Mat_wall"]
@@ -361,14 +370,29 @@ position = Vector3(2.35, 0.9, 2.4)
 shape = SubResource("Shape_shelf")
 
 ; ══ 灯：两盏都关阴影（省电；本项目对功耗敏感）══
+;
+; ⚠️ 2026-10-22 用户「灯没提上去啊，还是浮空」—— 墙从 2.50 升到 5.70 的时候，
+;    这盏吊灯**留在 y = 2.45 没动**。旧墙高下它离天花板只有 5 cm（看着就是吸顶灯），
+;    加高之后它变成一块孤零零悬在 3.2 m 空中的发光板。现在：
+;      · 灯板抬到 4.50（顶面 4.55），下方留 4.5 m 够人走、上方留 1.15 m 吊线；
+;      · 新增 `LampCord`（细圆柱 5.700 → 4.550），把灯和屋顶底面连起来；
+;      · `HutLight` 跟着上到 4.40（灯板下方一点，避免灯光被灯板自身挡）；
+;        omni_range 仍是 8 m，从 4.4 m 打到地面还有余量。
+;    量过的数（`_probe_hut_lamp.gd`）：改前 灯顶 2.50 → 屋顶底面 5.70 差 3.20 m，
+;    灯正上方/正下方都没有任何东西（纯悬空）；改后吊线顶 5.700 与屋顶底面**贴合**。
 [node name="HutLamp" type="MeshInstance3D" parent="."]
-position = Vector3(0, 2.45, 0)
+position = Vector3(0, 4.5, 0)
 scale = Vector3(0.4, 0.1, 0.4)
 mesh = SubResource("Box_unit")
 material_override = SubResource("Mat_lamp")
 
+[node name="LampCord" type="MeshInstance3D" parent="."]
+position = Vector3(0, 5.125, 0)
+mesh = SubResource("Cyl_cord")
+material_override = SubResource("Mat_metal")
+
 [node name="HutLight" type="OmniLight3D" parent="."]
-position = Vector3(0, 2.2, 0)
+position = Vector3(0, 4.4, 0)
 light_color = Color(1, 0.93, 0.8, 1)
 light_energy = 2.0
 shadow_enabled = false
