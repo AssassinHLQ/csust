@@ -568,6 +568,8 @@ func _ready() -> void:
 	_hud.bind(_player, _weapon)
 	# 小屋里的「召唤同伴」台（踩上去把跑酷时留在跑道口的同伴召回小屋）
 	_build_summon_pad()
+	# 小屋桌子上的电脑（假 Arch Linux 终端，按 F 进出，见 scripts/hut_computer.gd）
+	_build_computer()
 	# 新区域：商店（初始小屋右边、跨出平台铺一块地板，见 scripts/shop.gd）
 	_build_shop()
 
@@ -913,6 +915,22 @@ func _setup_render_distance() -> void:
 	_rd.name = "RenderDistance"
 	add_child(_rd)
 	_rd.watch(self)
+
+
+## 小屋桌子上的电脑（用户 2026-10-22：「桌子上放个显示器……按 F 使用，再按 F 退出」）。
+##
+## 挂成 `MeshHut` 的子节点，这样 `hut_computer.gd` 里的坐标就是小屋局部坐标
+## （桌面顶面 y = 0.80、桌面中心 x = −0.6 / z = −2.2 都是照着 `mesh_hut.tscn` 量的）。
+## ⚠️ 必须在 `_setup_render_distance()` **之前**建：晚一步它就不进裁切簇，
+##    显示器会在 100 m 外也照画（不致命，但白费）。
+func _build_computer() -> void:
+	var hut := get_node_or_null("MeshHut") as Node3D
+	if hut == null:
+		push_warning("[Game] 找不到 MeshHut，电脑不建")
+		return
+	var pc := HutComputer.new()
+	pc.name = "HutComputer"
+	hut.add_child(pc)
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
