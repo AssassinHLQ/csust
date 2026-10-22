@@ -74,12 +74,31 @@ func _run() -> void:
 				fails += 1
 
 	# ③ 打开
+	var p0 := game.get_node_or_null("Player") as Node3D
+	var before := p0.global_position if p0 != null else Vector3.ZERO
+	# ⚠️ 摄像机高度**不能假设是 1.35**：`player.gd` 运行时会按眼高改它
+	#    （实测开局就是 1.62）。所以这里只记「打开前是多少」，退出后比对。
+	var rig0 := p0.get_node_or_null("CameraRig") as Node3D if p0 != null else null
+	var rig_before := rig0.position.y if rig0 != null else 0.0
 	pc.use_for_test()
 	await process_frame
 	print("[pc] 打开后 is_using=%s" % str(pc.is_using()))
 	if not pc.is_using():
 		print("[pc] ✗ use_for_test 没打开")
 		fails += 1
+	# ③b 坐姿：人应该被挪到凳子上、摄像机降到 1.05
+	if p0 != null:
+		var seat := pc.to_global(Vector3(-0.6, 0.0, -1.30))
+		var rig := p0.get_node_or_null("CameraRig") as Node3D
+		print("[pc] 坐姿：玩家 %s → 凳子 %s（距离 %.2f m），CameraRig.y = %.2f"
+			% [str(before.snappedf(0.01)), str(p0.global_position.snappedf(0.01)),
+				p0.global_position.distance_to(seat), rig.position.y if rig != null else -1.0])
+		if p0.global_position.distance_to(seat) > 0.05:
+			print("[pc] ✗ 没有挪到凳子上")
+			fails += 1
+		if rig != null and not is_equal_approx(rig.position.y, 1.05):
+			print("[pc] ✗ 摄像机没降到 1.05")
+			fails += 1
 
 	# ④ 敲 help
 	_type(t, "help")
@@ -124,6 +143,18 @@ func _run() -> void:
 		print("[pc] 玩家进程恢复：物理 %s / process %s / input %s"
 			% [str(p.is_physics_processing()), str(p.is_processing()), str(p.is_processing_input())])
 		if not ok:
+			fails += 1
+		# ⑦b 起身：位置和摄像机要还原
+		var rig2 := p.get_node_or_null("CameraRig") as Node3D
+		print("[pc] 起身：玩家回到 %s（原 %s，距离 %.3f m），CameraRig.y = %.2f（原 %.2f）"
+			% [str(p.global_position.snappedf(0.01)), str(before.snappedf(0.01)),
+				p.global_position.distance_to(before), rig2.position.y if rig2 != null else -1.0,
+				rig_before])
+		if p.global_position.distance_to(before) > 0.05:
+			print("[pc] ✗ 起身后没回到原位")
+			fails += 1
+		if rig2 != null and not is_equal_approx(rig2.position.y, rig_before):
+			print("[pc] ✗ 摄像机没还原成打开前的高度")
 			fails += 1
 
 	print("[pc] %s（失败 %d 项）" % ["全部通过" if fails == 0 else "有失败", fails])

@@ -150,14 +150,14 @@ func _run() -> void:
 		"招牌字 =「%s」" % str(shop.get("sign_text")))
 
 	# ── 店员小空 ──
-	var clerk := shop.get_node_or_null("ClerkSora") as Node3D
+	var clerk := shop.get_node_or_null("ClerkSerika") as Node3D
 	print("\n── 店员 ──")
 	if clerk == null:
-		_check(false, "场景里有店员 ClerkSora")
+		_check(false, "场景里有店员 ClerkSerika")
 	else:
 		var cmodel := clerk.get("model") as Node3D
 		var cbox := _world_aabb(cmodel)
-		print("  小空：%s　骨架 %d 骨　手骨高度 L=%.2f R=%.2f m" % [
+		print("  芹香：%s　骨架 %d 骨　手骨高度 L=%.2f R=%.2f m" % [
 			"模型已就位" if cmodel != null else "**模型缺失**",
 			int(clerk.get("bone_count")),
 			float((clerk.get("hand_y") as Dictionary).get("l", -1.0)),
@@ -166,9 +166,9 @@ func _run() -> void:
 			"在台面以下（A-pose 也被柜台挡住）"
 			if float((clerk.get("hand_y") as Dictionary).get("l", 99.0)) < 1.04
 			else "**露在台面上**"))
-		_check(cmodel != null, "小空模型已加载")
+		_check(cmodel != null, "芹香模型已加载")
 		_check(cbox.size.y > 1.3 and cbox.size.y < 1.9,
-			"小空身高 %.2f m 在合理区间（1.3~1.9）" % cbox.size.y)
+			"芹香身高 %.2f m 在合理区间（1.3~1.9）" % cbox.size.y)
 		_check(float((clerk.get("hand_y") as Dictionary).get("l", 99.0)) < 1.04
 			and float((clerk.get("hand_y") as Dictionary).get("r", 99.0)) < 1.04,
 			"双手都在台面（1.04 m）以下")

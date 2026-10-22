@@ -39,6 +39,11 @@ const SCREEN_SIZE := Vector2(0.60, 0.34)
 const USE_RADIUS := 1.7
 const USE_DY_MAX := 1.6
 
+## 坐姿：人挪到凳子上（小屋局部坐标），摄像机降到这个高度。
+## 凳子坐面 (-0.6, 0.60, -1.3)；摄像机从站姿 1.35 降到 1.05。
+const SEAT_LOCAL := Vector3(-0.6, 0.0, -1.30)
+const SEAT_EYE_Y := 1.05
+
 ## 终端画布尺寸：COLS×CELL + 两侧留白
 const VP_SIZE := Vector2i(832, 664)
 
@@ -48,6 +53,9 @@ var viewport: SubViewport
 var _using := false
 var _in_range := false
 var _player: Node3D
+var _seated := false
+var _saved_xform := Transform3D()
+var _saved_rig_y := 1.35
 var _layer: CanvasLayer
 var _overlay: Control
 var _screen: TextureRect
@@ -285,6 +293,7 @@ func _open() -> void:
 	_hint.visible = false
 	_overlay.visible = true
 	terminal.reset()
+	_seat()
 	var p := _player_node()
 	if p != null:
 		if p is CharacterBody3D:
@@ -297,12 +306,45 @@ func _open() -> void:
 	print("[电脑] 打开 Arch 终端（假终端，不接真实 shell）")
 
 
+## 把人挪到凳子上。
+##
+## ⚠️ 用户 2026-10-22 明确「即使是待机动画生硬移动到椅子上也没事」——
+##    所以这里**不掰骨、不换动画**，就是把人平移过去 + 摄像机降到坐姿高度。
+##    代价：人是站着塞进凳子的（腿会穿模、身体穿靠背），这是用户接受的取舍。
+func _seat() -> void:
+	var p := _player_node()
+	if p == null or _seated:
+		return
+	_seated = true
+	_saved_xform = p.global_transform
+	var rig := p.get_node_or_null("CameraRig") as Node3D
+	if rig != null:
+		_saved_rig_y = rig.position.y
+		rig.position.y = SEAT_EYE_Y
+	p.global_position = to_global(SEAT_LOCAL)
+	p.rotation = Vector3(0.0, 0.0, 0.0)     # 朝 −Z，正对桌子
+
+
+func _stand() -> void:
+	if not _seated:
+		return
+	_seated = false
+	var p := _player_node()
+	if p == null:
+		return
+	p.global_transform = _saved_xform
+	var rig := p.get_node_or_null("CameraRig") as Node3D
+	if rig != null:
+		rig.position.y = _saved_rig_y
+
+
 func _close() -> void:
 	if not _using:
 		return
 	_using = false
 	_overlay.visible = false
 	_hint.visible = _in_range
+	_stand()
 	var p := _player_node()
 	if p != null:
 		p.set_physics_process(true)
@@ -340,7 +382,6 @@ func screen_mesh() -> MeshInstance3D:
 	return get_node_or_null("Screen") as MeshInstance3D
 
 
-# TODO(坐姿): 用户 2026-10-22 要求「椅子可以坐上去」。现在没有坐姿动画，
-# 把人塞到凳子 (-0.6, 0.60, -1.3) 上会站着穿进凳子，所以这一版**只在桌子前面
-# 站着按 F**。要真坐，得先有一条 sit 动画（或允许掰骨：大腿抬 ~90°、小腿垂下、
-# 骨盆降 0.32 m），并且把 `Player/CameraRig` 的 y 从 1.35 降到 ~0.95。
+# 坐姿说明见 `_seat()`：2026-10-22 用户拍板「即使是待机动画生硬移动到椅子上也没事」，
+# 所以是**站着塞进凳子**（腿会穿模），不掰骨、不做 sit 动画。
+# 想做得好看，需要真的一条 `Sit` 动画（或允许掰骨：大腿 ~90°、小腿垂下、骨盆降 0.32 m）。

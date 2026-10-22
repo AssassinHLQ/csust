@@ -538,7 +538,8 @@ func _build_counter() -> void:
 ## 店员：小空站在柜台后面，朝顾客（-X）。
 func _build_clerk() -> void:
 	var clerk := ShopClerk.new()
-	clerk.name = "ClerkSora"
+	# 2026-10-22 小空 → 芹香（校服版），节点名跟着换；见 `scripts/shop_clerk.gd`
+	clerk.name = "ClerkSerika"
 	clerk.position = Vector3(5.86, 0.0, 0.20)
 	clerk.rotation.y = -PI * 0.5     # 模型朝 +Z → 转 -90° 朝 -X（柜台外侧）
 	add_child(clerk)

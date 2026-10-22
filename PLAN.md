@@ -161,3 +161,11 @@
 ⚠️ 和小空（`sora.glb`，338 骨，手骨名 `hand.l`/`hand.r`，手骨高 0.89/0.69 m）
 **不是同一套 rig**，所以 `scripts/shop_clerk.gd` 换人时要改四处：
 手骨名、动画名、落脚偏移（−0.27 m 要抬起来）、身高缩放（1.39 m 偏矮）。
+
+**✅ 2026-10-22 已换完（校服版）**，改动：
+- `shop_clerk.gd`：`MODEL` → `serika.glb`；手骨名走 `Bip001 L/R Hand`；
+  待机播 `Normal_Idle`；`HaloFix.polish()` 抛光 `Serika_Halo`；
+- 缩放 `MODEL_SCALE = 1.55`、抬高 `CLERK_LIFT = 0.45 m`（**不是**按包围盒算 ——
+  这套 rig 的骨骼在压缩空间里，改 scale 几乎不改变世界高度，实测三次）；
+- 节点 `ClerkSora` → `ClerkSerika`；`CREDITS.md` / `credits.gd` 把小空标成「已停用」。
+- 小空的文件仍留在 `models/npc/sora/`，只是不再上场。
