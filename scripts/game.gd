@@ -1103,6 +1103,22 @@ func _build_room_proxy() -> void:
 		hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
 
 	_build_room_door(proxy, wall_boxes, AABB(lo, hi - lo), wall_mat)
+
+	# ⚠️ 代理必须**双面**渲染。
+	#
+	# 用户 2026-10-22：「初始房间的画室高斯泼溅呢」。实测（探针
+	# `_probe_room_swap.gd` / `_probe_room_splat.gd`）：开机到泼溅解码完
+	# （缓存命中 3.0 s、冷启动更久）这段时间里 `RoomProxy.visible` 本来就是
+	# `true`（配置正确），可**玩家站在屋里看着它却是空的** —— 因为代理是
+	# `BoxMesh` + `StandardMaterial3D`，面朝外、背面剔除，从屋里看全部被剔掉，
+	# 于是「先把实心房间给玩家看」这条设计根本做不到：玩家看到的是一圈被挖掉的
+	# 地板洞 + 洞底透出来的天空，像泼溅“消失”了。
+	# 双面之后，未就绪的那几秒是一个真正实心的米色房间。
+	for node in proxy.find_children("*", "MeshInstance3D", true, false):
+		var mat := (node as MeshInstance3D).material_override as BaseMaterial3D
+		if mat != null:
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
 	_room_proxy = proxy
 	_room_box = AABB(lo, hi - lo)
 	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [

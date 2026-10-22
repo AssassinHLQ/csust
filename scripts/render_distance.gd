@@ -27,12 +27,19 @@ extends Node
 ##   那是下一期的事（`Game/Parkour` 本来就是 `parkour.tscn` 的实例，
 ##   所以不用改 `game.tscn` 也能做，但会重置跑酷进度，得先跟用户确认）。
 ##
-## ── 为什么 `_authored` 要记「原始可见性」──
-##   跑酷的移动平台/发射台会自己改 `visible`。如果裁切恢复时一律写 `true`，
-##   那些「本来就该隐藏」的东西会在走近时冒出来。所以第一次碰到某个簇时先记下
-##   它当时的 `visible`，之后恢复的是**那个值**，不是 `true`。
-##   ⚠️ 已知取舍：藏起来期间如果游戏自己改了 `visible`，我们记的原始值会过期，
-##      走近时恢复成旧值。目前没有这种用法（会改可见性的都是跑酷机关，全在 60 m 内）。
+## ── 只碰「我们自己藏起来的」（`_hidden`）──
+##   跑酷的移动平台/发射台会自己改 `visible`；房间代理/泼溅更是**每帧**被
+##   `game.gd::_update_room_swap()` 改。所以本节点**绝不主动把东西设成可见**：
+##      · 想显示 → 只把 `_hidden` 里记着的放回去，没藏过的一律不碰
+##      · 想裁掉 → 记下它当时的 `visible` 再设 `false`
+##
+##   ⚠️ 2026-10-22 的教训（用户：「初始房间的画室高斯泼溅呢」）：第一版是
+##      「每个簇记一次 `_authored`，之后每 tick 恢复那个值」—— 于是
+##      `RoomProxy` 在开机剧本里被记成 `true`，`RenderDistance._process` 又排在
+##      `game._process` **后面**（父节点先跑），每 0.1 s 把
+##      `_update_room_swap()` 刚藏掉的方盒房间代理写回 `true`，
+##      玩家站在屋里看到的永远是那个米色盒子、泼溅被它整块挡住。
+##      「恢复原值」和「每帧都写」凑在一起就是这个结果，所以改成只恢复自己藏的。
 
 ## 一个簇的包围盒对角线上限（m）。60 m ≈ 跑酷路线里两个检查点之间，
 ## 也远大于商店（对角 ≈ 15 m）和任何一只角色（≈ 2 m），所以它们各自成簇。
@@ -49,7 +56,8 @@ var root: Node3D
 var stats := {}
 
 var _acc := 0.0
-var _authored := {}
+## 我们**压下去的**簇：id → 压之前它自己的 `visible`（可能是 `false`，见文件头）
+var _hidden := {}
 var _last_key := ""
 
 
@@ -62,8 +70,10 @@ func watch(game: Node3D) -> void:
 
 
 func rebuild() -> void:
+	# 重建之前先把藏起来的放回去，否则那些簇会永远停在 `visible = false`
+	if not _hidden.is_empty():
+		_restore_hidden()
 	clusters.clear()
-	_authored.clear()
 	if root != null:
 		_collect(root, 0)
 	var meshes := 0
@@ -111,11 +121,18 @@ func _apply(_dt: float, force: bool) -> void:
 			visible_clusters += 1
 			visible_meshes += int(c["meshes"])
 		var id := node.get_instance_id()
-		if not _authored.has(id):
-			_authored[id] = node.visible
-		var want: bool = bool(_authored[id]) if show else false
-		if node.visible != want:
-			node.visible = want
+		if show:
+			# 只放回**我们自己藏的**；没藏过的簇一概不碰（它有可能是游戏自己在管）
+			if _hidden.has(id):
+				var authored: bool = bool(_hidden[id])
+				_hidden.erase(id)
+				if node.visible != authored:
+					node.visible = authored
+		else:
+			if not _hidden.has(id):
+				_hidden[id] = node.visible
+			if node.visible:
+				node.visible = false
 	stats = {
 		"clusters": clusters.size(),
 		"meshes": _total_meshes(),
@@ -130,6 +147,15 @@ func _apply(_dt: float, force: bool) -> void:
 		print("[距离] %.0f m：可见 %d/%d 簇、%d/%d 网格"
 			% [far, visible_clusters, clusters.size(),
 				visible_meshes, int(stats["meshes"])])
+
+
+## 把 `_hidden` 里的簇全部放回它们被压之前的样子。
+func _restore_hidden() -> void:
+	for id in _hidden.keys():
+		var n := instance_from_id(id) as Node3D
+		if is_instance_valid(n):
+			n.visible = bool(_hidden[id])
+	_hidden.clear()
 
 
 func _camera() -> Camera3D:
