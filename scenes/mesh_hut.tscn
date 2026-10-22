@@ -110,15 +110,15 @@ size = Vector3(0.2, 3.4, 0.2)
 use_collision = true
 
 [node name="Walls" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.25, 0)
-size = Vector3(6.6, 2.5, 5.6)
+position = Vector3(0, 2.85, 0)
+size = Vector3(6.6, 5.7, 5.6)
 material = SubResource("Mat_wall")
 
 ; 掏空：比外壳小 0.2（= 墙厚），但**上下都捅穿** —— 上捅穿是为了让屋顶当盖子，
 ; 下捅穿是为了**不留地板**（见文件头第 1 个坑）。
 [node name="Cavity" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.5, 0)
-size = Vector3(6.2, 3.4, 5.2)
+position = Vector3(0, 2.9, 0)
+size = Vector3(6.2, 6.6, 5.2)
 operation = 2
 
 ; 门：开在 −X 墙（朝平台中心，玩家从那边过来正好看见门）。
@@ -147,10 +147,24 @@ size = Vector3(0.6, 0.9, 1.2)
 operation = 2
 material = SubResource("Mat_trim")
 
+; 加高到 5.7 m 之后，二层不能是整面白墙 —— 同样的窗在 y = 4.05 再开一排。
+; ⚠️ 必须仍然排在 Roof **之前**（减法要在盖子之前算）。
+[node name="WindowC" type="CSGBox3D" parent="Hut"]
+position = Vector3(0, 4.05, 2.8)
+size = Vector3(1.2, 0.9, 0.6)
+operation = 2
+material = SubResource("Mat_trim")
+
+[node name="WindowD" type="CSGBox3D" parent="Hut"]
+position = Vector3(3.3, 4.05, 0)
+size = Vector3(0.6, 0.9, 1.2)
+operation = 2
+material = SubResource("Mat_trim")
+
 ; 屋顶：7.40 × 6.40（比墙大 0.40×0.80，四周挑檐），底面 y = 2.50 = 墙顶。
 ; 它是**盖子**，必须排在掏空和门窗之后，否则中间会被掏穿。
 [node name="Roof" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 2.6, 0)
+position = Vector3(0, 5.8, 0)
 size = Vector3(7.4, 0.2, 6.4)
 material = SubResource("Mat_roof")
 

@@ -50,12 +50,13 @@ const HAND_BONES := {
 ##    实际渲染高度就是 `1.39 × scale`（`1.39` 是她自己的包围盒高度）。
 ##    现在按设定身高给：芹香 152 cm → `1.52 / 1.39 = 1.09`；
 ##    抬脚 = 模型原点那个 −0.27 的偏移 × 缩放 = 0.294（脚正好踩在 y = 0）
-##    **再加 0.22 m 的「看不见的垫脚箱」**：柜台台面 1.04 m，脚踩在地上时
-##    实拍（`_knob/clerk_xm.png`）只剩一个脑袋露在台面上，像个小孩扒柜台。
-##    柜台柜体本身 0.86 m 高，加这 0.22 从任何角度都看不到脚 ——
-##    头顶变成 1.74 m，露到胸口，是正常店员的观感。
+##    ⚠️ 2026-10-22 晚再修：本喵一度又加了 0.22 m 的「隐形垫脚箱」，用户从柜台侧面
+##    一眼就看见**她的脚悬空 0.218 m**（`_probe_face_hut.gd` 量到 AABB 底 y=0.218）。
+##    现在抬脚只留模型自己的原点偏移，**脚底 y = 0.000**，绝不悬空。
+##    代价（实话实说）：柜台台面 1.04 m 比她的下巴（≈1.10 m）还高，从顾客那侧只露一个头。
+##    要露更多只有两条路：柜台降高，或者给她脚下垫一块**看得见**的踏板。
 const MODEL_SCALE := 1.09
-const CLERK_LIFT := 0.514
+const CLERK_LIFT := 0.294
 
 ## 整只模型左右轻晃的幅度（没有 Idle 动画时的退路；芹香有动画，默认不晃）
 @export var idle_sway := false
@@ -97,6 +98,7 @@ func _ready() -> void:
 					* skeleton.get_bone_global_pose(idx).origin).y
 	# 光环抛光（和玩家/同伴那 8 顶一样的处理：受光 + 自发光 0.8 + 不投阴影）
 	HaloFix.polish(model)
+	_apply_smile()
 	_play_idle()
 	print("[Clerk] 芹香就位：%s（骨架 %d 骨，缩放 %.2f×，抬脚 %.2f m，手骨高度 L=%.2f R=%.2f m，动画 %s）" % [
 		MODEL.get_file(), bone_count, fit_scale, ground_lift,
@@ -139,6 +141,46 @@ func _play_idle() -> void:
 			_idle = ap
 			_idle_name = want
 			return
+
+
+## 换成微笑。
+##
+## ⚠️ 芹香没有形态键式的表情系统：10 个 `Mouth_*` 网格**几何完全相同**（同一个四边形），
+##    差别只在材质里的那张 128×128 嘴型贴图；当前生效的是 `Mouth_607`（白色大「o」，
+##    惊讶脸，就是用户看到的那张）。
+##    实测把这 10 个的形态键权重怎么改，屏幕上都是同一张嘴（嘴不是靠形变切出来的），
+##    所以最稳的做法是——**把想要的那张嘴贴图，铺给全部 10 个材质**。
+##    这样不管最后是哪一个网格在画，画出来都是微笑。
+##
+##    选 `Mouth_406`：那是一条很长的、两端上翘的细弧线（`_mouth_tex_sheet.png` 里
+##    第 3 张），是这十张里唯一的「抿嘴微笑」；401 是平线、602 是「∧」、600/601/701/703
+##    都是大张嘴，607 是惊讶。贴图不能选错，换之前先看那张对照表。
+const SMILE_MOUTH := "Mouth_406"
+
+
+func _apply_smile() -> void:
+	var mouths := model.find_children("Mouth*", "MeshInstance3D", true, false)
+	if mouths.is_empty():
+		return
+	var src: MeshInstance3D = null
+	for m in mouths:
+		if String(m.name) == SMILE_MOUTH:
+			src = m as MeshInstance3D
+			break
+	if src == null:
+		return
+	var src_mat := src.get_active_material(0) as StandardMaterial3D
+	if src_mat == null or src_mat.albedo_texture == null:
+		return
+	var tex := src_mat.albedo_texture
+	var n := 0
+	for m in mouths:
+		var mat := (m as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+		if mat == null:
+			continue
+		mat.albedo_texture = tex
+		n += 1
+	print("[Clerk] 嘴型统一成 %s 的微笑贴图（%d 个嘴型网格）" % [SMILE_MOUTH, n])
 
 
 func _replay_idle(anim_name: StringName) -> void:
