@@ -1,7 +1,11 @@
 extends SceneTree
-## 渲图探针：① 爱丽丝走路时枪背在身后（两个机位）  ② 芹香 `Cafe_Idle` 不拿枪
+## 渲图探针：① 爱丽丝走路时（`Cafe_Walk`）手上/身上有没有枪  ② 芹香 `Cafe_Idle` 不拿枪
 ##   godot --path . --script res://scripts/_probe_gun_back_shot.gd -- --splat=off
 ## 输出：_arisu_captures/_gun/{back,side,clerk}.png
+##
+## 注：2026-10-22 用户要求**回退**「走路把枪背到身后」（见 `anim_driver.gd` 里
+## 已删掉的 `_back_gun()`，原提交 839cc88）。所以现在 back/side 两张应该是
+## **完全看不到枪** —— 素材 `Cafe_Walk` 会把武器骨缩到 ≈0.038 藏起来。
 
 func _initialize() -> void:
 	_run.call_deferred()

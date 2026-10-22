@@ -4,7 +4,8 @@
 
 | 文件 | 尺寸 | 来源 | 许可 / 权利 | 状态 |
 |---|---|---|---|---|
-| `7zip.svg` | 24×24 矢量 | [Simple Icons](https://simpleicons.org/) `7zip.svg` | **CC0 1.0**（著作权放弃） | ✅ 社区重绘的单色版，不是 7-Zip 官方位图 |
+| `7zip.svg` | 24×24 矢量 | [Simple Icons](https://simpleicons.org/) `7zip.svg` | **CC0 1.0**（著作权放弃） | ✅ 单色符号版，形状与原版一致（描过同一字形），默认用它 |
+| `7zip_official.png` | 110×63 RGBA | 本机 `C:\Program Files\7-Zip\7zFM.exe` 的 `RT_GROUP_ICON 100` 抠出 | 7-Zip 商标，见下方 § | ✅ 官方原版字形（黑「7」块 + 白 ZIP 块），**只有 110×63，别再放大** |
 | `github.svg` | 24×24 矢量 | 同上 `github.svg` | **CC0 1.0**（著作权放弃） | ✅ |
 | `ollama.svg` | 24×24 矢量 | 同上 `ollama.svg` | **CC0 1.0**（著作权放弃） | ✅ |
 | `hashcat.png` | 256×256 RGBA | **用户 2026-10-22 提供**（原 128×128） | 图标版权归 hashcat 作者（软件本身是 MIT，**图标不在 MIT 里**） | ✅ 已裁掉白边 + 自己切 22% 圆角 |
@@ -43,6 +44,26 @@ var hc: Texture2D = load("res://assets/icons/hashcat.png")    # 位图，按原�
 
 ## 还差什么
 
-- **7-Zip 官方图标**是位图（`7zFM.exe` 内的 ico），这里用的是 Simple Icons 的社区
-  重绘版（单色、更干净）；要原版得从 7-Zip 安装目录抠。
+- **7-Zip 没有 256×256 的官方位图**：`7zFM.exe` / `7zG.exe` / `7-zip.dll` 里最大的
+  `RT_ICON` 就是 **48×48**，另有一个 110×63 的 `RT_GROUP_ICON 100`（本目录的
+  `7zip_official.png` 就是它，未经缩放）。要更大只能拿官方矢量重描。
+  用户 2026-10-22 给的那张 **dreamstime 水印图不能直接用**（四个角全是水印 +
+  `ID 2559952563`），只当字形参考，存在仓库外的
+  `C:\Users\WY157\Desktop\GODOT\_icon\ref\7zip_stock_dreamstime_watermarked.png`。
 - **知天下**建议再向主办方要一份**矢量**（SVG/AI），现在这张 700×700 放大到 4K 会糊。
+
+## 7-Zip 图标的来源与风险（2026-10-22）
+
+用户问「这个也存着」，给的是 dreamstime 的商业图库预览图 —— 那种图带水印，
+**不能进仓库、不能上屏**。替代方案是本喵从本机已装的 7-Zip 里直接抠图标：
+
+```bash
+python _tools/extract_7zip_icon.py "C:/Program Files/7-Zip/7zFM.exe" _icon/from_exe
+```
+
+脚本做的事：解析 PE 的 `.rsrc`，把 `RT_GROUP_ICON` + 一组 `RT_ICON` **重新拼成
+标准 `.ico`**，再交给 Pillow 解码（BMP 型条目的 AND 蒙版不用自己解）。
+
+⚠️ 法律上跟 Simple Icons 那两个一样：**这是商标，不是免费素材**。当游戏里的
+「工具墙」图标可以（描述性使用），别当成自己产品的标识。
+
