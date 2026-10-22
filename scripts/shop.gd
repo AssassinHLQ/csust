@@ -321,8 +321,13 @@ func _build_shell() -> void:
 		_mat["wall"])
 	_box("WallEast", Vector3(L * 0.5 - t * 0.5, wall_y, 0.0), Vector3(t, wall_h, D),
 		_mat["wall"])
-	_box("WallSouth", Vector3(0.0, wall_y, -D * 0.5 + t * 0.5), Vector3(L, wall_h, t),
-		_mat["wall"])
+	# ⚠️ 2026-10-22 用户：「灰色柱子与白墙重叠了的面闪烁还没有解决」。
+	#    探针 `_probe_zfight.gd` 在全店 86 个网格里只找到 4 组「面共面且面积重叠」
+	#    的对，就是四个墙角：`WallWest/WallEast` 的**端面**和 `WallSouth` 的**外表面**
+	#    都在 x = ±L/2 上，重叠 1.008 m²（= 0.2 × 5.04，整块端面）。
+	#    修法：南墙**缩到两侧墙的内表面之间**（L − 2t），变成对接缝，不再压着墙角。
+	_box("WallSouth", Vector3(0.0, wall_y, -D * 0.5 + t * 0.5),
+		Vector3(L - t * 2.0, wall_h, t), _mat["wall"])
 
 	# 北墙 = 店面：**通高玻璃幕墙**
 	#
@@ -356,8 +361,9 @@ func _build_shell() -> void:
 			Vector3(sx * (bay_x0 + bay_w * 0.5), 0.1 - e * 0.5 + glass_h * 0.5, z_out),
 			Vector3(bay_w, glass_h, 0.06), _mat["glass"])
 	# 门头横梁（细条）：门洞顶 → 幕墙下沿
+	# 横梁 / 顶部压条的长度也收到两侧墙之内（原来 L 正好和侧墙外表面同面，端头会闪）
 	_box_decor("Transom", Vector3(0.0, head_h + 0.05, z_out),
-		Vector3(L, 0.16, t + 0.02), _mat["trim"])
+		Vector3(L - t * 2.0, 0.16, t + 0.02), _mat["trim"])
 	# 上部幕墙玻璃：门头以上一直到顶部压条
 	for sx in sides:
 		_box_decor("CurtainGlass%s" % ("W" if sx < 0.0 else "E"),
@@ -383,7 +389,7 @@ func _build_shell() -> void:
 				Vector3(0.08, upper_y1 - upper_y0 + e * 2.0, 0.10), _mat["trim"])
 	# 顶部压条：幕墙顶边 → 屋顶（上沿插进屋顶 2 cm，避免共面）
 	_box_decor("HeadBand", Vector3(0.0, H - top_band * 0.5 + e * 0.5, z_out),
-		Vector3(L, top_band + e, t + 0.02), _mat["trim"])
+		Vector3(L - t * 2.0, top_band + e, t + 0.02), _mat["trim"])
 
 	# 天花板顶板：铺满内框（两侧压进墙里 3 cm），上沿顶进屋顶 1 cm
 	_box_decor("Ceiling", Vector3(0.0, H - 0.02, 0.0),

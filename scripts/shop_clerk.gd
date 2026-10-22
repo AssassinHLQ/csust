@@ -100,6 +100,7 @@ func _ready() -> void:
 	HaloFix.polish(model)
 	_apply_smile()
 	_play_idle()
+	_make_body()
 	print("[Clerk] 芹香就位：%s（骨架 %d 骨，缩放 %.2f×，抬脚 %.2f m，手骨高度 L=%.2f R=%.2f m，动画 %s）" % [
 		MODEL.get_file(), bone_count, fit_scale, ground_lift,
 		float(hand_y.get("l", -1.0)), float(hand_y.get("r", -1.0)),
@@ -141,6 +142,26 @@ func _play_idle() -> void:
 			_idle = ap
 			_idle_name = want
 			return
+
+
+## 碰撞：玩家不能穿过她。
+##
+## 用户 2026-10-22：「芹香需要有碰撞」。
+## 用胶囊（半径 0.26、总高 1.45、中心 y=0.75 → 脚 0.025、头顶 1.475），
+## 挂在 `ShopClerk` 自己下面，所以柜台挪窝时她跟着走。
+## 碰撞层用默认的 1（和商店的墙、柜台、货架一致）—— 玩家的 `CharacterBody3D`
+## 的 mask 里本来就包含第 1 层，不用改任何工程设置。
+func _make_body() -> void:
+	var body := StaticBody3D.new()
+	body.name = "ClerkBody"
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.26
+	cap.height = 1.45
+	cs.shape = cap
+	cs.position = Vector3(0.0, 0.75, 0.0)
+	body.add_child(cs)
+	add_child(body)
 
 
 ## 换成微笑。

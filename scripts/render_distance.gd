@@ -112,8 +112,10 @@ func _apply(_dt: float, force: bool) -> void:
 		var node: Node3D = c["node"]
 		if not is_instance_valid(node):
 			continue
-		var center: Vector3 = c["center"]
 		var radius: float = c["radius"]
+		# 现算世界盒子（节点可能是会动的角色），球心取盒子中心
+		var world_aabb: AABB = node.global_transform * (c["local_aabb"] as AABB)
+		var center := world_aabb.get_center()
 		# 球的最近点到摄像机的距离；负值（摄像机在球内）直接算 0
 		var d := maxf(0.0, center.distance_to(cam_pos) - radius)
 		var show := d <= far
@@ -196,10 +198,19 @@ func _collect(n: Node3D, depth: int) -> bool:
 	return true
 
 
+## 簇的包围盒**存成节点局部坐标**，不是世界坐标。
+##
+## ⚠️ 2026-10-22 用户：「渲染距离调到 400，跑到内存条那里突然看不见自己人了」。
+##    原因是第一版把世界 AABB 的**球心**缓存下来了：玩家/同伴/Boss 是**会动**的，
+##    簇心永远停在开机时的位置（出生点附近）。人跑到 480 m 外的内存条市场，
+##    「簇心到摄像机」= 480 m > 400 m → 判成裁掉 → **玩家自己的模型消失**。
+##    改成存局部 AABB：每 tick 现算 `node.global_transform * local_aabb`，
+##    动的节点跟着动，不动的节点算出来和原来一样。
+##    半径仍然用**局部对角线的一半**：球在任意旋转下都能罩住盒子，所以不用重算。
 func _make_cluster(n: Node3D, a: AABB, diag: float) -> Dictionary:
 	return {
 		"node": n,
-		"center": a.get_center(),
+		"local_aabb": n.global_transform.affine_inverse() * a,
 		"radius": diag * 0.5,
 		"meshes": _count_meshes(n),
 	}
