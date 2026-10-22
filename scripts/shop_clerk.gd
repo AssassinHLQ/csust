@@ -41,16 +41,21 @@ const HAND_BONES := {
 	"l": ["Bip001 L Hand", "hand.l"],
 	"r": ["Bip001 R Hand", "hand.r"],
 }
-## 抬高到能露出柜台（米）。
+## 尺寸与抬脚（米）。
 ##
-## ⚠️ 为什么是「抬高」而不是「缩放」：实测**改 `scale` 几乎不改变她的世界高度**
-##    （1.113× 时 `Bip001 Head` 世界 y=0.84，1.55× 时反而是 0.75）——
-##    这套 rig 的骨头处在压缩空间里，蒙皮网格最终落在哪由骨骼矩阵决定，
-##    节点 scale 只把这套矩阵整体缩了一点，位置基本不动。
-##    结果就是不管怎么缩，她站在台面 1.05 m 的柜台后面只剩天灵盖（实拍三次）。
-##    所以直接抬起来：脚下等于踩了一个看不见的垫脚箱（玩家看不到柜台后面）。
-const MODEL_SCALE := 1.55
-const CLERK_LIFT := 0.45
+## ⚠️ 2026-10-22 晚修正：这两个数原来是 `1.55` / `0.45`，实测**她变成 2.20 m 高**
+##    （`_probe_three.gd`：世界 AABB 底 0.029、顶 2.226）—— 站在 1.04 m 的柜台后面
+##    比爱丽丝（1.47 m）高出一大截，用户一眼看出「芹香站这么高」。
+##    上一版以为「改 scale 几乎不改变世界高度」，是被**绑定姿态 AABB** 骗了；
+##    实际渲染高度就是 `1.39 × scale`（`1.39` 是她自己的包围盒高度）。
+##    现在按设定身高给：芹香 152 cm → `1.52 / 1.39 = 1.09`；
+##    抬脚 = 模型原点那个 −0.27 的偏移 × 缩放 = 0.294（脚正好踩在 y = 0）
+##    **再加 0.22 m 的「看不见的垫脚箱」**：柜台台面 1.04 m，脚踩在地上时
+##    实拍（`_knob/clerk_xm.png`）只剩一个脑袋露在台面上，像个小孩扒柜台。
+##    柜台柜体本身 0.86 m 高，加这 0.22 从任何角度都看不到脚 ——
+##    头顶变成 1.74 m，露到胸口，是正常店员的观感。
+const MODEL_SCALE := 1.09
+const CLERK_LIFT := 0.514
 
 ## 整只模型左右轻晃的幅度（没有 Idle 动画时的退路；芹香有动画，默认不晃）
 @export var idle_sway := false
@@ -68,6 +73,7 @@ var fit_scale := 1.0
 
 var _t := 0.0
 var _idle: AnimationPlayer
+var _idle_name := ""
 
 
 func _ready() -> void:
@@ -107,16 +113,38 @@ func _fit(root: Node3D) -> void:
 	root.position.y = ground_lift
 
 
+## 播待机动画，并且**让它真的循环**。
+##
+## ⚠️ 用户 2026-10-22：「为什么芹香站这么高**也不动**」。
+##   实测（`_probe_three.gd`）：`Cafe_Idle` 播了，`is_playing() == true`，
+##   长度 1.667 s、140 条轨道、89 条有 >1 个关键帧 —— 但 `loop_mode` 是
+##   **0（LOOP_NONE）**，`current_animation_position` 停在 1.659 s：
+##   她播完第一遍就定格在最后一帧，看起来就是一根不动的桩。
+##   glb 里带来的动画默认不循环，`.play()` 也不会替你打开。
 func _play_idle() -> void:
 	for n in model.find_children("*", "AnimationPlayer", true, false):
 		var ap := n as AnimationPlayer
 		var list := ap.get_animation_list()
 		for want in IDLE_CLIPS:
-			if list.has(want):
-				ap.play(want)
-				ap.speed_scale = 1.0
-				_idle = ap
-				return
+			if not list.has(want):
+				continue
+			var anim := ap.get_animation(want)
+			if anim != null:
+				anim.loop_mode = Animation.LOOP_LINEAR
+			ap.play(want)
+			ap.speed_scale = 1.0
+			# 万一这条动画是只读资源（改不动 loop_mode），播完再自己续上
+			if not ap.animation_finished.is_connected(_replay_idle):
+				ap.animation_finished.connect(_replay_idle)
+			_idle = ap
+			_idle_name = want
+			return
+
+
+func _replay_idle(anim_name: StringName) -> void:
+	if _idle == null or anim_name != _idle_name:
+		return
+	_idle.play(anim_name)
 
 
 func _process(delta: float) -> void:

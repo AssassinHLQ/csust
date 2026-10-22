@@ -1284,13 +1284,20 @@ func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: M
 	# 横条宽度 = 洞口 + 两根竖条（不多那 2 cm），端头与竖框外沿齐平，不再探出小尾巴
 	_put_door_box(proxy, "DoorFrameT", axis, n_face, door_top, door_top + bar,
 		center, gap + bar, bar_d, frame_mat)
-	# 把手：一颗小圆柱，让这块黄板一眼看得出是「门」而不是刷了漆的墙
+	# 把手：一颗小圆柱，让这块黄板一眼看得出是「门」而不是刷了漆的墙。
+	#
+	# ⚠️ 2026-10-22 用户：「门把手怎么没有沾到门上」—— 老代码把它放在
+	#    `outer + out_sign * 0.10`（墙**外表面**再往外 10 cm），可门扇是缩在墙厚
+	#    中间的：门板外表面在 `plane + thick/2 = plane + 0.04`，墙外表面在
+	#    `outer = plane + 0.15`。于是把手悬空在门板外面 **0.21 m**，
+	#    从侧面看就是一颗浮在门框边的木块。
+	#    现在改成从**门板外表面**长出来，长度缩短到 0.12 m，横向离门边 0.30 m（再靠外会顶到门框竖条）。
 	var knob := MeshInstance3D.new()
 	knob.name = "DoorKnob"
 	var km := CylinderMesh.new()
 	km.top_radius = 0.045
 	km.bottom_radius = 0.045
-	km.height = 0.16
+	km.height = 0.12
 	km.radial_segments = 10
 	knob.mesh = km
 	var kmat := StandardMaterial3D.new()
@@ -1299,9 +1306,20 @@ func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: M
 	kmat.roughness = 0.45
 	knob.material_override = kmat
 	proxy.add_child(knob)
-	knob.global_position = _door_point(axis, outer + out_sign * 0.10, floor_y + 1.05,
-		center + w * 0.30)
+	knob.global_position = _door_point(axis,
+		plane + out_sign * (thick * 0.5 + km.height * 0.5), floor_y + 1.05,
+		center + (w * 0.5 - 0.30))
 	knob.global_rotation = Vector3(0, 0, PI * 0.5) if axis == 0 else Vector3(PI * 0.5, 0, 0)
+	# 门内侧也来一颗（真人站在屋里看门时，门板上也得有个把手，不然门内那面就是块光板）
+	var knob_in := MeshInstance3D.new()
+	knob_in.name = "DoorKnobIn"
+	knob_in.mesh = km
+	knob_in.material_override = kmat
+	proxy.add_child(knob_in)
+	knob_in.global_position = _door_point(axis,
+		plane - out_sign * (thick * 0.5 + km.height * 0.5), floor_y + 1.05,
+		center + (w * 0.5 - 0.30))
+	knob_in.global_rotation = knob.global_rotation
 	print("[Game] 609 门洞（没有碰撞盒的那一段）：%s 面 %.2f ~ %.2f，宽 %.2f m，中心 %.2f" % [
 		String(door["side"]), t_lo, t_hi, gap, center])
 	print("[Game] 609 门板：%.2f × %.2f m（门楣补齐到墙顶，比洞口每边多 %.2f m，无碰撞）"
