@@ -1,5 +1,8 @@
 class_name Player
 extends CharacterBody3D
+
+## 上台阶辅助。用 `preload` 而不是 `class_name` 引用 —— 见 `step_climb.gd` 文件头第一条。
+const StepClimb := preload("res://scripts/step_climb.gd")
 ## 第三人称主角控制器。
 ##
 ## 输入：
@@ -285,6 +288,8 @@ const JUMP_COYOTE_MS := 100.0
 var _jump_at := -99999.0        ## 上次按下跳跃键的毫秒时刻
 var _air_since := -99999.0      ## 上次离地的毫秒时刻
 var _was_on_floor := true       ## 上一帧的 `is_on_floor()`
+## 上一帧「想走却没走动」—— 上台阶只在被挡住时才试（见 `step_climb.gd`）
+var _blocked_last_frame := false
 
 
 func _physics_process(delta: float) -> void:
@@ -341,7 +346,21 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = horiz.x
 	velocity.z = horiz.z
+	# 上台阶：`CharacterBody3D` 自己不会，Godot 也没有内置开关（见 `step_climb.gd`）。
+	#
+	# 顺序要紧 —— **先抬上去、再 `move_and_slide()`**：先把人放到台阶顶面，
+	# 这一帧的滑移就在平地上做，不会撞到踢面；反过来先滑再抬，这一帧已经被挡住，
+	# 抬起来也只剩 0 位移可用。
+	#
+	# 只在「上一帧想走却没走动」时才试，所以平地上零开销、原手感一点不动
+	# （`_verify_move_feel.gd` 那套断言照旧）。
+	var before := global_position
+	if _blocked_last_frame and horiz.length_squared() > 0.01:
+		StepClimb.try_step(self, horiz * delta)
+		before = global_position
 	move_and_slide()
+	_blocked_last_frame = StepClimb.blocked(
+		global_position - before, horiz * delta)
 
 	# --- 角色朝向：开火/开镜时必对准准星，否则对着移动方向 ---
 	#

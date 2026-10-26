@@ -572,6 +572,8 @@ func _ready() -> void:
 	_build_computer()
 	# 新区域：商店（初始小屋右边、跨出平台铺一块地板，见 scripts/shop.gd）
 	_build_shop()
+	# 新区域：蒙德里安大楼（商店正对面，见 scripts/mondrian_house.gd）
+	_build_mondrian()
 
 	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
 	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
@@ -665,6 +667,11 @@ func _ready() -> void:
 const STANDBY_SCENE := "res://scenes/bosses_standby.tscn"
 ## 新区域：商店（初始小屋右边，跨出平台铺一块地板）。见 `scripts/shop.gd`。
 const SHOP_SCENE := "res://scenes/shop.tscn"
+## 蒙德里安大楼（两层，商店正对面）。位置的理由写在 `_build_mondrian()` 上面那段：
+## 北墙 z = −8.00 与商店门（z = −12.70）留 4.70 m 走道；东西 x 21.00 ~ 37.00
+## 全落在商店地板 Deck（x 20.01 ~ 40.00）之内，脚下不悬空。
+const MONDRIAN_SCENE := "res://scenes/mondrian_house.tscn"
+const MONDRIAN_POS := Vector3(29.0, 0.0, -2.0)
 
 
 ## 解析 `--bosses=`：返回空数组 = 不加。
@@ -900,6 +907,37 @@ func _build_shop() -> void:
 	shop.auto_build = false
 	add_child(shop)
 	shop.build()
+
+
+## 新区域「蒙德里安大楼」：**商店正对面**的两层大房子
+## （`scenes/mondrian_house.tscn` + `scripts/mondrian_house.gd`）。
+##
+## ── 用户 2026-10-26 原话 ──
+## 「新建场景，进入入口在这个商店对面建个大房子，要有一二层，使用蒙德里安风格建筑做」
+##
+## ── 摆在哪、为什么是这个数 ──
+## `_probe_mondrian_site.gd` 现场量的：
+##   商店墙体 x 20.70 ~ 33.90、z −18.30 ~ −12.70；门在南墙 z = −12.70、中心 x = 27.30；
+##   商店地板 Deck 铺到 x 20.01 ~ 40.00、z −20.00 ~ +20.00。
+##   商店南门外 z −10 ~ +18 的整片区域，从上往下打射线**全是 y ≈ 0 的平地、零障碍**。
+## 大楼半深 6.00、半宽 8.00，所以摆在 (29, 0, −2)：
+##   北墙外表面 z = −8.00 → 与商店门留 **4.70 m** 走道，出门直走几步就进大门；
+##   东西墙 x 21.00 ~ 37.00 → 全部落在 Deck 的 x 20.01 ~ 40.00 之内（脚下不悬空）；
+##   南墙 z = +4.00 → 离 Deck 南沿（+20.00）还有 16 m 余量。
+func _build_mondrian() -> void:
+	var ps := load(MONDRIAN_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] 找不到 %s，蒙德里安大楼不建" % MONDRIAN_SCENE)
+		return
+	var house := ps.instantiate() as MondrianHouse
+	if house == null:
+		push_warning("[Game] %s 的根节点不是 MondrianHouse" % MONDRIAN_SCENE)
+		return
+	house.name = "MondrianHouse"
+	house.position = MONDRIAN_POS
+	house.auto_build = false
+	add_child(house)
+	house.build()
 
 
 ## 渲染距离（Minecraft 式「远处不渲染」）。用户 2026-10-22 计划第 2 条。
