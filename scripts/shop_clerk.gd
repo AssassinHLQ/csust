@@ -286,7 +286,9 @@ func _make_hint() -> void:
 	_hint.no_depth_test = true
 	_hint.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_hint.shaded = false
-	_hint.position = Vector3(0.0, 1.92, 0.0)
+	# 高度 = 她头顶（1.527）再往上 0.20 m。第一版给 1.92，比头顶高 0.39 m，
+	# 在店里那个机位上正好飘到背后货架上面去了，看着跟人没关系。
+	_hint.position = Vector3(0.0, 1.72, 0.0)
 	_hint.visible = false
 	add_child(_hint)
 
