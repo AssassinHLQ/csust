@@ -41,6 +41,16 @@
 # 所以**不能**随仓库分发。本地放进 assets/ui_sprout/ 就会自动启用（否则回退 assets/ui/）。
 /assets/ui_sprout/**
 
+# 背景音乐（现在放的是 UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective）
+# —— 专有版权，**不随仓库分发**。本地把 `assets/music/shop_theme.ogg` 放好即可，
+# 没有它时商店只是没有 BGM，不会报错（`scripts/music.gd` 会 push_warning 一次）。
+# ⚠️ 只排除音频本体，**保留 `shop_theme.ogg.import`** ——
+#    循环开关（`loop=true`）存在那个文件里，克隆者把音频放进来就直接是循环的。
+/assets/music/*.ogg
+/assets/music/*.wav
+!/assets/music/*.ogg.import
+!/assets/music/README.md
+
 # 界面显示字体（现在放的是 Aa 字库的「Aa暗夜深渊」，商用需授权）——
 # 同样**不随仓库分发**。本地丢进 assets/ui_font/ 就自动启用，
 # 没有它时回退 assets/ui/font.ttf（Fusion Pixel，OFL，可分发）。

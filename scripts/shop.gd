@@ -110,6 +110,7 @@ func build() -> void:
 	_build_shell()
 	_build_interior()
 	_build_lights()
+	_build_music_zone()
 	_report()
 
 
@@ -652,6 +653,55 @@ func _box_standing(node_name: String, xz: Vector2, size: Vector3, mat: Material)
 
 
 # ══════════════════════════ 记账 ══════════════════════════
+
+# ══════════════════════════ 商店 BGM ══════════════════════════
+#
+# 用户 2026-10-26：「UNDERTALE Tem Shop ... 商店音乐，只要前面四十秒，这样子才能循环」。
+#
+# 做法：店里放一个 Area3D，玩家进来就淡入 BGM、出去就淡出。
+#   · 为什么用 Area3D 而不是每帧算距离：Area 由物理引擎管，玩家传送/掉落/走进走出
+#     都能收到 entered/exited，不用自己判边界；而且只在状态变化时才回调，零常态开销。
+#   · 层设置和「召唤台」一致：`collision_layer = 0`（自己不被撞）、
+#     `collision_mask = 1`（只感应世界层，玩家在第 1 层）。
+#   · 盒子比墙**内缩 0.6 m**：贴着墙走不该忽开忽关，也给淡入淡出留一点余量。
+const MUSIC_TRACK := "shop"
+
+var _music_area: Area3D
+var _music_inside := 0
+
+
+func _build_music_zone() -> void:
+	var area := Area3D.new()
+	area.name = "MusicZone"
+	area.collision_layer = 0
+	area.collision_mask = 1
+	area.monitoring = true
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	# 高度取墙高的 2 倍、中心抬到一半：玩家怎么跳都在里面
+	box.size = Vector3(shop_len - 0.6, shop_height * 2.0, shop_depth - 0.6)
+	cs.shape = box
+	cs.position = Vector3(0.0, shop_height, 0.0)
+	area.add_child(cs)
+	add_child(area)
+	# ⚠️ 用「计数」而不是布尔：玩家被瞬移时可能先 entered B 再 exited A，
+	#    布尔量会在同一帧里被后到的 exited 抹掉，出现「人在店里音乐却停了」。
+	area.body_entered.connect(_on_music_body.bind(1))
+	area.body_exited.connect(_on_music_body.bind(-1))
+	_music_area = area
+	print("[Shop] BGM 触发区：%.2f × %.2f × %.2f m（曲目 `%s`）" % [
+		box.size.x, box.size.y, box.size.z, MUSIC_TRACK])
+
+
+func _on_music_body(body: Node3D, delta: int) -> void:
+	if not body.is_in_group("player"):
+		return
+	_music_inside = maxi(_music_inside + delta, 0)
+	if _music_inside > 0:
+		Music.play(MUSIC_TRACK)
+	elif _music_inside == 0:
+		Music.stop()
+
 
 func _report() -> void:
 	var p := global_position
