@@ -72,10 +72,12 @@ func _run() -> void:
 	cam.look_at(Vector3(hp.x, 4.2, hp.z), Vector3.UP)
 	await _shoot(cam, out, "front")
 
-	# ② 从商店门口往外看（同机位，但带上商店）
-	cam.fov = 58.0
-	cam.global_position = Vector3(27.30, 1.7, -12.9)
-	cam.look_at(Vector3(hp.x, 3.4, hp.z - 6.0), Vector3.UP)
+	# ② 两栋楼 + 中间 4.70 m 走道（站在两楼之间西侧高处往东看）
+	# ⚠️ 原来站在商店门口（z=-12.9）往 +Z 拍，距离大楼北墙只有 4.9 m、
+	#    楼高 8 m，整屏被立面铺满，既看不到楼也看不到走道。
+	cam.fov = 60.0
+	cam.global_position = Vector3(hp.x - 13.0, 6.5, -9.5)
+	cam.look_at(Vector3(hp.x + 2.0, 4.0, hp.z - 1.0), Vector3.UP)
 	await _shoot(cam, out, "from_shop")
 
 	# ③ 侧面（东北角，看两层关系）
