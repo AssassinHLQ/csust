@@ -105,6 +105,20 @@ func _build_model() -> void:
 	rig.add_child(model)
 	# 本体朝 +Z（见文件头的朝向约定），Rig 保持不动 —— 这里**不要**再补 180°
 	rig.rotation.y = 0.0
+	# ── 脸上的两件事（用户 2026-10-26：「角色眉毛部分多重表情叠加了，
+	#    应该是所有角色都有这个问题」）──
+	#   · `simplify_brows`：这些模型把 2~3 层不同表情的眉毛叠在不同深度上
+	#     （小桃 2 层、小绿 3 层），只留最靠前那层；
+	#   · `separate_face_layers`：脸皮与「眼睛+嘴」那层几乎共面 → 双层线。
+	#   以前这两条**只对玩家调过**（见 `anim_driver.gd`），同伴这边一直是原样。
+	var brow_rep := FaceFix.simplify_brows(model)
+	if bool(brow_rep["applied"]):
+		print("[Companion %s] 眉毛：合并 %d 层 → 留最前面那层（塌掉 %d 个顶点）"
+			% [display_name, int(brow_rep["layers"]), int(brow_rep["collapsed"])])
+	var face_rep := FaceFix.separate_face_layers(model)
+	if int(face_rep["meshes"]) > 0:
+		print("[Companion %s] 脸皮分层：推开 %d 个网格 / %d 个面"
+			% [display_name, int(face_rep["meshes"]), int(face_rep["surfaces"])])
 	# 用户 2026-10-21：「凯伊的碰撞有问题，右偏了两个身位」
 	# → 把偏得离谱的模型水平拖回胶囊轴线（六只正常的不动）
 	_center_model_on_capsule()

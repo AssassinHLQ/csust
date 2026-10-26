@@ -76,6 +76,157 @@ static func _is_face_layer(mat_name: String) -> bool:
 	return false
 
 
+## ── 眉毛：同一张脸上叠了 2~3 层「不同表情的眉」，只留最前面那层 ──
+##
+## 2026-10-26 用户：「角色眉毛部分多重表情叠加了，应该是所有角色都有这个问题」。
+## `_probe_brow_islands.gd` 把 `EyeBrow`/`Eyebrow` surface 的顶点按三角形**连通块**
+## 切开，量出来（局部坐标，这些模型朝 +Z，z 越大越靠前）：
+##
+##   Serika  2 块、**1 层**：z 0.785~0.799                ← 正常（左右各一条）
+##   Momoi   7 块、**2 层**：z 0.680~0.684 / 0.762~0.777
+##   Midori  6 块、**3 层**：z 0.732~0.739 / 0.750~0.753 / 0.769~0.774
+##
+## 也就是说这些模型把**多个表情的眉毛叠在不同深度上**（原游戏是换网格选表情，
+## 导出的 glb 里没人把它们藏起来），于是脸上同时画着 2~3 条眉。
+## 出图对照：`_arisu_captures/_fix1026/brow_momoi_0_原样.png`（两条眉清清楚楚）。
+##
+## 做法：**只保留最靠前那一层**，其余层的顶点**全部塌到保留层的质心** ——
+## 塌成零面积三角形就不再渲染，但**顶点数不变、蒙皮数据不动**（比删顶点安全）。
+##
+## ⚠️ 两条和 `separate_face_layers()` 一样的规矩：
+##    ① 带形态键的网格跳过；
+##    ② 重建时**每个 surface 的材质都要重新挂回去**，否则整块变白。
+##
+## 返回 {applied, meshes, layers, collapsed, kept_z}
+static func simplify_brows(root: Node, layer_eps := 0.01) -> Dictionary:
+	var report := {"applied": false, "meshes": 0, "layers": 0, "collapsed": 0,
+		"kept_z": [] as Array}
+	if root == null:
+		return report
+	for mi in _all_meshes(root):
+		var am := mi.mesh as ArrayMesh
+		if am == null:
+			continue
+		if am.get_blend_shape_count() > 0:
+			continue
+		var brow_surf := -1
+		for s in am.get_surface_count():
+			var mat := am.surface_get_material(s)
+			if mat != null and String(mat.resource_name).to_lower().contains("brow"):
+				brow_surf = s
+				break
+		if brow_surf < 0:
+			continue
+		var islands := _islands(am, brow_surf)
+		if islands.size() < 3:
+			continue          # 左右各一条（2 块）就是正常的一层，不碰
+		# 按 z 中心分层
+		var layers := {}
+		for i in islands.size():
+			var lo: Vector3 = islands[i]["lo"]
+			var hi: Vector3 = islands[i]["hi"]
+			var key := "%.2f" % snappedf((lo.z + hi.z) * 0.5, layer_eps)
+			if not layers.has(key):
+				layers[key] = [] as Array
+			var g: Array = layers[key]
+			g.append(i)
+			layers[key] = g
+		if layers.size() < 2:
+			continue          # 只有一层 → 不用修
+		var keys := layers.keys()
+		keys.sort()
+		var keep_key: String = keys[keys.size() - 1]      # z 最大 = 最靠前
+		var keep: Array = layers[keep_key]
+		var centre := Vector3.ZERO
+		for i in keep:
+			centre += ((islands[i]["lo"] as Vector3) + (islands[i]["hi"] as Vector3)) * 0.5
+		centre /= float(keep.size())
+		# 重建整只网格：只动 brow 那一层，其余 surface 原样搬过去
+		var out := ArrayMesh.new()
+		for s in am.get_surface_count():
+			var mat := am.surface_get_material(s)
+			var arr := am.surface_get_arrays(s)
+			if s == brow_surf:
+				var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+				var n := 0
+				for i in islands.size():
+					if keep.has(i):
+						continue
+					var vi: PackedInt32Array = islands[i]["verts"]
+					for k in vi:
+						vs[k] = centre
+					n += vi.size()
+				arr[Mesh.ARRAY_VERTEX] = vs
+				report["collapsed"] = int(report["collapsed"]) + n
+			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			out.surface_set_material(out.get_surface_count() - 1, mat)
+		am.set_meta(META_BROWS, true)
+		# ⚠️ 赋给 **MeshInstance3D**（`mi`），不是赋给 ArrayMesh 自己 ——
+		#    写成 `m.mesh = out`（`m` 已经是 mesh）会报
+		#    「Invalid assignment of property or key 'mesh' ... on ArrayMesh」。
+		mi.mesh = out
+		report["meshes"] = int(report["meshes"]) + 1
+		report["layers"] = int(report["layers"]) + layers.size()
+		var kz: Array = report["kept_z"]
+		kz.append(keys[keys.size() - 1])
+		report["kept_z"] = kz
+	report["applied"] = int(report["meshes"]) > 0
+	return report
+
+
+const META_BROWS := "face_fix_brows"
+
+
+## 某只 surface 的顶点按三角形连成的**连通块**。
+## 返回 [{verts: PackedInt32Array, lo: Vector3, hi: Vector3}]，按 y 从大到小排。
+static func _islands(am: ArrayMesh, surf: int) -> Array:
+	var arr := am.surface_get_arrays(surf)
+	var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	if vs.is_empty():
+		return []
+	var parent := PackedInt32Array()
+	parent.resize(vs.size())
+	for i in vs.size():
+		parent[i] = i
+	var t := 0
+	while t + 2 < idx.size():
+		var a := _root(parent, idx[t])
+		var b := _root(parent, idx[t + 1])
+		var c := _root(parent, idx[t + 2])
+		var mn := mini(a, mini(b, c))
+		parent[a] = mn
+		parent[b] = mn
+		parent[c] = mn
+		t += 3
+	var groups := {}
+	for i in vs.size():
+		var r := _root(parent, i)
+		if not groups.has(r):
+			groups[r] = PackedInt32Array()
+		var g: PackedInt32Array = groups[r]
+		g.append(i)
+		groups[r] = g
+	var out: Array = []
+	for k in groups:
+		var g2: PackedInt32Array = groups[k]
+		var lo := Vector3(1e9, 1e9, 1e9)
+		var hi := Vector3(-1e9, -1e9, -1e9)
+		for i in g2:
+			var v := vs[i]
+			lo = Vector3(minf(lo.x, v.x), minf(lo.y, v.y), minf(lo.z, v.z))
+			hi = Vector3(maxf(hi.x, v.x), maxf(hi.y, v.y), maxf(hi.z, v.z))
+		out.append({"verts": g2, "lo": lo, "hi": hi})
+	return out
+
+
+static func _root(p: PackedInt32Array, i: int) -> int:
+	while p[i] != i:
+		p[i] = p[p[i]]
+		i = p[i]
+	return i
+
+
 static func _all_meshes(n: Node) -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = []
 	var stack: Array[Node] = [n]

@@ -560,6 +560,7 @@ func _ready() -> void:
 	_setup_sky()
 	_spawn = _player.global_position
 	_build_room_proxy()
+	_check_room_furniture()
 	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。
 	# ⚠️ 必须在房间泼溅挖洞**之前**做 —— `_carve_fallback_floor()` 会复制
 	#    `mesh.get_active_material(0)`，晚一步挖出来的洞就是没贴图的那块。
@@ -1051,7 +1052,23 @@ func _on_gate_boss(boss: Boss) -> void:
 ## 判定：墙体的世界包围盒（`_room_box`）收缩 `ROOM_SWAP_HYSTERESIS` 之后
 ## `has_point(player)` 就是「在屋里」。进/出各用一条边界（滞回），
 ## 免得贴着门框走的时候每帧来回闪。
+## ── 画室家具的碰撞 ──
+##
+## 2026-10-26 用户：「老师左边桌子那里还没有加碰撞体吗?」
+## → 「加碰撞这里，需要在 godot 编辑器也看得见，因为这样子我好微调，
+##    你自己大概给画室加上碰撞吧」
+##
+## **所以这些盒子写在 `scenes/game.tscn` 里**，挂在 `Room609/RoomCollision` 下：
+##   墙：WallXNeg / WallXPos / WallZNegA / WallZNegB / WallZPos
+##   家具：ArtDesk（老师西侧那张办公桌）、ArtChairA / ArtChairB（桌旁两把凳子）
+## 编辑器里点得到、Inspector 里能改 `size` / `position`，拖动手柄还能挪。
+##
+## ⚠️ 不要再在代码里建同名盒子 —— 会变成两套碰撞叠在一起（玩家离桌子半个身位
+##    就被看不见的第二块挡住）。这里只做**检测与报告**：万一场景里那几个节点被
+##    删了或改名了，启动日志会点名，而不是静默失效。
 const ROOM_COLLISION_PATH := "Room609/RoomCollision"
+## 场景里应该存在的家具碰撞节点名（只用于自检点名，**不用来建节点**）
+const ROOM_FURNITURE := ["ArtDesk", "ArtChairA", "ArtChairB"]
 const ROOM_PROXY_NAME := "RoomProxy"
 const ROOM_SWAP_HYSTERESIS := 0.25
 ## 配色照 `scenes/mesh_hut.tscn` 那间手工小屋的调子（用户说的「你之前做的这样子」）
@@ -1077,6 +1094,39 @@ var _room_inside := true
 
 ## 照碰撞盒建出「门外看到的网格」。放在 `_ready()`，因为碰撞盒在场景里就有，
 ## 不必等泼溅加载完 —— 加载那几秒里如果什么都不显示，房间就是一个黑洞。
+## ── 画室家具的碰撞（用户 2026-10-26：「老师左边桌子那里还没有加碰撞体吗?」）──
+##
+## ── 画室家具碰撞的**自检**（节点本身写在 `game.tscn` 里，见上面 ROOM_FURNITURE 注释）──
+##
+## 只做事后核对：场景里那几个 `CollisionShape3D` 还在不在、尺寸是不是正数、
+## 有没有和墙重叠。缺了就点名，免得哪天被误删还静默生效。
+func _check_room_furniture() -> void:
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		push_warning("[Game] 找不到 %s" % ROOM_COLLISION_PATH)
+		return
+	var found := 0
+	var names: Array[String] = []
+	for want in ROOM_FURNITURE:
+		var cs := body.get_node_or_null(want) as CollisionShape3D
+		if cs == null:
+			push_warning("[Game] 画室家具碰撞缺了 `%s`（应挂在 %s 下）"
+				% [want, ROOM_COLLISION_PATH])
+			continue
+		var box := cs.shape as BoxShape3D
+		if box == null:
+			push_warning("[Game] `%s` 的 shape 不是 BoxShape3D" % want)
+			continue
+		if box.size.x <= 0.0 or box.size.y <= 0.0 or box.size.z <= 0.0:
+			push_warning("[Game] `%s` 的尺寸有非正数：%s" % [want, str(box.size)])
+			continue
+		found += 1
+		names.append("%s(%.2f×%.2f×%.2f @ %s)" % [want, box.size.x, box.size.y, box.size.z,
+			str(cs.global_position.snappedf(0.01))])
+	print("[Game] 画室家具碰撞 %d/%d：%s"
+		% [found, ROOM_FURNITURE.size(), ", ".join(names)])
+
+
 func _build_room_proxy() -> void:
 	var body := get_node_or_null(ROOM_COLLISION_PATH)
 	if body == null:

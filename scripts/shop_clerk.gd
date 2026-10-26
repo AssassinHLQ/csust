@@ -176,6 +176,12 @@ func _ready() -> void:
 					* skeleton.get_bone_global_pose(idx).origin).y
 	# 光环抛光（和玩家/同伴那 8 顶一样的处理：受光 + 自发光 0.8 + 不投阴影）
 	HaloFix.polish(model)
+	# 眉毛：这些模型把 2~3 层不同表情的眉叠在不同深度上（清点见 `face_fix.gd`），
+	# 只留最靠前那层。芹香这条是**单层**（2 块 = 左右各一），所以这里通常是空转。
+	var brow_rep := FaceFix.simplify_brows(model)
+	if bool(brow_rep["applied"]):
+		print("[Clerk] 眉毛：%d 层 → 只留最前面那层" % int(brow_rep["layers"]))
+	FaceFix.separate_face_layers(model)
 	_apply_smile()
 	_play_idle()
 	_make_body()

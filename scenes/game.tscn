@@ -67,6 +67,22 @@ size = Vector3(2.9842682, 8.2994, 0.3)
 [sub_resource type="BoxShape3D" id="Shape_room_zpos"]
 size = Vector3(10.584586, 8.2994, 0.3)
 
+; ── 画室家具碰撞（2026-10-26 用户：「老师左边桌子那里还没有加碰撞体吗?」
+;    →「需要在 godot 编辑器也看得见，因为这样子我好微调」）──
+; 位置是「3D 线框叠在泼溅上手调」定出来的（scripts/_probe_box3d.gd：零投影误差；
+; 像素反投影会因为桌面 0.78 m 与地面 0 m 的透视差偏半米）。
+; 老师 Sensei 世界 (1.80, 0.00, 2.60)，桌子在他**西侧**，桌面高 0.78 m。
+[sub_resource type="BoxShape3D" id="Shape_art_desk"]
+size = Vector3(0.86, 0.78, 1.06)
+
+; 桌旁两把凳子：木凳面约 0.45 m 高。做成整块立方体而不是薄片 ——
+; 薄片会被一脚踩进去；凳子本来就该挡路。
+[sub_resource type="BoxShape3D" id="Shape_art_chair_a"]
+size = Vector3(0.42, 0.45, 0.42)
+
+[sub_resource type="BoxShape3D" id="Shape_art_chair_b"]
+size = Vector3(0.42, 0.45, 0.42)
+
 [sub_resource type="BoxShape3D" id="Shape_pillar"]
 size = Vector3(1.6, 0.8, 1.6)
 
@@ -151,6 +167,22 @@ shape = SubResource("Shape_room_zneg_b")
 [node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1495928316]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4993732, 1.2768, 13.710994)
 shape = SubResource("Shape_room_zpos")
+
+; ── 家具碰撞（2026-10-26）──
+; 挂在 Room609/RoomCollision 下，和墙共用一个 StaticBody3D ⇒ 玩家本来就会撞它。
+; 编辑器里选中后可在 Inspector 改 size、用移动手柄挪 position。
+; 盒子中心 y = 尺寸/2 ⇒ 底面正好落在 y = 0（平台面），不陷进地板也不悬空。
+[node name="ArtDesk" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091050]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.71, 0.39, 2.43)
+shape = SubResource("Shape_art_desk")
+
+[node name="ArtChairA" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091051]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.55, 0.225, 2.15)
+shape = SubResource("Shape_art_chair_a")
+
+[node name="ArtChairB" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091052]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.45, 0.225, 3.35)
+shape = SubResource("Shape_art_chair_b")
 
 ; ── 平台上的第三块场地：手工网格小屋（scenes/mesh_hut.tscn）──
 ; 落点由 scripts/_probe_platform_free.gd 量出来：与最近障碍（霸王龙的碰撞盒，
