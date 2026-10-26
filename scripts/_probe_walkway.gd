@@ -1,5 +1,5 @@
 extends SceneTree
-## 验数：楼与商店之间的走道、楼大门是否正对商店门、玩家能不能从商店门口走到大楼门口。
+## 验数：楼与商店之间的空地、楼大门是否正对商店门、玩家能不能从商店门口走到大楼门口。
 ##   godot --path . --headless --script res://scripts/_probe_walkway.gd -- --splat=off
 func _initialize() -> void:
 	_run.call_deferred()
@@ -25,7 +25,7 @@ func _run() -> void:
 	var house_north := hp.z - 6.00
 	print("商店南墙 z = %.2f（门中心 x = %.2f）" % [shop_south, sp.x])
 	print("大楼北墙 z = %.2f（门中心 x = %.2f）" % [house_north, hp.x])
-	print("走道净宽 = %.2f m" % (house_north - shop_south))
+	print("两楼间距（门前空场）= %.2f m" % (house_north - shop_south))
 	print("两门中心横向偏移 = %.2f m" % absf(hp.x - sp.x))
 
 	# 走道净宽里有没有障碍（在 x 取两门中点、z 从商店南墙到大楼北墙扫一遍）
@@ -43,17 +43,20 @@ func _run() -> void:
 		z += 0.10
 	print("  被挡格点 %d 个 → %s" % [blocked, "走道通畅" if blocked == 0 else "有障碍"])
 
-	# 真走一遍：从商店门口直着走向大楼门口
+	# 真走一遍：从商店门口直着走向大楼门口。
+	# ⚠️ 2026-10-26 楼退到 z = +13.50 之后，两门相距 20.16 m ——
+	#    走路速度 2.4 m/s（`player.gd::SPEED_WALK`），4 秒只够走 9.6 m，
+	#    所以从 240 帧加到 **660 帧（11 秒）**，并按每 2 秒打一次点。
 	var player := game.get("_player") as CharacterBody3D
 	player.global_position = Vector3(sp.x, 0.10, shop_south + 0.60)
 	player.velocity = Vector3.ZERO
 	for _f in 20:
 		await process_frame
-	print("\n真走一遍（起点 z=%.2f，朝 +Z 走 4 秒）：" % player.global_position.z)
+	print("\n真走一遍（起点 z=%.2f，朝 +Z 走 11 秒 / 2.4 m·s⁻¹）：" % player.global_position.z)
 	Input.action_press("move_back")
-	for _f in 240:
+	for _f in 660:
 		await process_frame
-		if _f % 60 == 0:
+		if _f % 120 == 0:
 			print("  t=%.1fs  (%.2f, %.3f, %.2f)"
 				% [float(_f) / 60.0, player.global_position.x,
 					player.global_position.y, player.global_position.z])

@@ -8,7 +8,7 @@
 
 | 文件名 | 用在哪 | 来源 |
 |---|---|---|
-| `shop_theme.ogg` | 商店「天使24」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
+| `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
 
 **只有本地放好这个文件，商店才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑

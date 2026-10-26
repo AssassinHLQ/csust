@@ -84,6 +84,20 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key.pressed or key.echo or key.keycode != KEY_ESCAPE:
 		return
+	# ── 小屋电脑的终端开着时，Esc 归终端（2026-10-26 用户实拍）──
+	#
+	# 用户原话：「电脑按 esc 怎么退不出而是打开了设置还被终端遮住了」。
+	# 病根是**派发顺序**：`Node._input` 由 SceneTree 按节点树**倒序**发下去，
+	# 而 `game.tscn` 里 MeshHut（电脑挂在它下面）排在 SettingsMenu **前面**，
+	# 倒序之后菜单反而先拿到 Esc —— 于是菜单先 toggle 并把事件吃掉，
+	# 终端那边**永远收不到**（它的页脚明明写着「按 F（或 Esc、或输入 exit）退出电脑」）。
+	# 更难看的是层号：电脑那层 CanvasLayer 是 **40**、这个菜单是 **10**，终端会盖在菜单上面。
+	#
+	# 这里**故意不 `set_input_as_handled()`**：让 Esc 继续往下走到电脑，
+	# 由终端自己关掉（`hut_computer.gd::_input()` → `ArchTerminal.feed()` → `exit_requested`）。
+	var pc := get_tree().get_first_node_in_group("hut_computer") as HutComputer
+	if pc != null and pc.is_using():
+		return
 	# 致谢面板开着时，Esc 先关它（不然一按就直接退出整个设置界面）
 	if _credits_root != null and _credits_root.visible:
 		close_credits()

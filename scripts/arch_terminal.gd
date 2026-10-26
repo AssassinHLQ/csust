@@ -65,6 +65,21 @@ const LOGO := [
 ## ⚠️ **全英文**。终端是「逐字格」画的：中文字形是 13 px 宽、格子只有 8 px，
 ##    一个汉字会压掉右边两个字符 —— 第一版打了中文，整段糊成一团（`欢迎使用` 变
 ##    `欢體用`）。中文提示放到覆盖层的普通 Label 里（那边是正常排版）。
+##
+## ── 这台机器的配置单（2026-10-26 用户：「这个 u 和内存配这个显卡不是狗骑吕布嘛」）──
+## 原来写的是 **Intel i5-4210M + 2258MiB / 7844MiB**，配一张 RTX 5090 ——
+## 平台侧把显卡按在地上摩擦。现在按用户点的配置换成**洋垃圾平台**：
+##   CPU  = **E5-2698 v2**：12 核 24 线程 @ 2.40GHz（Ivy Bridge-EP，X79 平台）
+##   RAM  = **64GiB DDR3-1600 ECC REG**（8 × 8GiB，四通道）
+##
+## ⚠️ 版本特意挑 **v2**：2698 的 v3 / v4 是 Haswell-EP / Broadwell-EP，**只吃 DDR4**，
+##    和「DDR3-1600」凑不到一块儿；v2 这一代才正好是 DDR3 四通道 ECC。
+##    （想改成不带版本的「E5-2698」也行 —— 改的就是下面这一行。）
+## ⚠️ 顺手**删掉了原来那行 `GPU: Intel 4th Gen Core Processor`**：那是 i5-4210M 的核显，
+##    换成至强之后机器上**根本没有核显**（E5 全系不带 iGPU）。留着是硬伤，不是梗。
+##
+## 这几行就是这台机器的「当前配置」，以后做「爱丽丝赚钱 → 找芹香买配件 → 升级」
+## 那条线时改的就是这里：升级一档，neofetch 跟着变一行。
 const INFO := [
 	["OS", "Arch Linux x86_64"],
 	["Host", "Arisu-PC (custom build)"],
@@ -79,10 +94,9 @@ const INFO := [
 	["Icons", "breeze [Plasma], breeze [GTK2/3]"],
 	["Terminal", "konsole"],
 	["Terminal Font", "Hack 10"],
-	["CPU", "Intel i5-4210M (4) @ 3.200GHz"],
+	["CPU", "Intel Xeon E5-2698 v2 (24) @ 2.400GHz"],
 	["GPU", "NVIDIA GeForce RTX 5090"],
-	["GPU", "Intel 4th Gen Core Processor"],
-	["Memory", "2258MiB / 7844MiB"],
+	["Memory", "7892MiB / 64GiB DDR3-1600 ECC"],
 ]
 
 ## logo 的固定列宽 —— ⚠️ `LOGO` 里各行的**尾部空格数不一致**，直接接右边那列会让

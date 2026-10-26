@@ -9,6 +9,14 @@ extends Node3D
 ## 所以这一版**只盖房子 + 铺地板**，高斯泼溅（`splatdata/shop_raw.sog`，70 MB）一概不加载 ——
 ## `SplatSlot` 是个空节点，等以后单独做「按需流式加载」再往里塞。
 ##
+## ── 店名：2026-10-26 从「天使24」改成「柴关电脑城」──
+## 用户原话：「我突然发现芹香没有理由去天使24，改成柴关电脑城」。
+## 芹香是**电器店打工**的设定（`shop_clerk.gd`），而「天使24」是便利店，
+## 柜台后面的店员和店招对不上；门头（`sign_text`）和店内陈设一起按「电脑城」重整：
+##   冰柜 → 整机展示柜、货架上是盒装配件、5090 展示柜照旧。
+## ⚠️ 下文几条注释里仍写「天使24」，那是**引用用户 2026-10-21 的原话**时的当日店名，
+##    引用不改写；说的都是同一栋房子（z-fighting 那几次）。
+##
 ## ── 尺寸从哪来 ──
 ## 不写死数字，直接从 `MeshHut/Hut/Walls`（CSGBox3D）与 `Hut/Roof` 上量：
 ##   长 = `modules` × 小屋外墙长（2 × 6.60 = **13.20 m**）
@@ -49,7 +57,7 @@ const TUCK := 0.02
 @export var modules := 2.0
 ## 墙高。0 = 跟初始小屋一样（2.50）。
 ## 2026-10-21 用户：「商店太矮了」→ 3.20；2026-10-22 用户：「商店5m」→ **5.00**。
-## （2.50 那版比优香还矮，3.20 只是「比人高一点」，5.00 才是正经便利店的层高。）
+## （2.50 那版比优香还矮，3.20 只是「比人高一点」，5.00 才是正经卖场的层高。）
 @export var wall_height := 5.00
 ## 小屋屋顶外沿 → 商店西墙的空当（走道宽度）
 @export var gap := 3.0
@@ -64,7 +72,10 @@ const TUCK := 0.02
 @export var door_height := 2.3
 
 @export_group("外观")
-@export var sign_text := "天使24"
+## 门头那几个字。2026-10-26 用户：「改成柴关电脑城」。
+## ⚠️ 5 个字 × (font_size 80 × pixel_size 0.005) = 2.00 m 宽，招牌板 3.40 m —— 放得下；
+##    再长就要一起调 `SignBoard` 的宽度与字号（见 `_build_shell()` 末尾）。
+@export var sign_text := "柴关电脑城"
 @export var wall_thickness := 0.2
 ## 单独 instance 出来看效果时打开；`game.gd` 里是等铺完地砖再手动 `build()`（材质才一样）
 @export var auto_build := false
@@ -195,7 +206,10 @@ func _make_materials() -> void:
 	_mat["steel"] = _std(Color(0.55, 0.57, 0.60), 0.42, 0.60)
 	_mat["metal"] = _std(Color(0.44, 0.46, 0.50), 0.45, 0.70)
 	_mat["crate"] = _std(Color(0.55, 0.40, 0.25), 0.85)
-	_mat["fridge"] = _std(Color(0.86, 0.89, 0.92), 0.30)
+	# 整机展示柜的柜体：深灰金属。
+	# 2026-10-26 改名电脑城时从便利店的**白冰柜**（0.86/0.89/0.92、粗糙 0.30）换过来 ——
+	# 白壳 + 发光门更像冷饮柜，深色金属壳才像机箱。
+	_mat["pccase"] = _std(Color(0.28, 0.30, 0.34), 0.38, 0.55)
 	_mat["dark"] = _std(Color(0.16, 0.18, 0.21), 0.60)
 
 	var lamp := _std(Color(0.95, 0.90, 0.75), 0.60)
@@ -429,11 +443,11 @@ func _build_interior() -> void:
 
 	_build_counter()
 
-	# 两排货架：贴南墙
+	# 两排货架：贴南墙（电脑城的「盒装配件区」）
 	for i in 2:
 		_shelf(-3.2 + float(i) * 4.4, -D * 0.5 + 0.45)
 
-	# 货架上的商品（纯装饰，不挡人）：顶层 3 只、中层 2 只
+	# 货架上的盒子（显卡/主板/电源的包装盒，纯装饰，不挡人）：顶层 3 只、中层 2 只
 	var goods := ["goods_a", "goods_b", "goods_c"]
 	for i in 2:
 		var cx := -3.2 + float(i) * 4.4
@@ -444,10 +458,10 @@ func _build_interior() -> void:
 			_box_decor("Goods", Vector3(cx - 0.35 + float(j) * 0.7, 1.13, -D * 0.5 + 0.45),
 				Vector3(0.18, 0.18, 0.26), _mat[goods[(j + 2) % 3]])
 
-	# 冰柜：贴西墙（进门左手边），发光的门面
-	_box_standing("Fridge", Vector2(-L * 0.5 + 0.55, -1.6), Vector3(0.65, 1.9, 1.0),
-		_mat["fridge"])
-	_box_decor("FridgeGlass", Vector3(-L * 0.5 + 0.90, 1.0, -1.6),
+	# 整机展示柜：贴西墙（进门左手边），玻璃门里透出灯 —— 电脑城里卖整机的那一排。
+	_box_standing("PcCase", Vector2(-L * 0.5 + 0.55, -1.6), Vector3(0.65, 1.9, 1.0),
+		_mat["pccase"])
+	_box_decor("PcCaseGlass", Vector3(-L * 0.5 + 0.90, 1.0, -1.6),
 		Vector3(0.04, 1.6, 0.86), _mat["glow"])
 
 	# 「5090 展示柜」：玻璃罩里一张发光的显卡（剧情梗）
@@ -469,7 +483,7 @@ func _build_interior() -> void:
 			Vector3(sx * 2.6, shop_height - 0.08, 0.0), Vector3(1.8, 0.06, 0.4),
 			_mat["lamp"])
 
-	# 店员：小空（2026-10-21 用户给的 .blend，Blender 转 GLB；署名见 CREDITS.md）
+	# 店员：芹香（2026-10-22 起；在她之前站这儿的是小空，见 `scripts/shop_clerk.gd`）
 	_build_clerk()
 
 	# 留给高斯泼溅的空位：**故意不加载**（70 MB 的 .sog 一进场景显存就炸）
@@ -521,7 +535,7 @@ func _build_counter() -> void:
 	# ⚠️ 2026-10-26 用户「柜台太高了」—— 原来是 **1.04 m**。
 	#    芹香按设定身高 1.52 m（`shop_clerk.gd` 的 MODEL_SCALE），1.04 已经到她的
 	#    胸口以上，从顾客那侧看过去只剩一个头，柜台像一堵墙。改成 0.88 m
-	#    （≈ 她身高的 58%，和真实便利店柜台的比例接近）。
+	#    （≈ 她身高的 58%，和真实卖场柜台的比例接近）。
 	_box("CounterTop", Vector3(cx, top_h - 0.03, cz),
 		Vector3(cw + 0.14, 0.06 + TUCK, cl + 0.16), _mat["counter_top"])
 	# 前沿不锈钢压条（顾客那一侧）
@@ -553,7 +567,7 @@ func _build_counter() -> void:
 			Vector3(0.22, 0.04, 2.6), _mat["counter"])
 
 
-## 店员：小空站在柜台后面，朝顾客（-X）。
+## 店员：芹香站在柜台后面，朝顾客（-X）。
 func _build_clerk() -> void:
 	var clerk := ShopClerk.new()
 	# 2026-10-22 小空 → 芹香（校服版），节点名跟着换；见 `scripts/shop_clerk.gd`

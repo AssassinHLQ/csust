@@ -1,6 +1,6 @@
 extends SceneTree
 ## 探针：① 芹香脸上的表情怎么换（网格 / 形态键清单）
-##       ② 小屋 MeshHut 和天使24（Shop）各多高
+##       ② 小屋 MeshHut 和商店（柴关电脑城）各多高
 ##       ③ 芹香的脚到底离地多少
 ##   godot --path . --script res://scripts/_probe_face_hut.gd -- --splat=off
 func _initialize() -> void:

@@ -23,7 +23,7 @@ const DIR := "res://assets/music/"
 ## 逻辑名 → {file, db}
 ##   db  基准音量（负数是变小）。再叠加 `GameSettings` 的主音量（走 Master 总线）
 const TRACKS := {
-	# 商店（天使24）的 BGM。素材：UNDERTALE「Tem Shop」。
+	# 商店（柴关电脑城）的 BGM。素材：UNDERTALE「Tem Shop」。
 	# ⚠️ 源文件 45.44 s，**只取前 40.2094 s** —— 那个长度是把整段做自相关之后
 	#    定出来的循环点：曲子自身的循环周期是 5.0262 s，40.2094 = 5.0262 × 8
 	#    （误差 0.2 ms）。直接按整数 40.000 s 切，接缝处与开头的相关系数只有

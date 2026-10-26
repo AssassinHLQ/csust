@@ -1,5 +1,5 @@
 extends SceneTree
-## 验图：① 小屋新高度（和天使24对比） ② 芹香微笑 + 脚踩地
+## 验图：① 小屋新高度（和商店对比） ② 芹香微笑 + 脚踩地
 ##   godot --path . --script res://scripts/_probe_hut_clerk_shot.gd -- --splat=off
 ## 输出：_arisu_captures/_hutshot/{hut,shop,clerk_face,clerk_side}.png
 func _initialize() -> void:
@@ -33,7 +33,7 @@ func _run() -> void:
 	cam.far = 400.0
 	root.add_child(cam)
 
-	# ① 从平台中央看小屋（同时能看到右后的天使24）
+	# ① 从平台中央看小屋（同时能看到右后的商店）
 	cam.global_position = Vector3(14.0, 3.0, -1.5)
 	cam.look_at(Vector3(14.0, 2.9, -15.5), Vector3.UP)
 	await _shoot(cam, out, "hut")

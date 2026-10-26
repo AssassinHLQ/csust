@@ -66,6 +66,35 @@ var _beam: OmniLight3D
 func _ready() -> void:
 	add_to_group("hut_computer")
 	_build()
+	# 兜底：设置菜单一开就把电脑合上（正常路径下永远不会触发，理由见 `_on_menu_opened`）。
+	var menu := _settings_menu()
+	if menu != null and menu.has_signal("opened_changed") \
+			and not menu.is_connected("opened_changed", _on_menu_opened):
+		menu.opened_changed.connect(_on_menu_opened)
+
+
+## 找设置菜单。**不用 `../../SettingsMenu` 这种硬路径** —— 探针里单独 instance
+## 小屋时那棵树是断的。先找当前场景，再退回按树干往上数两级。
+func _settings_menu() -> Node:
+	var sc := get_tree().current_scene
+	if sc != null:
+		var m := sc.find_child("SettingsMenu", true, false)
+		if m != null:
+			return m
+	return get_node_or_null("../../SettingsMenu")
+
+
+## 设置菜单开了 ⇒ 立刻合上电脑。
+##
+## 正常路径下这条**不会触发**：终端开着时 Esc 由设置菜单主动让给终端
+## （见 `settings_menu.gd::_input()` 里那段），菜单根本开不起来。
+## 留着是因为层号差得太远 —— 电脑这层 CanvasLayer 是 **40**、设置菜单是 **10**，
+## 万一以后菜单能从别的入口打开（快捷键、脚本、剧情演出），终端就会**盖在菜单上面**，
+## 用户 2026-10-26 实拍到的正是这个画面。宁可多合一次电脑，也不要那种画面。
+func _on_menu_opened(open: bool) -> void:
+	if open and _using:
+		print("[电脑] 设置菜单开了，终端让位（合上电脑）")
+		_close()
 
 
 # ── 建模 ──────────────────────────────────────────────────────────────────────

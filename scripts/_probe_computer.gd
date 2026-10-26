@@ -157,5 +157,37 @@ func _run() -> void:
 			print("[pc] ✗ 摄像机没还原成打开前的高度")
 			fails += 1
 
+	# ⑧ Esc 到底归谁（用户 2026-10-26 实拍：「电脑按 esc 怎么退不出而是打开了设置
+	#    还被终端遮住了」）
+	#
+	# ⚠️ 这一条**必须走真实输入**（`Input.parse_input_event`），不能像上面那样直接
+	#    `terminal.feed()` —— 要复现的正是「谁先拿到 Esc」，那是 SceneTree 按节点树
+	#    **倒序**派发 `_input` 的结果，绕过派发就测不到（实测：SettingsMenu 排在
+	#    MeshHut 之后，倒序派发时它先拿到 Esc，把终端那份吃掉了）。
+	var menu := game.get_node_or_null("SettingsMenu")
+	pc.use_for_test()
+	for _f in 3:
+		await process_frame
+	var esc := InputEventKey.new()
+	esc.pressed = true
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	Input.parse_input_event(esc)
+	for _f in 6:
+		await process_frame
+	var menu_open := menu != null and bool(menu.get("is_open"))
+	print("[pc] 终端开着时按 Esc → 电脑 is_using=%s（应 false）、设置菜单 is_open=%s（应 false）、世界暂停=%s（应 false）"
+		% [str(pc.is_using()), str(menu_open), str(paused)])
+	if pc.is_using():
+		print("[pc] ✗ Esc 没能退出电脑")
+		fails += 1
+	if menu_open or paused:
+		print("[pc] ✗ Esc 被设置菜单抢走了（终端 40 层会盖住菜单 10 层）")
+		fails += 1
+	# 收拾干净，别把状态留给后面的判定
+	if menu_open:
+		menu.call("close")
+	paused = false
+
 	print("[pc] %s（失败 %d 项）" % ["全部通过" if fails == 0 else "有失败", fails])
 	quit(0 if fails == 0 else 1)

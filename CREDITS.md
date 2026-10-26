@@ -51,7 +51,7 @@
 | 校园 / 画室609 高斯泼溅扫描 | 由使用者提供，**权利状态未核实** | 未核实 | ❌ | `splatdata/*.sogdata` | 拍摄权、场地权、肖像权、再分发权均未确认；缺失时用 `-- --splat=off` |
 | 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |
 | 老师（sensei）旧版模型与贴图 | **食小派蒙辣** | 专有（Blue Archive 二创） | ❌ | 已换成上面的卡通版；旧文件留在 `_sensei_out/sensei_tex.glb` | MMD/PMX 导出，313 骨、0 动作；本工程曾重导出为 `sensei.glb`（删 307 个刚体、贴图降到 1024、材质重建 —— MMD 材质树 glTF 导出器认不出，会静默丢贴图） |
-| **天使24 店员「黑见芹香」（Serika，校服版）** | 原作 © **NEXON Games / Yostar**（Blue Archive），模型包整理者未署名 | 专有（Blue Archive） | ❌ | `models/npc/serika/serika.glb`，来源：BlueArchiveModels 模型包（2026-10-22 用户指路 `Downloads/BlueArchiveModels-main`） | 93 骨 `Bip001` 骨架、40 条动画，待机播 `Normal_Idle`；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m（`shop_clerk.gd` 自动抬到踩地）。手骨 `Bip001 L/R Hand` 高 0.72 m 低于台面 1.04 m，藏在柜台后；光环 `Serika_Halo` 走 `HaloFix` 抛光。见 `scripts/shop_clerk.gd` |
+| **柴关电脑城店员「黑见芹香」（Serika，校服版）** | 原作 © **NEXON Games / Yostar**（Blue Archive），模型包整理者未署名 | 专有（Blue Archive） | ❌ | `models/npc/serika/serika.glb`，来源：BlueArchiveModels 模型包（2026-10-22 用户指路 `Downloads/BlueArchiveModels-main`） | 93 骨 `Bip001` 骨架、40 条动画，待机播 `Normal_Idle`；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m（`shop_clerk.gd` 自动抬到踩地）。手骨 `Bip001 L/R Hand` 高 0.72 m 低于台面 0.88 m，藏在柜台后；光环 `Serika_Halo` 走 `HaloFix` 抛光。见 `scripts/shop_clerk.gd`。店名 2026-10-26 从「天使24」改成「柴关电脑城」（便利店 → 电脑城，她才有理由站在这儿） |
 | （已停用）天使24 店员「小空」（Sora） | 薛定谔的小问号 | 专有（Blue Archive 二创） | ❌ | `models/npc/sora/`（文件仍在，不再上场） | 2026-10-22 起停用：用户要求「小空出差」，且 338 骨 MMD 精细模型与卡通大头小人的同伴画风不统一 |
 
 ## 三、界面与字体

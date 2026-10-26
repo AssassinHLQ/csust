@@ -214,13 +214,13 @@ const ENTRIES := [
 	{
 		"group": "角色与 Boss 模型",
 		"path": "models/npc/serika",
-		"title": "天使24 店员「黑见芹香」（Serika，校服版）",
+		"title": "柴关电脑城店员「黑见芹香」（Serika，校服版）",
 		"author": "原作 © NEXON Games / Yostar（Blue Archive），模型包整理者未署名",
 		"license": "专有版权（Blue Archive），仅本地学习用，不随仓库分发",
 		"distributed": false,
 		"source": "BlueArchiveModels 模型包里的 Serika.glb（2026-10-22 用户指路 Downloads/BlueArchiveModels-main）",
 		"license_file": "",
-		"note": "93 骨 Bip001 骨架、40 条动画，待机播 Normal_Idle；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m，shop_clerk.gd 会自动抬到踩地。手骨 Bip001 L/R Hand 高 0.72 m，低于台面 1.04 m，藏在柜台后；头顶光环 Serika_Halo 走 HaloFix 抛光",
+		"note": "93 骨 Bip001 骨架、40 条动画，待机播 Normal_Idle；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m，shop_clerk.gd 会自动抬到踩地。手骨 Bip001 L/R Hand 高 0.72 m，低于台面 0.88 m，藏在柜台后；头顶光环 Serika_Halo 走 HaloFix 抛光",
 	},
 	{
 		"group": "角色与 Boss 模型",
