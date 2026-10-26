@@ -76,6 +76,18 @@ const STAIR_Z0 := -4.30
 ## 立面线条的凸出量：彩色板 < 竖线 < 横线。
 ## 三级不同的凸出量保证**任何两条线交叉处都不共面**（共面就会闪）。
 const FACE_PANEL := 0.05
+## 立面上的每块装饰**都要埋进墙里**，而且埋得**各有各的深度**。
+##
+## ⚠️ 两个都试过、都不行的做法：
+##    ① 背面贴墙（埋 0）：所有线块的背面都和墙的外表面共面 → 和墙抢像素；
+##    ② 背面离墙留缝：所有线块的背面对齐到同一个平面上 → **它们互相**抢像素。
+##       `_verify_mondrian.gd` 量出成对的「PillarN ↔ BandN 轴2 0.084 m²」，
+##       正是用户 2026-10-21 在天使24 上看到的那类闪烁。
+## 现在：每块都往墙里埋，三种元素埋得**不一样深**（板 0.11 < 竖线 0.08 < 横线 0.05），
+## 背面全在墙体内部（被墙的正面挡住、根本不渲染），彼此也不在同一平面上。
+const EMBED_PANEL := 0.11
+const EMBED_PILLAR := 0.08
+const EMBED_BAND := 0.05
 const FACE_PILLAR := 0.07
 const FACE_BAND := 0.09
 
@@ -235,6 +247,13 @@ func _build_walls() -> void:
 	var mid_y := (y0 + y1) * 0.5
 	var oz := HALF_D - WALL_T * 0.5      # 南北墙在 z 上的中心
 	var ox := HALF_W - WALL_T * 0.5      # 东西墙在 x 上的中心
+	# ⚠️ 东西墙的 z 范围要**缩在两个墙厚之间**（±(HALF_D − WALL_T) = ±5.75）。
+	#    第一版让它们也铺到 ±6.00（= 南北墙的外表面），四个墙角就各有一对
+	#    「共面 + 重叠 2.005 m²」的面 —— `_verify_mondrian.gd` 一次抓出 72 组，
+	#    正是用户 2026-10-21 在天使24 上看到的那种「边上一走动就闪」。
+	#    现在：南北墙占满全宽（x ±8.00），东西墙夹在它们中间（z ±5.75），
+	#    四角是**贴边对接**而不是互相插进去。
+	var zin := HALF_D - WALL_T           # 5.75
 
 	# ── 北墙：门 x ±1.10、高 2.60 ──
 	_solid("WallN_W", Vector3((-HALF_W - DOOR_HALF) * 0.5, mid_y, -oz),
@@ -257,10 +276,11 @@ func _build_walls() -> void:
 	_deco("GlassS", Vector3(4.50, (5.00 + 7.20) * 0.5, oz),
 		Vector3(4.00, 7.20 - 5.00, 0.06), _mat["glass"])
 
-	# ── 东墙：窗 z −4.00~0.00，两层各一扇 ──
-	var wsize := Vector3(WALL_T, full_h, 2.00)          # 窗两侧各 2.00 m 的墙
-	_solid("WallE_N", Vector3(ox, mid_y, -5.00), wsize, w)
-	_solid("WallE_S", Vector3(ox, mid_y, 3.00), Vector3(WALL_T, full_h, 6.00), w)
+	# ── 东墙：窗 z −4.00~0.00，两层各一扇（z 夹在 ±5.75 之间）──
+	_solid("WallE_N", Vector3(ox, mid_y, (-zin - 4.00) * 0.5),
+		Vector3(WALL_T, full_h, 4.00 - zin), w)                      # −5.75 ~ −4.00
+	_solid("WallE_S", Vector3(ox, mid_y, (zin + 0.00) * 0.5),
+		Vector3(WALL_T, full_h, zin), w)                             # 0.00 ~ +5.75
 	_solid("WallE_Sill1", Vector3(ox, (y0 + 1.00) * 0.5, -2.00),
 		Vector3(WALL_T, 1.00 - y0, 4.00), w)
 	_solid("WallE_Mid", Vector3(ox, (3.20 + 5.00) * 0.5, -2.00),
@@ -273,8 +293,10 @@ func _build_walls() -> void:
 		Vector3(0.06, 7.20 - 5.00, 4.00), _mat["glass"])
 
 	# ── 西墙：窗 z 0.50~4.50，两层各一扇 ──
-	_solid("WallW_N", Vector3(-ox, mid_y, -2.75), Vector3(WALL_T, full_h, 6.50), w)
-	_solid("WallW_S", Vector3(-ox, mid_y, 5.25), Vector3(WALL_T, full_h, 1.50), w)
+	_solid("WallW_N", Vector3(-ox, mid_y, (0.50 - zin) * 0.5),
+		Vector3(WALL_T, full_h, zin + 0.50), w)                      # −5.75 ~ +0.50
+	_solid("WallW_S", Vector3(-ox, mid_y, (zin + 4.50) * 0.5),
+		Vector3(WALL_T, full_h, zin - 4.50), w)                      # +4.50 ~ +5.75
 	_solid("WallW_Sill1", Vector3(-ox, (y0 + 1.00) * 0.5, 2.50),
 		Vector3(WALL_T, 1.00 - y0, 4.00), w)
 	_solid("WallW_Mid", Vector3(-ox, (3.20 + 5.00) * 0.5, 2.50),
@@ -355,7 +377,11 @@ func _build_stairs() -> void:
 		_mat["stair"], _mat["stair"], _mat["red"], _mat["stair"],
 		_mat["stair"], _mat["blue"], _mat["stair"], _mat["stair"], _mat["yellow"],
 	]
-	for i in range(1, STAIR_STEPS + 1):
+	#
+	# ⚠️ 只造 1 ~ STAIR_STEPS−1 级：第 `STAIR_STEPS` 级踏面（4.20）由
+	#    `StairLanding` 那块占着，两边都造就会同高重叠 → 共面闪烁
+	#    （`_verify_mondrian.gd` 第一版抓出 Step_19 ↔ StairLanding 三组共面）。
+	for i in range(1, STAIR_STEPS):
 		var top_y := per_rise * float(i)
 		var z_a := STAIR_Z0 + per_run * float(i - 1)
 		var z_b := z_a + per_run
@@ -367,6 +393,10 @@ func _build_stairs() -> void:
 	# 顶面 4.20 与二层楼板同高；在 z 上**贴边对接**（2.70 / 2.70）不是重叠。
 	var land_z0 := STAIR_Z0 + per_run * (n - 1.0)   # 2.35
 	var land_z1 := STAIR_Z0 + STAIR_RUN             # 2.70
+	# ⚠️ 这块的 z 范围必须**紧接**第 20 级踏面的外沿（land_z0 = 2.35），
+	#    不能往回咬进第 19/20 级 —— 第一版写成从 `land_z0` 起但高度也顶到 4.20，
+	#    和第 20 级踏步（顶面也是 4.20）在 z 上重叠 0.35 m，
+	#    量出「轴0 1.477 m² / 轴1 0.560 m² / 轴2 6.752 m²」三组共面 → 会闪。
 	_solid("StairLanding", Vector3(cx, (FLOOR_H - SINK) * 0.5, (land_z0 + land_z1) * 0.5),
 		Vector3(STAIR_W, FLOOR_H + SINK, land_z1 - land_z0), _mat["stair"])
 
@@ -402,8 +432,10 @@ func _build_roof() -> void:
 		["EaveW", Vector3(-(HALF_W + EAVE), TOP_H + ROOF_T + 0.10, 0.0)],
 		["EaveE", Vector3(HALF_W + EAVE, TOP_H + ROOF_T + 0.10, 0.0)],
 	]:
+		# ⚠️ 东西这两条要**缩到南北两条之间**：(HALF_D + EAVE) × 2 − 0.34。
+		#    第一版两条都顶到角上，四个角各有一对 0.054 m² 的共面面 → 会闪。
 		_deco(str(spec[0]), spec[1] as Vector3,
-			Vector3(0.34, t, (HALF_D + EAVE) * 2.0), _mat["black"])
+			Vector3(0.34, t, (HALF_D + EAVE) * 2.0 - 0.34), _mat["black"])
 
 
 # ══════════════════════════ 立面（蒙德里安）══════════════════════════
@@ -432,71 +464,82 @@ func _build_facade() -> void:
 ## 北立面（正面，朝商店）。门开在这里，所以门两侧的线要避开洞口。
 func _build_facade_north() -> void:
 	var zf := -HALF_D                     # 北立面外表面
-	var z_p := zf - FACE_PILLAR * 0.5
-	var z_d := zf - FACE_PANEL * 0.5
-	var z_b := zf - FACE_BAND * 0.5
+	# 中心 = 正面与背面中点；正面在墙外 FACE_x、背面在墙内 EMBED_x
+	var z_p := zf + (EMBED_PILLAR - FACE_PILLAR) * 0.5
+	var z_d := zf + (EMBED_PANEL - FACE_PANEL) * 0.5
+	var z_b := zf + (EMBED_BAND - FACE_BAND) * 0.5
+	var t_p := FACE_PILLAR + EMBED_PILLAR
+	var t_d := FACE_PANEL + EMBED_PANEL
+	var t_b := FACE_BAND + EMBED_BAND
 
 	# ── 竖线：x 位置 / 起点 y / 终点 y（门那两条从门顶起）──
 	# 长度刻意不齐：−5.00 只到 6.30 就停，3.20 从 2.90 才起 —— 这是「画」的关键。
-	for spec in [[-6.60, 0.0, TOP_H], [-5.00, 0.0, 6.30],
-			[-DOOR_HALF, DOOR_H, TOP_H], [DOOR_HALF, DOOR_H, TOP_H],
-			[3.20, 2.90, TOP_H], [6.10, 0.0, 4.20]]:
+	for spec in [[-6.60, 0.0, TOP_H - 0.02], [-5.00, 0.0, 6.30],
+			[-DOOR_HALF, DOOR_H, TOP_H - 0.02], [DOOR_HALF, DOOR_H, TOP_H - 0.02],
+			[3.20, 2.90, TOP_H - 0.02], [6.10, 0.0, 4.20]]:
 		var px: float = spec[0]
 		var y0: float = spec[1]
 		var y1: float = spec[2]
 		_deco("PillarN", Vector3(px, (y0 + y1) * 0.5, z_p),
-			Vector3(0.28, y1 - y0, FACE_PILLAR), _mat["black"])
+			Vector3(0.28, y1 - y0, t_p), _mat["black"])
 
 	# ── 横线：y 位置 / x 起点 / x 终点（在门洞上方断开）──
 	for spec in [[2.90, -HALF_W, -2.30], [2.90, 2.30, HALF_W],
 			[FLOOR_H, -HALF_W, HALF_W], [6.30, -7.40, 1.60],
-			[TOP_H - 0.15, -HALF_W, HALF_W]]:
+			[TOP_H - 0.22, -HALF_W, HALF_W]]:
 		var py: float = spec[0]
 		var x0: float = spec[1]
 		var x1: float = spec[2]
 		_deco("BandN", Vector3((x0 + x1) * 0.5, py, z_b),
-			Vector3(x1 - x0, 0.30, FACE_BAND), _mat["black"])
+			Vector3(x1 - x0, 0.30, t_b), _mat["black"])
 
 	# ── 彩色矩形：贴在格子里，四周留出黑线的位置 ──
-	_deco("PanelNRed", Vector3(-7.05, 5.05, z_d), Vector3(1.10, 1.90, FACE_PANEL),
+	_deco("PanelNRed", Vector3(-7.05, 5.05, z_d), Vector3(1.10, 1.90, t_d),
 		_mat["red"])
-	_deco("PanelNYellow", Vector3(4.30, 7.35, z_d), Vector3(2.80, 1.00, FACE_PANEL),
+	_deco("PanelNYellow", Vector3(4.30, 7.35, z_d), Vector3(2.80, 1.00, t_d),
 		_mat["yellow"])
-	_deco("PanelNBlue", Vector3(5.55, 3.60, z_d), Vector3(1.10, 1.00, FACE_PANEL),
+	_deco("PanelNBlue", Vector3(5.55, 3.60, z_d), Vector3(1.10, 1.00, t_d),
 		_mat["blue"])
 
 	# ── 门套：黑门楣 + 深色门槛 ──
-	_deco("DoorHead", Vector3(0.0, DOOR_H + 0.15, z_b),
-		Vector3(DOOR_HALF * 2.0 + 0.56, 0.30, FACE_BAND), _mat["black"])
-	_deco("DoorSill", Vector3(0.0, 0.015, -HALF_D + WALL_T * 0.5),
-		Vector3(DOOR_HALF * 2.0, 0.05, WALL_T + 0.10), _mat["black"])
+	# ⚠️ 门头这块要**比门楣（2.60 起）抬高 2 cm**：
+	#    同底面时 `_verify_mondrian.gd` 会报「WallN_Lintel ↔ DoorHead 轴1 −面 0.110 m²」。
+	_deco("DoorHead", Vector3(0.0, DOOR_H + 0.17, z_b),
+		Vector3(DOOR_HALF * 2.0 + 0.56, 0.30, t_b), _mat["black"])
+	# ⚠️ 门槛要**比一层地面低一档**（顶面 0.020 → 0.040），否则和
+	#    `FloorPlate`（顶面 0.020）在 y 上共面、面积 0.110 m² → 会闪。
+	_deco("DoorSill", Vector3(0.0, 0.020, -HALF_D + WALL_T * 0.5),
+		Vector3(DOOR_HALF * 2.0, 0.04, WALL_T + 0.10), _mat["black"])
 
 
 ## 南立面（背面）。二层那扇窗 x 2.50~6.50 / y 5.00~7.20 要避开线。
 func _build_facade_south() -> void:
 	var zf := HALF_D
-	var z_p := zf + FACE_PILLAR * 0.5
-	var z_d := zf + FACE_PANEL * 0.5
-	var z_b := zf + FACE_BAND * 0.5
+	var z_p := zf - (EMBED_PILLAR - FACE_PILLAR) * 0.5
+	var z_d := zf - (EMBED_PANEL - FACE_PANEL) * 0.5
+	var z_b := zf - (EMBED_BAND - FACE_BAND) * 0.5
+	var t_p := FACE_PILLAR + EMBED_PILLAR
+	var t_d := FACE_PANEL + EMBED_PANEL
+	var t_b := FACE_BAND + EMBED_BAND
 
-	for spec in [[-6.90, 0.0, TOP_H], [-4.10, 0.0, 5.00], [1.20, 5.00, TOP_H],
-			[6.90, 0.0, 7.20]]:
+	for spec in [[-6.90, 0.0, TOP_H - 0.02], [-4.10, 0.0, 4.98], [1.20, 5.02, TOP_H - 0.02],
+			[6.90, 0.0, 7.18]]:
 		var px: float = spec[0]
 		var y0: float = spec[1]
 		var y1: float = spec[2]
 		_deco("PillarS", Vector3(px, (y0 + y1) * 0.5, z_p),
-			Vector3(0.28, y1 - y0, FACE_PILLAR), _mat["black"])
-	for spec in [[2.20, -HALF_W, 2.50], [2.20, 6.50, HALF_W], [7.20, 0.50, HALF_W],
-			[TOP_H - 0.15, -HALF_W, HALF_W]]:
+			Vector3(0.28, y1 - y0, t_p), _mat["black"])
+	for spec in [[2.20, -HALF_W, 2.50], [2.20, 6.50, HALF_W],
+			[TOP_H - 0.22, -HALF_W, HALF_W]]:
 		var py: float = spec[0]
 		var x0: float = spec[1]
 		var x1: float = spec[2]
 		_deco("BandS", Vector3((x0 + x1) * 0.5, py, z_b),
-			Vector3(x1 - x0, 0.30, FACE_BAND), _mat["black"])
+			Vector3(x1 - x0, 0.30, t_b), _mat["black"])
 
-	_deco("PanelSBlue", Vector3(-7.10, 6.60, z_d), Vector3(0.90, 2.20, FACE_PANEL),
+	_deco("PanelSBlue", Vector3(-7.10, 6.60, z_d), Vector3(0.90, 2.20, t_d),
 		_mat["blue"])
-	_deco("PanelSYellow", Vector3(-1.30, 1.60, z_d), Vector3(2.20, 1.40, FACE_PANEL),
+	_deco("PanelSYellow", Vector3(-1.30, 1.60, z_d), Vector3(2.20, 1.40, t_d),
 		_mat["yellow"])
 
 
@@ -505,9 +548,11 @@ func _build_facade_south() -> void:
 ## 线要绕开窗洞，所以竖线只放在窗洞之外，横线在窗上下各压一道。
 func _build_facade_side(side: float) -> void:
 	var xf := HALF_W * side
-	var x_p := xf + FACE_PILLAR * 0.5 * side
-	var x_d := xf + FACE_PANEL * 0.5 * side
-	var x_b := xf + FACE_BAND * 0.5 * side
+	var x_p := xf + (FACE_PILLAR - EMBED_PILLAR) * 0.5 * side
+	var x_b := xf + (FACE_BAND - EMBED_BAND) * 0.5 * side
+	var t_p := FACE_PILLAR + EMBED_PILLAR
+	var t_b := FACE_BAND + EMBED_BAND
+	var t_d := FACE_PANEL + EMBED_PANEL
 	var tag := "E" if side > 0.0 else "W"
 	# 窗的 z 范围（和 `_build_walls()` 里的一致）
 	var wz0 := -4.00 if side > 0.0 else 0.50
@@ -515,34 +560,34 @@ func _build_facade_side(side: float) -> void:
 	var zp_left := wz0 - 1.60
 	var zp_right := wz1 + 1.60
 
-	for spec in [[zp_left, 0.0, TOP_H], [zp_right, 0.0, 5.00]]:
+	for spec in [[zp_left, 0.0, TOP_H - 0.02], [zp_right, 0.0, 4.98]]:
 		var pz: float = spec[0]
 		var y0: float = spec[1]
 		var y1: float = spec[2]
 		_deco("Pillar%s" % tag, Vector3(x_p, (y0 + y1) * 0.5, pz),
-			Vector3(FACE_PILLAR, y1 - y0, 0.28), _mat["black"])
+			Vector3(t_p, y1 - y0, 0.28), _mat["black"])
 	# 窗洞上下各一道（贴着窗台/窗顶走，绕开玻璃）
-	for spec in [[0.85, -HALF_D, HALF_D], [3.35, wz0 - 0.10, wz1 + 0.10],
-			[4.85, wz0 - 0.10, wz1 + 0.10], [7.35, -HALF_D, HALF_D]]:
+	# ⚠️ 横线的**顶/底面不能和墙的分缝平面重合**（墙在 y = 1.00 / 3.20 / 5.00 / 7.20
+	#    处分块），否则「BandE ↔ WallE_Sill1 轴1 +面 0.200 m²」这种成对共面会闪。
+	#    原来四条分别在 0.85 / 3.35 / 4.85 / 7.35，**四条全中**；而且 7.35 那条
+	#    还横穿窗洞。现在改成窗下 0.82、两层窗之间 4.10、窗上 7.62。
+	for spec in [[0.82, -HALF_D, HALF_D], [4.10, wz0 - 0.10, wz1 + 0.10],
+			[7.62, -HALF_D, HALF_D]]:
 		var py: float = spec[0]
 		var z0: float = spec[1]
 		var z1: float = spec[2]
 		_deco("Band%s" % tag, Vector3(x_b, py, (z0 + z1) * 0.5),
-			Vector3(FACE_BAND, 0.30, z1 - z0), _mat["black"])
+			Vector3(t_b, 0.30, z1 - z0), _mat["black"])
 
-	# 彩色板：一块吊在二层高处，一块压在一层低处
+	# 彩色板：一块吊在二层高处，一块压在一层低处。
+	# 三种元素埋进墙里的深度不同（板 0.11 > 竖线 0.08 > 横线 0.05），见 `EMBED_*`。
 	var hi_mat: Material = _mat["blue"] if side > 0.0 else _mat["red"]
 	var lo_mat: Material = _mat["red"] if side > 0.0 else _mat["yellow"]
-	_deco("Panel%sHi" % tag, Vector3(x_d, 6.20, zp_left), Vector3(FACE_PANEL, 1.90, 2.20),
+	var xdp := xf + (FACE_PANEL - EMBED_PANEL) * 0.5 * side
+	_deco("Panel%sHi" % tag, Vector3(xdp, 6.20, zp_left), Vector3(t_d, 1.90, 2.20),
 		hi_mat)
-	_deco("Panel%sLo" % tag, Vector3(x_d, 0.55, zp_right), Vector3(FACE_PANEL, 0.90, 2.40),
+	_deco("Panel%sLo" % tag, Vector3(xdp, 0.55, zp_right), Vector3(t_d, 0.90, 2.40),
 		lo_mat)
-
-	# ── 东、西立面也各挂一块彩色板，绕到侧面时不至于全白 ──
-	_deco("PanelEast", Vector3(HALF_W + FACE_PANEL * 0.5, 6.30, 3.40),
-		Vector3(FACE_PANEL, 1.60, 2.60), _mat["blue"])
-	_deco("PanelWest", Vector3(-HALF_W - FACE_PANEL * 0.5, 6.30, -3.40),
-		Vector3(FACE_PANEL, 1.60, 2.60), _mat["red"])
 
 
 # ══════════════════════════ 室内家具 ══════════════════════════
