@@ -656,6 +656,45 @@ func _build_lights() -> void:
 			_deco("Tube%s%s" % [tag, "W" if sx < 0.0 else "E"],
 				Vector3(sx * 3.20, h + 0.10, 0.40), Vector3(1.80, 0.08, 0.30), _mat["lamp"])
 
+	# ── 门口灯：门头正上方一盏，晚上/背光时门口不至于是个黑洞 ──
+	var door_light := OmniLight3D.new()
+	door_light.name = "DoorLight"
+	door_light.position = Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.90)
+	door_light.light_color = Color(1.0, 0.95, 0.86)
+	door_light.light_energy = 2.0
+	door_light.omni_range = 7.5
+	door_light.shadow_enabled = false
+	add_child(door_light)
+	_deco("DoorLampBody", Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.22),
+		Vector3(0.60, 0.10, 0.26), _mat["lamp"])
+
+	# ── 招牌：门洞上方一块**深色底板 + 白字**，和天使24 / 召唤台的做法一致（Label3D）──
+	# ⚠️ 底板必须**埋进立面里**（往 +Z 退 0.02），否则和 `DoorHead` 那块黑门头共面。
+	#
+	# ⚠️ Label3D 的三条经验（`summon_pad.gd` 里踩出来的，这里照抄）：
+	#    1. `font_size × pixel_size` 才是字高（米）：96 × 0.0032 ≈ 0.31 m；
+	#    2. `outline_size` 必须给，**且要够大**（0 是"无描边"，深色底板上的浅字
+	#       没有描边会糊在底板里）；
+	#    3. `no_depth_test = true` —— 否则字的后半截会被自己的底板吃掉。
+	var sign_z := -HALF_D - FACE_BAND - 0.004
+	_deco("SignPlate", Vector3(0.0, DOOR_H + 0.62, sign_z + 0.02),
+		Vector3(3.60, 0.62, 0.08), _mat["black"])
+	var lb := Label3D.new()
+	lb.name = "SignText"
+	lb.text = "蒙德里安"
+	lb.font_size = 96
+	lb.pixel_size = 0.0032
+	lb.outline_size = 18
+	lb.outline_modulate = Color(0.06, 0.06, 0.06)
+	lb.modulate = Color(0.97, 0.96, 0.93)
+	lb.no_depth_test = true
+	lb.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	lb.shaded = false
+	lb.double_sided = false
+	lb.rotation.y = PI          # 字面朝 −Z（朝走道/朝商店）
+	lb.position = Vector3(0.0, DOOR_H + 0.62, sign_z - 0.03)
+	add_child(lb)
+
 
 # ══════════════════════════ 自检输出 ══════════════════════════
 
