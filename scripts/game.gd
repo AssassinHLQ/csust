@@ -667,11 +667,18 @@ func _ready() -> void:
 const STANDBY_SCENE := "res://scenes/bosses_standby.tscn"
 ## 新区域：商店（初始小屋右边，跨出平台铺一块地板）。见 `scripts/shop.gd`。
 const SHOP_SCENE := "res://scenes/shop.tscn"
-## 蒙德里安大楼（两层，商店正对面）。位置的理由写在 `_build_mondrian()` 上面那段：
-## 北墙 z = −8.00 与商店门（z = −12.70）留 4.70 m 走道；东西 x 21.00 ~ 37.00
-## 全落在商店地板 Deck（x 20.01 ~ 40.00）之内，脚下不悬空。
+## 蒙德里安大楼（两层，商店正对面）。
+##
+## 位置的理由写在 `_build_mondrian()` 上面那段：北墙 z = −8.00 与商店门
+## （z = −12.70）留 4.70 m 走道；x 范围全落在商店地板 Deck（x 20.01 ~ 40.00）之内。
+##
+## ⚠️ x 为什么是 **27.30** 而不是 29.00：商店门中心在 x = 27.30，用户要的是
+##    「进入入口在这个商店对面」—— 两门必须**正对**。第一版摆 29.00，
+##    两门横向差 1.70 m，实测从商店门口直着走 +Z，人会在 z = −8.30 被大楼
+##    北墙挡住（那里是实墙，不是门洞）。现在两门中心都在 x = 27.30，
+##    从商店门出来一直走就进大楼。
 const MONDRIAN_SCENE := "res://scenes/mondrian_house.tscn"
-const MONDRIAN_POS := Vector3(29.0, 0.0, -2.0)
+const MONDRIAN_POS := Vector3(27.30, 0.0, -2.0)
 
 
 ## 解析 `--bosses=`：返回空数组 = 不加。
