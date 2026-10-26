@@ -120,6 +120,20 @@ const CAMERA_FORWARD_OFFSET := PI
 const AIM_FOV_RATIO := 0.55
 @export var cam_lerp := 12.0
 
+## ── 上台阶的相机缓冲（用户 2026-10-26：「上楼梯生硬」）──
+##
+## `step_climb.gd` 把人**一帧之内**抬上台阶：实测爬蒙德里安那段 21 级楼梯，
+## 单帧最大抬升 **0.239 m**，整段 77 次跳变。相机挂在玩家身上 → 一级一「啪」。
+## 这里把那一次抬升记成 `_step_lag`（负值），再由 `_apply_camera()` 按指数曲线
+## 放掉：物理上人已经站上去了（脚仍踩在踏面上），**相机是滑上去的**。
+##
+## `STEP_LAG_TAU`：时间常数（秒）。0.075 ≈ 4~5 帧回到 63%，肉眼就是「顺」；
+##                 给 0.2 会明显觉得镜头黏在下面。
+## `STEP_LAG_MAX`：一次最多缓冲多高（米）。连续上台阶时防止越积越多变成弹簧。
+const STEP_LAG_TAU := 0.075
+const STEP_LAG_MAX := 0.45
+var _step_lag := 0.0
+
 var aiming := false
 var sprinting := false
 var crouching := false
@@ -356,7 +370,17 @@ func _physics_process(delta: float) -> void:
 	# （`_verify_move_feel.gd` 那套断言照旧）。
 	var before := global_position
 	if _blocked_last_frame and horiz.length_squared() > 0.01:
-		StepClimb.try_step(self, horiz * delta)
+		var y0 := global_position.y
+		if StepClimb.try_step(self, horiz * delta):
+			# ── 上台阶的**相机缓冲**（用户 2026-10-26：「上楼梯生硬」）──
+			#
+			# `step_climb` 是**一帧之内**把人抬上去的：实测爬那段 21 级楼梯，
+			# 单帧最大抬升 **0.239 m**、一分钟里跳 77 次 —— 相机挂在人身上，
+			# 于是跟着一级一级「啪」地跳，这就是「生硬」。
+			# 这里只把**抬升量**记进 `_step_lag`（水平位移照旧即时，不然人会慢半拍），
+			# 由 `_apply_camera()` 按指数曲线放掉：物理上她已经站上去了，脚仍然踩在
+			# 踏面上；但**相机是滑上去的**。
+			_step_lag = maxf(_step_lag - maxf(global_position.y - y0, 0.0), -STEP_LAG_MAX)
 		before = global_position
 	move_and_slide()
 	_blocked_last_frame = StepClimb.blocked(
@@ -412,12 +436,15 @@ func _physics_process(delta: float) -> void:
 ## 相机平滑：开镜时拉近、抬高、右肩偏移、缩 FOV
 func _apply_camera(delta: float) -> void:
 	var t := clampf(cam_lerp * delta, 0.0, 1.0)
+	# 上台阶缓冲（见 `_physics_process` 里记 `_step_lag` 那段）：指数衰减，
+	# 帧率无关。它**加在** rig 的基准高度上，所以不干扰蹲/开镜的高度插值。
+	_step_lag = lerpf(_step_lag, 0.0, 1.0 - exp(-delta / STEP_LAG_TAU))
 	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
 	#    见 `min_zoom_for_full_body()`。
 	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body())
 	spring.spring_length = lerpf(spring.spring_length, want, t)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else hip_shoulder), t)
-	rig.position.y = lerpf(rig.position.y, aim_height if aiming else hip_height, t)
+	rig.position.y = lerpf(rig.position.y, aim_height if aiming else hip_height, t) + _step_lag
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)
 
 	_recoil_pitch = lerpf(_recoil_pitch, 0.0, clampf(9.0 * delta, 0.0, 1.0))

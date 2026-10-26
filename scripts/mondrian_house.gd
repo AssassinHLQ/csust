@@ -106,6 +106,12 @@ const EMBED_BAND := 0.05
 const FACE_PILLAR := 0.07
 const FACE_BAND := 0.09
 
+## 横线**不要顶到墙的边**：屋顶/墙的分缝线、墙角线都在 ±HALF_W / ±HALF_D 上，
+## 横线的端面一落在那里就和墙的端面**同向共面**（`_verify_mondrian.gd` 抓出 40 组，
+## 每组 ~0.015 m²：站在墙角边上走动时那一条 30 cm × 5 cm 会闪）。
+## 现在每条横线两端各缩 `EDGE` —— 离墙边 12 mm，肉眼看不出来，但不再共面。
+const EDGE := 0.012
+
 ## 单独 instance 出来看效果时打开；`game.gd` 里是显式 `build()`（和 shop.gd 一个套路）
 @export var auto_build := false
 
@@ -493,8 +499,10 @@ func _build_facade_north() -> void:
 
 	# ── 竖线：x 位置 / 起点 y / 终点 y（门那两条从门顶起）──
 	# 长度刻意不齐：−5.00 只到 6.30 就停，3.20 从 2.90 才起 —— 这是「画」的关键。
+	# ⚠️ 门那两条的**下端点要抬 0.01**：原来是正好 DOOR_H = 2.60，
+	#    和 `WallN_Lintel` 的底面同高 → 同向共面 0.011 m²（门口上方那两条竖线会闪）。
 	for spec in [[-6.60, 0.0, TOP_H - 0.02], [-5.00, 0.0, 6.30],
-			[-DOOR_HALF, DOOR_H, TOP_H - 0.02], [DOOR_HALF, DOOR_H, TOP_H - 0.02],
+			[-DOOR_HALF, DOOR_H + 0.01, TOP_H - 0.02], [DOOR_HALF, DOOR_H + 0.01, TOP_H - 0.02],
 			[3.20, 2.90, TOP_H - 0.02], [6.10, 0.0, 4.20]]:
 		var px: float = spec[0]
 		var y0: float = spec[1]
@@ -503,6 +511,7 @@ func _build_facade_north() -> void:
 			Vector3(0.28, y1 - y0, t_p), _mat["black"])
 
 	# ── 横线：y 位置 / x 起点 / x 终点（在门洞上方断开）──
+	# ⚠️ 顶到墙边的两条（±HALF_W）各缩 `EDGE`，见 `EDGE` 的注释。
 	for spec in [[2.90, -HALF_W, -2.30], [2.90, 2.30, HALF_W],
 			[FLOOR_H, -HALF_W, HALF_W], [6.30, -7.40, 1.60],
 			[TOP_H - 0.22, -HALF_W, HALF_W]]:
@@ -510,7 +519,7 @@ func _build_facade_north() -> void:
 		var x0: float = spec[1]
 		var x1: float = spec[2]
 		_deco("BandN", Vector3((x0 + x1) * 0.5, py, z_b),
-			Vector3(x1 - x0, 0.30, t_b), _mat["black"])
+			Vector3(maxf(x1 - x0 - EDGE * 2.0, 0.05), 0.30, t_b), _mat["black"])
 
 	# ── 彩色矩形：贴在格子里，四周留出黑线的位置 ──
 	_deco("PanelNRed", Vector3(-7.05, 5.05, z_d), Vector3(1.10, 1.90, t_d),
@@ -554,7 +563,7 @@ func _build_facade_south() -> void:
 		var x0: float = spec[1]
 		var x1: float = spec[2]
 		_deco("BandS", Vector3((x0 + x1) * 0.5, py, z_b),
-			Vector3(x1 - x0, 0.30, t_b), _mat["black"])
+			Vector3(maxf(x1 - x0 - EDGE * 2.0, 0.05), 0.30, t_b), _mat["black"])
 
 	_deco("PanelSBlue", Vector3(-7.10, 6.60, z_d), Vector3(0.90, 2.20, t_d),
 		_mat["blue"])
@@ -596,7 +605,7 @@ func _build_facade_side(side: float) -> void:
 		var z0: float = spec[1]
 		var z1: float = spec[2]
 		_deco("Band%s" % tag, Vector3(x_b, py, (z0 + z1) * 0.5),
-			Vector3(t_b, 0.30, z1 - z0), _mat["black"])
+			Vector3(t_b, 0.30, maxf(z1 - z0 - EDGE * 2.0, 0.05)), _mat["black"])
 
 	# 彩色板：一块吊在二层高处，一块压在一层低处。
 	# 三种元素埋进墙里的深度不同（板 0.11 > 竖线 0.08 > 横线 0.05），见 `EMBED_*`。
@@ -659,23 +668,42 @@ func _build_interior() -> void:
 
 ## 两层各两盏（关阴影：本项目对功耗敏感，shop.gd 里也是这么做的）。
 ## 没有实体灯管的话，8 m 高的室内白天也是一片灰，看不出红/蓝/黄。
+##
+## ⚠️⚠️ 2026-10-26 用户：「灯又没有挂到天花板上而是浮空了」——**又**踩了小屋吊灯那个坑。
+##    灯管原来固定挂在 y = 3.40 / 7.20，而两层天花板的下表面分别是
+##    **3.950**（二层楼板底）和 **8.000**（屋顶底）：
+##
+##      第一版  Tube1 顶面 3.540 → 离天花板 **0.410 m**（悬空）
+##              Tube2 顶面 7.340 → 离天花板 **0.660 m**（悬空更明显）
+##      商店的同类灯管顶面 4.950、天花板 4.950 → 0.000（贴着，这才是对的）
+##
+##    现在按**天花板下表面**算：灯管顶面比它**高 0.02**（埋进楼板/屋顶 2 cm，
+##    和全楼 `SINK`/`TUCK` 的规矩一致，避免和天花板下表面共面）。
+##    灯管厚 0.08，所以中心 = 天花板下表面 − 0.02；点光源再往下 0.13。
+const TUBE_T := 0.08
+const TUBE_EMBED := 0.02
+
 func _build_lights() -> void:
-	for row in [[3.40, "1"], [7.20, "2"]]:
-		var h: float = row[0]
+	# [天花板下表面 y, 标签]
+	for row in [[FLOOR_H - SLAB_T, "1"], [TOP_H, "2"]]:
+		var ceil_y: float = row[0]
 		var tag: String = row[1]
+		var tube_y := ceil_y + TUBE_EMBED - TUBE_T * 0.5
 		for sx in [-1.0, 1.0]:
 			var l := OmniLight3D.new()
 			l.name = "Light%s%s" % [tag, "W" if sx < 0.0 else "E"]
-			l.position = Vector3(sx * 3.20, h, 0.40)
+			l.position = Vector3(sx * 3.20, tube_y - TUBE_T * 0.5 - 0.05, 0.40)
 			l.light_color = Color(1.0, 0.94, 0.84)
 			l.light_energy = 2.4
 			l.omni_range = 13.0
 			l.shadow_enabled = false
 			add_child(l)
 			_deco("Tube%s%s" % [tag, "W" if sx < 0.0 else "E"],
-				Vector3(sx * 3.20, h + 0.10, 0.40), Vector3(1.80, 0.08, 0.30), _mat["lamp"])
+				Vector3(sx * 3.20, tube_y, 0.40), Vector3(1.80, TUBE_T, 0.30), _mat["lamp"])
 
 	# ── 门口灯：门头正上方一盏，晚上/背光时门口不至于是个黑洞 ──
+	# ⚠️ 灯体原来挂在 z = −HALF_D − 0.22（墙面外 0.22 m），**悬在门前空中**；
+	#    现在补一根 0.06 厚的支架把它和墙面接起来（用户 2026-10-26 的「浮空」）。
 	var door_light := OmniLight3D.new()
 	door_light.name = "DoorLight"
 	door_light.position = Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.90)
@@ -684,7 +712,9 @@ func _build_lights() -> void:
 	door_light.omni_range = 7.5
 	door_light.shadow_enabled = false
 	add_child(door_light)
-	_deco("DoorLampBody", Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.22),
+	_deco("DoorLampArm", Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.11),
+		Vector3(0.10, 0.06, 0.24), _mat["black"])
+	_deco("DoorLampBody", Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.26),
 		Vector3(0.60, 0.10, 0.26), _mat["lamp"])
 
 	# ── 门头上**没有招牌字** ──

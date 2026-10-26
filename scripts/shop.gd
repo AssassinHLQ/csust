@@ -387,7 +387,13 @@ func _build_shell() -> void:
 	# 门正上方也补一扇幕墙玻璃：不补的话门洞上方就是个「洞」，
 	# 从街上直接看进店里的后墙（渲图上一眼就是块米色板，与幕墙断开）。
 	# 宽度取「门洞 + 两根竖梃」，两侧压进竖梃里，不会和后墙共面。
-	_box_decor("CurtainGlassDoor", Vector3(0.0, (upper_y0 + upper_y1) * 0.5, z_out),
+	#
+	# ⚠️ 2026-10-26：它和左右两扇 `CurtainGlassW/E` 在 x 上有 4 cm 重叠（故意压进竖梃），
+	#    三块的前表面又都落在 z = z_out + 0.03 上 —— `_probe_float_lamp_zfight.gd`
+	#    量到「CurtainGlassE ↔ CurtainGlassDoor 轴2 +面 0.098 m²」同向共面，
+	#    也就是店面正中那两条 2.2 m 高的**竖缝会闪**。
+	#    修法：门这扇往墙里退 4 mm，前表面错开（重叠体积照旧，竖梃照样盖住接缝）。
+	_box_decor("CurtainGlassDoor", Vector3(0.0, (upper_y0 + upper_y1) * 0.5, z_out - 0.004),
 		Vector3(door_w + 2.0 * pier + e * 2.0, upper_y1 - upper_y0, 0.06), _mat["glass"])
 	# 门洞正中一道竖梃：门上方那格玻璃背后正好是店里的后墙（米色），
 	# 不加这根竖梃，正面看过去那一整块像「实心板」而不像玻璃。
@@ -411,9 +417,12 @@ func _build_shell() -> void:
 		Vector3(L - t * 2.0 + 0.06, 0.06, D - t * 2.0 + 0.06), _mat["ceiling"])
 
 	# 门框（装饰，不挡人）：两根竖梃 + 一根门头
+	# ⚠️ 竖梃的 z 比门头**多出 5 mm**（0.045 而不是 0.04）：两者厚度都是 0.08，
+	#    同一个 z 的话外表面共面 → `_probe_float_lamp_zfight.gd` 量到
+	#    「DoorJambW/E ↔ DoorHead 轴2 +面 0.007 m²」，门框顶部两个角会闪。
 	for sx in sides:
 		_box_decor("DoorJamb%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * (half_door + 0.06), door_height * 0.5, D * 0.5 + 0.04),
+			Vector3(sx * (half_door + 0.06), door_height * 0.5, D * 0.5 + 0.045),
 			Vector3(0.12, door_height + 0.1, 0.08), _mat["trim"])
 	_box_decor("DoorHead", Vector3(0.0, door_height + 0.05, D * 0.5 + 0.04),
 		Vector3(door_w + 0.24, 0.12, 0.08), _mat["trim"])
@@ -579,6 +588,11 @@ func _build_clerk() -> void:
 
 
 ## 一组货架：两块侧板 + 三块隔板（全部带碰撞，数字只写一遍）
+##
+## ⚠️ 2026-10-26：隔板原来是**整宽 w**，端面正好落在侧板的外表面上
+##    （两侧各 cx ± 1.20 = 侧板外沿）→ `_probe_float_lamp_zfight.gd` 量到
+##    「ShelfSide4 ↔ ShelfBoard6 轴0 +面 0.036 m²」这组同向共面，侧面看货架会闪。
+##    现在隔板缩到 `w − 0.04`：两端各让 2 cm 缩进侧板里，还是搭在侧板上。
 func _shelf(cx: float, cz: float) -> void:
 	var w := 2.4
 	var h := 1.8
@@ -588,7 +602,7 @@ func _shelf(cx: float, cz: float) -> void:
 			Vector3(0.1, h, d), _mat["wood"])
 	for i in 3:
 		_box("ShelfBoard", Vector3(cx, h - 0.2 - float(i) * 0.6, cz),
-			Vector3(w, 0.08, d), _mat["wood"])
+			Vector3(w - 0.04, 0.08, d - 0.02), _mat["wood"])
 
 
 # ══════════════════════════ 灯 ══════════════════════════
