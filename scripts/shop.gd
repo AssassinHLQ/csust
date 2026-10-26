@@ -494,22 +494,33 @@ func _build_counter() -> void:
 	_box("CounterKick", Vector3(cx, floor_y + 0.06, cz),
 		Vector3(cw - 0.10, 0.12 + TUCK, cl - 0.20), _mat["dark"])
 
-	# 柜体（橡木）
-	var body_h := 0.86
+	# 柜体（橡木）。
+	# ⚠️ 柜体高度**跟着台面走**（`body_h = top_h − 0.18`）：柜体从 y=0.10 起、
+	#    顶上 `TUCK` 之后正好接住台面的底面（`top_h − 0.06`），中间不留缝也不插进去。
+	var top_h := 0.88       # 台面高度（米）
+	var body_h := top_h - 0.18
 	_box("Counter", Vector3(cx, floor_y + 0.12 + body_h * 0.5, cz),
 		Vector3(cw, body_h + TUCK, cl), _mat["counter"])
 
-	# 前脸嵌板（朝顾客那面 -X）：浅一号，凹进去 2 cm
-	_box_decor("CounterPanel", Vector3(cx - cw * 0.5 - 0.01, 0.60, cz),
-		Vector3(0.03, 0.62, cl - 0.36), _mat["counter_light"])
+	# 前脸嵌板（朝顾客那面 -X）：浅一号，凹进去 2 cm。
+	# ⚠️ 高度必须**跟着 body_h 走**：原来写死 0.60 / 0.62，是给 0.86 高的柜体配的；
+	#    柜体降到 0.70 之后嵌板会从柜顶探出 9 cm，像块立起来的板子。
+	var face_cy := floor_y + 0.12 + body_h * 0.5
+	var face_cy_h := body_h - 0.10
+	_box_decor("CounterPanel", Vector3(cx - cw * 0.5 - 0.01, face_cy, cz),
+		Vector3(0.03, face_cy_h, cl - 0.36), _mat["counter_light"])
 	# 前脸两道压条（装饰）
 	for dz in [-1.0, 1.0]:
 		_box_decor("CounterTrim%s" % ("A" if dz < 0.0 else "B"),
-			Vector3(cx - cw * 0.5 - 0.02, 0.60, cz + dz * (cl * 0.5 - 0.18)),
-			Vector3(0.05, 0.62, 0.05), _mat["steel"])
+			Vector3(cx - cw * 0.5 - 0.02, face_cy, cz + dz * (cl * 0.5 - 0.18)),
+			Vector3(0.05, face_cy_h, 0.05), _mat["steel"])
 
-	# 台面：1.04 高、6 cm 厚，前后各出檐 7 cm
-	var top_h := 1.04
+	# 台面：6 cm 厚，前后各出檐 7 cm。
+	#
+	# ⚠️ 2026-10-26 用户「柜台太高了」—— 原来是 **1.04 m**。
+	#    芹香按设定身高 1.52 m（`shop_clerk.gd` 的 MODEL_SCALE），1.04 已经到她的
+	#    胸口以上，从顾客那侧看过去只剩一个头，柜台像一堵墙。改成 0.88 m
+	#    （≈ 她身高的 58%，和真实便利店柜台的比例接近）。
 	_box("CounterTop", Vector3(cx, top_h - 0.03, cz),
 		Vector3(cw + 0.14, 0.06 + TUCK, cl + 0.16), _mat["counter_top"])
 	# 前沿不锈钢压条（顾客那一侧）

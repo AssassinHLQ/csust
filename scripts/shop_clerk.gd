@@ -23,7 +23,7 @@ extends Node3D
 ##
 ## ── 尺寸 ──
 ##   实测包围盒 0.67 × 1.39 × 0.50 m，**底在 y = −0.27**（原点在脚上方），
-##   所以 `_ground()` 会把模型整体抬高 0.27 m 让脚踩到地板。
+##   所以 `_ground()` 会把模型整体抬高 0.296 m（= 0.27 × 1.09）让脚踩到地板。
 ##   比爱丽丝（1.47 m）矮一点点，正好是芹香矮个子的设定，不缩放。
 ##   手骨高 0.45 + 0.27 = 0.72 m，柜台台面 1.04 m —— 手藏在柜台后面 ✓
 const MODEL := "res://models/npc/serika/serika.glb"
@@ -53,22 +53,42 @@ const HAND_BONES := {
 ##    ⚠️ 2026-10-22 晚再修：本喵一度又加了 0.22 m 的「隐形垫脚箱」，用户从柜台侧面
 ##    一眼就看见**她的脚悬空 0.218 m**（`_probe_face_hut.gd` 量到 AABB 底 y=0.218）。
 ##    现在抬脚只留模型自己的原点偏移，**脚底 y = 0.000**，绝不悬空。
-##    代价（实话实说）：柜台台面 1.04 m 比她的下巴（≈1.10 m）还高，从顾客那侧只露一个头。
-##    要露更多只有两条路：柜台降高，或者给她脚下垫一块**看得见**的踏板。
+##    代价（实话实说）：柜台台面比她的下巴还高，从顾客那侧只露一个头。
 ##
-## ⚠️⚠️ 2026-10-22 23:2x 用户「灯没提上去啊，还是浮空」—— **又悬空了，0.34 m**。
-##    根因是本喵一直在用 `mesh.get_aabb()`（= **绑定姿势**的包围盒）当「脚底」。
-##    蒙皮模型的这个盒子跟屏幕上真实渲染的姿势不是一回事，于是「量着贴地、看着悬空」，
-##    上一版为了把它压到 y=0 反而把整个人抬上去了。
-##    改用**骨骼**量（`_probe_clerk_feet.gd`），拿玩家当参照：
-##      玩家（`player.tscn` 里 −0.035 是调准过的）  Bip001 L/R Foot = +0.006 / +0.010
-##      芹香（改之前，CLERK_LIFT = 0.294）          Bip001 R/L Foot = +0.344 / +0.347
-##    → 高了 0.337 m。她的模型原点本身就有 4.65 cm 的脚踝偏移（×1.09 缩放 = 5.07 cm），
-##      所以正确抬脚 = 0.008 − 1.09 × 0.0465 = **−0.043**。
-##      改完复量：两脚 Foot 骨 +0.007 / +0.009，与玩家一致。
-##    副产品：整个人从 1.86 m 落回 1.52 m，柜台后面露出头 + 肩（原来只露一个头尖）。
+## ⚠️⚠️ 2026-10-26 复盘：**上一版把「浮空」的锅甩错了对象，改坏了她的高度**。
+##    事实链：
+##      · 模型原点在脚上方：蒙皮网格的世界包围盒底 = 原点 − 0.296 m
+##        （= GLB 里的 −0.27 × `MODEL_SCALE` 1.09），所以 `CLERK_LIFT = 0.296`
+##        才能让鞋底落在 y = 0；
+##      · 上一版误以为「用户说的浮空」是她，改用**脚骨高度**去对标玩家
+##        （`Bip001 L/R Foot` 定到 +0.007），把抬脚改成 −0.043 ——
+##        结果她**整个人埋进地板 0.339 m**（`_probe_clerk_height.gd` 实测：
+##        网格包围盒 y −0.339 ~ 1.188，身高 1.527 量级对，但整个沉下去了）。
+##      · 用户真正说的是**吊灯**浮空（小屋那段），与芹香无关。
+##    教训：她的骨架里**没有 toe 骨**，`Bip001 L/R Foot` 到底在踝还是在脚掌、
+##    离鞋底多少，和玩家那套骨架并不相同，**不能拿玩家的脚骨高度当尺子**。
+##    她自己的定高依据只有一个：模型原点相对鞋底的偏移（−0.296 m）。
+##
+## ── 两个数 ──
+##   `MODEL_SCALE`：等比缩放。她自己的包围盒高 1.39 m，× 1.09 = 1.52 m（设定身高）。
+##   `CLERK_LIFT` ：模型根节点的 y 偏移，把原点抬到「鞋底正好落在 y = 0」的位置。
 const MODEL_SCALE := 1.09
-const CLERK_LIFT := -0.043
+const CLERK_LIFT := 0.296
+
+## ── 对话（2026-10-26 用户：「芹香需要可以对话，交互后说 你配电脑吗?」）──
+##
+## 交互方式跟屋里的电脑（`hut_computer.gd`）一致：**站在她面前按 F**。
+## 说话用场景里的 `DialogueBox`（`play_steps` 是它的「内联播放」入口），
+## 这样打字的节奏、翻页、暂停世界全部沿用现成的那一套，不另起炉灶。
+const TALK_RADIUS := 2.6
+## 垂直方向也限定一下：站在二层或楼下远一点的地方按 F 不该触发
+const TALK_DY_MAX := 2.0
+## 对话内容。第一句是用户指定的原话。
+const TALK_LINES := [
+	"你配电脑吗?",
+]
+## 说话人名字（`DialogueBox` 名字牌上显示的那个）
+const SPEAKER := "芹香"
 
 ## 整只模型左右轻晃的幅度（没有 Idle 动画时的退路；芹香有动画，默认不晃）
 @export var idle_sway := false
@@ -87,6 +107,11 @@ var fit_scale := 1.0
 var _t := 0.0
 var _idle: AnimationPlayer
 var _idle_name := ""
+
+## 交互提示（「按 F 说话」）与范围标记
+var _hint: Label3D
+var _in_range := false
+var _player: Node3D
 
 
 func _ready() -> void:
@@ -113,6 +138,7 @@ func _ready() -> void:
 	_apply_smile()
 	_play_idle()
 	_make_body()
+	_make_hint()
 	print("[Clerk] 芹香就位：%s（骨架 %d 骨，缩放 %.2f×，抬脚 %.2f m，手骨高度 L=%.2f R=%.2f m，动画 %s）" % [
 		MODEL.get_file(), bone_count, fit_scale, ground_lift,
 		float(hand_y.get("l", -1.0)), float(hand_y.get("r", -1.0)),
@@ -222,7 +248,51 @@ func _replay_idle(anim_name: StringName) -> void:
 	_idle.play(anim_name)
 
 
+# ══════════════════════════ 对话交互 ══════════════════════════
+
+## 找场景里的 `DialogueBox`：从自己往上找，谁身上挂着就用谁的。
+## 不写死 `/root/Game/DialogueBox`，因为商店以后可能单独摆进别的关卡。
+func _dialogue() -> DialogueBox:
+	var n: Node = self
+	while n != null:
+		var d := n.get_node_or_null("DialogueBox") as DialogueBox
+		if d != null:
+			return d
+		n = n.get_parent()
+	return null
+
+
+## 玩家节点。走「`player` 组」而不是 `get_tree().current_scene.get_node("Player")`：
+##   `player.gd` 第 151 行 `add_to_group("player")`，组跟场景怎么挂无关；
+##   而 `current_scene` 在**探针/脚本手工挂场景**时是 null（实测就是这里没取到玩家，
+##   提示一直不显示、按 F 也没反应），`hut_computer.gd` 用的也是组。
+func _player_node() -> Node3D:
+	if _player != null and is_instance_valid(_player):
+		return _player
+	_player = get_tree().get_first_node_in_group("player") as Node3D
+	return _player
+
+
+## 「按 F 说话」的小提示。挂在头顶上方，只有走进范围才显示。
+func _make_hint() -> void:
+	_hint = Label3D.new()
+	_hint.name = "TalkHint"
+	_hint.text = "按 F 说话"
+	_hint.font_size = 40
+	_hint.pixel_size = 0.0032
+	_hint.outline_size = 10
+	_hint.outline_modulate = Color(0.05, 0.05, 0.06)
+	_hint.modulate = Color(1.0, 0.95, 0.75)
+	_hint.no_depth_test = true
+	_hint.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_hint.shaded = false
+	_hint.position = Vector3(0.0, 1.92, 0.0)
+	_hint.visible = false
+	add_child(_hint)
+
+
 func _process(delta: float) -> void:
+	_update_talk_range()
 	if _idle != null or not idle_sway or model == null:
 		return
 	_t += delta
@@ -260,3 +330,41 @@ func _skeletons(node: Node) -> Array:
 	for c in node.get_children():
 		out.append_array(_skeletons(c))
 	return out
+
+
+## 每帧判一次「玩家在不在跟前」，只在状态变化时改一次 `visible`。
+func _update_talk_range() -> void:
+	if _hint == null:
+		return
+	var p := _player_node()
+	if p == null:
+		return
+	var d := p.global_position - global_position
+	var flat := Vector2(d.x, d.z).length()
+	var near := flat <= TALK_RADIUS and absf(d.y) <= TALK_DY_MAX
+	if near == _in_range:
+		return
+	_in_range = near
+	_hint.visible = near
+
+
+func _input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo:
+		return
+	if k.keycode != KEY_F or not _in_range:
+		return
+	var d := _dialogue()
+	if d == null or d.is_active():
+		return
+	_talk(d)
+	get_viewport().set_input_as_handled()
+
+
+## 播放对话。`play_steps` 会自己暂停世界、打字、等翻页，结束后恢复。
+func _talk(d: DialogueBox) -> void:
+	var steps: Array = []
+	for line in TALK_LINES:
+		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
+	d.play_steps(steps, "shop_clerk")
+	print("[Clerk] 芹香开口：%d 句（%s）" % [steps.size(), String(TALK_LINES[0])])
