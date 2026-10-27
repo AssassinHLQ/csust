@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3]
+[gd_scene load_steps=33 format=3]
 
 ; 第二个场景：构成主义大厅（Constructivism）。
 ; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
@@ -87,6 +87,15 @@ size = Vector3(120.8, 0.62, 0.4)
 [sub_resource type="BoxMesh" id="Mesh_parapet"]
 size = Vector3(120.8, 0.62, 0.4)
 
+[sub_resource type="BoxShape3D" id="Shape_exit_door"]
+size = Vector3(0.32, 6, 5)
+
+[sub_resource type="BoxMesh" id="Mesh_exit_door"]
+size = Vector3(0.32, 6, 5)
+
+[sub_resource type="BoxMesh" id="Mesh_exit_stripe"]
+size = Vector3(0.36, 1, 1)
+
 [sub_resource type="BoxShape3D" id="Shape_bridge"]
 size = Vector3(8, 0.5, 15.2)
 
@@ -171,6 +180,26 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 36, -0.015, 3)
 mesh = SubResource("Mesh_carpet")
 surface_material_override/0 = SubResource("Mat_pad_on")
 cast_shadow = 0
+
+[node name="ExitDoor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.15, 3, 3)
+
+[node name="Collision" type="CollisionShape3D" parent="ExitDoor"]
+shape = SubResource("Shape_exit_door")
+
+[node name="Mesh" type="MeshInstance3D" parent="ExitDoor"]
+mesh = SubResource("Mesh_exit_door")
+surface_material_override/0 = SubResource("Mat_target_ring")
+
+[node name="StripeA" type="MeshInstance3D" parent="ExitDoor"]
+transform = Transform3D(1, 0, 0, 0, 0.25, 0, 0, 0, 5, -0.18, -1.6, 0)
+mesh = SubResource("Mesh_exit_stripe")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="StripeB" type="MeshInstance3D" parent="ExitDoor"]
+transform = Transform3D(1, 0, 0, 0, 0.25, 0, 0, 0, 5, -0.18, 1.7, 0)
+mesh = SubResource("Mesh_exit_stripe")
+surface_material_override/0 = SubResource("Mat_target")
 
 [node name="CampusBridge" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, -0.27, -67.5)

@@ -69,7 +69,14 @@ func _run() -> void:
 	_check(targets.size() == 3, "场上 3 个靶子（实际 %d）" % targets.size())
 	_check(not goal.monitoring, "终点初始锁定（monitoring = false）")
 	print("  计分牌：%s" % score.text)
-	_check(score.text == "目标 3 / 3", "计分牌初始 3/3")
+	_check(score.text == "机关 3 / 3", "计分牌初始 3/3")
+	# 机关没破之前东门挡着拱门
+	var q0 := PhysicsRayQueryParameters3D.create(Vector3(10, 0.3, 3), Vector3(70, 0.3, 3))
+	q0.collide_with_areas = false
+	var h0 := space.intersect_ray(q0)
+	var door_x := float(h0.position.x) if not h0.is_empty() else 999.0
+	print("  机关未破时往东打射线 → x=%.1f（应被东门挡在 ~14）" % door_x)
+	_check(door_x < 15.0, "机关未破时东门锁着")
 
 	# 先踩一次：锁着的时候不该完成
 	player.global_position = Vector3(1.0, 5.3, -8.2)
@@ -88,9 +95,9 @@ func _run() -> void:
 	for _i in 10:
 		await process_frame
 	print("  计分牌：%s  终点 monitoring=%s" % [score.text, str(goal.monitoring)])
-	_check(score.text == "目标 0 / 3", "计分牌归零")
+	_check(score.text == "机关 0 / 3", "计分牌归零")
 	_check(goal.monitoring, "靶子清空后终点解锁")
-	_check(msg.text.begins_with("目标全部击破"), "提示切换到「上高台」")
+	_check(msg.text.begins_with("机关全部击破"), "提示切换到「东门开启」")
 
 	print("\n=== 4. 踩终点 ===")
 	player.global_position = Vector3(1.0, 5.3, -8.2)
@@ -118,6 +125,11 @@ func _run() -> void:
 
 	print("
 === 6. 广场 / 东拱门 / 坠落保护 / 校园泼溅 ===")
+	await create_timer(2.0, true).timeout
+	var door := level.get_node_or_null("ExitDoor") as Node3D
+	print("  东门 y=%.2f（下沉 1.8 s 后应 < −3）" % (door.position.y if door else 999.0))
+	_check(door != null and door.position.y < -3.0, "三个机关破完，东门下沉")
+
 	var y_plaza := _ground_y(space, 30.0, 30.0, 6.0)
 	print("  广场地面 y=%.2f（应 −0.02）" % y_plaza)
 	_check(absf(y_plaza + 0.02) < 0.05, "广场地面高度正确")

@@ -21,11 +21,17 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 @onready var _goal_light: OmniLight3D = $Goal/Light
 @onready var _message: Label = $LevelUI/Message
 @onready var _fall: Area3D = $FallReset
+@onready var _campus: Node3D = get_node_or_null("Campus")
+@onready var _door: Node3D = $ExitDoor
 
 var _targets: Array = []
 var _left := 0
 var _total := 0
 var _complete := false
+var _door_open := false
+## 校园泼溅只在「出了大厅、且朝着校园」时才打开：Compute 后端 615 万点每帧
+## 固定成本约 500 ms，藏起来大厅里能 57 fps（实测 2.5 → 56.8）。
+var _campus_shown := false
 var _msg_tween: Tween
 var _pad_off: Material
 var _pad_on: Material
@@ -65,7 +71,7 @@ func _ready() -> void:
 		_hud.bind_splats(splats)
 	_set_goal_open(false)
 	_update_scoreboard()
-	_show_message("击破 %d 个红色靶子，再上高台踩圆盘" % _total, 5.0)
+	_show_message("击破 %d 个机关 —— 东门会下沉，可以出去看校园" % _total, 5.0)
 	print("[ConstructivistLevel] 关卡就绪：靶子 %d 个，玩家落点 %s"
 		% [_total, str(point.snappedf(0.01))])
 	SceneFlow.report_memory("构成主义关卡就绪")
@@ -88,9 +94,10 @@ func _on_target_died(_by: float) -> void:
 	_update_scoreboard()
 	if _left <= 0:
 		_set_goal_open(true)
-		_show_message("目标全部击破 —— 上高台，踩上红色圆盘", 6.0)
+		_open_exit_door()
+		_show_message("机关全部击破 —— 东门下沉，可以出去看校园", 6.0)
 		Sfx.play("ui_open", -2.0)
-		print("[ConstructivistLevel] 靶子清空，终点解锁")
+		print("[ConstructivistLevel] 机关清空，终点解锁 + 东门开启")
 
 
 func _set_goal_open(on: bool) -> void:
@@ -123,8 +130,50 @@ func _on_fall(body: Node3D) -> void:
 	print("[ConstructivistLevel] 玩家掉出广场，已送回出生点")
 
 
+## 东门下沉（动画 1.8 s），把碰撞一起沉到地板下面。
+func _open_exit_door() -> void:
+	if _door_open or _door == null:
+		return
+	_door_open = true
+	var tw := create_tween()
+	tw.tween_property(_door, "position:y", -3.3, 1.8) 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	print("[ConstructivistLevel] 东门下沉")
+
+
+func _process(_delta: float) -> void:
+	_update_campus_visibility()
+
+
+## 校园泼溅的可见性闸门：
+##   · 还没加载完 → 不动（保持隐藏）
+##   · 玩家还在大厅里 → **藏起来**（墙本来就挡着，没必要为它付每帧 500 ms）
+##   · 玩家出了大厅、但背对校园 → 也藏（绕到南边时不会白白掉帧）
+## 只有「站在广场上、大致朝校园那半边」才显示，这时才付渲染成本。
+func _update_campus_visibility() -> void:
+	if _campus == null or _player == null:
+		return
+	if not _campus.has_method("is_ready") or not bool(_campus.call("is_ready")):
+		return
+	var node := _campus.get("splat_node") as Node3D
+	if node == null:
+		return
+	if not _campus_shown:
+		node.visible = false
+	var pos := _player.global_position
+	var outside := absf(pos.x) > 15.0 or absf(pos.z) > 10.0
+	var cam := _player.get("cam") as Camera3D
+	var want := outside
+	if want and cam != null:
+		var to_campus := Vector3(0.0, 0.0, -150.0) - cam.global_position
+		want = (-cam.global_transform.basis.z).dot(to_campus.normalized()) > 0.15
+	if want != _campus_shown or node.visible != want:
+		_campus_shown = want
+		node.visible = want
+		print("[ConstructivistLevel] 校园泼溅 %s" % ("显示" if want else "隐藏（大厅里/背对）"))
+
+
 func _update_scoreboard() -> void:
-	_score.text = "目标 %d / %d" % [_left, _total]
+	_score.text = "机关 %d / %d" % [_left, _total]
 
 
 func _show_message(text: String, seconds: float) -> void:
