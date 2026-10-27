@@ -127,6 +127,13 @@ func _run() -> void:
 	var hit_x := float(h.position.x) if not h.is_empty() else 999.0
 	print("  大厅内往 +X 打射线 → 命中 x=%.1f（拱门开着应打到广场护栏 ~60）" % hit_x)
 	_check(hit_x > 50.0, "东墙拱门通向外广场")
+	# 广场→校园的桥、以及校园的隐形地面板
+	var y_bridge := _ground_y(space, 10.0, -67.0, 5.0)
+	print("  桥面 y=%.2f（应 −0.02）" % y_bridge)
+	_check(absf(y_bridge + 0.02) < 0.05, "广场到校园的桥面高度正确")
+	var y_campus := _ground_y(space, 0.0, -120.0, 5.0)
+	print("  校园地面板 y=%.2f（应 −0.02）" % y_campus)
+	_check(absf(y_campus + 0.02) < 0.05, "校园隐形地面板高度正确（可走）")
 	var campus := level.get_node_or_null("Campus")
 	_check(campus != null, "场景里有校园泼溅节点")
 	if campus != null:
