@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/constructivist_hall.gd" id="1_hall"]
+
+[node name="ConstructivistHall" type="Node3D"]
+script = ExtResource("1_hall")
+auto_build = true

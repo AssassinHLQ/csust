@@ -1,226 +1,210 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=18 format=3]
 
-; 下一场景（门厅）—— 蒙德里安二楼那扇门通向的地方。
+; 第二个场景：构成主义大厅（Constructivism）。
+; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
 ;
-; 这是一个**独立场景**：切进来时 SceneTree 会把上一个场景（校园平台 + 商店 +
-; 大楼 + 画室609 泼溅）整棵树 free 掉，显存随之回收。想换成真正的下一关时，
-; 只改入口节点的 target_scene 即可，这里的房间可以直接替换。
+; 建筑本体在 scenes/constructivist_hall_baked.tscn（由 constructivist_hall.gd 烘出来，
+; 每一块都能在编辑器里拖）。本文件只摆**玩法实体**：
+;   入口的返回门、玩家出生点、HUD、3 个红靶、高台终点、计分牌、关卡提示。
 ;
-; 几何全部是编辑器节点（StaticBody3D + CollisionShape3D + MeshInstance3D），
-; 位置/尺寸都能直接拖；墙面装饰用同一个单位 BoxMesh 缩放出来，改大小改 scale。
+; 路线：地面 → 红楔坡道（顶 3.2）→ 平台 A（3.2）→ 平台 B（4.2）→
+;       终点台（5.2，贴北墙）→ 踩上终点圆盘。
+; 三个靶子：北墙 (8, 2.6) / (12, 5.4)、东墙 (13.76, 4.0, z=2)。
 
 [ext_resource type="Script" path="res://scripts/next_level.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" path="res://scenes/scene_gate.tscn" id="4_gate"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="5_settings"]
+[ext_resource type="PackedScene" path="res://scenes/constructivist_hall_baked.tscn" id="6_hall"]
+[ext_resource type="Script" path="res://scripts/target.gd" id="7_target"]
 
-[sub_resource type="Environment" id="Env_next"]
+[sub_resource type="Environment" id="Env_hall"]
 background_mode = 1
-background_color = Color(0.055, 0.06, 0.075, 1)
+background_color = Color(0.05, 0.045, 0.04, 1)
 ambient_light_source = 3
-ambient_light_color = Color(0.55, 0.58, 0.66, 1)
-ambient_light_energy = 0.42
+ambient_light_color = Color(0.56, 0.5, 0.44, 1)
+ambient_light_energy = 0.5
 tonemap_mode = 3
 glow_enabled = true
-glow_intensity = 0.3
+glow_intensity = 0.35
 
-[sub_resource type="StandardMaterial3D" id="Mat_floor"]
-albedo_color = Color(0.42, 0.37, 0.31, 1)
-roughness = 0.9
+[sub_resource type="StandardMaterial3D" id="Mat_target"]
+albedo_color = Color(0.78, 0.13, 0.11, 1)
+roughness = 0.55
 
-[sub_resource type="StandardMaterial3D" id="Mat_wall"]
-albedo_color = Color(0.9, 0.89, 0.86, 1)
-roughness = 0.88
-
-[sub_resource type="StandardMaterial3D" id="Mat_black"]
-albedo_color = Color(0.055, 0.055, 0.06, 1)
-metallic = 0.25
-roughness = 0.42
-
-[sub_resource type="StandardMaterial3D" id="Mat_red"]
-albedo_color = Color(0.855, 0.098, 0.086, 1)
-roughness = 0.62
-
-[sub_resource type="StandardMaterial3D" id="Mat_blue"]
-albedo_color = Color(0.106, 0.286, 0.596, 1)
-roughness = 0.62
-
-[sub_resource type="StandardMaterial3D" id="Mat_yellow"]
-albedo_color = Color(0.965, 0.749, 0.086, 1)
-roughness = 0.62
-
-[sub_resource type="StandardMaterial3D" id="Mat_lamp"]
-albedo_color = Color(0.96, 0.94, 0.88, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_target_ring"]
+albedo_color = Color(0.055, 0.055, 0.058, 1)
 roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="Mat_pad_off"]
+albedo_color = Color(0.34, 0.07, 0.06, 1)
+roughness = 0.6
 emission_enabled = true
-emission = Color(1, 0.93, 0.78, 1)
-emission_energy_multiplier = 2.5
+emission = Color(0.55, 0.08, 0.06, 1)
+emission_energy_multiplier = 0.35
 
-[sub_resource type="BoxShape3D" id="Shape_floor"]
-size = Vector3(12, 0.4, 9)
+[sub_resource type="StandardMaterial3D" id="Mat_pad_on"]
+albedo_color = Color(0.9, 0.16, 0.12, 1)
+roughness = 0.45
+emission_enabled = true
+emission = Color(1, 0.25, 0.16, 1)
+emission_energy_multiplier = 2.4
 
-[sub_resource type="BoxShape3D" id="Shape_ceiling"]
-size = Vector3(12, 0.3, 9)
+[sub_resource type="TorusMesh" id="Mesh_target_ring"]
+inner_radius = 0.22
+outer_radius = 0.34
+rings = 32
+ring_segments = 8
 
-[sub_resource type="BoxShape3D" id="Shape_wall_ns"]
-size = Vector3(12, 3.6, 0.3)
+[sub_resource type="BoxShape3D" id="Shape_target"]
+size = Vector3(0.9, 0.9, 0.3)
 
-[sub_resource type="BoxShape3D" id="Shape_wall_ew"]
-size = Vector3(0.3, 3.6, 9)
+[sub_resource type="BoxMesh" id="Mesh_target"]
+size = Vector3(0.9, 0.9, 0.3)
 
-[sub_resource type="BoxMesh" id="Mesh_floor"]
-size = Vector3(12, 0.4, 9)
+[sub_resource type="BoxShape3D" id="Shape_goal"]
+size = Vector3(2.6, 1.8, 2.6)
 
-[sub_resource type="BoxMesh" id="Mesh_ceiling"]
-size = Vector3(12, 0.3, 9)
-
-[sub_resource type="BoxMesh" id="Mesh_wall_ns"]
-size = Vector3(12, 3.6, 0.3)
-
-[sub_resource type="BoxMesh" id="Mesh_wall_ew"]
-size = Vector3(0.3, 3.6, 9)
-
-[sub_resource type="BoxMesh" id="Mesh_unit"]
-size = Vector3(1, 1, 1)
+[sub_resource type="CylinderMesh" id="Mesh_pad"]
+top_radius = 1.15
+bottom_radius = 1.15
+height = 0.04
+radial_segments = 40
 
 [node name="NextLevel" type="Node3D"]
 script = ExtResource("1_level")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Env_next")
+environment = SubResource("Env_hall")
 
-[node name="Floor" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
+[node name="Hall" parent="." instance=ExtResource("6_hall")]
 
-[node name="Collision" type="CollisionShape3D" parent="Floor"]
-shape = SubResource("Shape_floor")
+[node name="Scoreboard" type="Label3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
+pixel_size = 0.008
+billboard = 0
+modulate = Color(0.08, 0.07, 0.06, 1)
+outline_modulate = Color(0.72, 0.12, 0.1, 1)
+text = "目标 3 / 3"
+font_size = 96
+outline_size = 26
+no_depth_test = false
 
-[node name="Mesh" type="MeshInstance3D" parent="Floor"]
-mesh = SubResource("Mesh_floor")
-surface_material_override/0 = SubResource("Mat_floor")
+[node name="Target1" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2.6, -8.64)
+script = ExtResource("7_target")
+max_health = 100.0
+respawn_time = 9999.0
 
-[node name="Ceiling" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.75, 0)
+[node name="Collision" type="CollisionShape3D" parent="Target1"]
+shape = SubResource("Shape_target")
 
-[node name="Collision" type="CollisionShape3D" parent="Ceiling"]
-shape = SubResource("Shape_ceiling")
+[node name="Mesh" type="MeshInstance3D" parent="Target1"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
 
-[node name="Mesh" type="MeshInstance3D" parent="Ceiling"]
-mesh = SubResource("Mesh_ceiling")
-surface_material_override/0 = SubResource("Mat_wall")
-
-[node name="WallN" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, -4.65)
-
-[node name="Collision" type="CollisionShape3D" parent="WallN"]
-shape = SubResource("Shape_wall_ns")
-
-[node name="Mesh" type="MeshInstance3D" parent="WallN"]
-mesh = SubResource("Mesh_wall_ns")
-surface_material_override/0 = SubResource("Mat_wall")
-
-[node name="WallS" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 4.65)
-
-[node name="Collision" type="CollisionShape3D" parent="WallS"]
-shape = SubResource("Shape_wall_ns")
-
-[node name="Mesh" type="MeshInstance3D" parent="WallS"]
-mesh = SubResource("Mesh_wall_ns")
-surface_material_override/0 = SubResource("Mat_wall")
-
-[node name="WallW" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.15, 1.8, 0)
-
-[node name="Collision" type="CollisionShape3D" parent="WallW"]
-shape = SubResource("Shape_wall_ew")
-
-[node name="Mesh" type="MeshInstance3D" parent="WallW"]
-mesh = SubResource("Mesh_wall_ew")
-surface_material_override/0 = SubResource("Mat_wall")
-
-[node name="WallE" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.15, 1.8, 0)
-
-[node name="Collision" type="CollisionShape3D" parent="WallE"]
-shape = SubResource("Shape_wall_ew")
-
-[node name="Mesh" type="MeshInstance3D" parent="WallE"]
-mesh = SubResource("Mesh_wall_ew")
-surface_material_override/0 = SubResource("Mat_wall")
-
-[node name="PanelRed" type="MeshInstance3D" parent="."]
-transform = Transform3D(2.6, 0, 0, 0, 1.8, 0, 0, 0, 0.06, -2.8, 2, -4.49)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_red")
-
-[node name="PanelBlue" type="MeshInstance3D" parent="."]
-transform = Transform3D(1.9, 0, 0, 0, 1.2, 0, 0, 0, 0.06, 2.2, 1.5, -4.49)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_blue")
-
-[node name="PanelYellow" type="MeshInstance3D" parent="."]
-transform = Transform3D(1.5, 0, 0, 0, 0.95, 0, 0, 0, 0.06, 4.3, 2.9, -4.49)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_yellow")
-
-[node name="BarV1" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.18, 0, 0, 0, 3.1, 0, 0, 0, 0.09, 0.35, 1.75, -4.465)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_black")
-
-[node name="BarV2" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.18, 0, 0, 0, 2.2, 0, 0, 0, 0.09, 3.6, 1.45, -4.465)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_black")
-
-[node name="BarH" type="MeshInstance3D" parent="."]
-transform = Transform3D(5.4, 0, 0, 0, 0.18, 0, 0, 0, 0.09, -2, 1.05, -4.465)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_black")
-
-[node name="TubeA" type="MeshInstance3D" parent="."]
-transform = Transform3D(3, 0, 0, 0, 0.06, 0, 0, 0, 0.22, 0, 3.58, -1.5)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_lamp")
+[node name="Ring" type="MeshInstance3D" parent="Target1"]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0.17)
+mesh = SubResource("Mesh_target_ring")
+surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
-[node name="TubeB" type="MeshInstance3D" parent="."]
-transform = Transform3D(3, 0, 0, 0, 0.06, 0, 0, 0, 0.22, 0, 3.58, 1.5)
-mesh = SubResource("Mesh_unit")
-surface_material_override/0 = SubResource("Mat_lamp")
+[node name="Target2" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 5.4, -8.64)
+script = ExtResource("7_target")
+max_health = 100.0
+respawn_time = 9999.0
+
+[node name="Collision" type="CollisionShape3D" parent="Target2"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target2"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="Ring" type="MeshInstance3D" parent="Target2"]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0.17)
+mesh = SubResource("Mesh_target_ring")
+surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
-[node name="LightA" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, -1.5)
-light_color = Color(1, 0.94, 0.84, 1)
-light_energy = 2
-omni_range = 8.0
-shadow_enabled = false
+[node name="Target3" type="StaticBody3D" parent="."]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 13.76, 4, 2)
+script = ExtResource("7_target")
+max_health = 100.0
+respawn_time = 9999.0
 
-[node name="LightB" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 1.5)
-light_color = Color(1, 0.94, 0.84, 1)
-light_energy = 2
-omni_range = 8.0
+[node name="Collision" type="CollisionShape3D" parent="Target3"]
+shape = SubResource("Shape_target")
+
+[node name="Mesh" type="MeshInstance3D" parent="Target3"]
+mesh = SubResource("Mesh_target")
+surface_material_override/0 = SubResource("Mat_target")
+
+[node name="Ring" type="MeshInstance3D" parent="Target3"]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0.17)
+mesh = SubResource("Mesh_target_ring")
+surface_material_override/0 = SubResource("Mat_target_ring")
+cast_shadow = 0
+
+[node name="Goal" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 5.9, -8.2)
+collision_layer = 0
+collision_mask = 1
+monitoring = false
+
+[node name="Collision" type="CollisionShape3D" parent="Goal"]
+shape = SubResource("Shape_goal")
+
+[node name="Pad" type="MeshInstance3D" parent="Goal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.69, 0)
+mesh = SubResource("Mesh_pad")
+surface_material_override/0 = SubResource("Mat_pad_off")
+cast_shadow = 0
+
+[node name="Light" type="OmniLight3D" parent="Goal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0.6)
+light_color = Color(1, 0.25, 0.16, 1)
+light_energy = 0.6
+omni_range = 6.0
 shadow_enabled = false
 
 [node name="SpawnPoint" type="Marker3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6.8)
 
 [node name="ReturnGate" parent="." instance=ExtResource("4_gate")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 4.18)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 8.45)
 target_scene = "res://scenes/game.tscn"
 target_spawn = "MondrianGate2F"
-gate_id = "NextLevelReturn"
-title = "返回 · 大楼二层"
+gate_id = "ConstructivistReturn"
+title = "返回 · 蒙德里安大楼"
 prompt = "按 F 返回"
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6.8)
 
 [node name="HUD" parent="." instance=ExtResource("3_hud")]
 
 [node name="SettingsMenu" type="CanvasLayer" parent="."]
 script = ExtResource("5_settings")
+
+[node name="LevelUI" type="CanvasLayer" parent="."]
+layer = 2
+
+[node name="Message" type="Label" parent="LevelUI"]
+anchors_preset = 10
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -420.0
+offset_top = 84.0
+offset_right = 420.0
+offset_bottom = 140.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.95, 0.92, 0.85, 1)
+theme_override_colors/font_outline_color = Color(0.07, 0.06, 0.05, 1)
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/font_size = 36
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1

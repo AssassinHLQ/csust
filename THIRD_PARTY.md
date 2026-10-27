@@ -27,7 +27,7 @@
 | 「佩洛洛斯拉」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_perorozilla/**`（`Perorozilla_Original.fbx` + 贴图 + 表情遮罩） |
 | 「比纳」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_binah/**`（`Binah_Original.fbx` + 贴图 + 渲染遮罩） |
 | 「哥利亚」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_goliath/**`（`Goliath_Decagram_Vulcan.fbx` + 贴图 + 渲染遮罩） |
-| 高斯泼溅扫描数据（校园 / 画室 609） | **权利状态未核实** | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，其拍摄权、场地权、肖像权与再分发权均未由本项目核实 |
+| 高斯泼溅数据（校园 / 画室 609） | **知天下 AI 生成**；权利状态未核实 | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，再分发权未由本项目核实 |
 | 校园碰撞网格 | 派生自上一项 | ❌ 不包含 | `models/school.collision.glb` |
 | UNDERTALE「Tem Shop」 | **专有版权**（© Toby Fox / Materia Collective） | ❌ 不包含 | `assets/music/shop_theme.ogg`（商店「柴关电脑城」的 BGM，40.2094 s 无缝循环版）。**仅用于本地学习，不得再分发、不得用于任何发布产物**。`.gitignore` 排除音频本体，但保留 `shop_theme.ogg.import`（循环开关在里面）。裁剪与循环点的推导见 `assets/music/README.md` 与 `tools/audio/make_loop.py` |
 | 项目图标 `icon.png` | 待确认 | ✅ 包含 | 来源需仓库作者确认；若不是原创请替换为自有图标 |
