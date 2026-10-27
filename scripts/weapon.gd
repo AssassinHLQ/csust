@@ -4,10 +4,13 @@ extends Node3D
 ##
 ## 枪是 Arisu.glb 自带的轨道枪（蒙在 Bip001_Weapon 骨上，跟着动作走）。
 ##
-## 弹道起点为什么不用枪口骨：
-##   枪口在腰侧（实测距右手骨 0.6 m、高度约 0.45 m），相机在眼睛高度（约 1.5 m）。
+## 弹道为什么从**相机中心**出发，而不是枪口骨 / 相机旁的固定偏移：
+##   枪口在腰侧（实测距右手骨 0.6 m、高度约 0.45 m），相机在眼睛高度（约 1.6 m）。
 ##   用「枪口 → 准星远点」会擦着目标过去，表现为「准星压在靶子上却打不中」。
-##   所以弹道起点 = 相机位置 + muzzle_offset，落在准星那条线上，保证指哪打哪。
+##   而「相机位置 + 固定偏移、方向仍取相机朝向」是一条**平行于准星、整体偏出去**的线
+##   —— 落点永远比准星偏右/偏下，距离越近屏幕上偏得越多（2026-10-27 用户实拍）。
+##   所以命中判定直接走准星本身：从相机中心沿相机前方发射。
+##   玩家自己的胶囊用 `q.exclude` 排除（角色模型本身没有碰撞体），同伴层整体屏蔽。
 ##   枪口火光与弹丸仍从真实枪口骨出来，观感不受影响。
 
 signal ammo_changed(current: int, maximum: int)
@@ -33,8 +36,6 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var recoil_yaw := 0.003
 
 @export var skeleton_path: NodePath
-## 弹道起点相对相机的偏移，保证起点落在准星线上
-@export var muzzle_offset := Vector3(0.24, -0.1, -0.35)
 ## 光弹 / 枪口火光的**视觉**起点：true = 把枪口骨投影到弹道那条线上（推荐）。
 ## 为什么需要：这个模型的枪**不在手上**（README §1.9），枪口骨在腰侧，
 ## 实测离弹道 **1.3 m**、高度只有 0.25 m。直接拿枪口当起点，光弹会从角色身侧
@@ -197,13 +198,13 @@ func _fire_raycast() -> void:
 	if _player == null:
 		return
 	# ⚠️ 开枪前**当场**再同步一次枪口：`_process` 里那一次可能早于 `AnimDriver`
-	#    掰枪骨（见 `_ready()` 里的说明）。这里同步之后，弹道起点就是**这一帧**
-	#    视觉枪口的真实位置。
+	#    掰枪骨（见 `_ready()` 里的说明）。命中判定已经不经过枪口了，但弹丸/火光的
+	#    **视觉起点**这一帧还得是新的。
 	_follow_muzzle_bone()
 
 	var cam_dir := _player.camera_forward()
-	var origin := _player.cam.global_position \
-		+ _player.cam.global_transform.basis * muzzle_offset
+	# 弹道 = 准星那条线本身（相机中心射线）。见文件头。
+	var origin := _player.cam.global_position
 
 	var spread := spread_aim if _player.aiming else spread_hip
 	var dir := _apply_spread(cam_dir, spread)

@@ -38,7 +38,7 @@ extends Node3D
 ## ── 尺寸一览（本节点局部坐标，单位米）──
 ##   外墙：x ±8.00、z ±6.00、高 8.00（一层 4.20 + 二层 3.80），墙厚 0.25
 ##   门洞：x ±1.10、高 2.60，开在北墙（−Z）
-##   楼梯：贴西墙内侧，宽 1.60，21 级踏步从 y=0 爬到 y=4.20（坡度 0.6 → 30.96°）
+##   楼梯（斜坡）：贴西墙内侧，宽 1.60，从 y=0 斜着爬到 y=4.20（31°，见 `_build_stairs()`）
 ##   屋顶：8.00 ~ 8.30，四周挑檐 0.50
 ##
 ## ── 三个容易踩的坑（都写在正文对应位置）──
@@ -77,15 +77,13 @@ const EAVE := 0.50
 const DOOR_HALF := 1.10
 const DOOR_H := 2.60
 
-## 楼梯
+## 楼梯（2026-10-27 改成斜坡，见 `_build_stairs()`）
 const STAIR_W := 1.60
-## 踏步级数（第 1 级踏面在 0.21 m，第 20 级在 4.20 m）
-const STAIR_STEPS := 20
-## 楼梯总水平段长（斜坡在 z 上跨过的距离）
+## 斜坡总水平段长（z 上跨过的距离）
 const STAIR_RUN := 7.00
-## 楼梯总爬升
+## 斜坡总爬升
 const STAIR_RISE := FLOOR_H
-## 第 1 级踏步踢面所在的 z（低 z 端）
+## 低 z 端（斜坡起点）的 z
 const STAIR_Z0 := -4.30
 
 ## 立面线条的凸出量：彩色板 < 竖线 < 横线。
@@ -357,8 +355,8 @@ func _build_floor_slab() -> void:
 	var xe1 := -HALF_W + WALL_T          # −7.75 西墙内表面
 	var xe2 := -HALF_W + WALL_T + STAIR_W  # −6.15 楼梯东沿
 	var zi0 := HALF_D - WALL_T           # +5.75
-	var stair_lo := STAIR_Z0             # −4.30 第 1 级踢面
-	var stair_hi := STAIR_Z0 + STAIR_RUN                        # +2.70 最后一级踏面外沿
+	var stair_lo := STAIR_Z0             # −4.30 斜坡起点
+	var stair_hi := STAIR_Z0 + STAIR_RUN                        # +2.70 斜坡终点（接二层楼板）
 	# 东侧主体：x −6.15 ~ +7.75
 	_solid("SlabE", Vector3((xe2 + HALF_W - WALL_T) * 0.5, slab_y, 0.0),
 		Vector3(HALF_W - WALL_T - xe2, SLAB_T, zi0 * 2.0), _mat["floor2"])
@@ -371,71 +369,106 @@ func _build_floor_slab() -> void:
 		Vector3(STAIR_W, SLAB_T, zi0 - stair_hi), _mat["floor2"])
 
 
-# ══════════════════════════ 楼梯 ══════════════════════════
+# ══════════════════════════ 楼梯（斜坡）══════════════════════════
 #
-# **真台阶、真碰撞** —— 每一级都站得住，脚踩在踏面上，不浮空。
+# 2026-10-27 用户：「楼梯换斜坡」。
 #
-# 能做到这一步，是因为先给玩家补了「上台阶」能力（`scripts/step_climb.gd`）。
-# 在那之前实测过：Godot 的 `CharacterBody3D` **连 0.10 m 的竖直坎都上不去**
-# （`_probe_step_climb.gd`，六档全测，门槛在 0.05 ~ 0.10 之间），
-# 38°/40° 倒角踢面也救不了（`_probe_stair_forms.gd`，最多爬到 0.10 m）。
-# 补上之后同样的六档：**0.05 / 0.10 / 0.15 / 0.21 / 0.30 全部爬上去，
-# 0.45 仍被挡住** —— 正好是想要的（踏步 0.21 要能上，桌面 0.80、柜台 1.04 要挡住）。
+# 原来 20 级真踏步（0.21 高 × 0.35 深，31°）+ 21 块阶梯状栏板：
+#   · 每上一级都要 `step_climb` 抬一次身体，镜头一跳一跳；
+#   · 截图里相机贴着走时还卡进了竖直栏板。
+# 现在整段改成**一整块 31° 斜坡**：
+#   · 视觉 = `PrismMesh` 楔块（底面贴地、斜面朝上、高的一端竖直收口）；
+#   · 碰撞 = 一块同角度的旋转盒，**顶面与斜面重合**；
+#   · 栏板 = 沿坡面倾斜的板（不再是阶梯），底面贴着斜面。
+# Godot 的 `CharacterBody3D` 只要坡度小于 `floor_max_angle`（默认 45°）就能直接走上去，
+# 这里 31° 富余，所以**不再依赖 `step_climb`**。反过来：以后把坡度调陡过 45°，
+# 人会走不上去，得同步改玩家的 `floor_max_angle`。
 #
-# ⚠️ 因此这里的踏步**必须有碰撞**，而且每一级都要从地面实心堆到本级踏面：
-#    悬空的「一片片踏板」会在上台阶逻辑的「③ 往下够地面」那一步踩空
-#    （`test_move` 够不到实心面就不认这一级）。
-#
-# 参数（0.21 高 × 0.35 深 = 31° 名义坡度，符合建筑规范里楼梯的常见比例）：
-#   `STAIR_STEPS` 20 级 × 踢面 `STAIR_RISE/20` = 0.21
-#   `STAIR_RUN` 7.00 m / 20 = 0.35 每级踏面
+# 尺寸沿用原楼梯：宽 1.60（x −7.75 ~ −6.15）、水平 7.00（z −4.30 ~ +2.70）、高 4.20。
+# 楔块往 z 多伸 2 cm（`RAMP_OVERLAP`），让高的一端塞进二层楼板底下 ——
+# 否则楔块的竖直背面和楼板端面在 z = 2.70 共面，站在一层会看到一条闪的接缝。
+const RAMP_OVERLAP := 0.02
+const RAMP_THICKNESS := 0.24
+const GUARD_HEIGHT := 0.95
+
 func _build_stairs() -> void:
-	var n := float(STAIR_STEPS)
-	var per_rise := STAIR_RISE / n           # 0.21
-	var per_run := STAIR_RUN / n             # 0.35
-	var cx := -HALF_W + WALL_T + STAIR_W * 0.5   # 楼梯中线 x = −6.95
+	var run := STAIR_RUN + RAMP_OVERLAP              # 7.02
+	var rise := STAIR_RISE                           # 4.20
+	var angle := atan2(rise, run)                    # ≈ 30.9°
+	var slope_len := sqrt(run * run + rise * rise)   # ≈ 8.18
+	var z0 := STAIR_Z0                               # −4.30
+	var cx := -HALF_W + WALL_T + STAIR_W * 0.5       # 楼梯中线 x = −6.95
+	var mid := Vector3(cx, rise * 0.5, z0 + run * 0.5)
+	# 斜面法线（朝上、朝 −Z）与「盒的 +Y 沿法线」的旋转
+	var normal := Vector3(0.0, cos(angle), -sin(angle))
+	var tilt := Basis(Vector3.RIGHT, -angle)
 
-	# ── ① 踏步：每级一块「从地下实心堆到本级踏面」的整块，**带碰撞** ──
-	# 侧面按蒙德里安配色循环上色：连成一条斜的彩色带，是这栋楼里最像画的一处。
-	# ⚠️ 竖直方向从 −SINK 起（不是 0）：底面会和一层地面共面 → 闪。
-	var palette: Array[Material] = [
-		_mat["stair"], _mat["stair"], _mat["red"], _mat["stair"],
-		_mat["stair"], _mat["blue"], _mat["stair"], _mat["stair"], _mat["yellow"],
-	]
-	#
-	# ⚠️ 只造 1 ~ STAIR_STEPS−1 级：第 `STAIR_STEPS` 级踏面（4.20）由
-	#    `StairLanding` 那块占着，两边都造就会同高重叠 → 共面闪烁
-	#    （`_verify_mondrian.gd` 第一版抓出 Step_19 ↔ StairLanding 三组共面）。
-	for i in range(1, STAIR_STEPS):
-		var top_y := per_rise * float(i)
-		var z_a := STAIR_Z0 + per_run * float(i - 1)
-		var z_b := z_a + per_run
-		var mat: Material = palette[(i - 1) % palette.size()]
-		_solid("Step", Vector3(cx, (top_y - SINK) * 0.5, (z_a + z_b) * 0.5),
-			Vector3(STAIR_W, top_y + SINK, z_b - z_a), mat)
+	# ── ① 楔块视觉：三角形截面在 XY，沿 Z 挤出；绕 Y 转 −90° 后
+	#      「竖直边」落在 +Z（高的一端），挤出方向变成世界 X（宽度）。
+	var prism := PrismMesh.new()
+	prism.size = Vector3(run, rise, STAIR_W)
+	prism.left_to_right = 1.0                        # 顶点靠 +X = 直角三角形
+	var ramp := MeshInstance3D.new()
+	ramp.name = "Ramp"
+	ramp.mesh = prism
+	ramp.material_override = _mat["stair"]
+	ramp.rotation.y = -PI * 0.5
+	ramp.position = mid
+	_decor.add_child(ramp)
+	decor_count += 1
 
-	# ── ② 顶部落脚平台：最后一级踏面外沿 → 二层楼板边缘 ──
-	# 顶面 4.20 与二层楼板同高；在 z 上**贴边对接**（2.70 / 2.70）不是重叠。
-	var land_z0 := STAIR_Z0 + per_run * (n - 1.0)   # 2.35
-	var land_z1 := STAIR_Z0 + STAIR_RUN             # 2.70
-	# ⚠️ 这块的 z 范围必须**紧接**第 20 级踏面的外沿（land_z0 = 2.35），
-	#    不能往回咬进第 19/20 级 —— 第一版写成从 `land_z0` 起但高度也顶到 4.20，
-	#    和第 20 级踏步（顶面也是 4.20）在 z 上重叠 0.35 m，
-	#    量出「轴0 1.477 m² / 轴1 0.560 m² / 轴2 6.752 m²」三组共面 → 会闪。
-	_solid("StairLanding", Vector3(cx, (FLOOR_H - SINK) * 0.5, (land_z0 + land_z1) * 0.5),
-		Vector3(STAIR_W, FLOOR_H + SINK, land_z1 - land_z0), _mat["stair"])
+	# ── ② 碰撞：旋转盒。中心沿法线往下半个厚度 ⇒ 顶面严格落在斜面上。
+	_collide("RampShape", mid - normal * (RAMP_THICKNESS * 0.5),
+		Vector3(STAIR_W, RAMP_THICKNESS, slope_len), tilt)
 
-	# ── ③ 东侧栏板：从踏步面往上 0.95 m，一路跟着台阶升高 ──
-	# 没有它的话，走到半空一脚踩偏就掉回一层。
-	# 做成整块**阶梯状**：每级一块竖直挡板，比斜板省事，也不会和踏步共面。
-	for i in range(1, STAIR_STEPS + 1):
-		var top_y := per_rise * float(i)
-		var z_a := STAIR_Z0 + per_run * float(i - 1)
-		_deco("Guard", Vector3(-HALF_W + WALL_T + STAIR_W - 0.06, top_y + 0.475,
-			z_a + per_run * 0.5), Vector3(0.12, 0.95, per_run + 0.01), _mat["black"])
-		_collide("GuardShape",
-			Vector3(-HALF_W + WALL_T + STAIR_W - 0.06, top_y + 0.475, z_a + per_run * 0.5),
-			Vector3(0.12, 0.95, per_run + 0.01))
+	# ── ③ 东侧斜栏板：底面贴斜面，垂直坡面往上 0.95 m
+	var guard_x := cx + STAIR_W * 0.5 - 0.06
+	var guard_c := Vector3(guard_x, mid.y, mid.z) + normal * (GUARD_HEIGHT * 0.5)
+	var guard_mesh := MeshInstance3D.new()
+	guard_mesh.name = "Guard"
+	var gm := BoxMesh.new()
+	gm.size = Vector3(0.12, GUARD_HEIGHT, slope_len)
+	guard_mesh.mesh = gm
+	guard_mesh.material_override = _mat["black"]
+	guard_mesh.transform = Transform3D(tilt, guard_c)
+	_decor.add_child(guard_mesh)
+	decor_count += 1
+	_collide("GuardShape", guard_c, gm.size, tilt)
+
+	# ── ④ 侧面（朝屋里的 +X 面）贴三块色板：整块三角白墙太素，
+	#      照原来彩色踏步的配色留三段颜色。都在斜面下方的三角形里、凸出侧面 1.2 cm。
+	for spec in [["RampRed", -3.95, -2.95, 0.05, 0.75, "red"],
+			["RampBlue", -1.70, -0.30, 0.10, 1.90, "blue"],
+			["RampYellow", 0.40, 1.50, 0.15, 3.10, "yellow"]]:
+		var pz0: float = spec[1]
+		var pz1: float = spec[2]
+		var py0: float = spec[3]
+		var py1: float = spec[4]
+		var panel := MeshInstance3D.new()
+		panel.name = str(spec[0])
+		var pm := BoxMesh.new()
+		pm.size = Vector3(0.02, py1 - py0, pz1 - pz0)
+		panel.mesh = pm
+		panel.material_override = _mat[str(spec[5])]
+		panel.position = Vector3(cx + STAIR_W * 0.5 + 0.002,
+			(py0 + py1) * 0.5, (pz0 + pz1) * 0.5)
+		_decor.add_child(panel)
+		decor_count += 1
+
+	# ── ⑤ 三道彩色横带（蒙德里安配色）：贴着斜面上方 2 mm，纯装饰
+	for spec in [["BandRed", 0.20, "red"], ["BandBlue", 0.47, "blue"],
+			["BandYellow", 0.74, "yellow"]]:
+		var t: float = spec[1]
+		var at := Vector3(cx, lerpf(0.0, rise, t), lerpf(z0, z0 + run, t)) + normal * 0.012
+		var band := MeshInstance3D.new()
+		band.name = str(spec[0])
+		var bm := BoxMesh.new()
+		bm.size = Vector3(STAIR_W - 0.02, 0.02, 0.32)
+		band.mesh = bm
+		band.material_override = _mat[str(spec[2])]
+		band.transform = Transform3D(tilt, at)
+		_decor.add_child(band)
+		decor_count += 1
 
 
 # ══════════════════════════ 屋顶 ══════════════════════════
@@ -736,7 +769,6 @@ func _build_lights() -> void:
 
 func _report() -> void:
 	var p := global_position
-	var per_run := STAIR_RUN / float(STAIR_STEPS)
 	print("[Mondrian] 两层大房子：占地 %.2f × %.2f m、墙高 %.2f（一层 %.2f + 二层 %.2f）、墙厚 %.2f"
 		% [HALF_W * 2.0, HALF_D * 2.0, TOP_H, FLOOR_H, TOP_H - FLOOR_H, WALL_T])
 	print("[Mondrian] 世界位置 (%.2f, %.2f, %.2f)：x %.2f ~ %.2f、z %.2f ~ %.2f"
@@ -744,7 +776,6 @@ func _report() -> void:
 	print("[Mondrian] 门洞：宽 %.2f × 高 %.2f，开在北墙 z = %.2f（朝商店）"
 		% [DOOR_HALF * 2.0, DOOR_H, p.z - HALF_D])
 	print("[Mondrian] 招牌：**无字**，只留黑门头（用户 2026-10-26：「蒙德里安是风格，不要明写出来」）")
-	print("[Mondrian] 楼梯：%d 级 × (%.2f 高 / %.2f 深)，坡度 %.2f（%.2f°），真踏步真碰撞"
-		% [STAIR_STEPS, STAIR_RISE / float(STAIR_STEPS), per_run,
-			STAIR_RISE / STAIR_RUN, rad_to_deg(atan2(STAIR_RISE / float(STAIR_STEPS), per_run))])
+	print("[Mondrian] 楼梯：一整块斜坡（31° 附近，水平 %.2f m、爬升 %.2f m），楔块 + 旋转盒碰撞"
+		% [STAIR_RUN, STAIR_RISE])
 	print("[Mondrian] 碰撞盒 %d 个、装饰 %d 个" % [solid_count, decor_count])

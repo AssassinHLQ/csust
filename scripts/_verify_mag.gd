@@ -61,8 +61,18 @@ func _run() -> void:
 	player.rig.rotation.y = 0.0
 	player._facing_yaw = player._yaw + PI
 	player.model_root.rotation.y = player._yaw + PI
-	player._pitch = -0.02
-	await _wait_seconds(0.3)
+	# Target1 的碰撞盒/网格在 game.tscn 里被往上抬了 4.117 m（用户未提交的改动），
+	# 不再是「站在地上平着打」了。所以按**碰撞盒的实际位置**算俯仰角，
+	# 迭代三轮把相机对准（相机本身会随俯仰沿弹簧臂移动）。
+	var t1 := game.get_node("Target1") as Target
+	var t1_box := t1.get_node("Collision") as Node3D
+	for _i in 3:
+		var cam_now := player.cam.global_position
+		var to_target: Vector3 = t1_box.global_position - cam_now
+		var flat := Vector2(to_target.x, to_target.z).length()
+		player.set("_pitch", atan2(to_target.y, flat))
+		await _wait_seconds(0.15)
+	await _wait_seconds(0.2)
 	# ⚠️ 测「按住不放」之前先把玩家的输入与物理处理关掉。
 	#    player.gd 的 `_poll_mouse_buttons()` 与 `_input()` 在收到**真实鼠标左键松开**时
 	#    会调 `weapon.trigger_up()`。上一次全量回归就撞上了：跑到一半 `_trigger` 被抢成
@@ -71,7 +81,13 @@ func _run() -> void:
 	#    顺带把抬枪后坐也冻住了（_apply_camera 在 _physics_process 里），弹道更确定。
 	player.set_physics_process(false)
 	player.set_process_input(false)
-	print("  调试：相机前方 = %s   枪口 = %s" % [
+	# 命中判定 2026-10-27 改成「相机中心射线」= 准星本身（weapon.gd 文件头）。
+	# 越肩相机比角色偏左约 0.4 m，所以要把角色往右补同样的量，准星才真的压在
+	# Target1（x = 6.0）身上；否则准星在 x ≈ 5.6，差 12 cm 打空。
+	player.global_position.x += 6.0 - player.cam.global_position.x
+	print("  调试：角色 %s  相机 %s  相机前方 %s  枪口 %s" % [
+		str(player.global_position.snappedf(0.01)),
+		str(player.cam.global_position.snappedf(0.01)),
 		str(player.camera_forward().snappedf(0.01)),
 		str(weapon.muzzle.global_position.snappedf(0.01))])
 	var hp_before := (game.get_node("Target1") as Target).health
@@ -95,7 +111,7 @@ func _run() -> void:
 		var n := int(shot_watch["n"])
 		if n <= 5 or n == 30 or n == 60:
 			var cam2 := player.cam
-			var o := cam2.global_position + cam2.global_transform.basis * weapon.muzzle_offset
+			var o := cam2.global_position
 			var d := player.camera_forward()
 			var sp := player.get_world_3d().direct_space_state
 			var q := PhysicsRayQueryParameters3D.create(o, o + d * 100.0)
@@ -224,7 +240,7 @@ func _run() -> void:
 
 	# 光弹从真实枪口附近出发；它不再被强制投影到相机前方，避免视觉上突然出现在角色前面。
 	var cam3 := player.cam
-	var ray_o := cam3.global_position + cam3.global_transform.basis * weapon.muzzle_offset
+	var ray_o := cam3.global_position
 	var ray_d := player.camera_forward()
 	var off_axis := INF
 	for item in weapon._in_flight:

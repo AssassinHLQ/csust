@@ -76,30 +76,76 @@ static func _is_face_layer(mat_name: String) -> bool:
 	return false
 
 
-## ── 眉毛：同一张脸上叠了 2~3 层「不同表情的眉」，只留最前面那层 ──
+## ── 眉毛：同一张脸上叠了多层「不同表情的眉」，只留最前面那层 ──
 ##
 ## 2026-10-26 用户：「角色眉毛部分多重表情叠加了，应该是所有角色都有这个问题」。
-## `_probe_brow_islands.gd` 把 `EyeBrow`/`Eyebrow` surface 的顶点按三角形**连通块**
-## 切开，量出来（局部坐标，这些模型朝 +Z，z 越大越靠前）：
+## `_probe_brow_islands.gd` 把 Eyebrow surface 的顶点按三角形**连通块**切开量出来。
 ##
-##   Serika  2 块、**1 层**：z 0.785~0.799                ← 正常（左右各一条）
-##   Momoi   7 块、**2 层**：z 0.680~0.684 / 0.762~0.777
-##   Midori  6 块、**3 层**：z 0.732~0.739 / 0.750~0.753 / 0.769~0.774
+## ⚠️⚠️ 2026-10-26 深夜修正：**第一版判据是错的，把爱丽丝的眉毛删成了白色**。
 ##
-## 也就是说这些模型把**多个表情的眉毛叠在不同深度上**（原游戏是换网格选表情，
-## 导出的 glb 里没人把它们藏起来），于是脸上同时画着 2~3 条眉。
-## 出图对照：`_arisu_captures/_fix1026/brow_momoi_0_原样.png`（两条眉清清楚楚）。
+##    第一版按「z 中心 `snappedf(0.01)` 分组」判层。但同一层眉毛会被切成很多**碎片**
+##    （爱丽丝 16 块、`z` 全挤在 0.092~0.104），四舍五入到 0.01 之后被分成好几组，
+##    于是「只留最靠前那组」把**同一层的大部分碎片**都压掉了 —— 脸上只剩下反光发白的
+##    那一小块，用户看到的就是「爱丽丝变成白色眉毛」。
 ##
-## 做法：**只保留最靠前那一层**，其余层的顶点**全部塌到保留层的质心** ——
-## 塌成零面积三角形就不再渲染，但**顶点数不变、蒙皮数据不动**（比删顶点安全）。
+##    实测（`_probe_brow_layers.gd`，把所有块按 z 排序看**相邻间隙**）：
+##
+##      | 角色 | 块数 | 相邻块最大间隙 | 真实层数 |
+##      |---|---|---|---|
+##      | 爱丽丝 | 16 | **+0.0000**（全部互相重叠）| 1 |
+##      | 小雪 | 2 | -0.0164 | 1 |
+##      | 优香 | 2 | -0.0109 | 1 |
+##      | 诺亚 | 4 | -0.0166 | 1 |
+##      | 小桃 | 7 | +0.0000（修复前的 2 层已处理）| 1 |
+##      | 小绿 | 6 | +0.0000 | 1 |
+##      | 芹香 | 2 | ≤ 0 | 1 |
+##      | 柚子 / 凯伊 | — | — | 1 |
+##
+##    也就是说：**只有真正「两层分开」的才需要删**，间隙是唯一的判据 ——
+##    同一层的碎片 z 范围一定互相重叠（间隙 ≤ 0），不同层隔着厘米级。
+##    修复前的 Momoi 间隙是 **7.8 cm**（z 0.680 那层 vs 0.770 那层）。
+##
+## 做法（两条都改）：
+##   ① 判层改成「按 z 排序后，相邻块间隙 > `LAYER_GAP` 才算新的一层」；
+##      只有 ≤ 1 层就**完全不动**（爱丽丝/小雪/优香/诺亚/芹香全部走这条）。
+##   ② 删的方式改成**从索引里去掉那些块的三角形**，不再「把顶点塌到一点」——
+##      塌平之后每个顶点的**骨骼权重不同**，蒙皮一动又把它们拉开，
+##      结果就是用户看到的「残留细线」。去掉索引是彻底不画。
 ##
 ## ⚠️ 两条和 `separate_face_layers()` 一样的规矩：
 ##    ① 带形态键的网格跳过；
 ##    ② 重建时**每个 surface 的材质都要重新挂回去**，否则整块变白。
+
+## ── 眉毛叠层去重：**已停用**（函数留着当记录，不在任何地方调用）──
 ##
-## 返回 {applied, meshes, layers, collapsed, kept_z}
-static func simplify_brows(root: Node, layer_eps := 0.01) -> Dictionary:
-	var report := {"applied": false, "meshes": 0, "layers": 0, "collapsed": 0,
+## 2026-10-26 用户：「角色眉毛部分多重表情叠加了，应该是所有角色都有这个问题」
+## → 本喵当天做了三版，**三版都栽在同一个地方**，最后撤销：
+##
+##   v1 按「z 中心 snappedf(0.01)」分层 → 爱丽丝 16 块被切成多层、删掉一半
+##      ⇒ **白眉**（用户当天实拍）。
+##   v2 改成「按 z 排序、相邻间隙 > 0.02 才算新层」，且只删索引不塌顶点
+##      → 爱丽丝的眉毛在**局部 z 的 −0.11 和 +0.10 各有一组**，间隙 5.8 cm 仍然
+##        被判成两层 ⇒ 还是白眉，只是这次剩 107 个三角形（原 168）。
+##   v3 改成「先按局部 x 的符号分成左右，再各自按 z 切层」
+##      → 爱丽丝的**左右眉本身是沿 z 分居两侧、x 都在 0 附近**，左右分组无效，
+##        照样切两层 ⇒ 还是白眉。
+##
+## 根因：**「同侧眉毛的叠层」和「左右两条眉」在几何上长一个样** ——
+## 都是「两组互不连通的、z 相隔几厘米的平面片」。只靠几何分不出来。
+##
+## 真要区分，得换判据（比如两组之间的**顶点数/形状是否互为镜像**，或者拿贴图 UV
+## 比对「是不是同一个表情」）。在看到更硬的证据之前**不做**，宁可不改。
+##
+## ⚠️ 所以下面这些常量目前**没有调用者**，留着是为了记下当时的错误判据，
+##    别再照着它们重写一遍。
+const LAYER_GAP := 0.05
+const MIN_BLOCKS_PER_LAYER := 2
+const SIDE_EPS := 0.005
+
+
+## 返回 {applied, meshes, layers, dropped_tris, kept_z}
+static func simplify_brows(root: Node) -> Dictionary:
+	var report := {"applied": false, "meshes": 0, "layers": 0, "dropped_tris": 0,
 		"kept_z": [] as Array}
 	if root == null:
 		return report
@@ -117,58 +163,110 @@ static func simplify_brows(root: Node, layer_eps := 0.01) -> Dictionary:
 				break
 		if brow_surf < 0:
 			continue
-		var islands := _islands(am, brow_surf)
-		if islands.size() < 3:
-			continue          # 左右各一条（2 块）就是正常的一层，不碰
-		# 按 z 中心分层
-		var layers := {}
+		var arr := am.surface_get_arrays(brow_surf)
+		var islands := _islands_from(arr)
+		if islands.size() < 2:
+			continue
+		# ① **按「左右两侧分别切层」**。
+		#
+		# ⚠️⚠️ 2026-10-26 第三次修：前两版都在「按 z 全排序切层」上栽了。
+		#    诊断（`_diag_arislayer.gd`）把爱丽丝那 16 块按 z 排出来：
+		#
+		#      块 1/8/9/13/15/10/11/12  → z **−0.111 ~ −0.032**   （8 块）
+		#      块 3/14/4/5/6/2/7/0     → z **+0.027 ~ +0.103**   （8 块）
+		#      两组之间隔着 **5.8 cm**，按 z 排就是「2 层」→ 删掉一半 → **白眉**。
+		#
+		#    但那两组**不是上下叠的同一侧眉毛，而是左右两条**：这些模型的局部坐标里，
+		#    左右眉分别落在 z 的两侧（不是 x）。所以「按 z 切层」从根上是错的。
+		#
+		#    正确判据：先把块按**局部 x 的符号**分成左/右两组，**每组内部**再按 z 切层。
+		#    真正的「叠层」（小桃修复前 z 0.680 vs 0.770）是**同一侧**上出现两条，
+		#    左右分组之后依然能分出来；而「左右两条」各自只剩一层，不会被误删。
+		var sides := {}
 		for i in islands.size():
-			var lo: Vector3 = islands[i]["lo"]
-			var hi: Vector3 = islands[i]["hi"]
-			var key := "%.2f" % snappedf((lo.z + hi.z) * 0.5, layer_eps)
-			if not layers.has(key):
-				layers[key] = [] as Array
-			var g: Array = layers[key]
-			g.append(i)
-			layers[key] = g
-		if layers.size() < 2:
-			continue          # 只有一层 → 不用修
-		var keys := layers.keys()
-		keys.sort()
-		var keep_key: String = keys[keys.size() - 1]      # z 最大 = 最靠前
-		var keep: Array = layers[keep_key]
-		var centre := Vector3.ZERO
-		for i in keep:
-			centre += ((islands[i]["lo"] as Vector3) + (islands[i]["hi"] as Vector3)) * 0.5
-		centre /= float(keep.size())
-		# 重建整只网格：只动 brow 那一层，其余 surface 原样搬过去
+			var cx: float = ((islands[i]["lo"] as Vector3).x + (islands[i]["hi"] as Vector3).x) * 0.5
+			var key := "L" if cx < -SIDE_EPS else ("R" if cx > SIDE_EPS else "C")
+			if not sides.has(key):
+				sides[key] = [] as Array
+			var sg: Array = sides[key]
+			sg.append(i)
+			sides[key] = sg
+		# 每侧各自按 z 切层；只要**任一侧**出现 2 层以上才动手
+		var layers: Array = []          # 每项 = 该层的块索引数组
+		var max_layers := 0
+		var side_layers := {}
+		for key in sides:
+			var group: Array = sides[key]
+			var order: Array = []
+			for i in group:
+				order.append(i)
+			order.sort_custom(func(a, b):
+				return float(islands[a]["lo"].z) < float(islands[b]["lo"].z))
+			var stacks: Array = []
+			var cur: Array = []
+			var cur_hi := -1e9
+			for i in order:
+				var lo: float = (islands[i]["lo"] as Vector3).z
+				var hi: float = (islands[i]["hi"] as Vector3).z
+				if not cur.is_empty() and lo - cur_hi > LAYER_GAP:
+					stacks.append(cur)
+					cur = []
+					cur_hi = -1e9
+				cur.append(i)
+				cur_hi = maxf(cur_hi, hi)
+			if not cur.is_empty():
+				stacks.append(cur)
+			side_layers[key] = stacks
+			max_layers = maxi(max_layers, stacks.size())
+		if max_layers < 2:
+			continue          # 两侧都只有一层 → 一个顶点都不动
+		# ② 每一侧**只留最靠前那层**（z 最大），其余层的**索引**整段去掉
+		var drop_verts := {}
+		for key in side_layers:
+			var stacks: Array = side_layers[key]
+			if stacks.size() < 2:
+				continue
+			for li in stacks.size() - 1:
+				for i in (stacks[li] as Array):
+					for vi in (islands[i]["verts"] as PackedInt32Array):
+						drop_verts[vi] = true
+			layers.append(stacks[stacks.size() - 1])
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var kept := PackedInt32Array()
+		var drop_tris := 0
+		var t := 0
+		while t + 2 < idx.size():
+			var a := idx[t]
+			var b := idx[t + 1]
+			var c := idx[t + 2]
+			if drop_verts.has(a) or drop_verts.has(b) or drop_verts.has(c):
+				drop_tris += 1
+			else:
+				kept.append(a)
+				kept.append(b)
+				kept.append(c)
+			t += 3
+		if drop_tris == 0:
+			continue
+		arr[Mesh.ARRAY_INDEX] = kept
+		# 重建整只网格（只换 brow 那一层的索引，其余 surface 原样搬）
 		var out := ArrayMesh.new()
 		for s in am.get_surface_count():
-			var mat := am.surface_get_material(s)
-			var arr := am.surface_get_arrays(s)
-			if s == brow_surf:
-				var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-				var n := 0
-				for i in islands.size():
-					if keep.has(i):
-						continue
-					var vi: PackedInt32Array = islands[i]["verts"]
-					for k in vi:
-						vs[k] = centre
-					n += vi.size()
-				arr[Mesh.ARRAY_VERTEX] = vs
-				report["collapsed"] = int(report["collapsed"]) + n
-			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-			out.surface_set_material(out.get_surface_count() - 1, mat)
-		am.set_meta(META_BROWS, true)
-		# ⚠️ 赋给 **MeshInstance3D**（`mi`），不是赋给 ArrayMesh 自己 ——
-		#    写成 `m.mesh = out`（`m` 已经是 mesh）会报
-		#    「Invalid assignment of property or key 'mesh' ... on ArrayMesh」。
+			var mat2 := am.surface_get_material(s)
+			var a2 := arr if s == brow_surf else am.surface_get_arrays(s)
+			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a2)
+			out.surface_set_material(out.get_surface_count() - 1, mat2)
+		out.set_meta(META_BROWS, true)
 		mi.mesh = out
 		report["meshes"] = int(report["meshes"]) + 1
 		report["layers"] = int(report["layers"]) + layers.size()
+		report["dropped_tris"] = int(report["dropped_tris"]) + drop_tris
+		var names: Array = report.get("mesh_names", [])
+		names.append("%s[%d层,删%d三角]" % [String(mi.name), layers.size(), drop_tris])
+		report["mesh_names"] = names
 		var kz: Array = report["kept_z"]
-		kz.append(keys[keys.size() - 1])
+		kz.append(snappedf((islands[(layers[layers.size() - 1] as Array)[0]]["lo"] as Vector3).z,
+			0.001))
 		report["kept_z"] = kz
 	report["applied"] = int(report["meshes"]) > 0
 	return report
@@ -177,10 +275,15 @@ static func simplify_brows(root: Node, layer_eps := 0.01) -> Dictionary:
 const META_BROWS := "face_fix_brows"
 
 
-## 某只 surface 的顶点按三角形连成的**连通块**。
-## 返回 [{verts: PackedInt32Array, lo: Vector3, hi: Vector3}]，按 y 从大到小排。
-static func _islands(am: ArrayMesh, surf: int) -> Array:
-	var arr := am.surface_get_arrays(surf)
+## 某只 surface 的顶点按三角形连成的**连通块**（从 `surface_get_arrays()` 的结果直接算）。
+## 返回 [{verts: PackedInt32Array, lo: Vector3, hi: Vector3}]。
+##
+## ⚠️ **只看被索引引用到的顶点**。`simplify_brows()` 是「只删索引、不删顶点」——
+##    删完之后剩下的顶点里会有一批**不再被任何三角形引用**的孤儿点，
+##    它们各自成一个单点集合，会让块数暴涨（实测爱丽丝 16 → 96）、
+##    而且每个孤儿点的 z 各不相同，于是被误判成「很多层」。
+##    这一段就是那个坑的补丁。
+static func _islands_from(arr: Array) -> Array:
 	var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 	if vs.is_empty():
@@ -199,13 +302,17 @@ static func _islands(am: ArrayMesh, surf: int) -> Array:
 		parent[b] = mn
 		parent[c] = mn
 		t += 3
+	# 只收集**被索引引用到的**顶点（孤儿点不算块，见上面 ⚠️）
+	var used := {}
+	for t3 in idx:
+		used[t3] = true
 	var groups := {}
-	for i in vs.size():
-		var r := _root(parent, i)
+	for i in used:
+		var r := _root(parent, int(i))
 		if not groups.has(r):
 			groups[r] = PackedInt32Array()
 		var g: PackedInt32Array = groups[r]
-		g.append(i)
+		g.append(int(i))
 		groups[r] = g
 	var out: Array = []
 	for k in groups:

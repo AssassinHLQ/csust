@@ -117,8 +117,18 @@ func _run() -> void:
 	player._facing_yaw = player._yaw + PI
 	player.rig.rotation.y = 0.0
 	player.model_root.rotation.y = PI
-	player._pitch = -0.02
-	await _wait(20)
+	# Target1 的碰撞盒/网格在 game.tscn 被往上抬了 4.117 m（用户未提交的改动），
+	# 且命中判定 2026-10-27 改成相机中心（准星）——按碰撞盒实际位置算俯仰，
+	# 并把角色右移补上越肩相机的横向偏移（相机 x = 角色 x − 0.4）。
+	var t1 := game.get_node("Target1") as Target
+	var t1_box := t1.get_node("Collision") as Node3D
+	for _i in 3:
+		var cam_now := player.cam.global_position
+		var to_target: Vector3 = t1_box.global_position - cam_now
+		player.set("_pitch", atan2(to_target.y, Vector2(to_target.x, to_target.z).length()))
+		await _wait(10)
+	player.global_position.x += t1_box.global_position.x - player.cam.global_position.x
+	await _wait(10)
 	var target: Target = game.get_node("Target1")
 	var hp0 := target.health
 	weapon.current_ammo = weapon.magazine_size

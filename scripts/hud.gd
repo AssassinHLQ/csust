@@ -41,9 +41,9 @@ extends CanvasLayer
 ## 现在**尺寸与颜色全部来自 `GameSettings`**（`crosshair_*` 那八项），下面三个常量只是
 ## 「读到空值时」的兜底，正常路径不会用到它们。改默认值请改 `game_settings.gd::DEFAULTS`。
 ##
-## 双色渐变怎么画的：五个 `ColorRect` 各挂同一个 `ShaderMaterial`，片元里按
-## `FRAGCOORD.y`（**设备像素**）在整条准星的高度区间里插值 —— 注意不是按各自节点的
-## UV 插值，否则中心点和四条臂会各画各的渐变，接缝一眼就看出来。
+## 双色渐变怎么画的：准星五块由 `_draw_crosshair()` 一次画完，容器上挂一个
+## `ShaderMaterial`，片元里按 `FRAGCOORD.y`（**设备像素**）在整条准星的高度区间里插值 ——
+## 注意不是按各自节点的 UV 插值，否则中心点和四条臂会各画各的渐变，接缝一眼就看出来。
 ## ⚠️ 区间（`span_top` / `span_bottom`）也必须是设备像素，和 `_layout_crosshair()` 里
 ##    那套「一切按整数物理像素摆」用同一把尺子。
 const CROSS_DOT_PX := 3.0     ## 中心点边长兜底值（物理像素）
@@ -76,6 +76,13 @@ const BAR_EDGE_PX := 2.0
 @onready var b: ColorRect = $Crosshair/B
 @onready var l: ColorRect = $Crosshair/L
 @onready var r: ColorRect = $Crosshair/R
+
+## 准星五块的布局结果（元素名 → 相对原点的**设备像素**矩形），绘制和探针共用。
+var _cross_rel := {}
+var _cross_origin := Vector2.ZERO
+var _cross_fit_err := Vector2.ZERO   ## 容器实际落点和整数设备像素的差，画的时候扣掉
+var _dot_alpha := 1.0
+var _arm_alpha := 1.0
 @onready var ammo: Label = $Panel/Margin/VBox/Ammo
 @onready var reload_trough: Panel = $Panel/Margin/VBox/ReloadTrough
 @onready var reload_bar: ProgressBar = $Panel/Margin/VBox/ReloadTrough/Reload
@@ -661,8 +668,15 @@ func _layout_crosshair() -> void:
 	var canvas := vp.get_visible_rect().size
 
 	# 1) 准星原点吸附到整数**物理像素格角**
+	# ⚠️ 控制节点不能摆在画布中心那种小数逻辑坐标上：1727.06/2 = 863.53 会被当成 864，
+	#    于是整条准星在 x 上偏右约 0.6 设备像素、栅格化后正好多 1 格。
+	#    （2026-10-27 实测：瞄准点 1280.0，准星中心 1281.5。）
+	#    这里改摆到**整数逻辑坐标**，再按它真实的设备位置反推偏移。
+	var logical_center := (canvas * 0.5).round()
+	var anchor_dev := xf * logical_center
 	var origin_px := (xf * (canvas * 0.5)).round()
-	var d := xf.affine_inverse() * origin_px - canvas * 0.5
+	_cross_fit_err = anchor_dev - origin_px
+	var d := logical_center - canvas * 0.5
 	crosshair.offset_left = d.x
 	crosshair.offset_right = d.x
 	crosshair.offset_top = d.y
@@ -673,33 +687,51 @@ func _layout_crosshair() -> void:
 	var thick_px := maxi(int(round(_cross_num("crosshair_thick_px", CROSS_THICK_PX))), 1)
 	var arm_px := maxi(int(round(_cross_num("crosshair_arm_px", CROSS_ARM_PX))), 1)
 	var gap_px := maxi(int(round(_spread * scale)), 0)
-	var dh := dot_px / 2          # 奇数时向下取整：1 px 就是 [0, 1) 这一格
-	var th := thick_px / 2
+	var dh := dot_px / 2          # 点左上角相对原点的偏移；奇数时右/下边缘比原点远 1 px
 
-	_set_px_rect(dot, Rect2(-dh, -dh, dot_px, dot_px))
-	_set_px_rect(t, Rect2(-th, -gap_px - arm_px, thick_px, arm_px))
-	_set_px_rect(b, Rect2(-th, gap_px, thick_px, arm_px))
-	_set_px_rect(l, Rect2(-gap_px - arm_px, -th, arm_px, thick_px))
-	_set_px_rect(r, Rect2(gap_px, -th, arm_px, thick_px))
+	# 点的实际边缘（相对原点）。四臂的间隙必须从这里量 —— 以前是拿原点量
+	# （±gap_px），点宽为奇数时左/上间隙 = gap+1、右/下间隙 = gap，
+	# 渲染出来就是「右下多一列/一行像素」（用户 2026-10-27 报，_probe_crosshair_pixels 实测 10/9）。
+	var dot_lo := -dh
+	var dot_hi := dot_lo + dot_px
+	var inner_lo := dot_lo - gap_px
+	var inner_hi := dot_hi + gap_px
+	# 臂的粗度居中在点上（点与粗度奇偶不同时统一往左/上偏一位，保持整格）
+	var arm_lo := dot_lo + int(floorf((dot_px - thick_px) * 0.5))
+
+	_cross_rel = {
+		"Dot": Rect2(dot_lo, dot_lo, dot_px, dot_px),
+		"T": Rect2(arm_lo, inner_lo - arm_px, thick_px, arm_px),
+		"B": Rect2(arm_lo, inner_hi, thick_px, arm_px),
+		"L": Rect2(inner_lo - arm_px, arm_lo, arm_px, thick_px),
+		"R": Rect2(inner_hi, arm_lo, arm_px, thick_px),
+	}
+	_cross_origin = origin_px
+	crosshair.queue_redraw()
 
 	# 3) 渐变的纵向区间：从「上臂顶边」到「下臂底边」，单位同样是设备像素。
 	#    ⚠️ 用 `origin_px.y`（设备坐标）而不是相对偏移 —— 着色器里的 `FRAGCOORD.y`
 	#       是设备坐标，两者必须同一个坐标系。
 	if _cross_mat != null:
-		var half_px := float(gap_px + arm_px)
-		_cross_mat.set_shader_parameter("span_top", origin_px.y - half_px)
-		_cross_mat.set_shader_parameter("span_bottom", origin_px.y + half_px)
+		_cross_mat.set_shader_parameter("span_top", origin_px.y + inner_lo - arm_px)
+		_cross_mat.set_shader_parameter("span_bottom", origin_px.y + inner_hi + arm_px)
 
 
-## 把一个**整数设备像素**矩形（相对准星原点）换成 Control 的逻辑偏移。
-func _set_px_rect(c: Control, px: Rect2) -> void:
-	if c == null:
+## 一块画布一次画完五块准星。为什么不用五个 ColorRect：它们各自是独立的
+## CanvasItem，在 1.48 这种非整数缩放下**每个节点的取整方向可以不同**
+## （2026-10-27 实测：L/R/T 各比 get_global_rect() 偏 1 设备像素，点与下臂不偏），
+## 结果就是用户说的「右下多了像素」。合成一个 CanvasItem 后五块共用一套变换。
+func _draw_crosshair() -> void:
+	if _cross_rel.is_empty() or crosshair == null:
 		return
 	var s := crosshair_scale()
-	c.offset_left = px.position.x / s
-	c.offset_top = px.position.y / s
-	c.offset_right = (px.position.x + px.size.x) / s
-	c.offset_bottom = (px.position.y + px.size.y) / s
+	# ⚠️ 本脚本挂在 CanvasLayer 上（不是 CanvasItem），只能用准星节点自己的 draw_rect()；
+	#    `draw` 信号是在该节点的绘制通知里发出的，此时调用是合法的。
+	for k in ["Dot", "T", "B", "L", "R"]:
+		var r: Rect2 = _cross_rel[k]
+		var a := _dot_alpha if k == "Dot" else _arm_alpha
+		crosshair.draw_rect(Rect2((r.position - _cross_fit_err) / s, r.size / s),
+			Color(1.0, 1.0, 1.0, a))
 
 
 ## 当前「画布逻辑单位 → 物理像素」的缩放。探针/自检拿它判断对齐。
@@ -709,20 +741,12 @@ func crosshair_scale() -> float:
 
 
 ## 每个准星元素**落在物理像素上的矩形** —— 供探针验证「中心点与十字条是否严格对称」。
+## 返回的是`_layout_crosshair()`算出来的**目标值**（绘制走的是同一份数据）。
 func crosshair_physical_rects() -> Dictionary:
-	var vp := get_viewport()
-	if vp == null:
-		return {}
-	var xf := vp.get_final_transform()
 	var out := {}
-	for pair in [["Dot", dot], ["T", t], ["B", b], ["L", l], ["R", r]]:
-		var c: Control = pair[1]
-		if c == null:
-			continue
-		var gr := c.get_global_rect()
-		var p0 := xf * gr.position
-		var p1 := xf * (gr.position + gr.size)
-		out[String(pair[0])] = Rect2(p0, p1 - p0)
+	for k in _cross_rel:
+		var r: Rect2 = _cross_rel[k]
+		out[k] = Rect2(_cross_origin + r.position, r.size)
 	return out
 
 
@@ -734,9 +758,14 @@ func _setup_crosshair() -> void:
 	sh.code = CROSSHAIR_SHADER
 	_cross_mat = ShaderMaterial.new()
 	_cross_mat.shader = sh
+	# 材质挂在**准星容器**上，五块由 `_draw_crosshair()` 一次画完（见那里的说明）。
+	# 五个 ColorRect 退化成数据载体（只用来存 alpha、给 crosshair_config 读），不再显示。
+	crosshair.material = _cross_mat
+	if not crosshair.draw.is_connected(_draw_crosshair):
+		crosshair.draw.connect(_draw_crosshair)
 	for c in [dot, t, b, l, r]:
 		if c is ColorRect:
-			(c as ColorRect).material = _cross_mat
+			(c as ColorRect).visible = false
 	GameSettings.listen(_on_setting_changed)
 	_apply_crosshair_style()
 	_layout_crosshair()
@@ -764,11 +793,15 @@ func _apply_crosshair_style() -> void:
 	_cross_mat.set_shader_parameter("bottom_color", c2)
 	var da := clampf(_cross_num("crosshair_dot_alpha", 1.0), 0.0, 1.0)
 	var aa := clampf(_cross_num("crosshair_arm_alpha", 1.0), 0.0, 1.0)
+	_dot_alpha = da
+	_arm_alpha = aa
 	if dot != null:
 		dot.color = Color(1.0, 1.0, 1.0, da)
 	for c in [t, b, l, r]:
 		if c is ColorRect:
 			(c as ColorRect).color = Color(1.0, 1.0, 1.0, aa)
+	if crosshair != null:
+		crosshair.queue_redraw()
 
 
 ## 设置一变就重画准星（颜色/渐变/粗细/透明度都在这里收口，别在各个 hit 点分散处理）。

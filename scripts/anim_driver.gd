@@ -334,13 +334,10 @@ func _ready() -> void:
 	if int(face_fix.get("surfaces", 0)) > 0:
 		print("[AnimDriver] 脸部层错开：%d 个 surface / %d 个顶点（跳过 %d 个带形态键的网格）" % [
 			int(face_fix["surfaces"]), int(face_fix["verts"]), int(face_fix.get("skipped", 0))])
-	# 眉毛：这些模型把 2~3 层不同表情的眉叠在不同深度上（用户 2026-10-26：
-	# 「角色眉毛部分多重表情叠加了，应该是所有角色都有这个问题」）。只留最靠前那层。
-	# 爱丽丝这条本来就是单层，所以这里通常空转 —— 留着是为了「所有角色同一条规矩」。
-	brow_fix = FaceFix.simplify_brows(get_parent())
-	if bool(brow_fix.get("applied", false)):
-		print("[AnimDriver] 眉毛去重：%d 层 → 留最前面那层（塌掉 %d 个顶点）" % [
-			int(brow_fix["layers"]), int(brow_fix["collapsed"])])
+	# 眉毛叠层：**故意不调** `FaceFix.simplify_brows()`。
+	# 三版判据都会把「左右两条眉」误判成「上下两层」，删一半就成了白眉
+	# （2026-10-26 用户实拍爱丽丝白眉）。原因和全部数据记在 `face_fix.gd` 里那段。
+	brow_fix = {}
 	# 头顶光环：低模环 + 受光 + 不发光 + 还投阴影 → 改成自发光环（不投阴影）。
 	# 用户 2026-10-22：「柚子的光环好像渲染出问题了」。判据见 `halo_fix.gd` 文件头。
 	halo_fix = HaloFix.polish(get_parent() as Node3D)

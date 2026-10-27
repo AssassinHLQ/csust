@@ -75,6 +75,12 @@ enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
 ## 受击闪白的颜色
 @export var flash_color := Color(1.0, 0.55, 0.55)
 
+## ── 进场加载节奏（2026-10-27 用户的分阶段加载策略，见 `boot_gate.gd`）──
+## 玩家进场景后离得远就先不建模型；走近 `boot_distance` 米或等满 `boot_max_wait` 秒再建。
+## 0/0 = 立即建（旧行为）。
+@export var boot_distance := 0.0
+@export var boot_max_wait := 0.0
+
 var health: float
 var model: Node3D
 ## 归一化后的视觉尺寸（世界，m）
@@ -89,6 +95,9 @@ var _collision: CollisionShape3D
 var _collision_shape: BoxShape3D
 ## 多块碰撞体（BOX_PARTS 模式会是好几个）。`_collision` 就是第一个，保持兼容。
 var _collisions: Array[CollisionShape3D] = []
+var _booted := false
+
+const BootGate := preload("res://scripts/boot_gate.gd")
 
 
 func _ready() -> void:
@@ -97,9 +106,17 @@ func _ready() -> void:
 	#    `died` 的，Boss 若也进 targets 组会被连两次，一次击杀加两分。
 	add_to_group("bosses")
 	health = max_health
+	health_changed.emit(health, max_health)
+	# 模型 + 碰撞按距离/超时延后（玩家从蒙德里安二层出生，木桩在几十米外）
+	BootGate.when_near(self, boot_distance, boot_max_wait, _boot)
+
+
+func _boot() -> void:
+	if _booted:
+		return
+	_booted = true
 	_build_model()
 	_build_collision()
-	health_changed.emit(health, max_health)
 
 
 ## 受击（Weapon 直接调这个，和 Target 的契约一致）

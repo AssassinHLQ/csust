@@ -9,9 +9,13 @@
 [ext_resource type="Script" uid="uid://dgrtxafrb2nat" path="res://scripts/pig_boss.gd" id="9_pig"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="10_settings"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="11_dialog"]
-[ext_resource type="PackedScene" path="res://scenes/mesh_hut.tscn" id="12_hut"]
-[ext_resource type="PackedScene" path="res://scenes/parkour.tscn" id="13_parkour"]
-[ext_resource type="Script" path="res://scripts/sensei_npc.gd" id="14_sensei"]
+[ext_resource type="PackedScene" uid="uid://cl08irr7qd06t" path="res://scenes/mesh_hut.tscn" id="12_hut"]
+[ext_resource type="PackedScene" uid="uid://do0red3si3ulj" path="res://scenes/parkour.tscn" id="13_parkour"]
+[ext_resource type="Script" uid="uid://cudybn0ajlrj6" path="res://scripts/sensei_npc.gd" id="14_sensei"]
+[ext_resource type="PackedScene" uid="uid://dcve5pso1hgi2" path="res://scenes/shop_baked.tscn" id="15_shopbaked"]
+[ext_resource type="PackedScene" path="res://scenes/mondrian_house_baked.tscn" id="16_mondrian_baked"]
+[ext_resource type="PackedScene" path="res://scenes/room609_proxy_baked.tscn" id="17_roomproxy"]
+[ext_resource type="PackedScene" path="res://scenes/scene_gate.tscn" id="18_gate"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -56,7 +60,7 @@ roughness = 0.9
 size = Vector3(0.3, 8.2994, 20.375868)
 
 [sub_resource type="BoxShape3D" id="Shape_room_xpos"]
-size = Vector3(0.3, 8.2994, 15.108234)
+size = Vector3(0.3, 8.2994, 15.373372)
 
 [sub_resource type="BoxShape3D" id="Shape_room_zneg_a"]
 size = Vector3(10.501027, 8.2994, 0.3)
@@ -67,21 +71,14 @@ size = Vector3(2.9842682, 8.2994, 0.3)
 [sub_resource type="BoxShape3D" id="Shape_room_zpos"]
 size = Vector3(10.584586, 8.2994, 0.3)
 
-; ── 画室家具碰撞（2026-10-26 用户：「老师左边桌子那里还没有加碰撞体吗?」
-;    →「需要在 godot 编辑器也看得见，因为这样子我好微调」）──
-; 位置是「3D 线框叠在泼溅上手调」定出来的（scripts/_probe_box3d.gd：零投影误差；
-; 像素反投影会因为桌面 0.78 m 与地面 0 m 的透视差偏半米）。
-; 老师 Sensei 世界 (1.80, 0.00, 2.60)，桌子在他**西侧**，桌面高 0.78 m。
 [sub_resource type="BoxShape3D" id="Shape_art_desk"]
-size = Vector3(0.86, 0.78, 1.06)
+size = Vector3(0.4927759, 1.1820049, 2.4761267)
 
-; 桌旁两把凳子：木凳面约 0.45 m 高。做成整块立方体而不是薄片 ——
-; 薄片会被一脚踩进去；凳子本来就该挡路。
 [sub_resource type="BoxShape3D" id="Shape_art_chair_a"]
-size = Vector3(0.42, 0.45, 0.42)
+size = Vector3(11.856813, 0.45, 21.759708)
 
 [sub_resource type="BoxShape3D" id="Shape_art_chair_b"]
-size = Vector3(0.42, 0.45, 0.42)
+size = Vector3(0.42, 0.92842406, 0.31044433)
 
 [sub_resource type="BoxShape3D" id="Shape_pillar"]
 size = Vector3(1.6, 0.8, 1.6)
@@ -127,7 +124,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("Shape_floor")
 
 [node name="Mesh" type="MeshInstance3D" parent="Floor" unique_id=1724024066]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0.0202322)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.011126518, -0.50000095, 0.0044879913)
 mesh = SubResource("Mesh_floor")
 surface_material_override/0 = SubResource("Mat_floor")
 
@@ -145,58 +142,60 @@ anchor_world = Vector3(0, 0.03, 4.25)
 crop_enabled = true
 crop_max_scale = 0.5
 box_door_side = "z-"
+start_delay = 10.0
+start_distance = 22.0
+low_priority = true
 
 [node name="RoomCollision" type="StaticBody3D" parent="Room609" unique_id=2101091049]
 
 [node name="WallXNeg" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1260600156]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.698859, 1.2768, 3.558024)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.699, 1.5, 3.558)
 shape = SubResource("Shape_room_xneg")
 
 [node name="WallXPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1711597667]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.706125, 1.2768, 5.901933)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.706, 1.5, 6.035)
 shape = SubResource("Shape_room_xpos")
 
 [node name="WallZNegA" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=675542165]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.48005772, 1.2768, -6.628549)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.48, 1.5, -6.629)
 shape = SubResource("Shape_room_zneg_a")
 
 [node name="WallZNegB" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1699283073]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4.657739, 1.2768, -5.2530003)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4.658, 1.5, -5.253)
 shape = SubResource("Shape_room_zneg_b")
 
 [node name="WallZPos" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=1495928316]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4993732, 1.2768, 13.710994)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.499, 1.5, 13.711)
 shape = SubResource("Shape_room_zpos")
 
-; ── 家具碰撞（2026-10-26）──
-; 挂在 Room609/RoomCollision 下，和墙共用一个 StaticBody3D ⇒ 玩家本来就会撞它。
-; 编辑器里选中后可在 Inspector 改 size、用移动手柄挪 position。
-; 盒子中心 y = 尺寸/2 ⇒ 底面正好落在 y = 0（平台面），不陷进地板也不悬空。
 [node name="ArtDesk" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091050]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.71, 0.39, 2.43)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.893612, 0.59100246, 1.3329114)
 shape = SubResource("Shape_art_desk")
 
 [node name="ArtChairA" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091051]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.55, 0.225, 2.15)
+transform = Transform3D(1, 0, -1.7484555e-07, 0, 1, 0, 1.7484555e-07, 0, 1, -0.548, 5.554684, 3.456)
 shape = SubResource("Shape_art_chair_a")
 
 [node name="ArtChairB" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091052]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.45, 0.225, 3.35)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
 shape = SubResource("Shape_art_chair_b")
 
-; ── 平台上的第三块场地：手工网格小屋（scenes/mesh_hut.tscn）──
-; 落点由 scripts/_probe_platform_free.gd 量出来：与最近障碍（霸王龙的碰撞盒，
-; z ∈ [−9.05, −6.93]）留 2.95 m，且躲开了 _verify_final 那条自检弹道
-; 「玩家(6,−4) → 靶1(6,−10)」。改了位置请重跑那个探针 + `_verify_mesh_hut`。
-[node name="MeshHut" parent="." instance=ExtResource("12_hut")]
+[node name="MeshHut" parent="." unique_id=864545597 instance=ExtResource("12_hut")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
 
-; ── 平台西侧的跑酷路线（scenes/parkour.tscn）──
-; 从平台西边缘（x = −20）跳出去，10 跳 + 一段窄梁，落到 56 m 外的「信号塔岛」。
-; 这一份**刻意不做偏移**：它在场景文件里就是按世界坐标写的（关卡几何，
-; 不是道具），所以这里是恒等变换。每一跳的余量、尺寸依据见那个文件的头注释。
-[node name="Parkour" parent="." instance=ExtResource("13_parkour")]
+[node name="Parkour" parent="." unique_id=1687720817 instance=ExtResource("13_parkour")]
 
+[node name="Shop" parent="." unique_id=1996334488 instance=ExtResource("15_shopbaked")]
+
+[node name="MondrianHouse" parent="." unique_id=2115650812 instance=ExtResource("16_mondrian_baked")]
+
+[node name="MondrianGate" parent="MondrianHouse" unique_id=952632126 instance=ExtResource("18_gate")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 4.2, -5.58)
+gate_id = "MondrianGate2F"
+title = "门厅 · 下一场景"
+prompt = "按 F 进入门厅"
+
+[node name="RoomProxy" parent="." unique_id=218846506 instance=ExtResource("17_roomproxy")]
 
 [node name="BossPig" type="StaticBody3D" parent="." unique_id=666610584]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -13, 0, -8)
@@ -212,6 +211,8 @@ texture_map = {
 collision_factors = Vector3(0.85, 0.8, 0.75)
 height = 2.6
 max_health = 1800.0
+boot_distance = 30.0
+boot_max_wait = 12.0
 
 [node name="Pillar1" type="StaticBody3D" parent="." unique_id=260400481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.4, -10)
@@ -248,9 +249,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.375, -10)
 script = ExtResource("3_target")
 
 [node name="Collision" type="CollisionShape3D" parent="Target1" unique_id=1974975342]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.1171284, 0)
 shape = SubResource("Shape_target")
 
 [node name="Mesh" type="MeshInstance3D" parent="Target1" unique_id=1386477904]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.1124907, 0)
 mesh = SubResource("Mesh_target")
 surface_material_override/0 = SubResource("Mat_target")
 
@@ -342,9 +345,11 @@ model_path = "res://models/companions/Kei_ext.glb"
 display_name = "凯伊"
 slot = Vector3(-5.2, 0, -1.4)
 
-[node name="Sensei" type="Node3D" parent="."]
+[node name="Sensei" type="Node3D" parent="." unique_id=1822426952]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 0, 2.6)
 script = ExtResource("14_sensei")
+boot_distance = 22.0
+boot_max_wait = 10.0
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1253512132]
 script = ExtResource("1_hud")

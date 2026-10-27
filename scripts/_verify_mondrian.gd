@@ -67,6 +67,13 @@ func _run() -> void:
 		var m := mi as MeshInstance3D
 		if m.mesh == null:
 			continue
+		# ⚠️ 斜坡/斜栏板/彩带是旋转过的盒子：AABB 会被撑大，
+		#    拿它判「同向面重合」只会得到假阳性。轴对齐的网格才进判定。
+		var bb := m.global_transform.basis
+		var skew := absf(bb.x.y) + absf(bb.x.z) + absf(bb.y.x) + absf(bb.y.z) \
+			+ absf(bb.z.x) + absf(bb.z.y)
+		if skew > 1e-3:
+			continue
 		list.append({"n": m.name, "a": m.global_transform * m.mesh.get_aabb()})
 	var found: Array = []
 	for i in list.size():
@@ -109,15 +116,23 @@ func _run() -> void:
 	for _f in 20:
 		await process_frame
 	Input.action_press("move_back")
+	var t0 := Time.get_ticks_msec()
 	var trace: Array = []
-	for _f in 240:
+	var next_trace := 0.0
+	while Time.get_ticks_msec() - t0 < 15000:
 		await process_frame
-		if _f % 30 == 0:
-			trace.append("t=%.1fs y=%.2f" % [float(_f) / 60.0, player.global_position.y])
+		var elapsed := float(Time.get_ticks_msec() - t0) / 1000.0
+		if elapsed >= next_trace:
+			trace.append("t=%.1fs y=%.2f" % [elapsed, player.global_position.y])
+			next_trace += 0.5
+		if player.global_position.y >= 4.15:
+			break
 	Input.action_release("move_back")
 	for _f in 15:
 		await process_frame
 	for t in trace:
 		print("  %s" % t)
-	print("  终点 y=%.3f（≥4.15 即上到二层）" % player.global_position.y)
+	var top := player.global_position.y
+	print("  终点 y=%.3f（≥4.15 即上到二层）  [%s]"
+		% [top, "PASS" if top >= 4.15 else "FAIL"])
 	quit(0)

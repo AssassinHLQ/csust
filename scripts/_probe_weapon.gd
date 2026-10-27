@@ -69,7 +69,7 @@ func _run() -> void:
 	_weapon.call("shoot")
 	await _wait(2)
 	var cam := _player.cam
-	var origin := cam.global_position + cam.global_transform.basis * _weapon.muzzle_offset
+	var origin := cam.global_position
 	print("[weapon] 相机 %s   弹道起点 %s   枪口 %s" % [
 		str(cam.global_position.snappedf(0.01)),
 		str(origin.snappedf(0.01)),
@@ -80,7 +80,7 @@ func _run() -> void:
 func _report(clip: String) -> void:
 	var cam := _player.cam
 	var fwd := -cam.global_transform.basis.z
-	var origin := cam.global_position + cam.global_transform.basis * _weapon.muzzle_offset
+	var origin := cam.global_position
 	# 玩家的局部坐标（-Z 是正前方）
 	var to_local := _player.global_transform.affine_inverse()
 	var muzzle_local: Vector3 = to_local * _weapon.muzzle.global_position

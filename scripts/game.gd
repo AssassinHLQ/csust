@@ -1,6 +1,8 @@
 extends Node3D
 ## 玩法场景总控：把 Player / Weapon / HUD / 高斯泼溅校园接起来，记账击杀。
 
+const SceneFlow := preload("res://scripts/scene_flow.gd")
+
 ## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
 const FALL_LIMIT := -60.0
 
@@ -90,6 +92,10 @@ var _rd: RenderDistance
 var _bosses: Array[Boss] = []
 var _companions: Array[Companion] = []
 var _spawn := Vector3.ZERO
+## 本场景是从别的场景走门进来的（`scene_gate.gd` → `scene_flow.gd`）
+var _entered_via_gate := false
+## 天空盒已经装上（`_enter_tree` 里做，见那里的说明）
+var _sky_done := false
 var _score := 0
 var _shots := 0
 var _hits := 0
@@ -509,9 +515,12 @@ const SKY_FOG := {
 
 
 func _setup_sky() -> void:
+	if _sky_done:
+		return
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if we == null or we.environment == null:
 		return
+	_sky_done = true
 	var key := SKY_DEFAULT
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--sky="):
@@ -545,6 +554,16 @@ func _setup_sky() -> void:
 	print("[Game] 天空盒 = %s（%s，%d×%d）" % [key, path, tex.get_width(), tex.get_height()])
 
 
+## 天空盒在 `_enter_tree()` 里就装好，而不是等 `_ready()`。
+##
+## 子节点的 `_ready()` **先于**父节点执行，而同伴 / 芹香 / 老师的模型加载要占 1.6 s 左右
+## —— 放在 `_ready` 里就等于「人都建完了才贴天空」，进场第一帧没有天。
+## `_enter_tree` 是父节点先跑，HDRI 全景图排在所有模型前面。
+## 用户 2026-10-27：「先把蒙德里安和 HDRI 天空加载好，保证进入流畅」。
+func _enter_tree() -> void:
+	_setup_sky()
+
+
 func _ready() -> void:
 	var vp := get_viewport()
 	if not vp.size_changed.is_connected(_fit_render_scale):
@@ -557,8 +576,10 @@ func _ready() -> void:
 	_player = $Player
 	_weapon = $Player/Weapon
 	_hud = $HUD
-	_setup_sky()
 	_spawn = _player.global_position
+	# 从别的场景走门回来：落到对应门前（`scene_gate.gd` 的 arrival_offset），
+	# 并把「这一趟不重播开场剧情」记下来。
+	_entered_via_gate = _apply_scene_entry()
 	_build_room_proxy()
 	_check_room_furniture()
 	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。
@@ -571,10 +592,10 @@ func _ready() -> void:
 	_build_summon_pad()
 	# 小屋桌子上的电脑（假 Arch Linux 终端，按 F 进出，见 scripts/hut_computer.gd）
 	_build_computer()
-	# 新区域：商店（初始小屋右边、跨出平台铺一块地板，见 scripts/shop.gd）
-	_build_shop()
-	# 新区域：蒙德里安大楼（商店正对面，见 scripts/mondrian_house.gd）
-	_build_mondrian()
+	# 商店与蒙德里安大楼**已经烘焙进场景**（`scenes/shop_baked.tscn` /
+	# `scenes/mondrian_house_baked.tscn`，在 game.tscn 里是实例节点），
+	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
+	# `scripts/_bake_buildings.gd`。
 
 	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
 	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
@@ -654,7 +675,13 @@ func _ready() -> void:
 	# 开场剧情放**最后**：HUD / Boss / 同伴都接好了再演，
 	# 这样对话框一结束世界就是完整可玩的（暂停期间 `splat_scene.gd` 的解码线程
 	# 照常在后台跑，只是 `_process` 里的收尾被推迟到恢复之后）。
-	_play_opening()
+	#
+	# 从别的场景走门回来时**不重播**：开场是「第一次到这里」的演出，
+	# 每次从门厅回来都演一遍会把玩家按在椅子上。
+	if _entered_via_gate:
+		print("[Game] 从别的场景返回：跳过开场剧情")
+	else:
+		_play_opening()
 
 
 ## 备用 Boss：`scenes/bosses_standby.tscn` 里躺着 6 位（霸王龙 / 倭瓜 / 霍德 /
@@ -739,6 +766,25 @@ func _spawn_standby_bosses() -> void:
 ## 命令行覆盖（都写在 `--` 之后）：
 ##     -- --story=off                不播开场，直接开打
 ##     -- --story=res://story/x.txt  改播指定的那一份（调某一段剧情用）
+## 从别的场景走门回来时，把玩家放到那扇门前。
+## 返回 true = 这一次是从别的场景进来的（调用方据此跳过开场剧情）。
+func _apply_scene_entry() -> bool:
+	var entry := SceneFlow.consume_entry()
+	if entry.is_empty():
+		return false
+	var gate_id := String(entry.get("gate", ""))
+	var gate := SceneFlow.find_gate(self, gate_id)
+	if gate == null:
+		print("[Game] 从别的场景返回，但场上没有落点门「%s」—— 用默认出生点" % gate_id)
+		return true
+	var point: Vector3 = gate.call("arrival_point")
+	_player.global_position = point
+	_player.velocity = Vector3.ZERO
+	print("[Game] 从别的场景返回：落点 = 门「%s」前 %s"
+		% [gate_id, str(point.snappedf(0.01))])
+	return true
+
+
 func _play_opening() -> void:
 	if not PLAY_OPENING:
 		return
@@ -897,10 +943,12 @@ func _build_summon_pad() -> void:
 
 ## 新区域「商店」：初始小屋右边的平台外面（`scenes/shop.tscn` + `scripts/shop.gd`）。
 ##
-## 为什么在代码里 instance、而不是摆进 `game.tscn`：
-##   1. 位置和长度都得**先量小屋**（长 = 2 × 小屋外墙长 6.60 = 13.20 m）再定，
-##      摆进场景只能写死坐标，小屋一挪就错位；
-##   2. 它必须等 `_dress_empty_lot()` 铺完地砖再建 —— 地板材质是**克隆平台那一块**的。
+## ⚠️ 2026-10-27 起**运行时不再走这里**：商店已经烘焙成 `scenes/shop_baked.tscn`，
+##    在 `game.tscn` 里是实例节点，运行时由 `shop.gd::_wire_baked()` 补信号。
+##    这个函数保留给烘焙工具 `scripts/_bake_buildings.gd`（它重建一遍再打包）。
+##
+## 为什么当初在代码里建：位置和长度得**先量小屋**（长 = 2 × 小屋外墙长 6.60 = 13.20 m）
+## 再定；而且必须等 `_dress_empty_lot()` 铺完地砖再建。
 ## 高斯泼溅（`splatdata/shop_raw.sog`，70 MB）**故意不加载**，见 `shop.gd` 文件头。
 func _build_shop() -> void:
 	var ps := load(SHOP_SCENE) as PackedScene
@@ -946,6 +994,9 @@ func _build_shop() -> void:
 ##    西侧 0.71 m 落在**主平台**（`Floor`，x −20 ~ +20）上 —— 那块也是 y = 0 的实心
 ##    地板，脚下照样不悬空，只是地面从平台那侧换成 Deck 那侧（同一张地砖图，
 ##    `shop.gd::_deck_material()` 本来就是克隆平台那块材质）。
+##
+## ⚠️ 2026-10-27 起运行时不再走这里：大楼已经烘焙成 `scenes/mondrian_house_baked.tscn`，
+##    在 `game.tscn` 里是实例节点。这个函数留给 `scripts/_bake_buildings.gd`。
 func _build_mondrian() -> void:
 	var ps := load(MONDRIAN_SCENE) as PackedScene
 	if ps == null:
@@ -1043,11 +1094,14 @@ func _on_gate_boss(boss: Boss) -> void:
 ## 用户要的：「走出 609 门就隐藏高斯泼溅，外部看起来从高斯泼溅变成普通网格，
 ## 走回去又隐藏普通网格、显示高斯泼溅」。**位置就是碰撞网格**（用户原话）。
 ##
-## 所以代理网格的每一个盒子都**照着 `Room609/RoomCollision` 的 `CollisionShape3D`
-## 原样复制**（尺寸取 `BoxShape3D.size`、位置取它的全局变换），不估、不缩、不对齐
+## 所以代理网格的每一个**墙**盒子都照着 `Room609/RoomCollision` 的 `CollisionShape3D`
+## 原样复制（尺寸取 `BoxShape3D.size`、位置取它的全局变换），不估、不缩、不对齐
 ## 到别的东西上 —— 碰撞在哪儿，看起来的墙就在哪儿。
-## 再补一块盖在墙顶的**顶板**：碰撞里没有顶，但站在外面从高处看，没有顶就一眼
-## 看进空房间里。
+## 分类是**按几何**做的，不看名字（用户 2026-10-27 把 `ArtChairA` 直接改成了屋顶板）：
+## 高盒子 = 墙；扁且贴墙顶 = 屋顶板；其余 = 屋里家具，只挡人、不出代理网格。
+## 再补一块盖在墙顶的**黑色顶板**：碰撞里没有顶，但站在外面从高处看，没有顶就一眼
+## 看进空房间里。顶板的长宽和高度**全部取自（对齐后的）墙包围盒** ——
+## 用户在编辑器里改完墙的碰撞体，屋顶跟着走，不用再改代码。
 ##
 ## 判定：墙体的世界包围盒（`_room_box`）收缩 `ROOM_SWAP_HYSTERESIS` 之后
 ## `has_point(player)` 就是「在屋里」。进/出各用一条边界（滞回），
@@ -1069,6 +1123,8 @@ func _on_gate_boss(boss: Boss) -> void:
 const ROOM_COLLISION_PATH := "Room609/RoomCollision"
 ## 场景里应该存在的家具碰撞节点名（只用于自检点名，**不用来建节点**）
 const ROOM_FURNITURE := ["ArtDesk", "ArtChairA", "ArtChairB"]
+## 墙的高度下限：高过它的盒子才算墙（家具 0.45~1.18 m、屋顶板 0.45 m 都不算）
+const ROOM_WALL_MIN_HEIGHT := 2.0
 const ROOM_PROXY_NAME := "RoomProxy"
 const ROOM_SWAP_HYSTERESIS := 0.25
 ## 配色照 `scenes/mesh_hut.tscn` 那间手工小屋的调子（用户说的「你之前做的这样子」）
@@ -1123,14 +1179,50 @@ func _check_room_furniture() -> void:
 		found += 1
 		names.append("%s(%.2f×%.2f×%.2f @ %s)" % [want, box.size.x, box.size.y, box.size.z,
 			str(cs.global_position.snappedf(0.01))])
-	print("[Game] 画室家具碰撞 %d/%d：%s"
+	print("[Game] 画室碰撞体 %d/%d 在位（高盒子当墙、贴顶扁盒子当屋顶，其余当家具）：%s"
 		% [found, ROOM_FURNITURE.size(), ", ".join(names)])
 
 
 func _build_room_proxy() -> void:
+	# 已经烘焙进场景（`scenes/room609_proxy_baked.tscn`，game.tscn 里的 RoomProxy 实例）
+	# → 只做运行时接线，不再现场建网格。
+	var baked := get_node_or_null(ROOM_PROXY_NAME) as Node3D
+	if baked != null:
+		_wire_baked_room_proxy(baked)
+		return
 	var body := get_node_or_null(ROOM_COLLISION_PATH)
 	if body == null:
 		return
+
+	# 先收集所有碰撞盒，再按**几何**分类 —— 名字不可靠：用户 2026-10-27 直接把
+	# `ArtChairA` 改成了盖在墙顶的「屋顶板」。分类规则：
+	#   · 高盒子（高 > 2 m）        = 墙，参与房间矩形；
+	#   · 扁盒子且贴到墙顶（1 m 内）= 屋顶板，黑色屋顶**照它生成**；
+	#   · 其余（桌子、凳子）        = 屋里家具，只挡人，不参与外观。
+	var all_boxes: Array[AABB] = []
+	var all_xf: Array[Transform3D] = []
+	var all_size: Array[Vector3] = []
+	for c in body.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var size: Vector3 = (cs.shape as BoxShape3D).size
+		all_boxes.append(cs.global_transform * AABB(-size * 0.5, size))
+		all_xf.append(cs.global_transform)
+		all_size.append(size)
+
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var wall_idx: Array[int] = []
+	for i in all_boxes.size():
+		if all_size[i].y <= ROOM_WALL_MIN_HEIGHT:
+			continue
+		wall_idx.append(i)
+		lo = lo.min(all_boxes[i].position)
+		hi = hi.max(all_boxes[i].position + all_boxes[i].size)
+	if wall_idx.is_empty():
+		return
+
 	var proxy := Node3D.new()
 	proxy.name = ROOM_PROXY_NAME
 	add_child(proxy)
@@ -1139,34 +1231,21 @@ func _build_room_proxy() -> void:
 	wall_mat.albedo_color = ROOM_WALL_COLOR
 	wall_mat.roughness = 0.95
 
-	var lo := Vector3(INF, INF, INF)
-	var hi := Vector3(-INF, -INF, -INF)
-	var walls := 0
 	var wall_boxes: Array[AABB] = []
 	var wall_meshes: Array[MeshInstance3D] = []
-	for c in body.get_children():
-		var cs := c as CollisionShape3D
-		if cs == null or not (cs.shape is BoxShape3D):
-			continue
-		var size: Vector3 = (cs.shape as BoxShape3D).size
+	for i in wall_idx:
 		var mi := MeshInstance3D.new()
-		mi.name = "Wall%d" % walls
+		mi.name = "Wall%d" % wall_meshes.size()
 		var m := BoxMesh.new()
-		m.size = size
+		m.size = all_size[i]
 		mi.mesh = m
 		mi.material_override = wall_mat
 		proxy.add_child(mi)
 		# ⚠️ 先 add_child 再写 global_transform：不在树里时 global == local。
-		mi.global_transform = cs.global_transform
-		var b: AABB = cs.global_transform * AABB(-size * 0.5, size)
-		lo = lo.min(b.position)
-		hi = hi.max(b.position + b.size)
-		wall_boxes.append(b)
+		mi.global_transform = all_xf[i]
+		wall_boxes.append(all_boxes[i])
 		wall_meshes.append(mi)
-		walls += 1
-	if walls == 0:
-		proxy.queue_free()
-		return
+	var walls := wall_meshes.size()
 
 	# 四面墙的**外表面**对齐到房间矩形。
 	#
@@ -1198,18 +1277,55 @@ func _build_room_proxy() -> void:
 		print("[Game] 609 代理墙：%d 面墙的外表面被对齐到房间矩形（手摆碰撞盒之间差了几厘米）"
 			% snapped)
 
-	var roof := MeshInstance3D.new()
-	roof.name = "Roof"
-	var rm := BoxMesh.new()
-	rm.size = Vector3(hi.x - lo.x, ROOM_ROOF_THICKNESS, hi.z - lo.z)
-	roof.mesh = rm
+	# 对齐会让墙的实际范围变几厘米 —— 屋顶必须按**对齐后**的盒子重算，
+	# 否则屋顶边缘会挑在墙外（用户 2026-10-27：「黑色屋顶根据我建的碰撞体来」）。
+	lo = Vector3(INF, INF, INF)
+	hi = Vector3(-INF, -INF, -INF)
+	for b in wall_boxes:
+		lo = lo.min(b.position)
+		hi = hi.max(b.position + b.size)
+
+	# ── 黑色屋顶 ──
+	# 有「屋顶板」碰撞盒（扁、贴墙顶）就照它生成：位置、厚度、出檐全由用户在编辑器里定。
+	# 没有就退回老办法（按墙包围盒自动铺一块 0.3 m 厚的板）。
+	var roof_idx: Array[int] = []
+	for i in all_boxes.size():
+		if i in wall_idx:
+			continue
+		var b: AABB = all_boxes[i]
+		if b.size.y <= ROOM_WALL_MIN_HEIGHT and (b.position.y + b.size.y) >= hi.y - 1.0:
+			roof_idx.append(i)
+
 	var roof_mat := StandardMaterial3D.new()
 	roof_mat.albedo_color = ROOM_ROOF_COLOR
 	roof_mat.roughness = 0.9
-	roof.material_override = roof_mat
-	proxy.add_child(roof)
-	roof.global_position = Vector3((lo.x + hi.x) * 0.5,
-		hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
+	if roof_idx.is_empty():
+		var roof := MeshInstance3D.new()
+		roof.name = "Roof"
+		var rm := BoxMesh.new()
+		rm.size = Vector3(hi.x - lo.x, ROOM_ROOF_THICKNESS, hi.z - lo.z)
+		roof.mesh = rm
+		roof.material_override = roof_mat
+		proxy.add_child(roof)
+		roof.global_position = Vector3((lo.x + hi.x) * 0.5,
+			hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
+		print("[Game] 609 黑色屋顶（自动按墙包围盒）：%.2f × %.2f m，底面 y=%.2f，"
+			% [rm.size.x, rm.size.z, hi.y]
+			+ "盖住 x %.2f ~ %.2f、z %.2f ~ %.2f" % [lo.x, hi.x, lo.z, hi.z])
+	else:
+		for k in roof_idx.size():
+			var i: int = roof_idx[k]
+			var mi := MeshInstance3D.new()
+			mi.name = "Roof" if k == 0 else "Roof%d" % (k + 1)
+			var rm := BoxMesh.new()
+			rm.size = all_size[i]
+			mi.mesh = rm
+			mi.material_override = roof_mat
+			proxy.add_child(mi)
+			mi.global_transform = all_xf[i]
+			var c := all_xf[i].origin
+			print("[Game] 609 黑色屋顶（照第 %d 块碰撞板）：%.2f × %.2f × %.2f @ (%.3f, %.3f, %.3f)"
+				% [i, all_size[i].x, all_size[i].y, all_size[i].z, c.x, c.y, c.z])
 
 	_build_room_door(proxy, wall_boxes, AABB(lo, hi - lo), wall_mat)
 
@@ -1233,6 +1349,42 @@ func _build_room_proxy() -> void:
 	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [
 		walls, str(_room_box.size.snappedf(0.01)),
 		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 烘焙版代理（`scenes/room609_proxy_baked.tscn`）：网格已经躺在 tscn 里，能直接拖。
+##
+## 房间矩形**仍然从碰撞盒量** —— 碰撞是判定依据，网格只是外观。这样即使你在编辑器里
+## 只挪了外观，玩家进屋/出屋的切换还是按碰撞走，不会出现「人还在屋里却换成外面视角」。
+func _wire_baked_room_proxy(proxy: Node3D) -> void:
+	_room_proxy = proxy
+	_room_box = _room_box_from_collisions()
+	if _room_box.size == Vector3.ZERO:
+		push_warning("[Game] RoomProxy 是烘焙版，但没量到墙的碰撞盒（%s）" % ROOM_COLLISION_PATH)
+	print("[Game] 609 门内外切换：代理网格为**烘焙场景**（%d 个节点）；房间矩形 %s，中心 %s" % [
+		proxy.get_child_count(), str(_room_box.size.snappedf(0.01)),
+		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 墙（高 > 2 m 的盒子，不含家具/屋顶板）的世界包围盒 —— 进出判定、地洞都用它。
+func _room_box_from_collisions() -> AABB:
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		return AABB()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var n := 0
+	for c in body.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var s: Vector3 = (cs.shape as BoxShape3D).size
+		if s.y <= ROOM_WALL_MIN_HEIGHT:   # 家具、屋顶板都不算墙
+			continue
+		var b: AABB = cs.global_transform * AABB(-s * 0.5, s)
+		lo = lo.min(b.position)
+		hi = hi.max(b.position + b.size)
+		n += 1
+	return AABB() if n == 0 else AABB(lo, hi - lo)
 
 
 ## 门板：把门洞糊上一块**淡黄色**的板。

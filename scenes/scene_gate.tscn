@@ -1,0 +1,88 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/scene_gate.gd" id="1_gate"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_gate_frame"]
+albedo_color = Color(0.055, 0.055, 0.06, 1)
+metallic = 0.25
+roughness = 0.42
+
+[sub_resource type="StandardMaterial3D" id="Mat_gate_glow"]
+shading_mode = 0
+albedo_color = Color(0.42, 0.76, 1, 0.58)
+transparency = 1
+cull_mode = 2
+roughness = 0.1
+
+[sub_resource type="BoxMesh" id="Mesh_gate_post"]
+size = Vector3(0.16, 2.5, 0.26)
+
+[sub_resource type="BoxMesh" id="Mesh_gate_lintel"]
+size = Vector3(2.12, 0.18, 0.26)
+
+[sub_resource type="QuadMesh" id="Mesh_gate_portal"]
+size = Vector2(1.8, 2.32)
+
+[sub_resource type="SphereShape3D" id="Shape_gate_trigger"]
+radius = 2.2
+
+[node name="SceneGate" type="Node3D"]
+script = ExtResource("1_gate")
+
+[node name="FrameL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.98, 1.25, 0)
+mesh = SubResource("Mesh_gate_post")
+surface_material_override/0 = SubResource("Mat_gate_frame")
+
+[node name="FrameR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.98, 1.25, 0)
+mesh = SubResource("Mesh_gate_post")
+surface_material_override/0 = SubResource("Mat_gate_frame")
+
+[node name="Lintel" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.59, 0)
+mesh = SubResource("Mesh_gate_lintel")
+surface_material_override/0 = SubResource("Mat_gate_frame")
+
+[node name="Portal" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("Mesh_gate_portal")
+surface_material_override/0 = SubResource("Mat_gate_glow")
+cast_shadow = 0
+
+[node name="Light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0.45)
+light_color = Color(0.55, 0.8, 1, 1)
+light_energy = 1.4
+omni_range = 4.5
+shadow_enabled = false
+
+[node name="Title" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.12, 0)
+pixel_size = 0.0032
+billboard = 1
+modulate = Color(0.96, 0.98, 1, 1)
+outline_modulate = Color(0, 0, 0, 1)
+text = "下一场景"
+font_size = 96
+outline_size = 24
+no_depth_test = true
+
+[node name="Prompt" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.82, 0)
+pixel_size = 0.003
+billboard = 1
+modulate = Color(1, 0.93, 0.72, 1)
+outline_modulate = Color(0, 0, 0, 1)
+text = "按 F 进入"
+font_size = 64
+outline_size = 20
+no_depth_test = true
+
+[node name="Trigger" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0.5)
+collision_layer = 0
+collision_mask = 1
+
+[node name="Shape" type="CollisionShape3D" parent="Trigger"]
+shape = SubResource("Shape_gate_trigger")

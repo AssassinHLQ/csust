@@ -37,6 +37,11 @@ extends Node3D
 ## 老师站着不动、也不参战，所以 `StaticBody3D + CapsuleShape3D` 就够 ——
 ## 玩家会撞到他、不会直接穿过去。关掉就只是个纯装饰。
 @export var collision_enabled := true
+## ── 进场加载节奏（2026-10-27，见 `boot_gate.gd`）──
+## 老师离出生点远时先不建模型，走近 / 超时再建。0/0 = 立即。
+@export var boot_distance := 0.0
+@export var boot_max_wait := 0.0
+
 ## 胶囊半径占身高的比例。1.62 m × 0.16 ≈ 0.26 m，比肩窄、比腰宽，撞上去不突兀。
 @export var collision_radius_ratio := 0.16
 ## 手臂下垂角度（度）。素材是 **T-pose**，不放下来像个木偶。
@@ -87,8 +92,19 @@ var _arm_rest := {}
 var _t := 0.0
 
 
+const BootGate := preload("res://scripts/boot_gate.gd")
+var _booted := false
+
+
 func _ready() -> void:
 	rotation.y = deg_to_rad(facing_yaw_deg)
+	BootGate.when_near(self, boot_distance, boot_max_wait, _boot)
+
+
+func _boot() -> void:
+	if _booted:
+		return
+	_booted = true
 	if not ResourceLoader.exists(model_path):
 		push_warning("[Sensei] 找不到模型：%s（老师不出现，游戏继续）" % model_path)
 		return

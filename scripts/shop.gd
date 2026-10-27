@@ -102,11 +102,44 @@ var _mat := {}
 func _ready() -> void:
 	if auto_build:
 		build()
+	elif has_node("Body"):        # 烘焙场景：几何/碰撞来自 tscn，只补运行时那几样
+		_wire_baked()
+
+
+## 烘焙场景的运行时接线。几何、碰撞、灯、招牌、Deck 地板都在
+## `scenes/shop_baked.tscn` 里（由 `scripts/_bake_buildings.gd` 生成，可在编辑器里直接拖）。
+##
+## 有两样**不能**烘焙，所以留在这里：
+##   · 芹香：`ShopClerk._ready()` 会自己实例化模型，烘进去会加载两份；
+##   · 音乐区信号：`body_entered.connect()` 不是持久连接，存不进 tscn。
+func _wire_baked() -> void:
+	_built = true
+	_body = get_node_or_null("Body") as StaticBody3D
+	_decor = get_node_or_null("Decor") as Node3D
+	shop_len = float(get_meta("baked_shop_len", 0.0))
+	shop_depth = float(get_meta("baked_shop_depth", 0.0))
+	shop_height = float(get_meta("baked_shop_height", 0.0))
+	deck_rect = get_meta("baked_deck_rect", Rect2())
+	built_count = int(get_meta("baked_built_count", 0))
+	decor_count = int(get_meta("baked_decor_count", 0))
+	print("[Shop] 烘焙场景就位：位置 (%.2f, %.2f, %.2f)，碰撞盒 %d 个、装饰 %d 个"
+		% [global_position.x, global_position.y, global_position.z, built_count, decor_count])
+	if shop_len > 0.0:
+		print("[Shop] 烘焙尺寸：长 %.2f、进深 %.2f、墙高 %.2f；Deck x %.2f ~ %.2f"
+			% [shop_len, shop_depth, shop_height, deck_rect.position.x, deck_rect.end.x])
+	var zone := get_node_or_null("MusicZone") as Area3D
+	if zone != null:
+		zone.body_entered.connect(_on_music_body.bind(1))
+		zone.body_exited.connect(_on_music_body.bind(-1))
+		_music_area = zone
+	_build_clerk()
 
 
 ## 由 `game.gd` 在地砖铺完之后调用（顺序见 `game.gd::_build_shop()`）。
+## ⚠️ 现在只有**烘焙工具**会走到这里（`scripts/_bake_buildings.gd`）；
+##    运行时用的是 `scenes/shop_baked.tscn`，见 `_wire_baked()`。
 func build() -> void:
-	if _built:
+	if _built or has_node("Body"):
 		return
 	_built = true
 	_measure()
@@ -511,7 +544,7 @@ func _build_counter() -> void:
 	var cx := 4.90          # 柜体中心 x
 	var cz := 0.20          # 柜体中心 z
 	var cw := 0.72          # 柜体进深（x）
-	var cl := 3.60          # 柜体长度（z）
+	var cl := 3.30          # 柜体长度（z）。2026-10-27 用户「柜台变窄一点点」：3.60 → 3.30
 	var floor_y := -TUCK
 
 	# 踢脚：内缩 5 cm，让柜体看起来是「浮」在地上的
@@ -521,7 +554,7 @@ func _build_counter() -> void:
 	# 柜体（橡木）。
 	# ⚠️ 柜体高度**跟着台面走**（`body_h = top_h − 0.18`）：柜体从 y=0.10 起、
 	#    顶上 `TUCK` 之后正好接住台面的底面（`top_h − 0.06`），中间不留缝也不插进去。
-	var top_h := 0.88       # 台面高度（米）
+	var top_h := 0.62       # 台面高度（米）
 	var body_h := top_h - 0.18
 	_box("Counter", Vector3(cx, floor_y + 0.12 + body_h * 0.5, cz),
 		Vector3(cw, body_h + TUCK, cl), _mat["counter"])
@@ -542,9 +575,11 @@ func _build_counter() -> void:
 	# 台面：6 cm 厚，前后各出檐 7 cm。
 	#
 	# ⚠️ 2026-10-26 用户「柜台太高了」—— 原来是 **1.04 m**。
-	#    芹香按设定身高 1.52 m（`shop_clerk.gd` 的 MODEL_SCALE），1.04 已经到她的
-	#    胸口以上，从顾客那侧看过去只剩一个头，柜台像一堵墙。改成 0.88 m
-	#    （≈ 她身高的 58%，和真实卖场柜台的比例接近）。
+	#    改成 0.88 m 是按当时 1.46 m 的芹香算的（≈ 她身高的 58%）。
+	#    2026-10-27 芹香改回原生 1.03 m（`shop_clerk.gd` 的 MODEL_SCALE），
+	#    0.88 会把她整个人挡在柜台后面（只剩头顶），所以再降到 **0.62 m**
+	#    —— 仍然是「她身高的 60%」，从顾客侧看得到胸口以上。
+	#    同一轮用户还要求「柜台变窄一点点」：长度（z 向）3.60 → 3.30，进深不动。
 	_box("CounterTop", Vector3(cx, top_h - 0.03, cz),
 		Vector3(cw + 0.14, 0.06 + TUCK, cl + 0.16), _mat["counter_top"])
 	# 前沿不锈钢压条（顾客那一侧）

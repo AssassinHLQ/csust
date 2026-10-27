@@ -1,0 +1,111 @@
+[gd_scene load_steps=2 format=3]
+
+; 独立的 HUD 场景（CanvasLayer + 脚本 + 准星/弹药节点）。
+; 内容是 game.tscn 里 HUD 那一棵的等价副本，节点名必须保持一致 ——
+; hud.gd 里是按 `$Panel/Margin/VBox/Ammo`、`$Crosshair/...` 直接取的。
+; 主场景 game.tscn 仍然保留自己的那一份（不动用户已经调好的场景），
+; 新场景（如 scenes/next_level.tscn）用这个来复用同一套 HUD。
+
+[ext_resource type="Script" uid="uid://dbk7lch6jtavg" path="res://scripts/hud.gd" id="1_hud"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Crosshair" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Dot" type="ColorRect" parent="Crosshair"]
+layout_mode = 0
+offset_left = -1.0
+offset_top = -1.0
+offset_right = 1.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.9)
+
+[node name="T" type="ColorRect" parent="Crosshair"]
+layout_mode = 0
+offset_left = -1.0
+offset_top = -13.0
+offset_right = 1.0
+offset_bottom = -5.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="B" type="ColorRect" parent="Crosshair"]
+layout_mode = 0
+offset_left = -1.0
+offset_top = 5.0
+offset_right = 1.0
+offset_bottom = 13.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="L" type="ColorRect" parent="Crosshair"]
+layout_mode = 0
+offset_left = -13.0
+offset_top = -1.0
+offset_right = -5.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="R" type="ColorRect" parent="Crosshair"]
+layout_mode = 0
+offset_left = 5.0
+offset_top = -1.0
+offset_right = 13.0
+offset_bottom = 1.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="Panel" type="PanelContainer" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -216.0
+offset_top = -98.0
+offset_right = -18.0
+offset_bottom = -18.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Ammo" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "15 / 15"
+horizontal_alignment = 2
+
+[node name="ReloadTrough" type="Panel" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="Reload" type="ProgressBar" parent="Panel/Margin/VBox/ReloadTrough"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
+max_value = 1.0
+show_percentage = false

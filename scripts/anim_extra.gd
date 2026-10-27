@@ -70,7 +70,12 @@ static func merge_glb(player: AnimationPlayer, path: String, as_name: String,
 
 	anim.loop_mode = Animation.LOOP_NONE
 	if player.has_animation(as_name):
-		player.remove_animation(as_name)
+		# ⚠️ `AnimationPlayer` 没有 `remove_animation()`；删除动作在动作库上。
+		#    原来这行会报 "Nonexistent function 'remove_animation'"（同一进程里
+		#    出现第二个玩家实例时才会走到，例如场景切换/探针）。
+		var old_lib := player.get_animation_library(&"")
+		if old_lib != null:
+			old_lib.remove_animation(as_name)
 	if not player.has_animation_library(&""):
 		player.add_animation_library(&"", AnimationLibrary.new())
 	player.get_animation_library(&"").add_animation(as_name, anim)

@@ -101,18 +101,19 @@ const HAND_BONES := {
 ##       教训：量一个角色的站姿，**必须逐网格看，并且认清哪个网格是身体**
 ##       （这些 Blue Archive 模型里枪/算盘/光环都是独立网格，绑姿能垂到脚下面去）。
 ##     她的身体网格也在 `_probe_body_heights.gd` 里和爱丽丝/同伴放在一起对照过。
-## 缩放：**让「头顶」落在她自己的碰撞胶囊顶上**。
+## 缩放：**和其他 NPC 一档**。
 ##
 ## ⚠️ 原来写的是「包围盒 1.39 m × 1.09 = 1.52 m」—— 那个 1.39 是**整只模型的 AABB**，
 ##    里面含 0.271 m 的**枪**（绑姿垂在原点下方）和 0.109 m 的**光环**，
 ##    所以它既不是身高、也不能拿来定缩放。实测（`_probe_float_lamp_zfight.gd`）：
 ##
 ##      模型空间：身体（sole → 发顶）= **1.031 m**，光环顶 = 1.130 m，枪底 = −0.271 m
-##      她自己的胶囊：`_make_body()` 里 高 1.45、中心 0.75 → 顶面 **1.475 m**
 ##
-##    取 1.42 之后：身体 = 1.031 × 1.42 = **1.464 m**，正好顶到胶囊顶 1.475（差 11 mm）——
-##    视觉高度和碰撞高度对上了，柜台 0.88 m 也回到「她身高的 60%」这个比例。
-const MODEL_SCALE := 1.42
+##    2026-10-26 那一版为了「头顶顶到胶囊顶」取了 1.42 → 身体 1.464 m，
+##    但**全场只有她一个人被放大**（同伴实测 0.96~1.11、玩家 0.69），
+##    用户 2026-10-27 站到店里一眼看出「芹香怎么这么大」。
+##    现在改回 **1.00（原生 1.031 m）**，胶囊同步缩到 1.04 —— 和四个同伴同一档。
+const MODEL_SCALE := 1.00
 ## 原点 = 鞋底，所以**不需要抬**（正数 = 往上抬，会浮空）。
 const CLERK_LIFT := 0.0
 
@@ -176,11 +177,8 @@ func _ready() -> void:
 					* skeleton.get_bone_global_pose(idx).origin).y
 	# 光环抛光（和玩家/同伴那 8 顶一样的处理：受光 + 自发光 0.8 + 不投阴影）
 	HaloFix.polish(model)
-	# 眉毛：这些模型把 2~3 层不同表情的眉叠在不同深度上（清点见 `face_fix.gd`），
-	# 只留最靠前那层。芹香这条是**单层**（2 块 = 左右各一），所以这里通常是空转。
-	var brow_rep := FaceFix.simplify_brows(model)
-	if bool(brow_rep["applied"]):
-		print("[Clerk] 眉毛：%d 层 → 只留最前面那层" % int(brow_rep["layers"]))
+	# 脸皮分层：脸皮与「眼睛+嘴」那层几乎共面 → 双层线（z-fighting）。
+	# ⚠️ 眉毛叠层（`simplify_brows`）**故意不调**，理由见 `face_fix.gd` 里那三版复盘。
 	FaceFix.separate_face_layers(model)
 	_apply_smile()
 	_play_idle()
@@ -242,10 +240,11 @@ func _make_body() -> void:
 	body.name = "ClerkBody"
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
-	cap.radius = 0.26
-	cap.height = 1.45
+	# 胶囊跟着模型走：身体 1.031 m → 胶囊总高 1.04、顶面 1.04、半径按 1.42 那一版等比缩
+	cap.radius = 0.18
+	cap.height = 1.04
 	cs.shape = cap
-	cs.position = Vector3(0.0, 0.75, 0.0)
+	cs.position = Vector3(0.0, 0.52, 0.0)
 	body.add_child(cs)
 	add_child(body)
 
@@ -334,9 +333,8 @@ func _make_hint() -> void:
 	_hint.no_depth_test = true
 	_hint.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_hint.shaded = false
-	# 高度 = 她头顶（1.527）再往上 0.20 m。第一版给 1.92，比头顶高 0.39 m，
-	# 在店里那个机位上正好飘到背后货架上面去了，看着跟人没关系。
-	_hint.position = Vector3(0.0, 1.72, 0.0)
+	# 高度 = 她头顶（1.031）再往上 0.20 m。
+	_hint.position = Vector3(0.0, 1.23, 0.0)
 	_hint.visible = false
 	add_child(_hint)
 

@@ -82,6 +82,14 @@ var _rescues := 0
 var _standby := false
 var _hold_yaw := 0.0
 
+## ── 进场错峰（2026-10-27 用户的分阶段加载策略）──
+## 7 只同伴的模型 + 动画修正合计约 1.25 s，原来全压在场景 `_ready()` 里，
+## 进场要等这一坨跑完才画第一帧。现在 `_ready()` 立刻返回、第一帧先出来，
+## 每只按序号错开 0.06 s 建模型 —— 玩家从门口走到大厅这段时间里就都长出来了。
+const BOOT_FIRST_DELAY := 0.30
+const BOOT_STEP_DELAY := 0.10
+static var _boot_slot := 0
+
 
 func _ready() -> void:
 	collision_layer = LAYER
@@ -90,7 +98,13 @@ func _ready() -> void:
 	if _player == null:
 		push_warning("[Companion %s] 找不到玩家节点：%s" % [display_name, player_path])
 	rig = get_node_or_null("Rig") as Node3D
-	_build_model()
+	# 错峰建模型：用 SceneTreeTimer + 信号，而不是 `await` ——
+	# 场景切换会把旧场景整个 free，await 恢复在已释放的实例上会报错；
+	# 信号连接在接收者被释放时会自动断开，安全。
+	var slot := _boot_slot
+	_boot_slot = (_boot_slot + 1) % 8
+	var timer := get_tree().create_timer(BOOT_FIRST_DELAY + float(slot) * BOOT_STEP_DELAY, true)
+	timer.timeout.connect(_build_model)
 
 
 func _build_model() -> void:
@@ -105,16 +119,12 @@ func _build_model() -> void:
 	rig.add_child(model)
 	# 本体朝 +Z（见文件头的朝向约定），Rig 保持不动 —— 这里**不要**再补 180°
 	rig.rotation.y = 0.0
-	# ── 脸上的两件事（用户 2026-10-26：「角色眉毛部分多重表情叠加了，
-	#    应该是所有角色都有这个问题」）──
-	#   · `simplify_brows`：这些模型把 2~3 层不同表情的眉毛叠在不同深度上
-	#     （小桃 2 层、小绿 3 层），只留最靠前那层；
-	#   · `separate_face_layers`：脸皮与「眼睛+嘴」那层几乎共面 → 双层线。
-	#   以前这两条**只对玩家调过**（见 `anim_driver.gd`），同伴这边一直是原样。
-	var brow_rep := FaceFix.simplify_brows(model)
-	if bool(brow_rep["applied"]):
-		print("[Companion %s] 眉毛：合并 %d 层 → 留最前面那层（塌掉 %d 个顶点）"
-			% [display_name, int(brow_rep["layers"]), int(brow_rep["collapsed"])])
+	# ── 脸皮分层（用户 2026-10-26：「角色眉毛部分多重表情叠加了」）──
+	# `separate_face_layers`：脸皮与「眼睛+嘴」那层几乎共面 → 双层线（z-fighting）。
+	# 这条以前**只对玩家调过**（见 `anim_driver.gd`），同伴这边一直是原样，现在补齐。
+	#
+	# ⚠️ 眉毛叠层（`simplify_brows`）**故意不调**：三版判据都会把「左右两条眉」
+	#    误判成「上下两层」，删一半就成白眉（2026-10-26 爱丽丝实拍）。详见 `face_fix.gd`。
 	var face_rep := FaceFix.separate_face_layers(model)
 	if int(face_rep["meshes"]) > 0:
 		print("[Companion %s] 脸皮分层：推开 %d 个网格 / %d 个面"

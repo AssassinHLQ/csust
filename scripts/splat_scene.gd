@@ -69,6 +69,18 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var crop_max_scale := 0.0
 ## 是否再乘 GDGS 自带的「绕 Z -180°」姿态修正。本数据自身 Y 朝上，默认关。
 @export var use_default_orientation := false
+
+## ── 加载节奏（2026-10-27 用户：「先不加载高斯泼溅…最后缓慢加载」）──
+##
+## 场景切进来时，泼溅是**最贵**的一项（解码 1~4 s + 主线程打包 + 几 GiB 显存）。
+## 玩家刚进门时通常离它还有几十米，所以可以让它晚一点开始：
+##   `start_delay`    场景就绪后至少等这么多秒再解码（0 = 立即）
+##   `start_distance` >0 时，玩家一旦进入这个距离就**立刻**开始（不必等满 delay）
+##   `low_priority`   解码线程降成低优先级，不和主线程抢 CPU（真正「缓慢加载」）
+## 两个都为 0 时行为与以前完全一致。
+@export var start_delay := 0.0
+@export var start_distance := 0.0
+@export var low_priority := false
 ## 是否挂上碰撞 GLB 的三角网格（本扫描的碰撞 GLB 与实际范围不符，默认关）
 @export var build_collision := false
 @export var collision_glb := "res://models/school.collision.glb"
@@ -222,7 +234,47 @@ func _ready() -> void:
 			_disable_placed_collision()
 			return
 	if auto_start:
+		if start_delay > 0.0 or start_distance > 0.0:
+			_start_when_due()
+		else:
+			start()
+
+
+## 按「延迟 / 距离」等一等再开始解码（见上面 `start_delay` 那段）。
+## 两个条件**任意一个**满足就开：到点了，或者玩家自己走过来了。
+func _start_when_due() -> void:
+	print("[SplatScene] %s：延后加载（delay %.1f s / 距离 %.1f m / 低优先级 %s）"
+		% [display_name, start_delay, start_distance, str(low_priority)])
+	# ⚠️ 第一帧的检查必须等下一帧：从门进来时，玩家的落点是 `game.gd::_ready()`
+	#    在**子节点 _ready 之后**才写的 —— 此刻玩家还站在场景的默认出生点
+	#    （画室里面），按距离判会误判成「就在旁边」而立刻开始解码，
+	#    结果整个换场景被泼溅打包拖到 7.6 s。等一帧，落点已经写好了。
+	var t0 := Time.get_ticks_msec()
+	while is_inside_tree() and not loading and splat_node == null:
+		await get_tree().process_frame
+		if _player_within_start_distance():
+			print("[SplatScene] %s：玩家进入 %.1f m，开始解码"
+				% [display_name, start_distance])
+			break
+		if start_delay > 0.0 \
+				and float(Time.get_ticks_msec() - t0) / 1000.0 >= start_delay:
+			print("[SplatScene] %s：等满 %.1f s，开始解码" % [display_name, start_delay])
+			break
+	if is_inside_tree() and not loading and splat_node == null:
 		start()
+
+
+func _player_within_start_distance() -> bool:
+	if start_distance <= 0.0:
+		return false
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	if p == null:
+		# 组是在 Player._ready() 里加的，而子节点的 _ready 顺序不保证它已经跑过 ——
+		# 开局这一帧退回到按名字找（场景树里节点本身早就建好了）。
+		var scene := get_tree().current_scene
+		if scene != null:
+			p = scene.get_node_or_null("Player") as Node3D
+	return p != null and p.global_position.distance_to(global_position) <= start_distance
 
 
 ## 跳过加载时，把**预先摆在场景里**的碰撞一并关掉。
@@ -270,7 +322,10 @@ func start() -> void:
 	loading = true
 	_start_ms = Time.get_ticks_msec()
 	_thread = Thread.new()
-	_thread.start(_worker.bind(source))
+	if low_priority:
+		_thread.start(_worker.bind(source), Thread.PRIORITY_LOW)
+	else:
+		_thread.start(_worker.bind(source))
 
 
 ## 同步加载（探针 / 自检用；会冻住主线程几十秒）
