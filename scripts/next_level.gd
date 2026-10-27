@@ -20,6 +20,7 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 @onready var _pad: MeshInstance3D = $Goal/Pad
 @onready var _goal_light: OmniLight3D = $Goal/Light
 @onready var _message: Label = $LevelUI/Message
+@onready var _fall: Area3D = $FallReset
 
 var _targets: Array = []
 var _left := 0
@@ -53,6 +54,15 @@ func _ready() -> void:
 	_pad_on = _make_pad_on(_pad_off)
 	if not _goal.body_entered.is_connected(_on_goal_body):
 		_goal.body_entered.connect(_on_goal_body)
+	if not _fall.body_entered.is_connected(_on_fall):
+		_fall.body_entered.connect(_on_fall)
+	# 场上的泼溅（长沙理工校园）挂到 HUD 的状态行：解码进度/就绪都看得见
+	var splats: Array = []
+	for c in get_children():
+		if c.has_method("force_start") and c.has_method("is_ready"):
+			splats.append(c)
+	if not splats.is_empty() and _hud.has_method("bind_splats"):
+		_hud.bind_splats(splats)
 	_set_goal_open(false)
 	_update_scoreboard()
 	_show_message("击破 %d 个红色靶子，再上高台踩圆盘" % _total, 5.0)
@@ -101,6 +111,16 @@ func _on_goal_body(body: Node3D) -> void:
 	_show_message("关卡完成 · 构成主义大厅", 8.0)
 	Sfx.play("ui_open")
 	print("[ConstructivistLevel] 关卡完成（靶子 %d/%d）" % [_total - _left, _total])
+
+
+## 掉出广场（校园泼溅没有碰撞，掉下去就是无底洞）→ 送回大厅出生点。
+func _on_fall(body: Node3D) -> void:
+	if body == null or not body.is_in_group("player"):
+		return
+	_player.global_position = ($SpawnPoint as Node3D).global_position
+	_player.set("velocity", Vector3.ZERO)
+	_show_message("掉出广场 —— 已送回大厅", 2.5)
+	print("[ConstructivistLevel] 玩家掉出广场，已送回出生点")
 
 
 func _update_scoreboard() -> void:

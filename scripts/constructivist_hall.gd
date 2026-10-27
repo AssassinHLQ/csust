@@ -44,6 +44,11 @@ const RAMP_RISE := 3.2
 const RAMP_Z0 := 2.8
 const RAMP_Z1 := RAMP_Z0 - RAMP_RUN      # −3.6
 
+## 东墙拱门（通向外面的广场）：z 从 0.5 到 5.5、高 6 m
+const EXIT_Z0 := 0.5
+const EXIT_Z1 := 5.5
+const EXIT_H := 6.0
+
 ## 平台/终点台（top = 顶面高度）
 const A_TOP := 3.2
 const A_C := Vector3(-10.5, 0.0, -5.3)
@@ -212,17 +217,32 @@ func _build_shell() -> void:
 	# 天花板（黑）：底面 y = 10
 	_solid("Ceiling", Vector3(0.0, HEIGHT + 0.2, 0.0),
 		Vector3(HALF_W * 2.0, 0.4, HALF_D * 2.0), _mat["black"])
-	# 四面墙（纸白，内表面严格在 ±HALF_W / ±HALF_D）
+	# 四面墙（纸白，内表面严格在 ±HALF_W / ±HALF_D）。
+	# 墙底往地下多伸 0.12：大厅站在更大的广场上（广场顶面 y = −0.02），
+	# 墙底停在 0 会露出一条缝。
 	var w := HALF_W + WALL_T * 0.5
 	var d := HALF_D + WALL_T * 0.5
-	_solid("WallN", Vector3(0.0, HEIGHT * 0.5, -d),
-		Vector3(HALF_W * 2.0 + WALL_T * 2.0, HEIGHT, WALL_T), _mat["paper"])
-	_solid("WallS", Vector3(0.0, HEIGHT * 0.5, d),
-		Vector3(HALF_W * 2.0 + WALL_T * 2.0, HEIGHT, WALL_T), _mat["paper"])
-	_solid("WallW", Vector3(-w, HEIGHT * 0.5, 0.0),
-		Vector3(WALL_T, HEIGHT, HALF_D * 2.0), _mat["paper"])
-	_solid("WallE", Vector3(w, HEIGHT * 0.5, 0.0),
-		Vector3(WALL_T, HEIGHT, HALF_D * 2.0), _mat["paper"])
+	var wall_h := HEIGHT + 0.12
+	var wall_y := HEIGHT * 0.5 - 0.06
+	_solid("WallN", Vector3(0.0, wall_y, -d),
+		Vector3(HALF_W * 2.0 + WALL_T * 2.0, wall_h, WALL_T), _mat["paper"])
+	_solid("WallS", Vector3(0.0, wall_y, d),
+		Vector3(HALF_W * 2.0 + WALL_T * 2.0, wall_h, WALL_T), _mat["paper"])
+	_solid("WallW", Vector3(-w, wall_y, 0.0),
+		Vector3(WALL_T, wall_h, HALF_D * 2.0), _mat["paper"])
+	# 东墙：中间开 5 m 宽 × 6 m 高的拱门，通向外面的广场
+	_solid("WallE_N", Vector3(w, wall_y, (-HALF_D + EXIT_Z0) * 0.5),
+		Vector3(WALL_T, wall_h, EXIT_Z0 + HALF_D), _mat["paper"])
+	_solid("WallE_S", Vector3(w, wall_y, (EXIT_Z1 + HALF_D) * 0.5),
+		Vector3(WALL_T, wall_h, HALF_D - EXIT_Z1), _mat["paper"])
+	_solid("WallE_Head", Vector3(w, (EXIT_H + HEIGHT) * 0.5, (EXIT_Z0 + EXIT_Z1) * 0.5),
+		Vector3(WALL_T, HEIGHT - EXIT_H, EXIT_Z1 - EXIT_Z0), _mat["paper"])
+	# 门套：两根红壁柱 + 黑门楣
+	for pz in [EXIT_Z0, EXIT_Z1]:
+		_solid("ExitPillar", Vector3(HALF_W - 0.02, EXIT_H * 0.5, pz),
+			Vector3(0.5, EXIT_H, 0.5), _mat["red"])
+	_deco("ExitLintel", Vector3(HALF_W - 0.02, EXIT_H + 0.18, (EXIT_Z0 + EXIT_Z1) * 0.5),
+		Vector3(0.5, 0.36, EXIT_Z1 - EXIT_Z0), _mat["black"])
 	# 黑色踢脚线（贴墙、凸出 2 cm）
 	for spec in [["BaseN", Vector3(0.0, 0.15, -HALF_D + 0.02), Vector3(HALF_W * 2.0, 0.30, 0.04)],
 			["BaseS", Vector3(0.0, 0.15, HALF_D - 0.02), Vector3(HALF_W * 2.0, 0.30, 0.04)]]:
@@ -343,15 +363,10 @@ func _build_wall_art() -> void:
 	_deco("WallBand", Vector3(0.0, 1.15, zf + 0.08), Vector3(27.6, 0.35, 0.12), _mat["red"])
 	# ── 字：白圆上的黑「01」与墙上的黑「前进」──
 	_label("01", Vector3(7.0, 6.3, zf + 0.20), 2.6, Color(0.93, 0.90, 0.83), 0.0)
-	# 北墙左侧被平台挡住、右侧是「01」，标语改放**东墙**（纸白底黑字最清楚）
-	_label("前进", Vector3(HALF_W - 0.15, 6.0, 4.0), 2.0, _mat["black"].albedo_color,
-		-PI * 0.5)
 
-	# ── 东墙：一条红色竖带 + 一个黑色斜块 ──
-	var xe := HALF_W - 0.02
-	_deco("EastBand", Vector3(xe, 5.0, 3.4), Vector3(0.10, 8.0, 0.9), _mat["red"])
-	_tilted_box("EastBeam", Vector3(xe - 0.08, 6.2, 0.0),
-		Vector3(0.16, 1.1, 12.0), Basis(Vector3.RIGHT, deg_to_rad(18.0)), _mat["black"])
+	# ── 东墙南段（门洞右边）：黑字标语 ──
+	_label("前进", Vector3(HALF_W - 0.15, 6.4, 7.4), 2.0, _mat["black"].albedo_color,
+		-PI * 0.5)
 
 	# ── 西墙：坡道后面一块黑色方块 ──
 	_deco("WestBlock", Vector3(-HALF_W + 0.06, 3.4, -5.8),

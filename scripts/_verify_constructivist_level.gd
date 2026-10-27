@@ -116,6 +116,31 @@ func _run() -> void:
 		% [player.global_position.y, float(Time.get_ticks_msec() - t0) / 1000.0])
 	_check(player.global_position.y >= 3.1, "能沿红楔坡道走上平台 A")
 
+	print("
+=== 6. 广场 / 东拱门 / 坠落保护 / 校园泼溅 ===")
+	var y_plaza := _ground_y(space, 30.0, 30.0, 6.0)
+	print("  广场地面 y=%.2f（应 −0.02）" % y_plaza)
+	_check(absf(y_plaza + 0.02) < 0.05, "广场地面高度正确")
+	var q := PhysicsRayQueryParameters3D.create(Vector3(10, 0.3, 3), Vector3(70, 0.3, 3))
+	q.collide_with_areas = false
+	var h := space.intersect_ray(q)
+	var hit_x := float(h.position.x) if not h.is_empty() else 999.0
+	print("  大厅内往 +X 打射线 → 命中 x=%.1f（拱门开着应打到广场护栏 ~60）" % hit_x)
+	_check(hit_x > 50.0, "东墙拱门通向外广场")
+	var campus := level.get_node_or_null("Campus")
+	_check(campus != null, "场景里有校园泼溅节点")
+	if campus != null:
+		print("  校园：start_delay=%.1f  preload_on_gate=%s"
+			% [float(campus.get("start_delay")), str(campus.get("preload_on_gate"))])
+		_check(float(campus.get("start_delay")) > 0.0, "校园泼溅延后加载")
+		_check(not bool(campus.get("preload_on_gate")), "校园泼溅不在门切换的黑屏里预载")
+	player.global_position = Vector3(0.0, -59.0, 0.0)
+	for _i in 30:
+		await physics_frame
+	print("  坠落测试后落点 %s" % str(player.global_position.snappedf(0.1)))
+	_check(player.global_position.z > 5.0 and player.global_position.y < 1.5,
+		"掉出广场会被送回大厅")
+
 	# ══ 出图 ══
 	for c in level.find_children("*", "CanvasLayer", true, false):
 		var cl := c as CanvasLayer
@@ -137,6 +162,12 @@ func _run() -> void:
 	cam.global_position = Vector3(3.5, 7.2, 2.5)
 	cam.look_at(Vector3(0.5, 5.0, -8.4))
 	await _shot("_constructivist_goal.png")
+
+	# 广场上回看大厅东立面（拱门 + 红门套）
+	cam.global_position = Vector3(34.0, 3.4, 16.0)
+	cam.look_at(Vector3(14.0, 5.0, 3.0))
+	cam.fov = 70.0
+	await _shot("_constructivist_exterior.png")
 
 	print("\n=== 结果：%d 项失败 ===" % _fails)
 	quit(0 if _fails == 0 else 1)

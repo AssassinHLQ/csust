@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=26 format=3]
 
 ; 第二个场景：构成主义大厅（Constructivism）。
 ; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
@@ -18,6 +18,7 @@
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="5_settings"]
 [ext_resource type="PackedScene" path="res://scenes/constructivist_hall_baked.tscn" id="6_hall"]
 [ext_resource type="Script" path="res://scripts/target.gd" id="7_target"]
+[ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 
 [sub_resource type="Environment" id="Env_hall"]
 background_mode = 1
@@ -28,6 +29,10 @@ ambient_light_energy = 0.5
 tonemap_mode = 3
 glow_enabled = true
 glow_intensity = 0.35
+fog_enabled = true
+fog_light_color = Color(0.30, 0.26, 0.23, 1)
+fog_density = 0.004
+fog_sky_affect = 0.0
 
 [sub_resource type="StandardMaterial3D" id="Mat_target"]
 albedo_color = Color(0.78, 0.13, 0.11, 1)
@@ -66,6 +71,28 @@ size = Vector3(0.9, 0.9, 0.3)
 [sub_resource type="BoxShape3D" id="Shape_goal"]
 size = Vector3(2.6, 1.8, 2.6)
 
+[sub_resource type="StandardMaterial3D" id="Mat_plaza"]
+albedo_color = Color(0.30, 0.285, 0.265, 1)
+roughness = 0.92
+
+[sub_resource type="BoxShape3D" id="Shape_plaza"]
+size = Vector3(120, 0.6, 120)
+
+[sub_resource type="BoxMesh" id="Mesh_plaza"]
+size = Vector3(120, 0.6, 120)
+
+[sub_resource type="BoxShape3D" id="Shape_parapet"]
+size = Vector3(120.8, 0.62, 0.4)
+
+[sub_resource type="BoxMesh" id="Mesh_parapet"]
+size = Vector3(120.8, 0.62, 0.4)
+
+[sub_resource type="BoxShape3D" id="Shape_fall"]
+size = Vector3(400, 4, 400)
+
+[sub_resource type="BoxMesh" id="Mesh_carpet"]
+size = Vector3(44, 0.012, 4)
+
 [sub_resource type="CylinderMesh" id="Mesh_pad"]
 top_radius = 1.15
 bottom_radius = 1.15
@@ -78,7 +105,84 @@ script = ExtResource("1_level")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Env_hall")
 
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.798636, -0.382683, 0.462554, 0, 0.770513, 0.637424, -0.601815, -0.509041, 0.615661, 12, 18, 8)
+light_color = Color(1, 0.95, 0.86, 1)
+light_energy = 1.05
+shadow_enabled = true
+directional_shadow_max_distance = 90.0
+
 [node name="Hall" parent="." instance=ExtResource("6_hall")]
+
+[node name="Plaza" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.32, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="Plaza"]
+shape = SubResource("Shape_plaza")
+
+[node name="Mesh" type="MeshInstance3D" parent="Plaza"]
+mesh = SubResource("Mesh_plaza")
+surface_material_override/0 = SubResource("Mat_plaza")
+
+[node name="ParapetN" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.29, -60.2)
+
+[node name="Collision" type="CollisionShape3D" parent="ParapetN"]
+shape = SubResource("Shape_parapet")
+
+[node name="Mesh" type="MeshInstance3D" parent="ParapetN"]
+mesh = SubResource("Mesh_parapet")
+surface_material_override/0 = SubResource("Mat_target_ring")
+
+[node name="ParapetS" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.29, 60.2)
+
+[node name="Collision" type="CollisionShape3D" parent="ParapetS"]
+shape = SubResource("Shape_parapet")
+
+[node name="Mesh" type="MeshInstance3D" parent="ParapetS"]
+mesh = SubResource("Mesh_parapet")
+surface_material_override/0 = SubResource("Mat_target_ring")
+
+[node name="ParapetW" type="StaticBody3D" parent="."]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -60.2, 0.29, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="ParapetW"]
+shape = SubResource("Shape_parapet")
+
+[node name="Mesh" type="MeshInstance3D" parent="ParapetW"]
+mesh = SubResource("Mesh_parapet")
+surface_material_override/0 = SubResource("Mat_target_ring")
+
+[node name="ParapetE" type="StaticBody3D" parent="."]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 60.2, 0.29, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="ParapetE"]
+shape = SubResource("Shape_parapet")
+
+[node name="Mesh" type="MeshInstance3D" parent="ParapetE"]
+mesh = SubResource("Mesh_parapet")
+surface_material_override/0 = SubResource("Mat_target_ring")
+
+[node name="Carpet" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 36, -0.015, 3)
+mesh = SubResource("Mesh_carpet")
+surface_material_override/0 = SubResource("Mat_pad_on")
+cast_shadow = 0
+
+[node name="FallReset" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -60, 0)
+collision_layer = 0
+collision_mask = 1
+
+[node name="Collision" type="CollisionShape3D" parent="FallReset"]
+shape = SubResource("Shape_fall")
+
+[node name="Campus" parent="." instance=ExtResource("8_campus")]
+start_delay = 8.0
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
@@ -130,7 +234,7 @@ surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
 [node name="Target3" type="StaticBody3D" parent="."]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 13.76, 4, 2)
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -8, 4.2, 8.64)
 script = ExtResource("7_target")
 max_health = 100.0
 respawn_time = 9999.0

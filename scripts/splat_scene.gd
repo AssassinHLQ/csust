@@ -81,6 +81,11 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var start_delay := 0.0
 @export var start_distance := 0.0
 @export var low_priority := false
+## 场景门切换时，要不要在「载入中」黑屏里把它预载完。
+## 小场地（画室 609，~700 MB）预载能消掉进场后那次上传卡顿；
+## 长沙理工校园（615 万点、约 2.9 GiB）不行 —— 预载会把黑屏拖到几十秒，
+## 所以它设成 false，进场后按 `start_delay` 自己在后台慢慢解。
+@export var preload_on_gate := true
 ## 是否挂上碰撞 GLB 的三角网格（本扫描的碰撞 GLB 与实际范围不符，默认关）
 @export var build_collision := false
 @export var collision_glb := "res://models/school.collision.glb"
