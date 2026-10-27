@@ -1,0 +1,166 @@
+[gd_scene load_steps=12 format=3]
+
+; 由 scripts/_split_sog.gd 生成：school_playable.sogdata 切成 3 × 3 块。
+; 每块共用同一个 offset，拼起来与原校园节点完全重合。
+; 重新切分：_tools/run_probe.sh res://scripts/_split_sog.gd -- --write
+
+[ext_resource type="Script" path="res://scripts/campus_chunks.gd" id="1_mgr"]
+[ext_resource type="Script" path="res://scripts/splat_scene.gd" id="2_splat"]
+
+[node name="CampusChunks" type="Node3D"]
+script = ExtResource("1_mgr")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 24.48, -155.56)
+max_distance = 140.00
+
+[node name="Chunk_0_0" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_0_0.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(-35.7876, -22.8402, -43.7555)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 8.00
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_1_0" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_1_0.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(-9.0632, -24.2200, -46.8450)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 9.20
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_2_0" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_2_0.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(58.6992, -22.6269, -32.2302)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 10.40
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_0_1" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_0_1.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(-52.3982, -21.4314, 2.9695)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 11.60
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_1_1" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_1_1.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(6.7591, -21.9703, 3.4469)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 12.80
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_2_1" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_2_1.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(57.3941, -22.3715, 3.9593)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 14.00
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_0_2" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_0_2.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(-51.2638, -21.9181, 39.0370)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 15.20
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_1_2" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_1_2.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(7.3321, -21.5594, 42.7995)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 16.40
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false
+
+[node name="Chunk_2_2" type="Node3D" parent="."]
+script = ExtResource("2_splat")
+sog_path = "res://splatdata/campus_chunks/chunk_2_2.sogdata"
+display_name = "校园"
+venue = "campus"
+cache_mode = "auto"
+world_scale = 25.00
+yaw_degrees = 0.0
+auto_place = false
+offset = Vector3(55.9836, -22.0065, 42.7197)
+crop_enabled = false
+use_default_orientation = false
+start_delay = 17.60
+start_distance = 0.0
+low_priority = true
+preload_on_gate = false

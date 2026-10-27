@@ -85,3 +85,6 @@ __pycache__/
 
 # RTX 5090 模型：爱给网下载，仅限本地学习使用（不可再分发）
 /models/rtx5090/
+
+# 校园分块（离线切成 3×3，用 scripts/_split_sog.gd 重新生成）
+/splatdata/campus_chunks/
