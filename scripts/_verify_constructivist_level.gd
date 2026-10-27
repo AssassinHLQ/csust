@@ -146,16 +146,13 @@ func _run() -> void:
 	var y_campus := _ground_y(space, 0.0, -120.0, 5.0)
 	print("  校园地面板 y=%.2f（应 −0.02）" % y_campus)
 	_check(absf(y_campus + 0.02) < 0.05, "校园隐形地面板高度正确（可走）")
-	var chunks := level.get_node_or_null("CampusChunks")
-	_check(chunks != null, "场景里有校园分块节点")
-	if chunks != null:
-		var n := chunks.get_child_count()
-		var first := chunks.get_child(0)
-		print("  分块 %d 个；首块 start_delay=%.1f  preload_on_gate=%s"
-			% [n, float(first.get("start_delay")), str(first.get("preload_on_gate"))])
-		_check(n == 9, "校园切成 9 块")
-		_check(float(first.get("start_delay")) > 0.0, "分块延后加载")
-		_check(not bool(first.get("preload_on_gate")), "分块不在门切换的黑屏里预载")
+	var campus := level.get_node_or_null("Campus")
+	_check(campus != null, "场景里有校园泼溅节点")
+	if campus != null:
+		print("  校园：start_delay=%.1f  preload_on_gate=%s"
+			% [float(campus.get("start_delay")), str(campus.get("preload_on_gate"))])
+		_check(float(campus.get("start_delay")) > 0.0, "校园泼溅延后加载")
+		_check(not bool(campus.get("preload_on_gate")), "校园泼溅不在门切换的黑屏里预载")
 	player.global_position = Vector3(0.0, -59.0, 0.0)
 	for _i in 30:
 		await physics_frame
