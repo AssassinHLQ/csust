@@ -60,7 +60,11 @@ static func find_gate(root: Node, gate_id: String) -> Node3D:
 
 
 ## 切场景。`spawn_gate` 是目标场景里的落点门 id；`from_gate` 是本门的 id。
-static func switch_scene(path: String, spawn_gate: String, from_gate: String) -> void:
+## `preload_splats` = 黑屏期间把目标场景的高斯泼溅**加载完再淡入**。
+## 泼溅的点数据上传（GDGS 合并 + GPU buffer）在主线程上要 1~2 s，
+## 放到进场后再加载就是一次肉眼可见的卡顿；藏在「载入中……」后面就只剩多等一会儿。
+static func switch_scene(path: String, spawn_gate: String, from_gate: String,
+		preload_splats := false) -> void:
 	if switching:
 		return
 	var tree := Engine.get_main_loop() as SceneTree
@@ -127,9 +131,14 @@ static func switch_scene(path: String, spawn_gate: String, from_gate: String) ->
 	report_memory("切换后（%s）" % path)
 	print("[SceneFlow] 换场景阻塞 %.0f ms（free 旧场景 + load/instantiate 新场景 + 所有 _ready）"
 		% float(Time.get_ticks_msec() - t_block))
-	# GPU 资源的释放 / GDGS 缓冲重建会晚一点，再记一次
-	await tree.create_timer(SETTLE_SECONDS, true).timeout
-	report_memory("切换后 %.2f s" % SETTLE_SECONDS)
+	if preload_splats:
+		# 预载时 `_load_splats_behind_fade` 已经把「等泼溅就绪」这件事做完了，
+		# 不用再空等 SETTLE_SECONDS。
+		await _load_splats_behind_fade(tree)
+	else:
+		# GPU 资源的释放 / GDGS 缓冲重建会晚一点，再记一次
+		await tree.create_timer(SETTLE_SECONDS, true).timeout
+		report_memory("切换后 %.2f s" % SETTLE_SECONDS)
 
 	var fade := tree.create_tween()
 	fade.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
@@ -137,6 +146,41 @@ static func switch_scene(path: String, spawn_gate: String, from_gate: String) ->
 	await fade.finished
 	overlay.queue_free()
 	switching = false
+
+
+## 黑屏还没撤的时候，把目标场景里的泼溅全部加载完（含主线程那 1~2 s 的
+## GDGS 合并 / 上传）。加载期间画面是「载入中……」，玩家不会看到卡顿。
+static func _load_splats_behind_fade(tree: SceneTree) -> void:
+	var scene := tree.current_scene
+	if scene == null:
+		return
+	# ⚠️ 不能用 `find_children("*", "SplatScene")`：类型过滤走 `is_class()`，
+	#    只认引擎内置类，脚本的 `class_name SplatScene` 不算。按方法名递归找。
+	var splats: Array[Node] = []
+	var stack: Array[Node] = [scene]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n.has_method("force_start") and n.has_method("is_ready"):
+			splats.append(n)
+		for c in n.get_children():
+			stack.append(c)
+	if splats.is_empty():
+		return
+	var t0 := Time.get_ticks_msec()
+	for s in splats:
+		s.call("force_start")
+	while float(Time.get_ticks_msec() - t0) / 1000.0 < 20.0:
+		var done := true
+		for s in splats:
+			if not bool(s.call("is_ready")) and not bool(s.get("load_failed")):
+				done = false
+				break
+		if done:
+			break
+		await tree.process_frame
+	print("[SceneFlow] 泼溅预载（黑屏内）%.1f s：%d 份" % [
+		float(Time.get_ticks_msec() - t0) / 1000.0, splats.size()])
+	report_memory("泼溅预载后")
 
 
 ## 把显存 / 资源数打到日志。窗口模式才有意义（headless 下这些值恒为 0）。

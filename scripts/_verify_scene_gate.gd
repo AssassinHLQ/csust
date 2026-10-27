@@ -151,7 +151,13 @@ func _run() -> void:
 		quit(1)
 		return
 
-	await create_timer(1.5, true).timeout
+	# 黑屏预载 + 淡入：等 SceneFlow.switching 归零（预载可能要几秒）
+	var t_fade := Time.get_ticks_msec()
+	while SceneFlow.switching and Time.get_ticks_msec() - t_fade < 30000:
+		await process_frame
+	print("[探针] 返回淡入完成：黑屏共 %.1f s"
+		% (float(Time.get_ticks_msec() - t_fade) / 1000.0))
+	await create_timer(0.5, true).timeout
 	var back_game := current_scene
 	var back_gate := back_game.find_child("MondrianGate", true, false) as Node3D
 	var back_player := back_game.get_node_or_null("Player") as Node3D
@@ -167,22 +173,11 @@ func _run() -> void:
 		"落点状态已被 game.gd 消费（不会影响下一次）")
 	print("[探针] 回到主场景后：%s" % _mem())
 
-	# ── 分阶段加载：返回时先不碰泼溅，等玩家走到 22 m 内再开始 ──
+	# ── 场景门预载：黑屏期间已经把目标场景的泼溅加载完，进场后不该再卡 ──
 	var room := back_game.get_node_or_null("Room609")
-	_check(room != null and not bool(room.call("is_ready"))
-		and not bool(room.get("loading")), "返回时画室609 泼溅尚未加载（延后）")
-	if room != null:
-		back_player.global_position = Vector3(0.0, 0.2, 6.0)   # 走进画室
-		var t_splat := Time.get_ticks_msec()
-		while Time.get_ticks_msec() - t_splat < 20000:
-			await process_frame
-			if bool(room.call("is_ready")):
-				break
-		print("[探针] 走到房间后泼溅就绪 = %s（%.1f s）"
-			% [str(bool(room.call("is_ready"))),
-				float(Time.get_ticks_msec() - t_splat) / 1000.0])
-		_check(bool(room.call("is_ready")), "玩家走近后泼溅自动开始并加载完成")
-	print("[探针] 泼溅加载后：%s" % _mem())
+	_check(room != null and bool(room.call("is_ready")),
+		"返回时画室609 泼溅已在黑屏内预载完成（进场不再卡）")
+	print("[探针] 泼溅已就绪：%s" % _mem())
 
 	print("=== 结果：%d 项失败 ===" % _fails)
 	quit(0 if _fails == 0 else 1)

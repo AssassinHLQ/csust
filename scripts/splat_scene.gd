@@ -192,6 +192,14 @@ var point_count := 0
 ## 裁剪结果（crop_enabled 时）：{"kept": int, "dropped": int, "box": AABB, "scale_dropped": int}
 var crop_stats := {}
 var loading := false
+## 这次加载失败了（`_finish` 里设）。场景门预载时用它判断「等完了没有」。
+## 名字不能叫 `failed` —— 和上面的 `failed` 信号重名。
+var load_failed := false
+## 上一次展开（含裁剪）的结果，按「源文件 + 修改时间 + 裁剪参数」缓存。
+## 场景来回切时同一个 .sogdata 会反复展开；缓存住这份 665 MB 的 CPU 数据，
+## 回程就只剩 GDGS 的 GPU 上传（~2 s），不用再花 3 s 展开 + 裁剪。
+## 只占内存、不占显存 —— 换场景时显存照常释放。
+static var _res_cache := {}
 var elapsed_seconds := 0.0
 
 var _thread: Thread = null
@@ -326,6 +334,13 @@ func start() -> void:
 		_thread.start(_worker.bind(source), Thread.PRIORITY_LOW)
 	else:
 		_thread.start(_worker.bind(source))
+
+
+## 立刻开始，不管 start_delay / start_distance（场景门在黑屏期间预载用）。
+func force_start() -> void:
+	if loading or splat_node != null:
+		return
+	start()
 
 
 ## 同步加载（探针 / 自检用；会冻住主线程几十秒）
@@ -532,11 +547,57 @@ func _resolve_source() -> String:
 	return SogRuntime.find_source(sog_path)
 
 
+func _cache_key(source: String) -> String:
+	return "%s|%d|%s|%.3f|%.3f" % [source, FileAccess.get_modified_time(source),
+		str(crop_enabled), crop_margin, crop_max_scale]
+
+
 func _worker(source: String) -> void:
+	var key := _cache_key(source)
+	var hit: Variant = _res_cache.get(key)
+	if hit is Dictionary:
+		var cached: Dictionary = (hit as Dictionary).duplicate()
+		cached["from_cache"] = true
+		print("[SplatScene] %s：复用内存里的展开结果（跳过解码/裁剪）" % display_name)
+		_mutex.lock()
+		_result = cached
+		_mutex.unlock()
+		return
 	var result: Dictionary = SogRuntime.load_sog(source, {
 		"cache": cache_mode,
 		"progress": Callable(self, "_on_progress_from_thread"),
 	})
+	# ⚠️ 内容盒 + 裁剪以前在 `_finish()`（主线程）里做。实测 2,769,851 点时
+	#    这一段要 **2.79 s**，整整卡死一帧（用户报的「展开缓存这里总是卡」）。
+	#    它们只读资源数据、不碰场景树，所以搬进工作线程：
+	#    主线程只剩 `GaussianSplatNode.new()` + `add_child()`（实测 4 ms）。
+	if bool(result.get("ok", false)):
+		var t_prep := Time.get_ticks_msec()
+		var res: Resource = result["resource"]
+		var bounds := content_bounds(res)
+		var cmin: Vector3 = bounds["min"]
+		var cmax: Vector3 = bounds["max"]
+		var bounds_ms := Time.get_ticks_msec() - t_prep
+		var crop_ms := 0
+		if crop_enabled:
+			var t_crop := Time.get_ticks_msec()
+			var cropped := _crop_resource(res, cmin, cmax)
+			crop_ms = Time.get_ticks_msec() - t_crop
+			if bool(cropped.get("ok", false)):
+				result["crop"] = cropped
+				res = cropped["resource"]
+				result["resource"] = res
+				var cb := content_bounds(res)
+				cmin = cb["min"]
+				cmax = cb["max"]
+		result["content_min"] = cmin
+		result["content_max"] = cmax
+		result["prep_ms"] = Time.get_ticks_msec() - t_prep
+		print("[SplatScene] 工作线程准备：内容盒 %d ms / 裁剪 %d ms（%s）" % [
+			bounds_ms, crop_ms, "开" if crop_enabled else "关"])
+		# 只留最后一份（同时只可能有一份场地在用），别让多份 665 MB 叠在内存里
+		_res_cache.clear()
+		_res_cache[key] = result.duplicate()
 	_mutex.lock()
 	_result = result
 	_mutex.unlock()
@@ -551,6 +612,7 @@ func _finish(result: Dictionary) -> void:
 	loading = false
 	elapsed_seconds = float(Time.get_ticks_msec() - _start_ms) / 1000.0
 	if not bool(result.get("ok", false)):
+		load_failed = true
 		failed.emit(String(result.get("message", result)))
 		return
 
@@ -558,23 +620,10 @@ func _finish(result: Dictionary) -> void:
 	splat_center = result.get("center", Vector3.ZERO)
 	splat_aabb = res.get("aabb")
 	point_count = int(res.get("point_count"))
-	var bounds := content_bounds(res)
-	content_min = bounds["min"]
-	content_max = bounds["max"]
-
-	# 裁掉离群 floaters（必须在算内容盒之后、建节点之前）
-	crop_stats = {}
-	if crop_enabled:
-		var cropped := _crop_resource(res)
-		if bool(cropped.get("ok", false)):
-			crop_stats = cropped
-			res = cropped["resource"]
-			point_count = int(res.get("point_count"))
-			splat_aabb = res.get("aabb")
-			var cb := content_bounds(res)
-			content_min = cb["min"]
-			content_max = cb["max"]
-
+	content_min = result.get("content_min", Vector3.ZERO)
+	content_max = result.get("content_max", Vector3.ZERO)
+	crop_stats = result.get("crop", {})
+	var t_node := Time.get_ticks_msec()
 	# 逐高斯坍缩的收敛点（源坐标）。必须在建节点之前定好，否则第一帧的
 	# _push_dynamic 会把 0 当成收敛点推下去。
 	_content_center = (content_min + content_max) * 0.5
@@ -582,6 +631,7 @@ func _finish(result: Dictionary) -> void:
 	splat_node.name = "Splat"
 	splat_node.set("gaussian", res)
 	add_child(splat_node)
+	print("[SplatScene] 主线程建节点（GDGS 合并点数据）%d ms" % (Time.get_ticks_msec() - t_node))
 	apply_transform()
 	if collapse_enabled and collapse_auto_play:
 		play_collapse()
@@ -648,7 +698,7 @@ func _resolve_offset() -> Vector3:
 ##
 ## 实现按「连续段」整段复制（slice + append_array），不是逐点拷贝 240 字节，
 ## 所以 277 万点只花 0.3 s 左右。
-func _crop_resource(res: Resource) -> Dictionary:
+func _crop_resource(res: Resource, cmin: Vector3, cmax: Vector3) -> Dictionary:
 	var bytes: PackedByteArray = res.get("point_data_byte")
 	var xyz: PackedVector3Array = res.get("xyz")
 	var count := int(res.get("point_count"))
@@ -665,8 +715,8 @@ func _crop_resource(res: Resource) -> Dictionary:
 				bytes.decode_float(o), bytes.decode_float(o + 4), bytes.decode_float(o + 8))
 
 	var box := AABB(
-		content_min - Vector3.ONE * crop_margin,
-		(content_max - content_min) + Vector3.ONE * crop_margin * 2.0)
+		cmin - Vector3.ONE * crop_margin,
+		(cmax - cmin) + Vector3.ONE * crop_margin * 2.0)
 	var box_hi := box.position + box.size
 
 	var out_bytes := PackedByteArray()

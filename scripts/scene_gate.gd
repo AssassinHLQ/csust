@@ -23,6 +23,8 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 @export var title := "下一场景"
 @export var prompt := "按 F 进入"
 @export var enabled := true
+## 切过去时，黑屏期间先把目标场景的高斯泼溅加载完再淡入（避免进场后卡一下）。
+@export var preload_splats := true
 ## 从别的场景回到本门时，玩家站在哪里（本节点局部坐标，+Z = 门的正面）
 @export var arrival_offset := Vector3(0.0, 0.05, 1.30)
 
@@ -64,7 +66,7 @@ func enter() -> void:
 	if not enabled or SceneFlow.switching:
 		return
 	print("[SceneGate] 进入「%s」：%s" % [title, target_scene])
-	SceneFlow.switch_scene(target_scene, target_spawn, gate_id)
+	SceneFlow.switch_scene(target_scene, target_spawn, gate_id, preload_splats)
 
 
 ## 从别的场景回来时玩家的落点（世界坐标）。

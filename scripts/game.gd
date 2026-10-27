@@ -1682,7 +1682,9 @@ func _on_splat_loaded(_info: Dictionary, scene: SplatScene) -> void:
 	if scene == null or scene.venue != "room":
 		return
 	_room_scene = scene
+	var t_carve := Time.get_ticks_msec()
 	_carve_fallback_floor()
+	print("[Game] 泼溅就位后的挖地板 %d ms" % (Time.get_ticks_msec() - t_carve))
 	# ⚠️ 立刻换一次代理/泼溅：开场剧情一开就 `get_tree().paused = true`，
 	#    `_process` 里的 `_update_room_swap()` **不会跑** —— 而房间这份泼溅
 	#    是 2.1 s 才解码完、往往正好落在剧情里。不在这里换，代理网格（米色墙 +
