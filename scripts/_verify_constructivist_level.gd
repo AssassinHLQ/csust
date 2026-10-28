@@ -171,6 +171,10 @@ func _run() -> void:
 				tris += 12
 		print("  校园碰撞：%d 个形状，约 %d 个三角面" % [shapes, tris])
 		_check(shapes >= 1 and tris > 100, "校园碰撞体有实际几何（%d 形状 / %d 面）" % [shapes, tris])
+	var preview := level.get_node_or_null("Campus/CampusPreview")
+	_check(preview != null, "有编辑器用的校园点云预览")
+	if preview != null:
+		_check(not (preview as Node3D).visible, "点云预览在运行时自动隐藏")
 	player.global_position = Vector3(0.0, -59.0, 0.0)
 	for _i in 30:
 		await physics_frame

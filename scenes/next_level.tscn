@@ -22,6 +22,7 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_collision.tscn" id="9_campuscol"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh.scn" id="10_campusmesh"]
 [ext_resource type="Texture2D" path="res://assets/sky/sky_bluesunset.jpg" id="11_sky_preview"]
+[ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -260,6 +261,9 @@ preload_on_gate = false
 ; campus_collision_mesh.scn = collider-forge 的 Poisson 网格（63 万面，树冠会连成大块）。
 ; 2026-10-28 用户要求先试网格版，所以默认挂网格；换回盒子把下面这行换成
 ; instance=ExtResource("9_campuscol") 即可。
+; 编辑器专用的低模点云预览（运行时自动隐藏），用来对齐碰撞。
+[node name="CampusPreview" parent="Campus" instance=ExtResource("12_campus_preview")]
+
 [node name="CampusCollisionMesh" parent="." instance=ExtResource("10_campusmesh")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
