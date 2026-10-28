@@ -57,6 +57,10 @@ var model_scale = [1.0]
 var should_terminate_thread : Array[bool] = [false]
 ## 若设置，则直接从预打包的 60-float 世界坐标 bin 上传，跳过 PLY 解析/打包。
 var bin_path := ""
+var _bin_file: FileAccess
+var _bin_total := 0
+var _bin_uploaded := 0
+var _bin_loading := false
 var num_splats_loaded : Array[int] = [0]
 var basis_override = Basis.IDENTITY
 
@@ -117,12 +121,53 @@ func init_gpu() -> void:
 	should_terminate_thread[0] = false
 	num_splats_loaded[0] = 0
 	if bin_path != "":
-		_load_bin(context.device, descriptors['splats'].rid, point_cloud.size)
+		_begin_bin_load(point_cloud.size)
+		is_loaded = false
 	else:
 		PlyFileScript.load_gaussian_splats(point_cloud, point_cloud.size / 1000,
 			context.device, descriptors['splats'].rid, should_terminate_thread,
 			num_splats_loaded, func(): pass)
-	is_loaded = true
+		is_loaded = true
+
+func _begin_bin_load(count : int) -> void:
+	_bin_file = FileAccess.open(bin_path, FileAccess.READ)
+	if _bin_file == null:
+		push_error("[ggs] 打不开 bin: %s" % bin_path)
+		return
+	_bin_total = count * 240
+	_bin_uploaded = 0
+	_bin_loading = true
+	num_splats_loaded[0] = 0
+	print("[ggs] bin 开始分帧上传：%.0f MB" % (float(_bin_total) / 1048576.0))
+
+## 每帧最多上传 PER_FRAME；返回 true 表示还在加载。
+func pump_load() -> void:
+	if not context: init_gpu()
+	if _bin_loading:
+		_pump_bin(context.device, descriptors['splats'].rid)
+
+func _pump_bin(device, buffer) -> bool:
+	if not _bin_loading or _bin_file == null:
+		return false
+	const PER_FRAME := 64 * 1024 * 1024
+	var budget := PER_FRAME
+	while budget > 0 and _bin_uploaded < _bin_total:
+		var n := mini(64 * 1024 * 1024, _bin_total - _bin_uploaded)
+		var data := _bin_file.get_buffer(n)
+		if data.is_empty():
+			break
+		device.buffer_update(buffer, _bin_uploaded, data.size(), data)
+		_bin_uploaded += data.size()
+		budget -= data.size()
+		num_splats_loaded[0] = _bin_uploaded / 240
+	if _bin_uploaded >= _bin_total:
+		_bin_file.close()
+		_bin_file = null
+		_bin_loading = false
+		is_loaded = true
+		print("[ggs] bin 上传完成：%d 点" % num_splats_loaded[0])
+		return false
+	return true
 
 func _load_bin(device, buffer, count : int) -> void:
 	var f := FileAccess.open(bin_path, FileAccess.READ)
@@ -146,6 +191,9 @@ func _load_bin(device, buffer, count : int) -> void:
 
 func cleanup_gpu():
 	should_terminate_thread[0] = true
+	if _bin_file != null:
+		_bin_file.close()
+		_bin_file = null
 	if load_thread.is_started():
 		load_thread.wait_to_finish()
 	if context: context.free()
@@ -153,13 +201,17 @@ func cleanup_gpu():
 
 func rasterize() -> void:
 	if not context: init_gpu()
+	if _bin_loading:
+		if _pump_bin(context.device, descriptors['splats'].rid):
+			return
 	
 	var camera_pos = basis_override * camera.global_position
 	context.device.buffer_update(descriptors['uniforms'].rid, 0, 8*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3]))
 	context.device.buffer_clear(descriptors['histogram'].rid, 0, 4 + 4*RADIX*4) # Clear the sort buffer size and reset global histogram
 	context.device.buffer_clear(descriptors['tile_bounds'].rid, 0, tile_dims.x*tile_dims.y * 2*4) # Clear gsplat_boundaries buffer
 	#context.device.buffer_update(descriptors['grid_dimensions'].rid, 0, 3*4*2, default_block_dims)
-	#context.device.texture_clear(descriptors['render_texture'].rid, Color.BLACK, 0, 1, 0, 1)
+	# 每帧清成透明：合成器用 alpha 区分「没有 splat」的区域。
+	context.device.texture_clear(descriptors['render_texture'].rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
 	is_loaded = not load_thread.is_alive()
 	
 	# Run the projection pipeline. This will return how many duplicated points

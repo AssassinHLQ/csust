@@ -159,6 +159,8 @@ func _ready() -> void:
 	SceneFlow.report_memory("构成主义关卡就绪")
 
 
+	_maybe_enable_campus_ggs()
+
 func _make_pad_on(base: Material) -> Material:
 	var m: StandardMaterial3D = (base as StandardMaterial3D).duplicate() \
 		if base is StandardMaterial3D else StandardMaterial3D.new()
@@ -272,3 +274,12 @@ func _show_message(text: String, seconds: float) -> void:
 
 func _hide_message() -> void:
 	_message.visible = false
+
+
+## 实验：用 GGS 光栅器 + CompositorEffect 画校园。启动参数 `-- --ggs-campus` 才生效。
+func _maybe_enable_campus_ggs() -> void:
+	if not OS.get_cmdline_user_args().has("--ggs-campus"):
+		return
+	var ggs = load("res://scripts/campus_ggs.gd").new()
+	ggs.name = "CampusGGS"
+	add_child(ggs)
