@@ -20,6 +20,7 @@
 [ext_resource type="Script" path="res://scripts/target.gd" id="7_target"]
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision.tscn" id="9_campuscol"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh.scn" id="10_campusmesh"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_level"]
 sky_top_color = Color(0.16, 0.21, 0.33, 1)
@@ -258,7 +259,11 @@ start_distance = 0.0
 low_priority = true
 preload_on_gate = false
 
-[node name="CampusCollision" parent="." instance=ExtResource("9_campuscol")]
+; 碰撞两套：campus_collision.tscn = 25 块手烘盒子（干净、轻）；
+; campus_collision_mesh.scn = collider-forge 的 Poisson 网格（63 万面，树冠会连成大块）。
+; 2026-10-28 用户要求先试网格版，所以默认挂网格；换回盒子把下面这行换成
+; instance=ExtResource("9_campuscol") 即可。
+[node name="CampusCollisionMesh" parent="." instance=ExtResource("10_campusmesh")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)

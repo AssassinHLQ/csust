@@ -155,15 +155,22 @@ func _run() -> void:
 		_check(not bool(campus.get("preload_on_gate")), "校园泼溅不在门切换的黑屏里预载")
 		_check(is_equal_approx(float(campus.get("world_scale")), 75.0),
 			"校园放大 3 倍（world_scale=75，实测 %.1f）" % float(campus.get("world_scale")))
-	var col := level.get_node_or_null("CampusCollision")
+	var col := level.get_node_or_null("CampusCollisionMesh")
+	if col == null:
+		col = level.get_node_or_null("CampusCollision")
 	_check(col != null, "场景里有校园碰撞体")
 	if col != null:
-		var boxes := 0
-		for c in col.get_children():
-			if c is StaticBody3D:
-				boxes += 1
-		print("  校园碰撞体 %d 块" % boxes)
-		_check(boxes > 1, "校园不止一个长方体碰撞（实测 %d 块）" % boxes)
+		var shapes := 0
+		var tris := 0
+		for c in col.find_children("*", "CollisionShape3D", true, false):
+			var cs := c as CollisionShape3D
+			shapes += 1
+			if cs.shape is ConcavePolygonShape3D:
+				tris += (cs.shape as ConcavePolygonShape3D).get_faces().size() / 3
+			elif cs.shape is BoxShape3D:
+				tris += 12
+		print("  校园碰撞：%d 个形状，约 %d 个三角面" % [shapes, tris])
+		_check(shapes >= 1 and tris > 100, "校园碰撞体有实际几何（%d 形状 / %d 面）" % [shapes, tris])
 	player.global_position = Vector3(0.0, -59.0, 0.0)
 	for _i in 30:
 		await physics_frame
