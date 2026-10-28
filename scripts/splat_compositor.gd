@@ -33,9 +33,10 @@ func _enter_tree() -> void:
 	# Compute 的排序缓冲随「单个高斯覆盖的 tile 数」膨胀，3 倍缩放后每点覆盖
 	# 9 倍面积，直接压垮。这里在**任何 GaussianSplatNode 注册之前**把后端定成
 	# Raster —— 用代码改运行时设置，不动用户的 project.godot（里面写的是 Compute）。
-	#   -- --gdgs-backend=compute   临时跑 Compute 对比（会掉到 3 fps）
-	#   -- --gdgs-backend=auto      用 project.godot 里的值
-	var want := "Raster"
+	# 2026-10-28 用户选择：保持 3×，用 Compute（排序正确、转视角不跳；代价是 fps 低）。
+	#   -- --gdgs-backend=raster    临时跑 Raster（快，但分组排序会跳）
+	#   -- --gdgs-backend=auto      用 project.godot 里的值（也是 Compute）
+	var want := "Compute"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--gdgs-backend="):
 			want = a.substr(15).strip_edges().capitalize()
