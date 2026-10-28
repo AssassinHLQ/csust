@@ -55,6 +55,8 @@ var should_enable_heatmap = [false]
 var render_scale = [1.0]
 var model_scale = [1.0]
 var should_terminate_thread : Array[bool] = [false]
+## 若设置，则直接从预打包的 60-float 世界坐标 bin 上传，跳过 PLY 解析/打包。
+var bin_path := ""
 var num_splats_loaded : Array[int] = [0]
 var basis_override = Basis.IDENTITY
 
@@ -114,14 +116,38 @@ func init_gpu() -> void:
 	# 这里在调用线程（Compositor/render thread）同步上传。加载会卡一下，先验证渲染。
 	should_terminate_thread[0] = false
 	num_splats_loaded[0] = 0
-	PlyFileScript.load_gaussian_splats(point_cloud, point_cloud.size / 1000,
-		context.device, descriptors['splats'].rid, should_terminate_thread,
-		num_splats_loaded, func(): pass)
+	if bin_path != "":
+		_load_bin(context.device, descriptors['splats'].rid, point_cloud.size)
+	else:
+		PlyFileScript.load_gaussian_splats(point_cloud, point_cloud.size / 1000,
+			context.device, descriptors['splats'].rid, should_terminate_thread,
+			num_splats_loaded, func(): pass)
 	is_loaded = true
+
+func _load_bin(device, buffer, count : int) -> void:
+	var f := FileAccess.open(bin_path, FileAccess.READ)
+	if f == null:
+		push_error("[ggs] 打不开 bin: %s" % bin_path)
+		return
+	var total := count * 60 * 4
+	var uploaded := 0
+	var chunk := 4 * 1024 * 1024
+	while uploaded < total:
+		var n := mini(chunk, total - uploaded)
+		var data := f.get_buffer(n)
+		if data.is_empty():
+			break
+		device.buffer_update(buffer, uploaded, data.size(), data)
+		uploaded += data.size()
+		num_splats_loaded[0] = uploaded / 240
+	f.close()
+	print("[ggs] bin 上传完成：%d 点 / %.0f MB" % [num_splats_loaded[0],
+		float(uploaded) / 1048576.0])
 
 func cleanup_gpu():
 	should_terminate_thread[0] = true
-	load_thread.wait_to_finish()
+	if load_thread.is_started():
+		load_thread.wait_to_finish()
 	if context: context.free()
 	if render_texture: render_texture.texture_rd_rid = RID()
 
