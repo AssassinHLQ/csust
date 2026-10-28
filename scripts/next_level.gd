@@ -44,6 +44,8 @@ const SKY_FOG := {
 ## 室外一片黑（泼溅是烘焙亮度，不会跟着变暗，反而更怪）。
 ## 想用其余五张：`-- --sky=night` 这样直接指定。
 const SKY_POOL := ["day", "pink", "overcast", "coldsunset", "bluesunset"]
+## 默认和初始场景保持一致（粉紫黄昏）；想随机抽：-- --sky=random
+const SKY_DEFAULT := "pink"
 ## 上一次抽到的 key：避免连续两次同一张（关卡来回切的时候很明显）。
 static var _last_sky := ""
 
@@ -79,19 +81,23 @@ func _setup_sky() -> void:
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if we == null or we.environment == null:
 		return
-	var key := ""
+	var key := SKY_DEFAULT
+	var want_random := false
 	for a in OS.get_cmdline_user_args():
-		if a.begins_with("--sky="):
+		if a == "--sky=random":
+			want_random = true
+		elif a.begins_with("--sky="):
 			key = a.substr(6).strip_edges().to_lower()
-	if not SKY_PATHS.has(key):
+	if want_random:
 		# 最多试 4 次抽到和上一关不同的；实在撞了就随它
 		for _i in 4:
 			var k := String(SKY_POOL[randi() % SKY_POOL.size()])
 			if k != _last_sky:
 				key = k
 				break
-		if key == "":
-			key = String(SKY_POOL[randi() % SKY_POOL.size()])
+	elif not SKY_PATHS.has(key):
+		push_warning("[ConstructivistLevel] 没有叫「%s」的天空，用默认 %s" % [key, SKY_DEFAULT])
+		key = SKY_DEFAULT
 	_last_sky = key
 	var tex := load(SKY_PATHS[key]) as Texture2D
 	if tex == null:

@@ -55,13 +55,20 @@ func _run() -> void:
 	var top_world: float = (node.global_transform * (campus.get("content_max") as Vector3)).y
 	print("[scale] 内容顶面 y=%.2f" % top_world)
 
-	var col := level.get_node_or_null("CampusCollision")
-	var boxes := 0
+	var col := level.get_node_or_null("CampusCollisionMesh")
+	if col == null:
+		col = level.get_node_or_null("CampusCollision")
+	var shapes := 0
+	var tris := 0
 	if col != null:
-		for c in col.get_children():
-			if c is StaticBody3D:
-				boxes += 1
-	print("[scale] 校园碰撞体 %d 块（应 > 1）" % boxes)
+		for c in col.find_children("*", "CollisionShape3D", true, false):
+			var cs := c as CollisionShape3D
+			shapes += 1
+			if cs.shape is ConcavePolygonShape3D:
+				tris += (cs.shape as ConcavePolygonShape3D).get_faces().size() / 3
+			elif cs.shape is BoxShape3D:
+				tris += 12
+	print("[scale] 校园碰撞：%d 形状 / %d 面" % [shapes, tris])
 
 	var space: PhysicsDirectSpaceState3D = level.get_world_3d().direct_space_state
 	for p in [Vector2(0, -120), Vector2(0, -200), Vector2(60, -300), Vector2(-200, -400)]:

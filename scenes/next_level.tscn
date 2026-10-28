@@ -21,7 +21,7 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision.tscn" id="9_campuscol"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh.scn" id="10_campusmesh"]
-[ext_resource type="Texture2D" path="res://assets/sky/sky_bluesunset.jpg" id="11_sky_preview"]
+[ext_resource type="Texture2D" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
@@ -40,10 +40,10 @@ ambient_light_color = Color(0.56, 0.5, 0.44, 1)
 ambient_light_energy = 0.5
 tonemap_mode = 3
 glow_enabled = true
-glow_intensity = 0.35
+glow_intensity = 0.12
 fog_enabled = true
-fog_light_color = Color(0.30, 0.26, 0.23, 1)
-fog_density = 0.004
+fog_light_color = Color(0.62, 0.48, 0.55, 1)
+fog_density = 0.0006
 fog_sky_affect = 0.0
 
 [sub_resource type="StandardMaterial3D" id="Mat_target"]
