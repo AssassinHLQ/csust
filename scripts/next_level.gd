@@ -147,8 +147,12 @@ func _process(_delta: float) -> void:
 ## 校园泼溅的可见性闸门：
 ##   · 还没加载完 → 不动（保持隐藏）
 ##   · 玩家还在大厅里 → **藏起来**（墙本来就挡着，没必要为它付每帧 500 ms）
-##   · 玩家出了大厅、但背对校园 → 也藏（绕到南边时不会白白掉帧）
-## 只有「站在广场上、大致朝校园那半边」才显示，这时才付渲染成本。
+##   · 出了大厅 → 一律显示
+##
+## ⚠️ 以前还有一条「朝着校园那半边才显示」的朝向判断，结果是玩家在广场上
+##    一转身校园整片消失、只剩近乎全黑的背景色，看起来就像「突然没光照了」
+##    （用户 2026-10-28 报）。朝向判断已删：宁可多付渲染成本，也不能让场景
+##    在玩家转视角时凭空消失。
 func _update_campus_visibility() -> void:
 	if _campus == null or _player == null:
 		return
@@ -160,16 +164,11 @@ func _update_campus_visibility() -> void:
 	if not _campus_shown:
 		node.visible = false
 	var pos := _player.global_position
-	var outside := absf(pos.x) > 15.0 or absf(pos.z) > 10.0
-	var cam := _player.get("cam") as Camera3D
-	var want := outside
-	if want and cam != null:
-		var to_campus := Vector3(0.0, 0.0, -150.0) - cam.global_position
-		want = (-cam.global_transform.basis.z).dot(to_campus.normalized()) > 0.15
+	var want := absf(pos.x) > 15.0 or absf(pos.z) > 10.0
 	if want != _campus_shown or node.visible != want:
 		_campus_shown = want
 		node.visible = want
-		print("[ConstructivistLevel] 校园泼溅 %s" % ("显示" if want else "隐藏（大厅里/背对）"))
+		print("[ConstructivistLevel] 校园泼溅 %s" % ("显示" if want else "隐藏（大厅里）"))
 
 
 func _update_scoreboard() -> void:

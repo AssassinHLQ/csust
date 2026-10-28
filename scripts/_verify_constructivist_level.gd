@@ -153,6 +153,17 @@ func _run() -> void:
 			% [float(campus.get("start_delay")), str(campus.get("preload_on_gate"))])
 		_check(float(campus.get("start_delay")) > 0.0, "校园泼溅延后加载")
 		_check(not bool(campus.get("preload_on_gate")), "校园泼溅不在门切换的黑屏里预载")
+		_check(is_equal_approx(float(campus.get("world_scale")), 75.0),
+			"校园放大 3 倍（world_scale=75，实测 %.1f）" % float(campus.get("world_scale")))
+	var col := level.get_node_or_null("CampusCollision")
+	_check(col != null, "场景里有校园碰撞体")
+	if col != null:
+		var boxes := 0
+		for c in col.get_children():
+			if c is StaticBody3D:
+				boxes += 1
+		print("  校园碰撞体 %d 块" % boxes)
+		_check(boxes > 1, "校园不止一个长方体碰撞（实测 %d 块）" % boxes)
 	player.global_position = Vector3(0.0, -59.0, 0.0)
 	for _i in 30:
 		await physics_frame

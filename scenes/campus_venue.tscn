@@ -9,7 +9,7 @@
 ;   add_child(campus)
 ;
 ; 摆放参数是针对这份**俯拍航拍**扫描调的（README §6.4 / §6.5）：
-;   world_scale = 25    内容约 211 × 160 m（真实校园尺度）
+;   world_scale = 75    内容约 576 × 483 m（用户 2026-10-28 要求「放大三倍」）
 ;   auto_place = true   水平自动居中 + 顶面沉到 top_gap 之下
 ;   top_gap = 12        内容是「只有从上方看才干净」的薄饼，所以要沉到平台下面
 ;                       —— 配一个悬浮平台、玩家低头俯视才好看。
@@ -22,6 +22,6 @@ script = ExtResource("1_splat")
 sog_path = "res://splatdata/school_playable.sogdata"
 display_name = "校园"
 venue = "campus"
-world_scale = 25.0
+world_scale = 75.0
 auto_place = true
 top_gap = 12.0

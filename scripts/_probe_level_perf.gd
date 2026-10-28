@@ -19,6 +19,11 @@ func _measure(tag: String, seconds := 2.0) -> float:
 
 
 func _run() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--backend="):
+			var b := a.substr(10).capitalize()
+			ProjectSettings.set_setting("gdgs/rendering/backend", b)
+			print("[perf] 强制后端 = %s" % b)
 	root.size = Vector2i(1600, 900)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
@@ -46,11 +51,23 @@ func _run() -> void:
 	print("[perf] 广场边朝北：校园节点 visible=%s" % str(node.visible))
 	await _measure("广场边朝校园（显示）")
 
-	player.set("_yaw", PI)   # 原地转身背对校园
+	player.global_position = Vector3(0.0, 0.3, -150.0)   # 校园地面上
+	player.set("_yaw", 0.0)
 	for _i in 30:
 		await physics_frame
-	print("[perf] 广场边背对：校园节点 visible=%s" % str(node.visible))
-	await _measure("广场边背对校园（隐藏）")
+	print("[perf] 校园地面：校园节点 visible=%s" % str(node.visible))
+	await _measure("校园地面行走（显示）")
+
+	player.global_position = Vector3(0.0, 0.3, -300.0)   # 校园深处
+	for _i in 30:
+		await physics_frame
+	await _measure("校园深处（显示）")
+
+	player.set("_yaw", PI)   # 原地转身背对校园（朝南）
+	for _i in 30:
+		await physics_frame
+	print("[perf] 广场边背对：校园节点 visible=%s（应为 true，不再按朝向隐藏）" % str(node.visible))
+	await _measure("广场边背对（仍显示）")
 	print("[perf] draw calls=%d  图元=%d"
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])

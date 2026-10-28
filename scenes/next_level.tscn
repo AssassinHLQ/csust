@@ -19,11 +19,24 @@
 [ext_resource type="PackedScene" path="res://scenes/constructivist_hall_baked.tscn" id="6_hall"]
 [ext_resource type="Script" path="res://scripts/target.gd" id="7_target"]
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision.tscn" id="9_campuscol"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat_level"]
+sky_top_color = Color(0.16, 0.21, 0.33, 1)
+sky_horizon_color = Color(0.58, 0.5, 0.44, 1)
+ground_bottom_color = Color(0.08, 0.075, 0.07, 1)
+ground_horizon_color = Color(0.58, 0.5, 0.44, 1)
+sun_angle_max = 25.0
+sun_curve = 0.12
+
+[sub_resource type="Sky" id="Sky_level"]
+sky_material = SubResource("SkyMat_level")
 
 [sub_resource type="Environment" id="Env_hall"]
-background_mode = 1
+background_mode = 2
 background_color = Color(0.05, 0.045, 0.04, 1)
-ambient_light_source = 3
+sky = SubResource("Sky_level")
+ambient_light_source = 2
 ambient_light_color = Color(0.56, 0.5, 0.44, 1)
 ambient_light_energy = 0.5
 tonemap_mode = 3
@@ -103,13 +116,13 @@ size = Vector3(8, 0.5, 15.2)
 size = Vector3(8, 0.5, 15.2)
 
 [sub_resource type="BoxMesh" id="Mesh_plinth"]
-size = Vector3(191.9, 3.3, 0.6)
+size = Vector3(575.6, 3.3, 0.6)
 
 [sub_resource type="BoxShape3D" id="Shape_campus_floor"]
-size = Vector3(191.9, 0.5, 161.2)
+size = Vector3(575.6, 0.5, 483.4)
 
 [sub_resource type="BoxShape3D" id="Shape_fall"]
-size = Vector3(400, 4, 400)
+size = Vector3(1400, 4, 1400)
 
 [sub_resource type="BoxMesh" id="Mesh_carpet"]
 size = Vector3(44, 0.012, 4)
@@ -218,21 +231,25 @@ surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
 [node name="CampusFloor" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.27, -155.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.27, -316.7)
 
 [node name="Collision" type="CollisionShape3D" parent="CampusFloor"]
 shape = SubResource("Shape_campus_floor")
 
 [node name="FallReset" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -60, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -60, -316.7)
 collision_layer = 0
 collision_mask = 1
 
 [node name="Collision" type="CollisionShape3D" parent="FallReset"]
 shape = SubResource("Shape_fall")
 
+; 校园：world_scale=75（2026-10-28 用户要求「放大三倍」），地面 576×484 m。
+; 同时把量出来的 1.16°/0.43° 扫描倾角转平：basis ≈ Rx(1.163°)·Rz(0.429°)，
+; y 让拟合地面落在 −0.02 附近；CampusCollision 的盒碰撞是从**同一变换**下的
+; 点云烘出来的（scripts/_bake_campus_collision.gd），改这里之后要重烘。
 [node name="Campus" parent="." instance=ExtResource("8_campus")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24.48, -155.56)
+transform = Transform3D(0.999972, -0.00749, 0, 0.007488, 0.999766, -0.020299, 0.000152, 0.020298, 0.999794, 0, 49.81, -316.7)
 crop_enabled = true
 crop_margin = 0.5
 crop_max_scale = 0.5
@@ -240,6 +257,8 @@ start_delay = 8.0
 start_distance = 0.0
 low_priority = true
 preload_on_gate = false
+
+[node name="CampusCollision" parent="." instance=ExtResource("9_campuscol")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)

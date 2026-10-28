@@ -26,6 +26,24 @@ var _script_checked := false
 var _attached := {}
 
 
+func _enter_tree() -> void:
+	# 2026-10-28：校园放大 3 倍后实测两种后端（1600×900、RTX 4060 Laptop）
+	#   Compute 3.2 fps（广场边朝校园）/ 3.5 fps（校园地面）
+	#   Raster  50.1 fps / 41.2 fps
+	# Compute 的排序缓冲随「单个高斯覆盖的 tile 数」膨胀，3 倍缩放后每点覆盖
+	# 9 倍面积，直接压垮。这里在**任何 GaussianSplatNode 注册之前**把后端定成
+	# Raster —— 用代码改运行时设置，不动用户的 project.godot（里面写的是 Compute）。
+	#   -- --gdgs-backend=compute   临时跑 Compute 对比（会掉到 3 fps）
+	#   -- --gdgs-backend=auto      用 project.godot 里的值
+	var want := "Raster"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--gdgs-backend="):
+			want = a.substr(15).strip_edges().capitalize()
+	if want != "Auto":
+		ProjectSettings.set_setting(BACKEND_SETTING, want)
+	print("[SplatCompositor] 泼溅后端 = %s" % want)
+
+
 func _ready() -> void:
 	var needed := _backend_needs_compositor()
 	set_process(needed)

@@ -41,7 +41,7 @@ func _run() -> void:
 		return
 	print("  点数 = %s   耗时 = %.1f s" % [_fmt(campus.point_count), campus.elapsed_seconds])
 	_check(campus.point_count == 6150154, "点数 = 6,150,154（实测 %s）" % _fmt(campus.point_count))
-	_check(is_equal_approx(campus.world_scale, 25.0), "world_scale = 25")
+	_check(is_equal_approx(campus.world_scale, 75.0), "world_scale = 75（放大 3 倍）")
 	_check(campus.auto_place, "auto_place 打开")
 
 	var aabb := campus.content_world_aabb()
