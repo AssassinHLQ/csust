@@ -24,7 +24,7 @@
 [ext_resource type="Texture2D" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
-[ext_resource type="PackedScene" path="res://scenes/campus_collision_walls.scn" id="14_campusmesh_upper"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -259,18 +259,17 @@ start_distance = 0.0
 low_priority = true
 preload_on_gate = false
 
-; 碰撞四套，按需换 instance（实测数字见 scripts/ 下对应烘焙脚本的文件头）：
-;   campus_collision_walls.scn = **默认**：原始 Poisson 网格只留竖直面
-;      （|法线 y| ≤ 0.55、最高点 ≥ 1 m），22.9 万面，删掉 63.6% 的地面/树冠/屋顶。
-;      地面完全交给 CampusFloor 那块平板（校园拟合倾角只有 0.18°/0.05°，平的），
-;      人不会站到树冠、雨棚这些「看不见的鼓包」上。
-;   campus_collision_mesh_upper.scn = 只剪「最高点不到 1 m」的贴地层（删 10.6%）。
-;      仍有 2/45 个落点浮到 1.67 m（矮棚/灌木顶）。
-;   campus_collision_mesh.scn  = 原始 Poisson 网格 62.9 万面。网格自己的地面比点云
-;      地面低 >0.3 m 的占 37.5%、高 >0.3 m 的占 28.8%。
-;   campus_collision_fine.tscn = 3 m 细盒子 1598 块。实测主路 34.4% 的采样点被盒子
-;      挡住、有人直接卡在盒子里（on_floor=false），所以不用来当默认。
-;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）。
+; 校园碰撞：campus_collision_walls_final.scn（2026-10-29 默认）
+;   = collider-forge 的 Poisson 网格经 _tools/campus_collision_refine.py 三步处理：
+;     ① 顶点沿局部平面投影贴到点云（中位偏差 0.378 → 0.322 m，平均挪 0.145 m）
+;     ② 只留竖直面（|法线 y| ≤ 0.55、最高点 ≥ 1 m）—— 地面交给 CampusFloor 平板
+;        （校园地面拟合倾角只有 0.18°/0.05°，是平的；网格自己的地面会让人浮空/陷进去）
+;     ③ 剔掉重心离点云 > 0.75 m 的「凭空补面」23.1% —— 那些就是看不见的墙和鼓包
+;   18.2 万三角 / 6.2 MB。实测：主路 45 个落点全部踩在 -0.02，主路 1 m 高被挡 0.4%。
+; 备选（按需换 instance）：
+;   campus_collision_mesh.scn  = 原始 Poisson 62.9 万面（会浮空/站在树冠上）
+;   campus_collision_fine.tscn = 3 m 细盒子 1598 块（主路 34.4% 被挡，会卡死在盒子里）
+;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）
 [node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
