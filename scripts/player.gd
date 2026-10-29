@@ -163,6 +163,11 @@ var _lock_left := 0.0
 
 func _ready() -> void:
 	add_to_group("player")
+	# 2026-10-29 用户：「爱丽丝爬坡能力加强一点点」。
+	# CharacterBody3D 默认 floor_max_angle = 45°，校园里那些 45° 出头的路肩/坡道
+	# 会直接把人挡住或往下滑。放到 52°（仍然上不了垂直墙），台阶也从 0.32 提到 0.38。
+	floor_max_angle = deg_to_rad(52.0)
+	floor_snap_length = 0.45
 	# 用户 2026-10-21：「每次你运行游戏都会抢占鼠标一瞬间，然后我就点不到下面的任务栏了」
 	# → 两道闸：
 	#   ① 探针 / 自检一律带 `--no-capture`（写在 `--` 之后），**根本不收鼠标**；

@@ -14,6 +14,8 @@ extends SceneTree
 
 const LEVEL_PATH := "res://scenes/next_level.tscn"
 const OUT_PATH := "res://scenes/campus_collision.tscn"
+## 可用 --out=res://... 改输出，默认还是老路径
+var out_path := OUT_PATH
 
 ## 网格边长（世界单位，已按放大后的校园调）
 var cell := 12.0
@@ -24,6 +26,12 @@ var min_points := 200
 var min_high_points := 200
 ## 盒顶取「从高往低累计到这么多点」的高度，避免单个离群点把盒子顶到天上
 var top_points := 40
+## 竖向空档上限（米）：一格从地面到盒顶，中间不能有超过这么高的「空段」。
+## 用来挡掉「树冠伸到马路上空」那种格 —— 否则路面会凭空多出一堵墙。
+## 0 = 关掉这个判据。
+var gap_max := 3.0
+## 一个竖格至少这么多点才算「这段是实的」
+var min_bin_points := 3
 ## 桥头留出的安全走廊（世界坐标），避免出口正对着树/楼的盒子
 var corridor := Rect2(2.0, -98.0, 16.0, 26.0)   # x, z, w, h
 var ground_y := -0.02
@@ -57,9 +65,13 @@ func _run() -> void:
 			cell = float(a.substr(7))
 		elif a.begins_with("--min-high="):
 			min_high = float(a.substr(11))
+		elif a.begins_with("--gap="):
+			gap_max = float(a.substr(6))
+		elif a.begins_with("--out="):
+			out_path = a.substr(6)
 
-	if write and FileAccess.file_exists(OUT_PATH) and not force:
-		print("[bake] %s 已存在；要覆盖请加 -- --force" % OUT_PATH)
+	if write and FileAccess.file_exists(out_path) and not force:
+		print("[bake] %s 已存在；要覆盖请加 -- --force" % out_path)
 		quit(0)
 		return
 
@@ -142,6 +154,19 @@ func _run() -> void:
 					break
 			if top < min_high:
 				continue
+			# 竖向连续性：地面到盒顶之间不能有超过 gap_max 的空档
+			if gap_max > 0.0:
+				var run := 0
+				var worst := 0
+				var last_bin := int(top / bin_size)
+				for bi in range(0, last_bin + 1):
+					if _hist[k * _bins + bi] < min_bin_points:
+						run += 1
+						worst = maxi(worst, run)
+					else:
+						run = 0
+				if float(worst) * bin_size > gap_max:
+					continue
 			tops[k] = top
 			cand[k] = 1
 			candidates += 1
@@ -206,13 +231,13 @@ func _run() -> void:
 		print("[bake] pack 失败：%d" % err)
 		quit(1)
 		return
-	err = ResourceSaver.save(ps, OUT_PATH)
+	err = ResourceSaver.save(ps, out_path)
 	if err != OK:
 		print("[bake] save 失败：%d" % err)
 		quit(1)
 		return
-	print("[bake] %s ← %d 个盒（%.1f KB）" % [OUT_PATH, body_count,
-		float(FileAccess.get_file_as_bytes(ProjectSettings.globalize_path(OUT_PATH)).size()) / 1024.0])
+	print("[bake] %s ← %d 个盒（%.1f KB）" % [out_path, body_count,
+		float(FileAccess.get_file_as_bytes(ProjectSettings.globalize_path(out_path)).size()) / 1024.0])
 	quit(0)
 
 

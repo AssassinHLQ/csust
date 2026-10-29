@@ -1,4 +1,4 @@
-[gd_scene load_steps=33 format=3]
+[gd_scene load_steps=35 format=3]
 
 ; 第二个场景：构成主义大厅（Constructivism）。
 ; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
@@ -23,6 +23,8 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh.scn" id="10_campusmesh"]
 [ext_resource type="Texture2D" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh_upper.scn" id="14_campusmesh_upper"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -257,14 +259,18 @@ start_distance = 0.0
 low_priority = true
 preload_on_gate = false
 
-; 碰撞两套：campus_collision.tscn = 25 块手烘盒子（干净、轻）；
-; campus_collision_mesh.scn = collider-forge 的 Poisson 网格（63 万面，树冠会连成大块）。
-; 2026-10-28 用户要求先试网格版，所以默认挂网格；换回盒子把下面这行换成
-; instance=ExtResource("9_campuscol") 即可。
+; 碰撞四套，按需换 instance（实测数字见 scripts/ 下对应烘焙脚本的文件头）：
+;   campus_collision_mesh_upper.scn = **默认**：Poisson 网格剪掉「最高顶点不到 1 m」
+;      的贴地三角形（10.6%），地面交回 CampusFloor 平板，墙/树照旧。
+;   campus_collision_mesh.scn  = 原始 Poisson 网格 62.9 万面。网格自己的地面比点云
+;      地面低 >0.3 m 的占 37.5%、高 >0.3 m 的占 28.8%，人会浮空/陷进去。
+;   campus_collision_fine.tscn = 3 m 细盒子 1598 块。实测主路 34.4% 的采样点被盒子
+;      挡住、有人直接卡在盒子里（on_floor=false），所以不用来当默认。
+;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）。
 ; 编辑器专用的低模点云预览（运行时自动隐藏），用来对齐碰撞。
 [node name="CampusPreview" parent="Campus" instance=ExtResource("12_campus_preview")]
 
-[node name="CampusCollisionMesh" parent="." instance=ExtResource("10_campusmesh")]
+[node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
