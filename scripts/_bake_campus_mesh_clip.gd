@@ -11,8 +11,11 @@ extends SceneTree
 ## 产物：scenes/campus_collision_mesh_upper.scn
 
 const SRC := "res://scenes/campus_collision_mesh.scn"
-const OUT := "res://scenes/campus_collision_mesh_upper.scn"
-const CUT := 1.0     # 米：三角形最高顶点低于这个值就删
+var OUT := "res://scenes/campus_collision_mesh_upper.scn"
+var CUT := 1.0       # 米：三角形最高顶点低于这个值就删
+## 只要竖直面（墙/树干/围栏）：|法线 y| 小于这个值才留。
+## 1 = 关掉（保留水平面）；0.55 ≈ 与水平面夹角 57° 以上
+var MAX_NY := 1.0
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -20,6 +23,13 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var force := OS.get_cmdline_user_args().has("--force")
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--out="):
+			OUT = a.substr(6)
+		elif a.begins_with("--cut="):
+			CUT = float(a.substr(6))
+		elif a.begins_with("--max-ny="):
+			MAX_NY = float(a.substr(9))
 	if FileAccess.file_exists(OUT) and not force:
 		print("[clip] %s 已存在；覆盖请加 -- --force" % OUT)
 		quit(0)
@@ -44,13 +54,14 @@ func _run() -> void:
 		var b: Vector3 = xf * faces[i + 1]
 		var c: Vector3 = xf * faces[i + 2]
 		var top := maxf(a.y, maxf(b.y, c.y))
-		if top < CUT:
+		var ny := absf((b - a).cross(c - a).normalized().y)
+		if top < CUT or ny > MAX_NY:
 			dropped += 1
 		else:
 			keep.append(a); keep.append(b); keep.append(c)
 		i += 3
-	print("[clip] 原 %d 三角 → 留 %d，删地面 %d（%.1f%%）"
-		% [faces.size() / 3, keep.size() / 3, dropped, 100.0 * dropped / maxi(faces.size() / 3, 1)])
+	print("[clip] 原 %d 三角 → 留 %d，删 %d（%.1f%%），cut=%.2f max_ny=%.2f"
+		% [faces.size() / 3, keep.size() / 3, dropped, 100.0 * dropped / maxi(faces.size() / 3, 1), CUT, MAX_NY])
 
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(keep)

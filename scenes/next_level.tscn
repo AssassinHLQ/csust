@@ -24,7 +24,7 @@
 [ext_resource type="Texture2D" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
-[ext_resource type="PackedScene" path="res://scenes/campus_collision_mesh_upper.scn" id="14_campusmesh_upper"]
+[ext_resource type="PackedScene" path="res://scenes/campus_collision_walls.scn" id="14_campusmesh_upper"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -260,16 +260,17 @@ low_priority = true
 preload_on_gate = false
 
 ; 碰撞四套，按需换 instance（实测数字见 scripts/ 下对应烘焙脚本的文件头）：
-;   campus_collision_mesh_upper.scn = **默认**：Poisson 网格剪掉「最高顶点不到 1 m」
-;      的贴地三角形（10.6%），地面交回 CampusFloor 平板，墙/树照旧。
+;   campus_collision_walls.scn = **默认**：原始 Poisson 网格只留竖直面
+;      （|法线 y| ≤ 0.55、最高点 ≥ 1 m），22.9 万面，删掉 63.6% 的地面/树冠/屋顶。
+;      地面完全交给 CampusFloor 那块平板（校园拟合倾角只有 0.18°/0.05°，平的），
+;      人不会站到树冠、雨棚这些「看不见的鼓包」上。
+;   campus_collision_mesh_upper.scn = 只剪「最高点不到 1 m」的贴地层（删 10.6%）。
+;      仍有 2/45 个落点浮到 1.67 m（矮棚/灌木顶）。
 ;   campus_collision_mesh.scn  = 原始 Poisson 网格 62.9 万面。网格自己的地面比点云
-;      地面低 >0.3 m 的占 37.5%、高 >0.3 m 的占 28.8%，人会浮空/陷进去。
+;      地面低 >0.3 m 的占 37.5%、高 >0.3 m 的占 28.8%。
 ;   campus_collision_fine.tscn = 3 m 细盒子 1598 块。实测主路 34.4% 的采样点被盒子
 ;      挡住、有人直接卡在盒子里（on_floor=false），所以不用来当默认。
 ;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）。
-; 编辑器专用的低模点云预览（运行时自动隐藏），用来对齐碰撞。
-[node name="CampusPreview" parent="Campus" instance=ExtResource("12_campus_preview")]
-
 [node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
