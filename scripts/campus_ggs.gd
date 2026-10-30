@@ -43,6 +43,11 @@ func _ready() -> void:
 	if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
 		_bin_path = BIN_DEV
 		push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
+	# 两处都没有就别硬撑：不碰 GDGS，让老泼溅照常工作（否则校园会整片消失）
+	if not FileAccess.file_exists(_bin_path):
+		push_error("[campus_ggs] 找不到 %s，回退 GDGS 泼溅" % _bin_path)
+		set_process(false)
+		return
 	var level := get_parent()
 	_gdgs_sc = get_node_or_null("/root/SplatCompositor")
 	if _gdgs_sc != null:
