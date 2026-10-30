@@ -48,9 +48,12 @@ func _process(_dt: float) -> bool:
 		var vram := 0.0
 		if rasterizer != null and rasterizer.context:
 			vram = float(rasterizer.context.device.get_memory_usage(RenderingDevice.MEMORY_TOTAL)) / 1048576.0
-		print("[ggscomp] fps=%d vram=%.0fMB loaded=%s" % [
+		var ts := Vector2i.ZERO
+		if rasterizer != null:
+			ts = rasterizer.texture_size
+		print("[ggscomp] fps=%d vram=%.0fMB loaded=%s render=%s" % [
 			Engine.get_frames_per_second(), vram,
-			str(rasterizer != null and rasterizer.is_loaded)])
+			str(rasterizer != null and rasterizer.is_loaded), str(ts)])
 	if loaded_at > 0 and now - loaded_at > 14000:
 		quit()
 		return true

@@ -1,9 +1,14 @@
 extends Node3D
-## GGS 校园的可用接入：GGS 渲染到纹理，全屏 quad 把「校园 + 同款全景天空」画在
-## 场景背景上；大厅/玩家/广场按深度画在前面。没有 Compositor，所以保持 70+ fps。
-## 启动参数 `-- --ggs-campus` 才生效；默认完全不动游戏。
+## GGS 校园：GGS 渲染到纹理，全屏 quad 把「校园 + 同款全景天空」画在场景背景上；
+## 大厅/玩家/广场按深度画在前面。没有 Compositor，所以保持 70+ fps。
+##
+## 2026-10-30 起**默认启用**（打包后也是这套），要回退 GDGS Compute：
+##   -- --ggs-campus=off   或   -- --no-ggs-campus
+## 1.4 GB 的 packed bin 现在放在项目里（res://campus_ggs.bin），导出才会带上；
+## 项目里没有时退回开发机上的老绝对路径。
 
-const BIN := "C:/Users/WY157/Desktop/GODOT/_arisu_captures/campus_ggs.bin"
+const BIN := "res://campus_ggs.bin"
+const BIN_DEV := "C:/Users/WY157/Desktop/GODOT/_arisu_captures/campus_ggs.bin"
 const PlyFileScript := preload("res://addons/ggs_campus/ply_file.gd")
 const Rasterizer := preload("res://addons/ggs_campus/gaussian_splatting_rasterizer.gd")
 
@@ -19,11 +24,25 @@ var _overlay: CanvasLayer
 var _overlay_label: Label
 var _total := 0
 var _active := false
+var _want_size := Vector2i.ZERO
+## 泼溅光栅化纹理的最大宽度（可用 `--ggs-max-w=1600` 改）
+var max_render_w := 1920.0
+var _bin_path := BIN
 
 func _ready() -> void:
-	if not OS.get_cmdline_user_args().has("--ggs-campus"):
+	for a in OS.get_cmdline_user_args():
+		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
+			set_process(false)
+			return
+		if a.begins_with("--ggs-max-w="):
+			max_render_w = maxf(640.0, float(a.substr(12)))
+	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
+	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return
+	if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
+		_bin_path = BIN_DEV
+		push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
 	var level := get_parent()
 	_gdgs_sc = get_node_or_null("/root/SplatCompositor")
 	if _gdgs_sc != null:
@@ -32,6 +51,10 @@ func _ready() -> void:
 	if campus != null:
 		campus.set("auto_start", false)
 		campus.set_process(false)
+		# auto_start 是在子节点 _ready 里判的，这里已经晚了：那条「等 8 s 再解码」
+		# 的协程已经在跑。直接释放 GDGS 那份校园，省 16 s 解码 + 一块显存，
+		# 也避免两套渲染器同时用 RenderingDevice 打架（实测掉到 23 fps）。
+		campus.queue_free()
 	player = level.get_node_or_null("Player") as Node3D
 	var we := level.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if we != null and we.environment != null and we.environment.sky != null:
@@ -65,9 +88,9 @@ func _make_bundle() -> bool:
 	# 不要 Compositor：GGS 走全屏 quad，Compositor 会把光栅器拖到个位数帧率。
 	if cam.compositor != null:
 		cam.compositor = null
-	var f := FileAccess.open(BIN, FileAccess.READ)
+	var f := FileAccess.open(_bin_path, FileAccess.READ)
 	if f == null:
-		push_error("[campus_ggs] 打不开 bin: %s" % BIN)
+		push_error("[campus_ggs] 打不开 bin: %s" % _bin_path)
 		return false
 	var count := int(f.get_length() / 240)
 	_total = count
@@ -75,7 +98,7 @@ func _make_bundle() -> bool:
 	var ply = PlyFileScript.new()
 	ply.size = count
 	rasterizer = Rasterizer.new(ply, get_viewport().get_size(), tex, cam)
-	rasterizer.bin_path = BIN
+	rasterizer.bin_path = _bin_path
 	rasterizer.model_scale[0] = 1.0
 
 	_ready_done = true
@@ -109,15 +132,25 @@ func _process(_dt: float) -> void:
 		return
 	if cam.compositor != null:
 		cam.compositor = null
+	# 4K 最大化窗口会按 3504×2049 光栅化，实测只有 28 fps。泼溅纹理封顶 1920 宽，
+	# 剩下的交给全屏 quad 线性放大（3× 的泼溅本来就糊，肉眼几乎看不出差别）。
 	var vs: Vector2i = get_viewport().get_size()
-	if rasterizer.texture_size != vs:
+	if _want_size != vs:
+		_want_size = vs
+		var sc := minf(1.0, max_render_w / maxf(float(vs.x), 1.0))
+		rasterizer.render_scale = [sc]
 		rasterizer.texture_size = vs
 	rasterizer.update_camera_matrices()
 	if rasterizer.is_loaded:
 		RenderingServer.call_on_render_thread(rasterizer.rasterize)
 	else:
 		RenderingServer.call_on_render_thread(rasterizer.pump_load)
-	if quad == null and rasterizer.render_texture != null and rasterizer.render_texture.texture_rd_rid.is_valid():
+	# ⚠️ 窗口尺寸一变，rasterizer 会**新建**一个 Texture2DRD（旧 RID 被释放），
+	#    我们手里这个 tex 必须跟着换，否则 quad 指着已释放的贴图：
+	#    校园整片不画，还会每帧刷 "Uniforms supplied for set (3)"。
+	if rasterizer.render_texture != null 			and tex.texture_rd_rid != rasterizer.render_texture.texture_rd_rid:
+		tex.texture_rd_rid = rasterizer.render_texture.texture_rd_rid
+	if quad == null and tex.texture_rd_rid.is_valid() 			and panorama != null and panorama.get_rid().is_valid():
 		_make_quad()
 	if _overlay != null and _overlay.visible:
 		var loaded := int(rasterizer.num_splats_loaded[0])

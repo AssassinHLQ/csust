@@ -238,6 +238,14 @@ func _process(_delta: float) -> void:
 ##    （用户 2026-10-28 报）。朝向判断已删：宁可多付渲染成本，也不能让场景
 ##    在玩家转视角时凭空消失。
 func _update_campus_visibility() -> void:
+	if campus_ggs_mode:
+		# GGS 模式：校园由 campus_ggs.gd 画，GDGS 那份泼溅必须一直藏着，
+		# 否则两套渲染器同时用 RenderingDevice，管线会打架（实测掉到 23 fps + 刷错误）
+		if is_instance_valid(_campus) and bool(_campus.call("is_ready")):
+			var ggs_node := _campus.get("splat_node") as Node3D
+			if ggs_node != null and ggs_node.visible:
+				ggs_node.visible = false
+		return
 	if _campus == null or _player == null:
 		return
 	if not _campus.has_method("is_ready") or not bool(_campus.call("is_ready")):
@@ -276,10 +284,15 @@ func _hide_message() -> void:
 	_message.visible = false
 
 
-## 实验：用 GGS 光栅器 + CompositorEffect 画校园。启动参数 `-- --ggs-campus` 才生效。
+## 校园渲染：默认走 GGS 光栅器（2026-10-30 起，打包也是这套）。
+## 回退老 GDGS Compute：`-- --ggs-campus=off` 或 `-- --no-ggs-campus`。
+var campus_ggs_mode := false
+
 func _maybe_enable_campus_ggs() -> void:
-	if not OS.get_cmdline_user_args().has("--ggs-campus"):
-		return
+	for a in OS.get_cmdline_user_args():
+		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
+			return
+	campus_ggs_mode = true
 	var ggs = load("res://scripts/campus_ggs.gd").new()
 	ggs.name = "CampusGGS"
 	add_child(ggs)

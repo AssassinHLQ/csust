@@ -88,3 +88,9 @@ __pycache__/
 
 # 校园分块（离线切成 3×3，用 scripts/_split_sog.gd 重新生成）
 /splatdata/campus_chunks/
+
+# ---- GGS 校园的 packed bin（1.4 GB，导出时才需要；不进仓库）----
+/campus_ggs.bin
+
+# ---- 导出产物 ----
+/build/
