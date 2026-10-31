@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=3]
+[gd_scene load_steps=36 format=3]
 
 ; 第二个场景：构成主义大厅（Constructivism）。
 ; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
@@ -25,6 +25,7 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
+[ext_resource type="PackedScene" path="res://scenes/campus_buildings.tscn" id="15_campusbuildings"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -271,6 +272,9 @@ preload_on_gate = false
 ;   campus_collision_fine.tscn = 3 m 细盒子 1598 块（主路 34.4% 被挡，会卡死在盒子里）
 ;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）
 [node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
+
+; 2026-10-31：入口一带补的 8 栋可走进去的楼（_bake_campus_buildings.gd 自动选址烘出）
+[node name="CampusBuildings" parent="." instance=ExtResource("15_campusbuildings")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
