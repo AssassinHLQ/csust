@@ -16,11 +16,13 @@ const OUT := "res://scenes/campus_deconstruct.tscn"
 const DOOR_SCRIPT := "res://scripts/push_door.gd"
 
 ## 门朝主路开：左侧 +90°（朝 +x），右侧 -90°（朝 -x）
+## 2026-10-31 用户：「四个房子不要这么分散，要集中起来」
+##   → 四个目标点挤在 (0,-112) 周围 40 m 见方，搜索半径只给 9 m
 const TARGETS := [
-	[Vector3(-26, 0, -100), 90.0],
-	[Vector3(26, 0, -104), -90.0],
-	[Vector3(-30, 0, -142), 90.0],
-	[Vector3(28, 0, -146), -90.0],
+	[Vector3(-20, 0, -98), 90.0],
+	[Vector3(20, 0, -98), -90.0],
+	[Vector3(-20, 0, -128), 90.0],
+	[Vector3(20, 0, -128), -90.0],
 ]
 
 var _write := false
@@ -49,17 +51,25 @@ func _run() -> void:
 	if campus != null:
 		campus.set("auto_start", false)
 		campus.set_process(false)
-	# 旧的 8 栋先摘掉，免得选址射线打到它们
-	var old := level.get_node_or_null("CampusBuildings")
-	if old != null:
-		old.queue_free()
-		await process_frame
+	# 上一版（两个名字都可能是）先摘掉，否则选址射线会打到自己的旧副本
+	for nm in ["CampusBuildings", "CampusDeconstruct"]:
+		var old := level.get_node_or_null(nm)
+		if old != null:
+			old.queue_free()
+	await process_frame
 	await physics_frame
 	var space: PhysicsDirectSpaceState3D = level.get_world_3d().direct_space_state
 
 	var spots: Array = []
 	for t in TARGETS:
-		var s := _find_clear(space, t[0], float(t[1]))
+		var yaw0 := float(t[1])
+		var found: Array = []
+		# 门朝主路最好；不行就转 180°，再不行转 ±90°，尽量在同一个点附近把门找到空处
+		for dy in [0.0, 180.0, 90.0, -90.0]:
+			found = _find_clear(space, t[0], yaw0 + dy)
+			if not found.is_empty():
+				break
+		var s := found
 		if s.is_empty():
 			print("[dec] %s 附近没找到空地，跳过" % str(t[0]))
 		else:
@@ -75,7 +85,7 @@ func _run() -> void:
 	var root_node := Node3D.new()
 	root_node.name = "CampusDeconstruct"
 	# 铺地：把这一片连成一个小广场（视觉，不挡路）
-	_slab(root_node, Vector3(0, 0.02, -122), Vector3(74, 0.04, 84),
+	_slab(root_node, Vector3(0, 0.02, -113), Vector3(58, 0.04, 62),
 		_mat(Color(0.62, 0.60, 0.57), 0.85, 0.0), false)
 	var i := 0
 	for s in spots:
@@ -99,7 +109,7 @@ func _run() -> void:
 func _find_clear(space: PhysicsDirectSpaceState3D, around: Vector3, yaw: float) -> Array:
 	var q := PhysicsRayQueryParameters3D.new()
 	q.collision_mask = 1
-	for r in [0.0, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 22.0, 26.0, 30.0, 34.0, 38.0]:
+	for r in [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]:
 		for k in 16:
 			var ang := TAU * k / 16.0
 			var c: Vector3 = around + Vector3(cos(ang), 0, sin(ang)) * r
@@ -141,12 +151,15 @@ func _clear(space: PhysicsDirectSpaceState3D, q: PhysicsRayQueryParameters3D, c:
 			gz += 1.5
 		gx += 1.5
 	var hs: Array[float] = []
+	var blocked := 0
 	for p in pts:
 		for dir in [Vector3(0.6, 0, 0), Vector3(-0.6, 0, 0), Vector3(0, 0, 0.6), Vector3(0, 0, -0.6)]:
 			q.from = Vector3(c.x + p.x, 1.0, c.z + p.z)
 			q.to = q.from + dir
 			if not space.intersect_ray(q).is_empty():
-				return -999.0
+				blocked += 1
+		if blocked > 6:
+			return -999.0
 		q.from = Vector3(c.x + p.x, 40.0, c.z + p.z)
 		q.to = Vector3(c.x + p.x, -5.0, c.z + p.z)
 		var r: Dictionary = space.intersect_ray(q)
