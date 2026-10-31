@@ -26,11 +26,7 @@ func _run() -> void:
 		await process_frame
 	print("[bldgshot] 加载完成 %d ms" % (Time.get_ticks_msec() - t0))
 
-	var target := Vector3(22, 0, -143)
-	for b in level.get_node("CampusBuildings").get_children():
-		if b is StaticBody3D and String(b.name).contains("teaching"):
-			target = (b as Node3D).position
-			break
+	var target := Vector3(4, 0, -122)
 	print("[bldgshot] 取景楼 %s" % str(target))
 
 	# ① 纯几何：GGS 只认玩家相机，别的机位会被全屏 quad 盖掉，先关掉
@@ -45,8 +41,8 @@ func _run() -> void:
 	cam.far = 2000.0
 	level.add_child(cam)
 	cam.current = true
-	cam.global_position = target + Vector3(0, 26, 46)
-	cam.look_at(target + Vector3(0, 6, 0), Vector3.UP)
+	cam.global_position = target + Vector3(0, 22, 66)
+	cam.look_at(target + Vector3(0, 5, 0), Vector3.UP)
 	for i in 6:
 		await process_frame
 	await RenderingServer.frame_post_draw

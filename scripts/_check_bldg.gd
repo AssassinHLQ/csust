@@ -14,7 +14,7 @@ func _run():
 	var ok_door := 0
 	var ok_wall := 0
 	var total := 0
-	for b in level.get_node("CampusBuildings").get_children():
+	for b in level.get_node("CampusDeconstruct").get_children():
 		if not (b is StaticBody3D):
 			continue
 		total += 1
@@ -29,7 +29,7 @@ func _run():
 		var w := hi.x - lo.x
 		var front: float = b.position.z + hi.z
 		var cx: float = b.position.x
-		var door_x := cx - w * 0.22
+		var door_x := cx - w * 0.25
 		q.from = Vector3(door_x, 1.2, front + 2.0)
 		q.to = Vector3(door_x, 1.2, front - 2.0)
 		var d := space.intersect_ray(q)

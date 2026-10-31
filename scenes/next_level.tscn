@@ -25,7 +25,7 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
-[ext_resource type="PackedScene" path="res://scenes/campus_buildings.tscn" id="15_campusbuildings"]
+[ext_resource type="PackedScene" path="res://scenes/campus_deconstruct.tscn" id="15_campusbuildings"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -273,8 +273,9 @@ preload_on_gate = false
 ;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）
 [node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
 
-; 2026-10-31：入口一带补的 8 栋可走进去的楼（_bake_campus_buildings.gd 自动选址烘出）
-[node name="CampusBuildings" parent="." instance=ExtResource("15_campusbuildings")]
+; 2026-10-31：东门附近 4 栋解构主义小楼（每栋 2 间房、每间一扇推门）
+; 由 _bake_campus_deconstruct.gd 烘出（每栋 2 间房、每间一扇推门，走近 2.3 m 自动开）
+[node name="CampusDeconstruct" parent="." instance=ExtResource("15_campusbuildings")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
