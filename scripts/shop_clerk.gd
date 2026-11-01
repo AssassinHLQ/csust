@@ -181,7 +181,7 @@ const SHEET_5090 := {
 	"labels": [
 		"显卡 · RTX 5090 · 32GB GDDR7 ×8",
 		"整机 · WRX90 主板 + 开放式机架",
-		"处理器 · Threadripper PRO 7995WX · 96 核",
+		"处理器 · Threadripper PRO 9995WX · 96 核 · 128 条 PCIe 5.0",
 		"内存 · DDR5-5600 ECC 32GB ×8 = 256GB",
 		"系统盘 · PCIe 5.0 NVMe 2TB ×2（RAID 1）",
 		"数据盘 · PCIe 5.0 NVMe 8TB ×4（RAID 0）",

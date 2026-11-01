@@ -77,7 +77,7 @@ SHEETS = [
         "rows": [
             ("显卡", "NVIDIA RTX 5090 · 32GB GDDR7 · 575W", "8", "¥3.5 万/张", True),
             ("整机", "WRX90 工作站主板 + 开放式机架", "1", "¥2.5 万", False),
-            ("处理器", "Threadripper PRO 7995WX · 96 核", "1", "¥10 万", False),
+            ("处理器", "Threadripper PRO 9995WX · 96 核 · 128 条 PCIe 5.0", "1", "¥10 万", False),
             ("内存", "DDR5-5600 ECC 32GB · 8 条 = 256GB", "8", "¥0.4 万/条", True),
             ("系统盘", "PCIe 5.0 NVMe 2TB · RAID 1", "2", "¥0.3 万", False),
             ("数据盘", "PCIe 5.0 NVMe 8TB · RAID 0", "4", "¥1.2 万", False),
