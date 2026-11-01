@@ -14,10 +14,10 @@ func _run() -> void:
 	lvl.set("enabled", false)
 	lvl.set("_player", player)
 
-	for st in [-1, 5, 20, 40, 98]:
+	for st in [-1, 5, 7, 8, 9, 19, 20, 32, 40, 98]:
 		lvl.set("checkpoint", st)
 		var back: int = lvl.call("respawn_station")
-		var seg: int = 0 if st < 0 else int(lvl.call("segment_of", st))
+		var seg: int = int(lvl.call("segment_of", back))
 		print("[seg] checkpoint=%d → 复活站 %d（第 %d 段起点）" % [st, back, seg + 1])
 
 	# 真摔一次：放到第 20 站，调 _rescue

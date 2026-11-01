@@ -277,7 +277,12 @@ func segment_start(seg: int) -> int:
 func respawn_station() -> int:
 	if checkpoint < 0:
 		return 0
-	return segment_start(segment_of(checkpoint))
+	var seg := segment_of(checkpoint)
+	if seg + 1 < segments.size() and checkpoint >= segment_start(seg + 1) - 1:
+		# 已经踩到本段最后一站（比如 C1 = 第 1 段终点）→ 存档推进到下一段起点，
+		# 而不是把玩家打回本段开头。段终点那根「第 N 段·终点」的柱子就是存档点。
+		return segment_start(seg + 1)
+	return segment_start(seg)
 
 
 ## 站在第 i 站的台面上时，人应该被放在哪儿（台面正中、抬高 5 cm 免得嵌进去）
@@ -406,6 +411,11 @@ func _physics_process(_delta: float) -> void:
 		print("[Parkour] 读档续跑：送回第 %d 站 %s" % [checkpoint + 1, label_at(checkpoint)])
 		return
 
+	var save_at := respawn_station()
+	if save_at > _saved_station:
+		_saved_station = save_at
+		_notify_save(save_at)
+
 	if here > checkpoint:
 		checkpoint = here
 		checkpoint_reached.emit(here, label_at(here))
@@ -502,6 +512,15 @@ func _rescue() -> void:
 
 
 ## 被 boss 打死：和摔落一样，进度清零；传送和回血由玩家自己在 0.6 s 后完成。
+## 存档推进时弹一句（踩到「第 N 段·终点」那根柱子就算存过档）
+func _notify_save(station: int) -> void:
+	var text := "已存档：第 %d 段起点" % (segment_of(station) + 1)
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.has_method("boss_line"):
+		fut.call("boss_line", text)
+	print("[Parkour] %s（第 %d 站 %s）" % [text, station + 1, label_at(station)])
+
+
 func _on_player_died() -> void:
 	# 和摔落同一条规则：回本段起点。玩家 0.6 s 后才传送，先把复活点改掉。
 	var back := respawn_station()
@@ -645,6 +664,8 @@ func _spawn_settlement() -> void:
 var _trap_done := false
 ## 通关后立的传送门（见 _spawn_finish_portal）
 var _finish_portal: Node3D
+## 上一次提示过的存档站（只在往前推进时弹一次，别每帧刷）
+var _saved_station := 0
 var _portal_cooldown := 0.0
 var _cage: Node3D
 var _avenger: Boss
