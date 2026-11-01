@@ -37,6 +37,6 @@ func _run() -> void:
 			1.0 + lo / 100.0, 1.0 + hi / 100.0])
 	print("[fx] %d 块连乘：期望 ×%.3f（%+.1f%%）　最惨 ×%.3f（%+.1f%%）　最好 ×%.3f（%+.1f%%）" % [
 		n, avg, (avg - 1.0) * 100.0, worst, (worst - 1.0) * 100.0, best, (best - 1.0) * 100.0])
-	print("[fx] 结论：%s（期望亏损 ≤ 25%%、最惨不破 −65%%）" % (
-		"OK" if avg >= 0.75 and worst >= 0.35 else "FAIL"))
+	print("[fx] 结论：%s（期望不为负、且会看牌能打出 ≥ ×3）" % (
+		"OK" if avg >= 1.0 and best >= 3.0 else "FAIL"))
 	quit(0)
