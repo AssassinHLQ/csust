@@ -55,6 +55,17 @@ const ENTRIES := [
 		"note": "`tools/make_lot_paver.py` 生成，完全可平铺，不依赖外网素材",
 	},
 	{
+		"group": "代码与插件",
+		"path": "addons/ggs_campus",
+		"title": "校园 GGS 泼溅光栅器（Godot 4.7 移植版）",
+		"author": "2Retr0（GodotGSplat 原作者）；本项目移植到 4.7，并加了校园专用 bin 加载与全屏合成",
+		"license": "MIT（可分发、可商用）；许可原文见 addons/ggs_campus/NOTICE.md",
+		"distributed": true,
+		"source": "https://github.com/2Retr0/GodotGSplat",
+		"license_file": "addons/ggs_campus/NOTICE.md",
+		"note": "6.14M 高斯校园 72–83 fps、约 5 GB 显存；不走 Compositor，用全屏 quad 画在场景背后",
+	},
+	{
 		"group": "角色与 Boss 模型",
 		"path": "models/rtx5090",
 		"title": "RTX 5090 显卡模型（最后平台房顶那件资产）",

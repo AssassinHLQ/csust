@@ -104,7 +104,9 @@ func _run() -> void:
 		var d: Dictionary = e
 		_check(md.contains(d["path"]),
 			"CREDITS.md 里写了「%s」的路径 %s" % [d["title"], d["path"]])
-		_check(md.contains(d["author"].split("（")[0]),
+		# Markdown 里作者常常是 **加粗** 的，比对前先把强调符号去掉
+		var author_key: String = String(d["author"]).split("（")[0].replace("*", "")
+		_check(md.replace("*", "").contains(author_key),
 			"CREDITS.md 里写了「%s」的作者 %s" % [d["title"], d["author"]])
 
 	print("\n========== 6. 游戏内「致谢与素材署名」面板 ==========")
@@ -161,6 +163,8 @@ func _run() -> void:
 		print("  Boss %d 位 → 血条组占 y = %.0f ~ %.0f；泼溅状态行从 %.0f 开始（下限 %.0f）" % [
 			boss_count, top - 28.0, boss_bottom, splat_top, floor_top])
 		_check(boss_count == 7, "场上正好 7 位 Boss（--bosses=all，实测 %d）" % boss_count)
+		if boss_count != 7:
+			print("  ⚠️ 这一条要带 `-- --bosses=all` 跑；不带参数时场上只摆 1 位（飞猪优香）")
 		_check(splat_top > boss_bottom,
 			"泼溅状态行（%.0f）在最后一条 Boss 血条（%.0f）下面" % [splat_top, boss_bottom])
 		_check(splat_top >= floor_top,

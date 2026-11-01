@@ -29,6 +29,7 @@
 | 全景天空盒（粉/日/夜/黄昏） | AllSky Free（Richard Whitelock） | MIT | ✅ | `assets/sky/`，[AllSkyFree_Godot](https://github.com/rpgwhitelock/AllSkyFree_Godot) | 原图 8192~16384 缩到 4096×2048 JPEG |
 | 空地地砖贴图 + 法线图 | 本项目作者（程序生成） | MIT | ✅ | `assets/tex/`，`tools/make_lot_paver.py` | 完全可平铺 |
 | [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | ReconWorldLab | MIT | ✅ | `addons/gdgs/` | 高斯泼溅渲染插件；原许可保留在 `addons/gdgs/LICENSE` |
+| 校园 GGS 泼溅光栅器（Godot 4.7 移植版） | **2Retr0**（GodotGSplat 原作者）；本项目移植到 4.7，并加了校园专用的 bin 加载与全屏合成 | MIT | ✅ | `addons/ggs_campus/`，[GodotGSplat](https://github.com/2Retr0/GodotGSplat)，许可原文 `addons/ggs_campus/NOTICE.md` | 6.14M 高斯校园 72–83 fps、约 5 GB 显存；不用 Compositor，走全屏 quad + 天空
 
 ## 二、角色与 Boss 模型（**全部不随仓库分发**）
 
@@ -69,6 +70,7 @@
 |---|---|---|---|---|---|
 | [Interface Sounds](https://kenney.nl/assets/interface-sounds) / [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) / [RPG Audio](https://kenney.nl/assets/rpg-audio) | Kenney | **CC0 1.0** | ✅ | `assets/sfx/`，许可原文 `assets/sfx/LICENSE_Kenney_CC0.md` | `click_*`、`toggle_*`、`tick_*`、`open_*`、`close_*`、`laserSmall_000..004`、`metalLatch`、`metalClick` |
 | 枪声 | 本项目作者（Python 合成） | MIT | ✅ | `assets/sfx/gunshot_000.wav` ~ `gunshot_004.wav` | 不是采样，是算出来的：噪声 + 包络 + 带通，见 README §1.19 |
+| 商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版） | Toby Fox / Materia Collective | 专有版权 —— 仅本地学习，不得再分发、不得用于任何发布产物 | ❌ | `assets/music/`，来源 UNDERTALE | 音频本体被 `.gitignore` 排除；`*.ogg.import` 进仓库（循环开关在里面），克隆者需自备文件 |
 
 ## 五、剧情与图标
 
@@ -76,6 +78,7 @@
 |---|---|---|---|---|---|
 | 剧情文本（开场 / 设定） | 本项目作者 | MIT | ✅ | `story/` | 角色名来自 Blue Archive，属同人创作 |
 | 项目图标 `icon.png` | **待确认** | 待确认 | ✅ | `icon.png` | 若不是原创请替换为自有图标 |
+| 工具墙图标（7-Zip / GitHub / hashcat / Ollama / 知天下） | Simple Icons（CC0 矢量）+ 各商标持有人；hashcat / 知天下 图标由使用者提供 | 矢量图 CC0 1.0；图标本身是各厂商商标，仅作演示与识别用 | ✅ | `assets/icons/`，[simpleicons.org](https://simpleicons.org/) | CC0 只覆盖著作权、不授予商标权；知天下图标对外发布前需向主办方确认 |
 | 柴关电脑城「B300 整机配置单」插图 | 本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 [usa0.top](https://usa0.top)） | 排版与文案原创（MIT）；右侧机器照为 AI 生成图，不含第三方摄影作品 | ✅ | `assets/story/config_sheet.png` | 1600×970；中文用微软雅黑排版（AI 直接画中文字会糊），图上不出现厂商商标 |
 | 配置单悬停用的零件照片（8 张） | NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体 | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | ❌ | `assets/story/parts/` | gpu / server / cpu / ram / ssd / nic / cooling / psu 各一张，统一裁成 492×560 深色底；**逐张出处见 [`assets/story/parts/SOURCES.md`](assets/story/parts/SOURCES.md)**；缺图时配置单照常显示，只是悬停不换图 |
 
