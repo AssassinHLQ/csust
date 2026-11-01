@@ -580,6 +580,11 @@ func _ready() -> void:
 	# 从别的场景走门回来：落到对应门前（`scene_gate.gd` 的 arrival_offset），
 	# 并把「这一趟不重播开场剧情」记下来。
 	_entered_via_gate = _apply_scene_entry()
+	# 一个场景一个存档点：从门进来就落在门前，直接进场景就是默认出生点。
+	_spawn = _player.global_position
+	_player.set_respawn_point(_spawn)
+	if not _player.died.is_connected(_on_player_died):
+		_player.died.connect(_on_player_died)
 	_build_room_proxy()
 	_check_room_furniture()
 	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。
@@ -871,6 +876,11 @@ func _process(_delta: float) -> void:
 		_player.global_position = _spawn
 		_player.velocity = Vector3.ZERO
 		print("[game] 掉出平台，已送回出生点")
+
+
+## 被 boss 打倒：玩家自己在 0.6 s 后回到本场景唯一的存档点，这里只记一笔。
+func _on_player_died() -> void:
+	print("[game] 玩家倒下 → 送回本场景的存档点 %s" % str(_spawn.snappedf(0.01)))
 
 
 func _on_target_died(_by: float) -> void:

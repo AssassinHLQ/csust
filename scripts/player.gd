@@ -24,9 +24,16 @@ const StepClimb := preload("res://scripts/step_climb.gd")
 
 signal aim_changed(aiming: bool)
 signal health_changed(current: float, maximum: float)
+## 血量归零。关卡接这个信号做自己的善后（进度清零 / 提示），
+## 真正的传送和回血由 `_respawn_now()` 在 0.6 s 后完成。
+signal died
 
 @export var max_health := 250.0
 var health := 250.0
+## 倒下后送回哪儿。**一个场景一个存档点**：由各关卡在进场景时设一次
+## （`set_respawn_transform`），默认取 _ready 时的位置。
+var _respawn_xform := Transform3D.IDENTITY
+var _dying := false
 ## 2026-10-20 用户：「爱丽丝增强，血量变成 250」—— 原来是 100（盖特 Boss 一下 26、
 ## 倭瓜优香的天降一击 40，所以 250 才够吃几下）。注意 `health` 的初值也要跟着改，
 ## 否则 `_ready()` 里 `health = max_health` 之前 HUD 会闪一帧 100。
@@ -185,6 +192,7 @@ func _ready() -> void:
 	health = max_health
 	_apply_camera(1.0)
 	health_changed.emit(health, max_health)
+	_respawn_xform = global_transform
 	# 设置（Esc 菜单）：先读一次初值，之后跟着变
 	GameSettings.listen(_on_setting_changed)
 	_apply_settings()
@@ -535,12 +543,39 @@ func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> v
 			velocity += Vector3(cos(a), 0.0, sin(a)) * knockback
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
-		# 教学沙盒不做死亡画面：1 秒后**原地**回满血（只清速度 + 回血，不搬位置）。
-		await get_tree().create_timer(1.0).timeout
-		if is_instance_valid(self):
-			velocity = Vector3.ZERO
-			health = max_health
-			health_changed.emit(health, max_health)
+		# 血量见底 = 像掉进虚空一样被送回本场景的存档点，不再原地回血。
+		_die_and_respawn()
+
+
+## 关卡进场景时调一次，把「这个场景的存档点」定下来。
+func set_respawn_transform(xf: Transform3D) -> void:
+	_respawn_xform = xf
+
+
+func set_respawn_point(p: Vector3) -> void:
+	_respawn_xform = Transform3D(_respawn_xform.basis, p)
+
+
+func respawn_point() -> Vector3:
+	return _respawn_xform.origin
+
+
+## 倒下 → 短促停顿 → 送回存档点并回满血。0.6 s 的停顿是为了让击杀有一拍反馈，
+## 同时给关卡接 `died` 信号做善后（清进度、弹提示）。
+func _die_and_respawn() -> void:
+	if _dying:
+		return
+	_dying = true
+	velocity = Vector3.ZERO
+	died.emit()
+	await get_tree().create_timer(0.6).timeout
+	if not is_instance_valid(self):
+		return
+	global_transform = _respawn_xform
+	velocity = Vector3.ZERO
+	health = max_health
+	health_changed.emit(health, max_health)
+	_dying = false
 
 
 func heal(amount: float) -> void:

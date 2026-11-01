@@ -127,6 +127,10 @@ func _ready() -> void:
 		point = gate.call("arrival_point")
 	_player.global_position = point
 	_player.set("velocity", Vector3.ZERO)
+	# 一个场景一个存档点：这一关的复活点就是入口（从门进来就是门前，直接跑就是 SpawnPoint）
+	_player.set_respawn_point(point)
+	if not _player.died.is_connected(_on_player_died):
+		_player.died.connect(_on_player_died)
 	_hud.bind(_player, _player.get_node("Weapon"))
 
 	for c in get_children():
@@ -212,6 +216,13 @@ func _on_fall(body: Node3D) -> void:
 	_player.set("velocity", Vector3.ZERO)
 	_show_message("掉出广场 —— 已送回大厅", 2.5)
 	print("[ConstructivistLevel] 玩家掉出广场，已送回出生点")
+
+
+## 被 boss 打倒：血量归零 → 玩家自己会在 0.6 s 后回到本场景的存档点，
+## 这里只负责提示和把进度相关的表现收一下。
+func _on_player_died() -> void:
+	_show_message("被击倒 —— 送回大厅入口", 3.0)
+	print("[ConstructivistLevel] 玩家倒下，等待重生到入口")
 
 
 ## 北门下沉（动画 1.8 s），把碰撞一起沉到地板下面。

@@ -248,14 +248,14 @@ func segment_start(seg: int) -> int:
 	return int(segments[clampi(seg, 0, segments.size() - 1)])
 
 
-## 摔下去该回哪一站 —— **最近踩过的那一站**（= `checkpoint`）。
+## 摔下去该回哪一站 —— **本场景唯一的存档点 = 第 0 站（跑道口）**。
 ##
-## ⚠️ 这里曾经是「回本段起点」，用户玩过之后反馈**太难**（摔一次要重跑整段，最长 45 m），
-##    所以改回「回最近踩过的落脚点」。检查点仍然只在段交界推进（段号也只在段交界前进），
-##    但复活点就是你最后踩住的那一站。段起点（`segments`）继续当**视觉地标**：
-##    那儿有 4 m 休息台 + 5 m 信号桅杆，只是不再当复活点。
+## ⚠️ 2026-11-01 用户要求：「之前跑酷的存档点太多了，每个格子都是存档点，
+##    需要改成一个场景一个存档点」。所以这里不再返回 `checkpoint`（那是旧行为：
+##    每个落脚格子都能当复活点）。`checkpoint` 仍然记「最高踩到第几站」，
+##    只用来显示进度 / 判定通关 / 起表，**不再当复活点**。
 func respawn_station() -> int:
-	return maxi(checkpoint, 0)
+	return 0
 
 
 ## 站在第 i 站的台面上时，人应该被放在哪儿（台面正中、抬高 5 cm 免得嵌进去）
@@ -369,6 +369,9 @@ func _physics_process(_delta: float) -> void:
 		_player = get_tree().get_first_node_in_group("player") as Player
 		if _player == null:
 			return
+		# 复活点由场景（game.gd）统一设成「本场景唯一的存档点」，跑酷不再自己改。
+		if not _player.died.is_connected(_on_player_died):
+			_player.died.connect(_on_player_died)
 	var p := _player.global_position
 	var here := _station_at(p)
 
@@ -463,13 +466,21 @@ func _disarm() -> void:
 ## 第 i 站那台「回平台」传送台 —— 见 `_on_return_pad_entered`（岛上是唯一的回头路）
 func _rescue() -> void:
 	rescues += 1
+	# 一个场景一个存档点：摔下去就等于重开这一关，进度一并清零，人送回场景存档点。
+	reset_run()
 	var back := respawn_station()
-	_player.global_position = respawn_point(back)
+	_player.global_position = _player.respawn_point()
 	_player.velocity = Vector3.ZERO
 	rescued.emit(back, label_at(back))
 	Sfx.play("ui_open")
-	print("[Parkour] 第 %d 次摔落 → 回**最近踩过的落脚点**第 %d 站 %s（第 %d 段）"
-		% [rescues, back + 1, label_at(back), segment_of(back) + 1])
+	print("[Parkour] 第 %d 次摔落 → 回本场景唯一的存档点 %s（进度清零）"
+		% [rescues, str(_player.respawn_point().snappedf(0.1))])
+
+
+## 被 boss 打死：和摔落一样，进度清零；传送和回血由玩家自己在 0.6 s 后完成。
+func _on_player_died() -> void:
+	reset_run()
+	print("[Parkour] 玩家倒下 → 回本场景唯一的存档点，进度清零")
 
 
 ## 岛上的传送台：踏上去回主平台。
