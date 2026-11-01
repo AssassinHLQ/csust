@@ -440,6 +440,11 @@ func _run_current() -> void:
 func _process(delta: float) -> void:
 	if not _active:
 		return
+	# 选选项 / 看图的时候不推进：这两种状态的下一步要等玩家按键。
+	# ⚠️ 少了这条的话，`image` 如果排在剧本第一步（正文还是空的），会被下面
+	#    「空正文兜底」直接跳过去 —— 图一闪就没。
+	if _choosing or _showing_image:
+		return
 
 	if _hold > 0.0:
 		_hold -= delta
