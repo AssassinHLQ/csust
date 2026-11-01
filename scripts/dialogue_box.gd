@@ -44,6 +44,9 @@ extends CanvasLayer
 ## 播放开始 / 结束。`game.gd` 靠 finished 决定「要不要在演完之后做点什么」。
 signal started
 signal finished
+## 玩家在一次 `choice` 步骤里选定了第 index 项（value 是选项自带的 `value`，
+## 没写就用下标）。剧情会接着播选项里的 `then` 步骤。
+signal choice_made(index: int, value: Variant)
 
 ## ── 布局（**逻辑单位**，`canvas_items` 拉伸下再乘缩放）──
 ##
@@ -71,6 +74,16 @@ const NAME_PLATE_PAD := 22.0
 const NAME_FONT_SIZE := 22
 const HINT_FONT_SIZE := 14
 const HINT_TEXT := "空格 / 回车 / 左键　继续"
+
+## ── 选项列（`choice` 步骤）──
+## 钉在对话框正上方，一行一项。当前项左侧一个小箭头，边框做呼吸闪烁。
+const CHOICE_WIDTH := 860.0
+const CHOICE_ROW_H := 46.0
+const CHOICE_GAP := 8.0
+const CHOICE_ARROW := "▶"
+const CHOICE_HINT_TEXT := "W / S 选择　空格 / 回车 确认"
+## 呼吸灯周期（秒）
+const CHOICE_PULSE := 0.85
 
 ## 打字速度（字/秒）。剧本里 `@speed` 可以中途改。30 大致是「比默读稍快」。
 const CHARS_PER_SEC := 30.0
@@ -109,6 +122,16 @@ var _shown := 0.0
 ## `@wait` / `@clear` 剩下的秒数；> 0 时不接受翻页（按键会直接跳过这段）
 var _hold := 0.0
 var _cps := CHARS_PER_SEC
+
+## ── 选项状态（`choice` 步骤）──
+var _choice_panel: Control
+var _choice_rows: Array[Panel] = []
+var _choice_arrows: Array[Label] = []
+var _choice_styles: Array[StyleBoxFlat] = []
+var _choice_options: Array = []
+var _choice_index := 0
+var _choosing := false
+var _choice_pulse: Tween
 
 
 func _ready() -> void:
@@ -179,6 +202,11 @@ func play_steps(steps: Array, source := "") -> void:
 	_active = true
 	_root.visible = true
 	set_process(true)
+	_choosing = false
+	_choice_options = []
+	_choice_index = 0
+	if _choice_panel != null:
+		_choice_panel.visible = false
 	_stop_voice()
 	_body.text = ""
 	_body.visible_characters = 0
@@ -203,6 +231,12 @@ func finish() -> void:
 	_hold = 0.0
 	_stop_voice()
 	_root.visible = false
+	_choosing = false
+	_choice_options = []
+	if _choice_panel != null:
+		_choice_panel.visible = false
+	if _choice_pulse != null and _choice_pulse.is_valid():
+		_choice_pulse.kill()
 	set_process(false)
 	_resume()
 	if not _finished_emitted:
@@ -268,6 +302,9 @@ func get_cps() -> float:
 func advance() -> void:
 	if not _active:
 		return
+	# 选择时「继续」键归选择用（空格 = 确认），不能让 advance 顺手翻页
+	if _choosing:
+		return
 	if _hold > 0.0:
 		_hold = 0.0
 		_index += 1
@@ -290,6 +327,30 @@ func _input(event: InputEvent) -> void:
 	# ⚠️ 见文件头「交接规则」第 1 条：设置界面开着时什么都不吞。
 	#    `_input` 比 GUI 事件先跑，这里吞鼠标 = 设置界面的按钮点不动。
 	if _menu_open():
+		return
+
+	# 选择中：W/S（或上下方向键）移动，空格/回车确认，其余键不响应。
+	if _choosing:
+		if event is InputEventKey:
+			var ck := event as InputEventKey
+			if ck.pressed and not ck.echo:
+				match ck.keycode:
+					KEY_W, KEY_UP:
+						_move_choice(-1)
+					KEY_S, KEY_DOWN:
+						_move_choice(1)
+					KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
+						_confirm_choice()
+					_:
+						return
+				get_viewport().set_input_as_handled()
+		elif event is InputEventMouseButton:
+			var cmb := event as InputEventMouseButton
+			if cmb.pressed and cmb.button_index == MOUSE_BUTTON_LEFT:
+				_confirm_choice()
+				get_viewport().set_input_as_handled()
+		elif event is InputEventMouseMotion:
+			get_viewport().set_input_as_handled()
 		return
 
 	if event is InputEventKey:
@@ -337,6 +398,9 @@ func _run_current() -> void:
 				return
 			StoryScript.K_SPEED:
 				_cps = maxf(0.0001, float(s.get("cps", CHARS_PER_SEC)))
+			StoryScript.K_CHOICE:
+				_begin_choice(s)
+				return
 			StoryScript.K_END:
 				finish()
 				return
@@ -375,7 +439,176 @@ func _process(delta: float) -> void:
 ## 右下角那行「空格 / 回车 / 左键 继续」：等按键时亮，正在打字时压暗。
 ## 它同时是**唯一的操作提示** —— 没有它，第一次玩的人不知道该按什么。
 func _update_hint() -> void:
+	_hint.text = CHOICE_HINT_TEXT if _choosing else HINT_TEXT
 	_hint.modulate.a = 0.22 if is_typing() else 0.85
+
+
+# --- 选项 -------------------------------------------------------------------
+#
+# 一个 `choice` 步骤长这样：
+#   {"kind": "choice", "options": [
+#       {"text": "商人啊！我正是为此而来！", "value": 1, "then": [ {"kind":"say", …} ]},
+#       {"text": "[观察了银行卡的余额，摇了摇头]", "then": [ … ]},
+#   ]}
+# 问题句本身由上一条 `say` 负责显示；选项出现时把它立刻打完，不压在半截字上。
+# `then` 里的步骤会被**插到当前步之后**接着播，不需要动作节点。
+
+## 进入一次选择：把问题句打完、列选项、等 W/S + 空格。
+func _begin_choice(step: Dictionary) -> void:
+	var opts: Array = step.get("options", [])
+	if opts.size() < 2:
+		push_warning("[Dialogue] choice 至少要有 2 个选项，这一步跳过")
+		_index += 1
+		_run_current()
+		return
+	# 问题句先打完，别让选项压在半截字上
+	_shown = float(_body_text.length())
+	_body.visible_characters = int(_shown)
+	_choice_options = opts
+	_choice_index = 0
+	_build_choice_rows()
+	_choosing = true
+	_choice_panel.visible = true
+	_refresh_choices()
+	_update_hint()
+	print("[Dialogue] 选项 %d 个：%s" % [
+		opts.size(), str(opts.map(func(o): return String(o.get("text", ""))))])
+
+
+func _build_choice_rows() -> void:
+	for c in _choice_panel.get_children():
+		_choice_panel.remove_child(c)
+		c.queue_free()
+	_choice_rows.clear()
+	_choice_arrows.clear()
+	_choice_styles.clear()
+
+	var n := _choice_options.size()
+	var total := n * CHOICE_ROW_H + (n - 1) * CHOICE_GAP
+	_choice_panel.offset_left = -CHOICE_WIDTH * 0.5
+	_choice_panel.offset_right = CHOICE_WIDTH * 0.5
+	_choice_panel.offset_bottom = -(BOX_BOTTOM + BOX_HEIGHT + 14.0)
+	_choice_panel.offset_top = _choice_panel.offset_bottom - total
+
+	for i in n:
+		var opt: Dictionary = _choice_options[i]
+		var row := Panel.new()
+		row.name = "Choice%d" % i
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.position = Vector2(0.0, i * (CHOICE_ROW_H + CHOICE_GAP))
+		row.size = Vector2(CHOICE_WIDTH, CHOICE_ROW_H)
+		var sb := _choice_style(0.25, 0.62)
+		row.add_theme_stylebox_override("panel", sb)
+		_choice_panel.add_child(row)
+
+		var arrow := Label.new()
+		arrow.name = "Arrow"
+		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		arrow.text = CHOICE_ARROW
+		arrow.position = Vector2(14.0, 0.0)
+		arrow.size = Vector2(26.0, CHOICE_ROW_H)
+		arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		arrow.add_theme_font_size_override("font_size", 20)
+		arrow.add_theme_color_override("font_color", _skin["dialogue_name"])
+		arrow.modulate.a = 0.0
+		row.add_child(arrow)
+
+		var text := Label.new()
+		text.name = "Text"
+		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		text.text = String(opt.get("text", ""))
+		text.position = Vector2(46.0, 0.0)
+		text.size = Vector2(CHOICE_WIDTH - 60.0, CHOICE_ROW_H)
+		text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		text.clip_text = true
+		text.add_theme_font_size_override("font_size", 22)
+		text.add_theme_color_override("font_color", _skin["text"])
+		row.add_child(text)
+
+		_choice_rows.append(row)
+		_choice_arrows.append(arrow)
+		_choice_styles.append(sb)
+
+
+func _choice_style(border_a: float, bg_a: float) -> StyleBoxFlat:
+	var accent: Color = _skin["dialogue_name"]
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.055, 0.05, bg_a)
+	sb.border_color = Color(accent.r, accent.g, accent.b, border_a)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(4)
+	return sb
+
+
+## 把「谁被选中」画出来：箭头只在当前项出现，边框做呼吸闪烁。
+func _refresh_choices() -> void:
+	if _choice_pulse != null and _choice_pulse.is_valid():
+		_choice_pulse.kill()
+	var accent: Color = _skin["dialogue_name"]
+	for i in _choice_rows.size():
+		var sel := i == _choice_index
+		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else Color(1, 1, 1, 0.70)
+		_choice_arrows[i].modulate.a = 1.0 if sel else 0.0
+		_choice_styles[i].border_color = Color(accent.r, accent.g, accent.b,
+			1.0 if sel else 0.26)
+	if _choice_rows.is_empty():
+		return
+	# 呼吸灯：当前项的边框在 0.30 ↔ 1.0 之间来回。暂停时也要跑。
+	var sb: StyleBoxFlat = _choice_styles[_choice_index]
+	var bright := Color(accent.r, accent.g, accent.b, 1.0)
+	var dim := Color(accent.r, accent.g, accent.b, 0.30)
+	_choice_pulse = create_tween().set_loops()
+	_choice_pulse.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_choice_pulse.tween_property(sb, "border_color", dim, CHOICE_PULSE) \
+		.set_trans(Tween.TRANS_SINE)
+	_choice_pulse.tween_property(sb, "border_color", bright, CHOICE_PULSE) \
+		.set_trans(Tween.TRANS_SINE)
+
+
+func _move_choice(step: int) -> void:
+	if _choice_rows.is_empty():
+		return
+	_choice_index = wrapi(_choice_index + step, 0, _choice_rows.size())
+	Sfx.play("ui_slider", -10.0)
+	_refresh_choices()
+
+
+func _confirm_choice() -> void:
+	if not _choosing or _choice_rows.is_empty():
+		return
+	var idx := _choice_index
+	var opt: Dictionary = _choice_options[idx]
+	_choosing = false
+	_choice_panel.visible = false
+	if _choice_pulse != null and _choice_pulse.is_valid():
+		_choice_pulse.kill()
+	Sfx.play("ui_press")
+	choice_made.emit(idx, opt.get("value", idx))
+	print("[Dialogue] 选了第 %d 项：%s" % [idx + 1, String(opt.get("text", ""))])
+	# 选项自带的后续步骤插在当前步后面，接着往下播
+	var extra: Variant = opt.get("then", [])
+	if extra is Array and not (extra as Array).is_empty():
+		var arr: Array = extra
+		for k in arr.size():
+			_steps.insert(_index + 1 + k, arr[k])
+	_index += 1
+	_run_current()
+
+
+## 正在选择时是第几项（没在选择 → −1），自检用
+func current_choice() -> int:
+	return _choice_index if _choosing else -1
+
+
+func choice_count() -> int:
+	return _choice_options.size() if _choosing else 0
+
+
+func choice_text(index: int) -> String:
+	if index < 0 or index >= _choice_options.size():
+		return ""
+	return String((_choice_options[index] as Dictionary).get("text", ""))
 
 
 # --- 暂停交接 ---------------------------------------------------------------
@@ -478,6 +711,17 @@ func _build() -> void:
 	_hint.add_theme_color_override("font_color", _skin["subtext"])
 	_box.add_child(_hint)
 	_layout_name_plate("")
+
+	# 选项列：钉在对话框正上方。行是**按选项数临时生成**的，这里只建容器。
+	_choice_panel = Control.new()
+	_choice_panel.name = "Choices"
+	_choice_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_choice_panel.anchor_left = 0.5
+	_choice_panel.anchor_right = 0.5
+	_choice_panel.anchor_top = 1.0
+	_choice_panel.anchor_bottom = 1.0
+	_choice_panel.visible = false
+	_root.add_child(_choice_panel)
 
 	# 配音播放器。**单独一个**（不走 `Sfx` 的池子），理由见文件头「语音」。
 	_voice = AudioStreamPlayer.new()

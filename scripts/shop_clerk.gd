@@ -129,6 +129,22 @@ const TALK_DY_MAX := 2.0
 const TALK_LINES := [
 	"你配电脑吗?",
 ]
+## 主角的两个回答（用户 2026-11-01 给的原文，标点照抄）。
+## `then` 是选中之后接着播的台词 —— 对话播放器会把它们插在后面。
+const TALK_OPTIONS := [
+	{
+		"text": "商人啊!我正是为此而来!",
+		"value": 1,
+		"then": [{"kind": "say", "who": SPEAKER,
+			"text": "好嘞！那咱把配置单摊开对一对。"}],
+	},
+	{
+		"text": "[观察了银行卡的余额,摇了摇头]",
+		"value": 2,
+		"then": [{"kind": "say", "who": SPEAKER,
+			"text": "……先看看也行，不着急买。"}],
+	},
+]
 ## 说话人名字（`DialogueBox` 名字牌上显示的那个）
 const SPEAKER := "芹香"
 
@@ -410,9 +426,12 @@ func _input(event: InputEvent) -> void:
 
 
 ## 播放对话。`play_steps` 会自己暂停世界、打字、等翻页，结束后恢复。
+## 第一句问「你配电脑吗?」，然后给玩家两个选项（W/S 选、空格确认）。
 func _talk(d: DialogueBox) -> void:
 	var steps: Array = []
 	for line in TALK_LINES:
 		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
+	steps.append({"kind": "choice", "options": TALK_OPTIONS.duplicate(true)})
 	d.play_steps(steps, "shop_clerk")
-	print("[Clerk] 芹香开口：%d 句（%s）" % [steps.size(), String(TALK_LINES[0])])
+	print("[Clerk] 芹香开口：%d 句 + %d 个选项（%s）"
+		% [TALK_LINES.size(), TALK_OPTIONS.size(), String(TALK_LINES[0])])
