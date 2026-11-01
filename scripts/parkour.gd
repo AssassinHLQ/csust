@@ -43,8 +43,9 @@ const EDGE_MARGIN := 0.30
 ## `\n` 是硬换行（`BossLine` 那个 Label 的 autowrap 关着,换行只认这里）。
 const BOSS_LINE := "敢动我5090？！\n爱丽丝还我十万美刀！！！"
 
-## 倭瓜优香倒下掉进银行卡的钱（元）。用户 2026-11：「倭瓜优香掉落 10w」
-const AVENGER_DROP := 100000
+## 倭瓜优香倒下掉进银行卡的钱（元）。用户 2026-11：「掉落 10w」→ 后改「20w」
+## （67 万的整机门槛，10 万太少，凑不够）
+const AVENGER_DROP := 200000
 ## 通关后立在跑道口的传送门，踩上去直接送到岛上的结算屋
 const PORTAL_DEST := "Island/Props/Shed"
 ## 传送门送到的地方：屋里那台结算台会自动把资产 + 保证金转进这张卡
@@ -127,13 +128,23 @@ func _ready() -> void:
 ## **运行时生成**、不写进场景：屋顶位置跟着掩体走，写死绝对坐标以后一改房子就漂。
 func _spawn_roof_gpu() -> void:
 	var shed := get_node_or_null("Island/Props/Shed")
-	if shed == null or shed.get_node_or_null("RTX5090") != null:
+	if shed == null:
 		return
-	var gpu := Rtx5090.new()
-	gpu.name = "RTX5090"
-	# 屋顶**东侧**（招牌挪到西边以后，2026-10-20 用户画的框：「放这里」）
-	gpu.position = Vector3(1.1, 2.5, 0.2)
-	shed.add_child(gpu)
+	# 旧场景里烘过一张，先清掉再按四张重新摆
+	for c in shed.get_children():
+		if String(c.name).begins_with("RTX5090"):
+			c.queue_free()
+	# 2026-11 用户：「跑酷终点的 5090 换成四张，整齐摆放」——
+	# 东半边 2×2 摆开（西边留给 BANK 招牌），每张仍按 ¥59,999 进资产账。
+	var spots := [
+		Vector3(0.55, 2.5, -0.55), Vector3(1.45, 2.5, -0.55),
+		Vector3(0.55, 2.5, 0.75), Vector3(1.45, 2.5, 0.75),
+	]
+	for i in spots.size():
+		var gpu := Rtx5090.new()
+		gpu.name = "RTX5090_%d" % (i + 1)
+		gpu.position = spots[i]
+		shed.add_child(gpu)
 
 
 ## 屋顶的 **BANK 招牌**（2026-10-20 用户：「在这个房顶上面放一个 BANK 的牌子，
