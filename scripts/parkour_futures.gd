@@ -70,14 +70,15 @@ const SCH_UNKNOWN := Color(0.34, 0.30, 0.46)
 ## ⚠️ 这两段**没有牌子**（`Pct` Label3D），涨跌幅是这里算出来的，不是读牌子 ——
 ##    所以 `_settle()` 里按 `pl["kind"]` 分流，别再去找 `Pct`。
 const FUND_PCT := 0.50
-const LOT_WIN_P := 0.35
-const LOT_WIN_LO := 0.60
-const LOT_WIN_HI := 2.00
+const LOT_WIN_P := 0.22
+const LOT_WIN_LO := 0.20
+const LOT_WIN_HI := 0.80
 const LOT_LOSE_LO := 0.40
 const LOT_LOSE_HI := 1.60
-## 盈利倍率（2026-11 用户要求）：**只放大正收益**，亏损照原样。
+## 盈利倍率：**1.0 = 不放大**（2026-11 用户：「钱突然变那么多会带坏别人」，
+## 把之前调到 3.0 的暴富倍率关掉了；留着这个常量方便以后微调）。
 ## 原来一局最多把 10 万滚到十几万，够不到商店那 67 万的坎（2026-11 门槛从 50 万提到 67 万）。
-const PROFIT_MULT := 3.0
+const PROFIT_MULT := 1.0
 
 ## ── 账户（单位：万）──
 ## `margin` = 保证金（真实结算：每块 K 线第一次踩上去，就按它牌子上那个涨跌幅结算一次）
