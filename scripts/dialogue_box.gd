@@ -161,6 +161,10 @@ var _sheet_zones: Array[Control] = []
 var _showing_sheet := false
 ## 照片下方的动态说明（盖住底图上烧死的那行字）
 var _sheet_caption: Label
+## 配置单显示前的鼠标模式（CAPTURED 时鼠标钉在屏幕中心，悬停热区收不到移动）
+var _sheet_mouse_before := Input.MOUSE_MODE_VISIBLE
+## 上一张配置单的底图：连着两张加载成同一张时报一声（多半是导入缓存没刷新）
+var _last_sheet_base: Texture2D
 ## 配置单里「文字列」在源图上的左右边界（排版脚本里也是这两个数）
 const SHEET_COL_X0 := 40.0
 const SHEET_COL_X1 := 1032.0
@@ -247,7 +251,10 @@ func play_steps(steps: Array, source := "") -> void:
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
+	if _showing_sheet:
+		_restore_mouse_after_sheet()
 	_showing_sheet = false
+	_last_sheet_base = null
 	if _sheet_root != null:
 		_sheet_root.visible = false
 	_stop_voice()
@@ -282,7 +289,10 @@ func finish() -> void:
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
+	if _showing_sheet:
+		_restore_mouse_after_sheet()
 	_showing_sheet = false
+	_last_sheet_base = null
 	if _sheet_root != null:
 		_sheet_root.visible = false
 	if _choice_pulse != null and _choice_pulse.is_valid():
@@ -771,6 +781,10 @@ func _show_sheet(step: Dictionary) -> void:
 		_index += 1
 		_run_current()
 		return
+	if _last_sheet_base != null and _last_sheet_base == base:
+		push_warning("[Dialogue] 两张配置单加载成了同一张底图：%s（检查导入缓存 / 是否重新导入）"
+			% base.resource_path)
+	_last_sheet_base = base
 	var s := minf(IMAGE_MAX_W / float(base.get_width()), IMAGE_MAX_H / float(base.get_height()))
 	var w := float(base.get_width()) * s
 	var h := float(base.get_height()) * s
@@ -827,6 +841,7 @@ func _show_sheet(step: Dictionary) -> void:
 
 	_sheet_root.visible = true
 	_showing_sheet = true
+	_release_mouse_for_sheet()
 	_shown = float(_body_text.length())
 	_body.visible_characters = int(_shown)
 	_update_hint()
@@ -840,8 +855,22 @@ func _dismiss_sheet() -> void:
 	_sheet_root.visible = false
 	_sheet_hover.visible = false
 	_sheet_hover.texture = null
+	_restore_mouse_after_sheet()
 	_index += 1
 	_run_current()
+
+
+## 配置单要看悬停 → 把鼠标放出来。原模式记下来，关掉再原样还回去。
+func _release_mouse_for_sheet() -> void:
+	_sheet_mouse_before = Input.mouse_mode
+	if _sheet_mouse_before != Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _restore_mouse_after_sheet() -> void:
+	# Esc 设置界面可能是在看配置单的时候打开的 —— 那就别把鼠标收回去。
+	if _sheet_mouse_before == Input.MOUSE_MODE_CAPTURED and not _menu_open():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func is_showing_sheet() -> bool:
