@@ -12,7 +12,7 @@ func _run() -> void:
 	root.add_child(cpus)
 
 	# 屋顶台面（CPU 现在摆在 609 屋顶，y ≈ 5.65）
-	var roof_top := 5.65
+	var roof_top := 5.79
 	var floor_body := StaticBody3D.new()
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
@@ -27,7 +27,10 @@ func _run() -> void:
 	for _i in 40:
 		await physics_frame
 
-	var list: Array = cpus.get_children()
+	var list: Array = []
+	for c in cpus.get_children():
+		if c.has_method("price"):
+			list.append(c)
 	var cpu0 := list[0] as Node3D
 	print("[cpu] 609 屋顶 %d 颗（期望 10）" % list.size())
 	for c in list:

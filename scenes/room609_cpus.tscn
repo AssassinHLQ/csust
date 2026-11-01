@@ -3,7 +3,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ryzen_9950x3d.tscn" id="1_cpu"]
 
 [node name="Room609Cpus" type="Node3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, 5.665, 3.54)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, 5.79, 3.54)
 
 [node name="Cpu1" parent="." instance=ExtResource("1_cpu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -1.00)
@@ -34,3 +34,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 1.00)
 
 [node name="Cpu10" parent="." instance=ExtResource("1_cpu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 1.00)
+
+[node name="Beacon" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.004
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.88, 0.45, 1)
+outline_modulate = Color(0.05, 0.05, 0.08, 1)
+text = "隐藏福利 · Ryzen 9 9950X3D ×10"
+font_size = 64
+outline_size = 16
