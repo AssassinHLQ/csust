@@ -85,6 +85,12 @@ const CHOICE_HINT_TEXT := "W / S 选择　空格 / 回车 确认"
 ## 呼吸灯周期（秒）
 const CHOICE_PULSE := 0.85
 
+## ── 剧情插图（`image` 步骤）──
+## 弹在画面中间偏上，下面还留着对话框；按「继续」关掉。
+const IMAGE_MAX_W := 860.0
+const IMAGE_MAX_H := 520.0
+const IMAGE_LIFT := 90.0
+
 ## 打字速度（字/秒）。剧本里 `@speed` 可以中途改。30 大致是「比默读稍快」。
 const CHARS_PER_SEC := 30.0
 
@@ -132,6 +138,12 @@ var _choice_options: Array = []
 var _choice_index := 0
 var _choosing := false
 var _choice_pulse: Tween
+
+## 剧情插图
+var _image_panel: Panel
+var _image_rect: TextureRect
+var _showing_image := false
+var _image_path := ""
 
 
 func _ready() -> void:
@@ -207,6 +219,10 @@ func play_steps(steps: Array, source := "") -> void:
 	_choice_index = 0
 	if _choice_panel != null:
 		_choice_panel.visible = false
+	_showing_image = false
+	_image_path = ""
+	if _image_panel != null:
+		_image_panel.visible = false
 	_stop_voice()
 	_body.text = ""
 	_body.visible_characters = 0
@@ -235,6 +251,10 @@ func finish() -> void:
 	_choice_options = []
 	if _choice_panel != null:
 		_choice_panel.visible = false
+	_showing_image = false
+	_image_path = ""
+	if _image_panel != null:
+		_image_panel.visible = false
 	if _choice_pulse != null and _choice_pulse.is_valid():
 		_choice_pulse.kill()
 	set_process(false)
@@ -304,6 +324,10 @@ func advance() -> void:
 		return
 	# 选择时「继续」键归选择用（空格 = 确认），不能让 advance 顺手翻页
 	if _choosing:
+		return
+	# 图还摊在屏幕上：这一下是按「关掉图」
+	if _showing_image:
+		_dismiss_image()
 		return
 	if _hold > 0.0:
 		_hold = 0.0
@@ -400,6 +424,9 @@ func _run_current() -> void:
 				_cps = maxf(0.0001, float(s.get("cps", CHARS_PER_SEC)))
 			StoryScript.K_CHOICE:
 				_begin_choice(s)
+				return
+			StoryScript.K_IMAGE:
+				_show_image(String(s.get("path", "")))
 				return
 			StoryScript.K_END:
 				finish()
@@ -611,6 +638,59 @@ func choice_text(index: int) -> String:
 	return String((_choice_options[index] as Dictionary).get("text", ""))
 
 
+# --- 剧情插图 ---------------------------------------------------------------
+
+## 弹一张图：按原图比例缩到 IMAGE_MAX 之内，居中偏上（下面留对话框）。
+## 图缺失只 warning 并跳过这一步 —— 演出不该因为一张图挂掉。
+func _show_image(path: String) -> void:
+	var tex: Texture2D = null
+	if not path.is_empty():
+		tex = load(path) as Texture2D
+	if tex == null:
+		push_warning("[Dialogue] 找不到剧情插图：%s（这一步跳过）" % path)
+		_index += 1
+		_run_current()
+		return
+	var iw := float(tex.get_width())
+	var ih := float(tex.get_height())
+	var s := minf(IMAGE_MAX_W / maxf(iw, 1.0), IMAGE_MAX_H / maxf(ih, 1.0))
+	var w := iw * s
+	var h := ih * s
+	_image_rect.texture = tex
+	_image_rect.size = Vector2(w, h)
+	_image_panel.size = Vector2(w + 12.0, h + 12.0)
+	_image_panel.offset_left = -_image_panel.size.x * 0.5
+	_image_panel.offset_right = _image_panel.size.x * 0.5
+	_image_panel.offset_top = -_image_panel.size.y * 0.5 - IMAGE_LIFT
+	_image_panel.offset_bottom = _image_panel.size.y * 0.5 - IMAGE_LIFT
+	_image_panel.visible = true
+	_image_path = path
+	_showing_image = true
+	# 弹图时把正在打的字立刻打完，别让图压在半截字上
+	_shown = float(_body_text.length())
+	_body.visible_characters = int(_shown)
+	_update_hint()
+	print("[Dialogue] 弹图：%s（%.0f×%.0f）" % [path, w, h])
+
+
+func _dismiss_image() -> void:
+	if not _showing_image:
+		return
+	_showing_image = false
+	_image_panel.visible = false
+	_image_path = ""
+	_index += 1
+	_run_current()
+
+
+func is_showing_image() -> bool:
+	return _showing_image
+
+
+func current_image_path() -> String:
+	return _image_path
+
+
 # --- 暂停交接 ---------------------------------------------------------------
 
 ## 设置界面是不是开着。**必须有这层判断**：两个节点都会 `paused = true`，
@@ -722,6 +802,31 @@ func _build() -> void:
 	_choice_panel.anchor_bottom = 1.0
 	_choice_panel.visible = false
 	_root.add_child(_choice_panel)
+
+	# 剧情插图：一块深色底板 + 一张按比例缩放的贴图，默认藏着。
+	_image_panel = Panel.new()
+	_image_panel.name = "StoryImage"
+	_image_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_image_panel.anchor_left = 0.5
+	_image_panel.anchor_right = 0.5
+	_image_panel.anchor_top = 0.5
+	_image_panel.anchor_bottom = 0.5
+	_image_panel.visible = false
+	var img_sb := StyleBoxFlat.new()
+	img_sb.bg_color = Color(0.04, 0.035, 0.03, 0.94)
+	img_sb.border_color = Color(0.36, 0.26, 0.16, 0.95)
+	img_sb.set_border_width_all(3)
+	img_sb.set_corner_radius_all(3)
+	_image_panel.add_theme_stylebox_override("panel", img_sb)
+	_root.add_child(_image_panel)
+
+	_image_rect = TextureRect.new()
+	_image_rect.name = "Texture"
+	_image_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_image_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_image_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_image_rect.position = Vector2(6.0, 6.0)
+	_image_panel.add_child(_image_rect)
 
 	# 配音播放器。**单独一个**（不走 `Sfx` 的池子），理由见文件头「语音」。
 	_voice = AudioStreamPlayer.new()

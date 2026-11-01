@@ -57,6 +57,9 @@ const K_VOICE := "voice"
 ## 分支选项：`options` 里每项 `{text, value?, then?}`，`then` 是选中后接着播的步骤数组。
 ## 目前只有内联剧本（`shop_clerk.gd` 那种 `play_steps`）在用，`.txt` 剧本还没做对应指令。
 const K_CHOICE := "choice"
+## 弹一张图（配置单、照片之类）：`path` 指向 `res://` 下的贴图。
+## 显示后等玩家按「继续」才关掉，再往下播。
+const K_IMAGE := "image"
 const K_END := "end"
 
 ## `@clear` 的空档时长（秒）。解析器只负责认这个词，时长归播放器用；

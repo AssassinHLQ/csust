@@ -33,8 +33,10 @@ func _make_steps() -> Array:
 		{"kind": "say", "who": "芹香", "text": "你配电脑吗?"},
 		{"kind": "choice", "options": [
 			{"text": "商人啊!我正是为此而来!", "value": 1,
-				"then": [{"kind": "say", "who": "芹香", "text": "老板,看这套配置怎么样[TVT]"}]},
-			{"text": "观察了银行卡的余额,摇了摇头", "value": 2},
+				"then": [{"kind": "say", "who": "芹香", "text": "老板,看这套配置怎么样[TVT]"},
+					{"kind": "image", "path": "res://models/boss/tex/boss_body.png"}]},
+			{"text": "观察了银行卡的余额,摇了摇头", "value": 2,
+				"then": [{"kind": "say", "who": "芹香", "text": "……先看看也行，不着急买。"}]},
 		]},
 	]
 
@@ -81,8 +83,12 @@ func _run() -> void:
 	_key(KEY_SPACE)
 	for _i in 30:
 		await process_frame
-	_check(not box.is_active(), "选第 2 项后对话直接结束（is_active=%s）" % str(box.is_active()))
-	_check(box.current_text().is_empty() or not box.is_active(), "选第 2 项没有多余台词")
+	print("[choice] 选第 2 项后的正文=%s" % box.current_text())
+	_check(box.current_text().begins_with("……先看看也行"), "选第 2 项后芹香回一句「……先看看也行，不着急买。」")
+	box.advance()
+	for _i in 10:
+		await process_frame
+	_check(not box.is_active(), "第 2 项那句读完结束对话")
 
 	# ── ② 选第一项：接「老板,看这套配置怎么样[TVT]」 ──
 	await _open(box)
@@ -95,8 +101,14 @@ func _run() -> void:
 	print("[choice] 选第 1 项后的正文=%s" % box.current_text())
 	_check(box.current_text() == "老板,看这套配置怎么样[TVT]", "第 1 项的反应台词正确")
 	box.advance()
+	for _i in 15:
+		await process_frame
+	_check(box.is_showing_image(), "报价之后弹出插图（is_showing_image=%s）" % str(box.is_showing_image()))
+	_check(box.current_image_path().ends_with("boss_body.png"), "图片路径正确：%s" % box.current_image_path())
+	_check(box.is_active(), "弹图时对话还没结束")
+	box.advance()
 	for _i in 10:
 		await process_frame
-	_check(not box.is_active(), "第 1 项说完也正常结束")
+	_check(not box.is_showing_image() and not box.is_active(), "按继续关掉图并结束对话")
 	print("[choice] 结果：%d 通过 / %d 失败" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
