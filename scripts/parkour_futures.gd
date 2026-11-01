@@ -912,6 +912,16 @@ func add_asset(label: String, price: int) -> void:
 	_add_asset(label, price)
 
 
+## 打怪掉落的现金：**先记成本轮资产**，踩结算台时才转进银行卡。
+## 用户 2026-11「为什么我还没有结算就 40w 了」——掉落直接进卡会让卡里凭空多钱；
+## 资产栏里能看到，结算台照旧一次转卡，钱的来路才说得清。
+func add_loot(yuan: int, label: String) -> void:
+	var amount := maxi(yuan, 0)
+	if amount <= 0:
+		return
+	_add_asset(label, amount)
+
+
 func _add_asset(label: String, price: int) -> void:
 	var yuan := maxi(price, 0)
 	assets_yuan += yuan

@@ -493,9 +493,17 @@ func _flash() -> void:
 func _die(by_damage: float) -> void:
 	_dead = true
 	if drop_yuan > 0:
-		BankCard.add(drop_yuan)
-		print("[Boss %s] 打倒 → 掉进银行卡 %s（余额 %s）" % [display_name,
-			BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
+		# 掉落先进本轮资产（跑酷的结算台再转银行卡），
+		# 不能直接进卡 —— 用户 2026-11「为什么我还没有结算就 40w 了」。
+		var fut := get_tree().get_first_node_in_group("futures")
+		if fut != null and fut.has_method("add_loot"):
+			fut.call("add_loot", drop_yuan, "%s 掉落" % display_name)
+			print("[Boss %s] 打倒 → 本轮资产 +%s（结算后进银行卡）" % [display_name,
+				BankCard.format_yuan(drop_yuan)])
+		else:
+			BankCard.add(drop_yuan)
+			print("[Boss %s] 打倒 → 掉进银行卡 %s（余额 %s）" % [display_name,
+				BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
 	died.emit(by_damage)
 	for c in _collisions:
 		c.set_deferred("disabled", true)

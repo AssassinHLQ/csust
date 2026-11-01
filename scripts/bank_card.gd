@@ -13,6 +13,10 @@ extends RefCounted
 ##    把 `user://bank_card.cfg` 里的 yuan 改大即可（或临时改这里）。
 
 const PATH := "user://bank_card.cfg"
+const BACKUP_PATH := "user://bank_card_pre_v2.cfg"
+## v1：Boss 掉落直接进卡；v2：掉落先记本轮资产，结算才进卡。
+## 老存档里两种钱混在一起分不出来，升级时备份 + 清零一次。
+const SAVE_VERSION := 2
 const DEFAULT_YUAN := 0
 
 static var _loaded := false
@@ -26,9 +30,21 @@ static func _ensure() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(PATH) == OK:
 		_yuan = int(cf.get_value("card", "yuan", DEFAULT_YUAN))
+		if int(cf.get_value("card", "v", 1)) < SAVE_VERSION:
+			_migrate_to_v2()
 	else:
 		_yuan = DEFAULT_YUAN
 		_save()
+
+
+static func _migrate_to_v2() -> void:
+	var backup := ConfigFile.new()
+	backup.set_value("card", "yuan", _yuan)
+	backup.save(BACKUP_PATH)
+	print("[BankCard] v1 → v2：旧余额 %s 已备份到 %s，卡清零重来" % [
+		format_yuan(_yuan), BACKUP_PATH])
+	_yuan = DEFAULT_YUAN
+	_save()
 
 
 ## 当前余额（元）
@@ -65,6 +81,7 @@ static func spend(yuan: int) -> bool:
 static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("card", "yuan", _yuan)
+	cf.set_value("card", "v", SAVE_VERSION)
 	var err := cf.save(PATH)
 	if err != OK:
 		push_warning("[BankCard] 存档失败（%s）：%s" % [error_string(err), PATH])

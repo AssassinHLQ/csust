@@ -18,12 +18,22 @@ func _run() -> void:
 	for _i in 30:
 		await process_frame
 
-	# ① 倭瓜掉落
+	# ① 倭瓜掉落：先记本轮资产，**结算前不进银行卡**
+	var fut := lvl.get_node_or_null("Futures")
+	if fut != null:
+		fut.set("assets_yuan", 0)
+		fut.set("margin", 0.0)
+		fut.set("debt", 0)
 	BankCard.set_balance(0)
 	lvl.call("_on_avenger_died", 1.0)
 	for _i in 5:
 		await process_frame
-	print("[eco] 倭瓜倒下后余额 = %s（期望 ¥10.0 万）" % BankCard.format_yuan(BankCard.balance()))
+	print("[eco] 倭瓜倒下后 银行卡 = %s（期望 ¥0）、资产 = %s（期望 20.0 万）" % [
+		BankCard.format_yuan(BankCard.balance()),
+		BankCard.format_yuan(int(fut.get("assets_yuan"))) if fut != null else "-"])
+	if fut != null:
+		fut.call("settle_all")
+		print("[eco] 结算后 银行卡 = %s（期望 20.0 万）" % BankCard.format_yuan(BankCard.balance()))
 
 	# ② 通关 → 传送门
 	var launch := lvl.get_node_or_null("Launch") as Node3D

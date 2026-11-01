@@ -21,10 +21,17 @@ func _run() -> void:
 	print("[roof] 屋顶 5090 数量 = %d（期望 4）" % gpus.size())
 	for g in gpus:
 		print("[roof]   %s @ %s" % [g.name, str((g as Node3D).position.snappedf(0.01))])
+	var fut := lvl.get_node_or_null("Futures")
+	if fut != null:
+		fut.set("assets_yuan", 0)
+		fut.set("margin", 0.0)
+		fut.set("debt", 0)
 	BankCard.set_balance(0)
 	lvl.call("_on_avenger_died", 1.0)
 	for _i in 5:
 		await process_frame
-	print("[roof] 倭瓜掉落 → 余额 %s（期望 20.0 万）" % BankCard.format_yuan(BankCard.balance()))
+	print("[roof] 倭瓜掉落 → 银行卡 %s（期望 ¥0）、资产 %s（期望 20.0 万）" % [
+		BankCard.format_yuan(BankCard.balance()),
+		BankCard.format_yuan(int(fut.get("assets_yuan"))) if fut != null else "-"])
 	BankCard.set_balance(0)
 	quit(0)

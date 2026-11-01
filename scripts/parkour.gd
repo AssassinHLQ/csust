@@ -330,6 +330,8 @@ func reset_run() -> void:
 	_elapsed = 0.0
 	_started_at = Time.get_ticks_msec()
 	checkpoint = -1
+	# 回到主平台重开一轮：岛上的存档作废，否则下一次摔落还会被送回终点。
+	_island_cp = Vector3.INF
 
 
 func _start_timer() -> void:
@@ -416,10 +418,13 @@ func _physics_process(_delta: float) -> void:
 		if not _player.died.is_connected(_on_player_died):
 			_player.died.connect(_on_player_died)
 	var p := _player.global_position
-	if _island_cp == Vector3.INF 			and Vector2(p.x - ISLAND_CENTER.x, p.z - ISLAND_CENTER.z).length() < ISLAND_RADIUS:
-		# 高度压到岛面附近：落在屋顶 / 高台上也算岛面存档，
-		# 免得复活到高处继续隔空打倭瓜
-		_island_cp = Vector3(p.x, minf(p.y, ISLAND_CENTER.y + 0.35), p.z)
+	# 只有**脚踏实地站在大平台台面**上才算岛上存档：存档坐标写死成平台上的安全点，
+	# 不再记玩家踩上去的那一点（那可能是平台边缘 / 半空，y 压到 7.75 会生成在板子底下）。
+	if _island_cp == Vector3.INF and _player.is_on_floor() \
+			and absf(p.x - ISLAND_CENTER.x) < ISLAND_INNER \
+			and absf(p.z - ISLAND_CENTER.z) < ISLAND_INNER \
+			and p.y > ISLAND_TOP_Y - 0.4 and p.y < ISLAND_TOP_Y + 1.5:
+		_island_cp = ISLAND_SPAWN
 		_notify_island_save()
 	var here := _station_at(p)
 
@@ -693,10 +698,18 @@ var _finish_portal: Node3D
 ## 上一次提示过的存档站（只在往前推进时弹一次，别每帧刷）
 var _saved_station := 0
 ## 结束平台（岛）的存档：用户 2026-11「结束平台也要算一个存档，不然别人复活到了
-## 柱子上就无伤倭瓜优香了」——第一次落到岛上就记下位置，之后摔落/被打死回岛上，
+## 柱子上就无伤倭瓜优香了」——第一次落到岛上就记下，之后摔落/被打死回岛上，
 ## 而不是回第 12 段的柱子顶上。
+##
+## 存档点**写死**在大平台台面上（用户 2026-11「存档点错了……应该存档在这个大平台才对」）：
+## 记玩家落点会把边缘/半空的坐标存下来，复活直接生成到板子底下摔死。
+## 平台：`Island` 中心 (-590.95, 7.4, -9.5)，16×16 m 板厚 1.2 → 台面 y = 8.0。
+## 安全点选在平台东侧空地：避开结算屋（x ≈ -594）、信号塔腿（x ≈ -595）和倭瓜出生点（-591, -2.5）。
 const ISLAND_CENTER := Vector3(-590.95, 7.4, -9.5)
-const ISLAND_RADIUS := 22.0
+const ISLAND_TOP_Y := 8.0
+const ISLAND_SPAWN := Vector3(-587.5, 8.08, -8.5)
+## 台面内圈半边长：栏杆在 ±7.4，退进来一点（7.0）免得贴着边生成。
+const ISLAND_INNER := 7.0
 var _island_cp := Vector3.INF
 var _portal_cooldown := 0.0
 var _cage: Node3D
@@ -923,10 +936,12 @@ func _on_avenger_died(_by_damage: float) -> void:
 			cage.global_position + Vector3(0.0, 9.0, 0.0), 0.5) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_callback(cage.queue_free)
 		Sfx.play("ui_open", 4.0)
-	BankCard.add(AVENGER_DROP)
 	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.has_method("add_loot"):
+		fut.call("add_loot", AVENGER_DROP, "倭瓜优香掉落")
+	else:
+		BankCard.add(AVENGER_DROP)
 	if fut != null and fut.has_method("boss_line"):
-		fut.call("boss_line", "倭瓜优香掉落 ¥%d → 银行卡 （余额 %s）" % [
-			AVENGER_DROP, BankCard.format_yuan(BankCard.balance())])
-	print("[Parkour] 倭瓜优香倒下 → 牢笼解除；掉落 %s（银行卡 %s）" % [
-		BankCard.format_yuan(AVENGER_DROP), BankCard.format_yuan(BankCard.balance())])
+		fut.call("boss_line", "倭瓜优香掉落 ¥%d → 本轮资产（结算后进银行卡）" % AVENGER_DROP)
+	print("[Parkour] 倭瓜优香倒下 → 牢笼解除；掉落 %s（本轮资产，结算后进银行卡）" % [
+		BankCard.format_yuan(AVENGER_DROP)])
