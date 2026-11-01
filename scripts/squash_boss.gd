@@ -19,6 +19,9 @@ extends BossAttacker
 
 const SKILL_SLAM := 0
 const SKILL_HEAVY := 1
+const SKILL_DASH := 2      ## 压扁冲撞：贴地冲过去砸
+const SKILL_QUAKE := 3     ## 三连震：连着砸三下
+const SKILL_COUNT := 4
 
 ## 天降：落点在爱丽丝周围这个半径内随机（m）
 @export var slam_place_radius := 3.0
@@ -41,6 +44,13 @@ const SKILL_HEAVY := 1
 ##    圈还是比它半宽 1.36 m 大一圈，画在脚前不会缩进身体里。
 @export var heavy_radius := 1.9
 @export var heavy_reach := 2.2
+## 冲撞：位移距离 / 伤害 / 击退
+@export var dash_distance := 7.0
+@export var dash_damage := 24.0
+@export var dash_knockback := 12.0
+## 三连震：每下伤害 / 每下间隔（秒）
+@export var quake_damage := 14.0
+@export var quake_step := 0.42
 
 ## 压扁用的基准（`model` 缩放 / 位置 / 脚底）
 var _base_scale := Vector3.ONE
@@ -53,14 +63,16 @@ var _move_tween: Tween
 var _mark: MeshInstance3D
 ## 下一次用哪个技能（第一下用天降，够震撼）
 var _next_skill := SKILL_SLAM
+const SKILL_NAMES := ["压扁天降", "原地重砸", "压扁冲撞", "三连震"]
 ## 技能二抬身前的模型高度
 var _base_model_y := 0.0
 
 
 func _init() -> void:
-	attack_interval = 4.2              # 比飞猪慢
-	attack_start_delay = 3.0
-	windup_time = 1.0                  # 起手很慢，好躲
+	# 2026-11 用户：「攻击频率变快很多」——原来 4.2 / 3.0 / 1.0，现在压到 1.8 / 1.5 / 0.55
+	attack_interval = 1.8
+	attack_start_delay = 1.5
+	windup_time = 0.55
 	attack_range = 12.0
 	attack_half_angle_degrees = 32.0   # 正面比飞猪窄
 	attack_damage = 26.0               # 技能二的伤害（天降另算，见 slam_damage）
@@ -102,14 +114,18 @@ func _process(delta: float) -> void:
 # --- 两个技能轮换 -------------------------------------------------------------
 
 func _attack(player: Player) -> void:
-	print("[倭瓜优香] 出手：%s" % ("压扁天降" if _next_skill == SKILL_SLAM else "原地重砸"))
+	var skill := _next_skill
+	_next_skill = (_next_skill + 1) % SKILL_COUNT
+	print("[倭瓜优香] 出手：%s" % SKILL_NAMES[skill])
 	_attacking = true
 	_attack_cooldown = attack_interval
-	if _next_skill == SKILL_SLAM:
-		_next_skill = SKILL_HEAVY
+	if skill == SKILL_SLAM:
 		await _skill_slam(player)
+	elif skill == SKILL_DASH:
+		await _skill_dash(player)
+	elif skill == SKILL_QUAKE:
+		await _skill_quake(player)
 	else:
-		_next_skill = SKILL_SLAM
 		# 技能二用它自己那套圈（`heavy_radius` / `heavy_reach`），见文件头的注释：
 		# `super._attack()` 读的是基类的 `attack_radius` / `attack_reach`，而那两个字段
 		# 同时被天降用着，所以这里临时换掉、await 完再换回来。
@@ -195,6 +211,96 @@ func _land(center: Vector3) -> void:
 			p.take_damage(slam_damage, center, slam_knockback)
 	print("[倭瓜优香] 天降落地（%.1f, %.1f）→ 圈内 %.0f 伤害 / %.0f 击退"
 		% [center.x, center.z, slam_damage, slam_knockback])
+
+
+## 技能三：压扁蓄力 → 贴地冲向玩家 → 落点结算（红圈就是伤害区）
+func _skill_dash(player: Player) -> void:
+	if player == null or not is_instance_valid(player):
+		_attacking = false
+		return
+	_ground_y = global_position.y
+	var to := player.global_position - global_position
+	to.y = 0.0
+	if to.length() < 0.3:
+		to = Vector3(0.0, 0.0, 1.0)
+	var dist := minf(dash_distance, to.length())
+	var dest := global_position + to.normalized() * dist
+	dest.y = _ground_y
+	# ① 压扁蓄力
+	_squash_tween = create_tween()
+	_squash_tween.tween_method(_set_squash, 1.0, 0.35, 0.30) 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	await _squash_tween.finished
+	if not _alive():
+		_abort()
+		return
+	# ② 落点亮圈
+	_show_mark(Vector3(dest.x, _ground_y, dest.z))
+	_move_tween = create_tween()
+	_move_tween.tween_property(_mark, "scale", Vector3.ONE * attack_radius, 0.42) 		.set_trans(Tween.TRANS_SINE)
+	await _move_tween.finished
+	if not _alive():
+		_abort()
+		return
+	# ③ 贴地冲过去
+	_squash_tween = create_tween()
+	_squash_tween.tween_method(_set_squash, 0.35, 1.0, 0.12)
+	_move_tween = create_tween()
+	_move_tween.tween_property(self, "global_position", dest, 0.24) 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	Sfx.play("ui_open", 2.0)
+	await _move_tween.finished
+	if not _alive():
+		_abort()
+		return
+	# ④ 结算
+	_hide_mark()
+	var p := _find_player()
+	if p != null:
+		var flat := Vector3(p.global_position.x - dest.x, 0.0,
+			p.global_position.z - dest.z)
+		if flat.length() <= attack_radius:
+			p.take_damage(dash_damage, dest, dash_knockback)
+	print("[倭瓜优香] 冲撞到（%.1f, %.1f）→ 圈内 %.0f 伤害" % [dest.x, dest.z, dash_damage])
+	_squash_tween = create_tween()
+	_squash_tween.tween_method(_set_squash, 1.0, 0.85, 0.05)
+	_squash_tween.tween_method(_set_squash, 0.85, 1.0, 0.18)
+	await _squash_tween.finished
+	_attacking = false
+
+
+## 技能四：三连震 —— 连着在玩家脚下砸三下，单下轻、来得快
+func _skill_quake(_player: Player) -> void:
+	_ground_y = global_position.y
+	for i in 3:
+		if not _alive():
+			_abort()
+			return
+		var p := _find_player()
+		if p == null or not is_instance_valid(p):
+			break
+		var center := Vector3(p.global_position.x, _ground_y, p.global_position.z)
+		var r := attack_radius * 0.85
+		_show_mark(center)
+		_mark.scale = Vector3.ONE * (attack_radius * 0.55)
+		_squash_tween = create_tween()
+		_squash_tween.tween_property(_mark, "scale", Vector3.ONE * r, quake_step) 			.set_trans(Tween.TRANS_SINE)
+		await _squash_tween.finished
+		if not _alive():
+			_abort()
+			return
+		_hide_mark()
+		var q := _find_player()
+		if q != null:
+			var flat := Vector3(q.global_position.x - center.x, 0.0,
+				q.global_position.z - center.z)
+			if flat.length() <= r:
+				q.take_damage(quake_damage, center, 8.0)
+		Sfx.play("ui_close", 4.0)
+		print("[倭瓜优香] 三连震第 %d 下（%.1f, %.1f）" % [i + 1, center.x, center.z])
+		_squash_tween = create_tween()
+		_squash_tween.tween_method(_set_squash, 1.0, 0.62, 0.08)
+		_squash_tween.tween_method(_set_squash, 0.62, 1.0, 0.14)
+		await _squash_tween.finished
+	_attacking = false
 
 
 # --- 压扁 / 红圈 ---------------------------------------------------------------

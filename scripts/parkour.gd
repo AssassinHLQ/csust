@@ -286,6 +286,21 @@ func respawn_station() -> int:
 
 
 ## 站在第 i 站的台面上时，人应该被放在哪儿（台面正中、抬高 5 cm 免得嵌进去）
+## 摔落 / 被打死回哪儿：上过岛就回岛上记的那个点，否则回本段起点。
+func respawn_position() -> Vector3:
+	if _island_cp != Vector3.INF:
+		return _island_cp
+	return respawn_point(respawn_station())
+
+
+## 「已存档：结束平台」
+func _notify_island_save() -> void:
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.has_method("boss_line"):
+		fut.call("boss_line", "已存档：结束平台")
+	print("[Parkour] 已存档：结束平台 %s" % str(_island_cp.snappedf(0.1)))
+
+
 func respawn_point(i: int) -> Vector3:
 	var b := box_at(i)
 	return Vector3(b.position.x + b.size.x * 0.5, top_at(i) + 0.05,
@@ -401,6 +416,11 @@ func _physics_process(_delta: float) -> void:
 		if not _player.died.is_connected(_on_player_died):
 			_player.died.connect(_on_player_died)
 	var p := _player.global_position
+	if _island_cp == Vector3.INF 			and Vector2(p.x - ISLAND_CENTER.x, p.z - ISLAND_CENTER.z).length() < ISLAND_RADIUS:
+		# 高度压到岛面附近：落在屋顶 / 高台上也算岛面存档，
+		# 免得复活到高处继续隔空打倭瓜
+		_island_cp = Vector3(p.x, minf(p.y, ISLAND_CENTER.y + 0.35), p.z)
+		_notify_island_save()
 	var here := _station_at(p)
 
 	# 读档续跑（**仅在 `resume_on_start = true` 时**；默认关闭，重进回初始位置）
@@ -501,14 +521,17 @@ func _rescue() -> void:
 	rescues += 1
 	# 每段一个存档点：摔了就回**本段起点**，进度退到段首（不是清零整关）
 	var back := respawn_station()
-	checkpoint = back
-	_player.global_position = respawn_point(back)
+	var pos := respawn_position()
+	if _island_cp == Vector3.INF:
+		checkpoint = back
+	_player.global_position = pos
 	_player.velocity = Vector3.ZERO
-	_player.set_respawn_point(respawn_point(back))
+	_player.set_respawn_point(pos)
 	rescued.emit(back, label_at(back))
 	Sfx.play("ui_open")
-	print("[Parkour] 第 %d 次摔落 → 回第 %d 段起点（第 %d 站 %s）"
-		% [rescues, segment_of(back) + 1, back + 1, label_at(back)])
+	print("[Parkour] 第 %d 次摔落 → %s" % [rescues,
+		"回结束平台" if _island_cp != Vector3.INF
+		else "回第 %d 段起点（第 %d 站 %s）" % [segment_of(back) + 1, back + 1, label_at(back)]])
 
 
 ## 被 boss 打死：和摔落一样，进度清零；传送和回血由玩家自己在 0.6 s 后完成。
@@ -524,10 +547,13 @@ func _notify_save(station: int) -> void:
 func _on_player_died() -> void:
 	# 和摔落同一条规则：回本段起点。玩家 0.6 s 后才传送，先把复活点改掉。
 	var back := respawn_station()
-	checkpoint = back
-	_player.set_respawn_point(respawn_point(back))
-	print("[Parkour] 玩家倒下 → 回第 %d 段起点（第 %d 站 %s）"
-		% [segment_of(back) + 1, back + 1, label_at(back)])
+	var pos := respawn_position()
+	if _island_cp == Vector3.INF:
+		checkpoint = back
+	_player.set_respawn_point(pos)
+	print("[Parkour] 玩家倒下 → %s" % [
+		"回结束平台" if _island_cp != Vector3.INF
+		else "回第 %d 段起点（第 %d 站 %s）" % [segment_of(back) + 1, back + 1, label_at(back)]])
 
 
 ## 岛上的传送台：踏上去回主平台。
@@ -666,6 +692,12 @@ var _trap_done := false
 var _finish_portal: Node3D
 ## 上一次提示过的存档站（只在往前推进时弹一次，别每帧刷）
 var _saved_station := 0
+## 结束平台（岛）的存档：用户 2026-11「结束平台也要算一个存档，不然别人复活到了
+## 柱子上就无伤倭瓜优香了」——第一次落到岛上就记下位置，之后摔落/被打死回岛上，
+## 而不是回第 12 段的柱子顶上。
+const ISLAND_CENTER := Vector3(-590.95, 7.4, -9.5)
+const ISLAND_RADIUS := 22.0
+var _island_cp := Vector3.INF
 var _portal_cooldown := 0.0
 var _cage: Node3D
 var _avenger: Boss
