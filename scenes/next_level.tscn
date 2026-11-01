@@ -27,7 +27,6 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
-[ext_resource type="PackedScene" path="res://scenes/campus_deconstruct.tscn" id="15_campusbuildings"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -278,9 +277,9 @@ preload_on_gate = false
 ;   campus_collision.tscn      = 12 m 粗盒子 25 块（只有 20 m 以上的楼，最省）
 [node name="CampusCollision" parent="." instance=ExtResource("14_campusmesh_upper")]
 
-; 2026-10-31：东门附近 4 栋解构主义小楼（每栋 2 间房、每间一扇推门）
-; 由 _bake_campus_deconstruct.gd 烘出（每栋 2 间房、每间一扇推门，走近 2.3 m 自动开）
-[node name="CampusDeconstruct" parent="." instance=ExtResource("15_campusbuildings")]
+; 2026-11-01：东门口那 4 栋解构主义小楼连同它们脚下 58×62 m 的地面盒子一起撤掉了
+; （用户：「去掉之前高斯泼溅上面那四个建筑与建筑下面的地面盒子」）。
+; 场景文件 scenes/campus_deconstruct.tscn 还留着，想恢复的话把 instance 加回来即可。
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 4.1, 7.6)

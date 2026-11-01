@@ -85,6 +85,7 @@ func build() -> void:
 	_build_ramps()
 	_build_grids()
 	_build_lights()
+	_build_furniture()
 	_build_shell_collision()
 	print("[mondrian_hall] solid=%d decor=%d" % [solid_count, decor_count])
 
@@ -454,9 +455,9 @@ func _build_grids() -> void:
 
 ## 在房间某一面墙上贴一块（side: N/S/E/W，uv 是沿墙 / 竖直的坐标）。
 func _panel_on(nm: String, side: String, lo: Vector2, hi: Vector2,
-		u: float, v: float, w: float, h: float, mat: Material) -> void:
+		u: float, v: float, w: float, h: float, mat: Material, extra := 0.0) -> void:
 	# 墙厚 0.3、以房间净空线为中线，所以内表面在 ±0.15，装饰再往里 0.03
-	var off: float = WALL_T * 0.5 + 0.03
+	var off: float = WALL_T * 0.5 + 0.03 + extra
 	match side:
 		"N":
 			_deco(nm, Vector3(u, v, lo.y + off), Vector3(w, h, 0.04), mat)
@@ -512,3 +513,159 @@ func _build_lights() -> void:
 		var e: float = rows[i][1]
 		_deco("CeilLamp%d" % i, p, Vector3(6.0, 0.05, 1.8), _mat["lamp"])
 		_lamp("Lamp%d" % i, p - Vector3(0, 0.6, 0), e * 0.75, Color(1.0, 0.96, 0.88))
+
+
+# ══════════════════════════ 室内陈设 ══════════════════════════
+#
+# 全部是装饰（不带碰撞）：跑道和靶子的视线都留空了 —— 一层斜坡在 x[-7.5,-5.0]，
+# 二层斜坡在 x[3.0,5.5]，三层从斜坡口到起跳台那一条也不摆东西。
+
+func _cyl(nm: String, center: Vector3, radius: float, height: float, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = radius
+	cm.bottom_radius = radius
+	cm.height = height
+	cm.radial_segments = 24
+	mi.mesh = cm
+	mi.material_override = mat
+	mi.name = _unique(_decor, nm)
+	mi.position = center
+	_decor.add_child(mi)
+	decor_count += 1
+
+
+## 椅子：黑托柱 + 座面 + 靠背。
+func _chair(nm: String, base: Vector3, yaw: float, seat: Material) -> void:
+	var b := Basis(Vector3.UP, yaw)
+	_sloped_box(nm + "_Col", base + Vector3(0, 0.22, 0), Vector3(0.14, 0.44, 0.14), b, _mat["black"], false)
+	_sloped_box(nm + "_Seat", base + Vector3(0, 0.46, 0), Vector3(0.52, 0.08, 0.52), b, seat, false)
+	_sloped_box(nm + "_Back", base + b * Vector3(0, 0.78, -0.24), Vector3(0.52, 0.56, 0.07), b, seat, false)
+
+
+## 桌子：台面 + 两端黑腿板。
+func _desk(nm: String, center: Vector3, size: Vector2, height: float, top_mat: Material) -> void:
+	_deco(nm + "_Top", Vector3(center.x, center.y + height, center.z),
+		Vector3(size.x, 0.08, size.y), top_mat)
+	_deco(nm + "_LegW", Vector3(center.x - size.x * 0.5 + 0.14, center.y + height * 0.5, center.z),
+		Vector3(0.12, height, size.y * 0.78), _mat["black"])
+	_deco(nm + "_LegE", Vector3(center.x + size.x * 0.5 - 0.14, center.y + height * 0.5, center.z),
+		Vector3(0.12, height, size.y * 0.78), _mat["black"])
+
+
+## 展台：白座 + 黑压边 + 顶上一个色块（当雕塑看）。
+func _pedestal(nm: String, base: Vector3, size: float, art: Material) -> void:
+	_deco(nm + "_Base", base + Vector3(0, size * 0.5, 0), Vector3(size, size, size), _mat["white"])
+	_deco(nm + "_Rim", base + Vector3(0, size + 0.01, 0),
+		Vector3(size + 0.05, 0.02, size + 0.05), _mat["black"])
+	_deco(nm + "_Art", base + Vector3(0, size + 0.32, 0),
+		Vector3(size * 0.5, 0.62, size * 0.5), art)
+
+
+## 挂画：黑框 + 白画布 + 红黄蓝三块 + 一条竖黑线。
+func _art(nm: String, side: String, lo: Vector2, hi: Vector2,
+		u: float, v: float, w: float, h: float) -> void:
+	_panel_on(nm + "_Frame", side, lo, hi, u, v, w, h, _mat["black"], 0.02)
+	_panel_on(nm + "_Canvas", side, lo, hi, u, v, w - 0.18, h - 0.18, _mat["white"], 0.05)
+	_panel_on(nm + "_Red", side, lo, hi, u - w * 0.20, v + h * 0.17,
+		w * 0.40, h * 0.52, _mat["red"], 0.075)
+	_panel_on(nm + "_Yel", side, lo, hi, u + w * 0.30, v + h * 0.28,
+		w * 0.26, h * 0.30, _mat["yellow"], 0.075)
+	_panel_on(nm + "_Blu", side, lo, hi, u + w * 0.28, v - h * 0.22,
+		w * 0.30, h * 0.34, _mat["blue"], 0.075)
+	_panel_on(nm + "_Line", side, lo, hi, u + w * 0.05, v,
+		0.05, h - 0.2, _mat["black"], 0.09)
+
+
+## 吊灯：黑吊杆 + 白色灯盘。
+func _pendant(nm: String, top: Vector3, drop: float) -> void:
+	_deco(nm + "_Rod", top - Vector3(0, drop * 0.5, 0), Vector3(0.04, drop, 0.04), _mat["black"])
+	_cyl(nm + "_Shade", top - Vector3(0, drop, 0), 0.32, 0.09, _mat["lamp"])
+
+
+func _rug(nm: String, center: Vector3, size: Vector2, mat: Material) -> void:
+	_deco(nm, Vector3(center.x, center.y + 0.015, center.z), Vector3(size.x, 0.02, size.y), mat)
+	var t := 0.10
+	_deco(nm + "_BdN", Vector3(center.x, center.y + 0.028, center.z - size.y * 0.5),
+		Vector3(size.x, 0.02, t), _mat["black"])
+	_deco(nm + "_BdS", Vector3(center.x, center.y + 0.028, center.z + size.y * 0.5),
+		Vector3(size.x, 0.02, t), _mat["black"])
+	_deco(nm + "_BdW", Vector3(center.x - size.x * 0.5, center.y + 0.028, center.z),
+		Vector3(t, 0.02, size.y), _mat["black"])
+	_deco(nm + "_BdE", Vector3(center.x + size.x * 0.5, center.y + 0.028, center.z),
+		Vector3(t, 0.02, size.y), _mat["black"])
+
+
+func _build_furniture() -> void:
+	_build_furniture_l1()
+	_build_furniture_l2()
+	_build_furniture_l3()
+
+
+func _build_furniture_l1() -> void:
+	var f := FLOOR_Y
+	# 门内接待台
+	_desk("L1_Desk", Vector3(-2.0, f, 4.2), Vector2(2.2, 0.9), 1.0, _mat["white"])
+	_deco("L1_DeskFront", Vector3(-2.0, f + 0.55, 4.66), Vector3(1.4, 0.5, 0.05), _mat["red"])
+	_deco("L1_DeskTop", Vector3(-2.0, f + 1.04, 4.2), Vector3(2.3, 0.04, 1.0), _mat["black"])
+	# 地毯
+	_rug("L1_Rug", Vector3(-2.2, f, -0.8), Vector2(8.6, 6.4), _mat["blue"])
+	# 长桌 + 四把椅
+	_desk("L1_Table", Vector3(1.4, f, -2.2), Vector2(2.4, 1.1), 0.74, _mat["white"])
+	_chair("L1_ChairN1", Vector3(0.4, f, -0.8), PI, _mat["white"])
+	_chair("L1_ChairN2", Vector3(2.2, f, -0.8), PI, _mat["yellow"])
+	_chair("L1_ChairS1", Vector3(0.4, f, -3.6), 0.0, _mat["white"])
+	_chair("L1_ChairS2", Vector3(2.2, f, -3.6), 0.0, _mat["red"])
+	# 西侧展台
+	_pedestal("L1_Ped1", Vector3(-9.6, f, -4.4), 1.0, _mat["yellow"])
+	_pedestal("L1_Ped2", Vector3(-9.6, f, -1.4), 1.0, _mat["red"])
+	# 西墙长凳
+	_deco("L1_Bench", Vector3(-10.9, f + 0.42, 3.2), Vector3(0.55, 0.12, 3.0), _mat["yellow"])
+	_deco("L1_BenchBase", Vector3(-10.9, f + 0.20, 3.2), Vector3(0.32, 0.40, 2.4), _mat["black"])
+	# 挂画
+	_art("L1_Art1", "W", L1_MIN, L1_MAX, -4.8, 2.7, 1.9, 1.5)
+	_art("L1_Art2", "E", L1_MIN, L1_MAX, -3.4, 2.7, 1.7, 1.3)
+	_art("L1_Art3", "S", L1_MIN, L1_MAX, -8.6, 2.7, 1.8, 1.4)
+	# 吊灯
+	_pendant("L1_Pend1", Vector3(-6.0, L1_TOP - SLAB_T, 1.2), 0.95)
+	_pendant("L1_Pend2", Vector3(1.8, L1_TOP - SLAB_T, 1.2), 0.95)
+
+
+func _build_furniture_l2() -> void:
+	var f := L1_TOP
+	_rug("L2_Rug", Vector3(-1.0, f, -1.4), Vector2(6.6, 4.6), _mat["yellow"])
+	_desk("L2_Table", Vector3(-1.0, f, -1.4), Vector2(3.4, 1.2), 0.74, _mat["white"])
+	_chair("L2_ChairN1", Vector3(-2.2, f, 0.0), PI, _mat["blue"])
+	_chair("L2_ChairN2", Vector3(-0.4, f, 0.0), PI, _mat["white"])
+	_chair("L2_ChairN3", Vector3(1.2, f, 0.0), PI, _mat["red"])
+	_chair("L2_ChairS1", Vector3(-2.2, f, -2.8), 0.0, _mat["white"])
+	_chair("L2_ChairS2", Vector3(-0.4, f, -2.8), 0.0, _mat["yellow"])
+	_chair("L2_ChairS3", Vector3(1.2, f, -2.8), 0.0, _mat["white"])
+	# 南墙沙发
+	_deco("L2_Sofa", Vector3(-5.4, f + 0.42, 4.9), Vector3(2.8, 0.45, 0.95), _mat["blue"])
+	_deco("L2_SofaBack", Vector3(-5.4, f + 0.88, 5.32), Vector3(2.8, 0.95, 0.18), _mat["blue"])
+	_deco("L2_SofaArmW", Vector3(-6.8, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
+	_deco("L2_SofaArmE", Vector3(-4.0, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
+	# 东侧展台
+	_pedestal("L2_Ped1", Vector3(6.4, f, -4.6), 0.9, _mat["blue"])
+	_art("L2_Art1", "W", L2_MIN, L2_MAX, -3.6, 7.2, 1.8, 1.4)
+	_art("L2_Art2", "E", L2_MIN, L2_MAX, -3.8, 7.2, 1.6, 1.2)
+	_pendant("L2_Pend1", Vector3(-3.2, L2_TOP - SLAB_T, 0.4), 1.0)
+	_pendant("L2_Pend2", Vector3(2.6, L2_TOP - SLAB_T, 0.4), 1.0)
+
+
+func _build_furniture_l3() -> void:
+	var f := L2_TOP
+	# 西侧休息角
+	_deco("L3_Sofa", Vector3(-3.5, f + 0.42, -1.4), Vector3(0.95, 0.45, 2.8), _mat["red"])
+	_deco("L3_SofaBack", Vector3(-3.92, f + 0.88, -1.4), Vector3(0.18, 0.95, 2.8), _mat["red"])
+	_desk("L3_Table", Vector3(-1.7, f, -1.4), Vector2(1.3, 1.3), 0.52, _mat["white"])
+	_deco("L3_TableTop", Vector3(-1.7, f + 0.56, -1.4), Vector3(1.4, 0.03, 1.4), _mat["black"])
+	_chair("L3_Chair1", Vector3(-0.5, f, -1.4), -PI * 0.5, _mat["yellow"])
+	_chair("L3_Chair2", Vector3(-2.9, f, 0.2), PI, _mat["blue"])
+	# 展台
+	_pedestal("L3_Ped1", Vector3(8.6, f, -4.4), 0.9, _mat["yellow"])
+	_art("L3_Art1", "W", L3_MIN, L3_MAX, 2.6, 10.9, 1.6, 1.3)
+	_art("L3_Art2", "S", L3_MIN, L3_MAX, -2.4, 10.9, 1.6, 1.3)
+	_pendant("L3_Pend1", Vector3(-1.7, L3_TOP - SLAB_T, -1.4), 1.2)
+	_pendant("L3_Pend2", Vector3(1.6, L3_TOP - SLAB_T, -1.4), 1.2)
