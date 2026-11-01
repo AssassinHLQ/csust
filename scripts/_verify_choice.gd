@@ -35,7 +35,7 @@ func _make_steps() -> Array:
 			{"text": "商人啊!我正是为此而来!", "value": 1,
 				"then": [{"kind": "say", "who": "芹香", "text": "老板,看这套配置怎么样[TVT]"},
 					{"kind": "image", "path": "res://models/boss/tex/boss_body.png"}]},
-			{"text": "观察了银行卡的余额,摇了摇头", "value": 2,
+			{"text": "[观察了银行卡的余额,摇了摇头]", "value": 2,
 				"then": [{"kind": "say", "who": "芹香", "text": "……先看看也行，不着急买。"}]},
 		]},
 	]
@@ -67,8 +67,8 @@ func _run() -> void:
 	_check(box.choice_count() == 2, "进入选择，选项数=%d（期望 2）" % box.choice_count())
 	_check(box.current_choice() == 0, "默认选中第 1 项（current=%d）" % box.current_choice())
 	_check(box.choice_text(0) == "商人啊!我正是为此而来!", "第 1 项：%s" % box.choice_text(0))
-	_check(box.choice_text(1) == "观察了银行卡的余额,摇了摇头",
-		"第 2 项（已去括号）：%s" % box.choice_text(1))
+	_check(box.choice_text(1) == "[观察了银行卡的余额,摇了摇头]",
+		"第 2 项（带方括号）：%s" % box.choice_text(1))
 	_key(KEY_S)
 	for _i in 4:
 		await process_frame

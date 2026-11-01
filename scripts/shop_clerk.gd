@@ -250,7 +250,7 @@ const TALK_OPTIONS := [
 		],
 	},
 	{
-		"text": "观察了银行卡的余额,摇了摇头",
+		"text": "[观察了银行卡的余额,摇了摇头]",
 		"value": 2,
 		"then": [{"kind": "say", "who": SPEAKER,
 			"text": "……先看看也行，不着急买。"}],

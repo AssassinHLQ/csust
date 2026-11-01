@@ -23,8 +23,8 @@ func _run() -> void:
 		{"kind": "say", "who": "芹香", "text": "你配电脑吗?"},
 		{"kind": "choice", "options": [
 			{"text": "商人啊!我正是为此而来!", "disabled": true,
-				"disabled_hint": "银行卡余额不足：还差 ¥20.0 万（卡上 ¥30.0 万）"},
-			{"text": "观察了银行卡的余额,摇了摇头"},
+				"disabled_hint": "银行卡余额不足：还差 ¥67.0 万（卡上 ¥0）"},
+			{"text": "[观察了银行卡的余额,摇了摇头]"},
 		]},
 	], "shot")
 	for _i in 30:
