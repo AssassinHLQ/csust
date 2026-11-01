@@ -538,27 +538,27 @@ func _cyl(nm: String, center: Vector3, radius: float, height: float, mat: Materi
 ## 椅子：黑托柱 + 座面 + 靠背。
 func _chair(nm: String, base: Vector3, yaw: float, seat: Material) -> void:
 	var b := Basis(Vector3.UP, yaw)
-	_sloped_box(nm + "_Col", base + Vector3(0, 0.22, 0), Vector3(0.14, 0.44, 0.14), b, _mat["black"], false)
-	_sloped_box(nm + "_Seat", base + Vector3(0, 0.46, 0), Vector3(0.52, 0.08, 0.52), b, seat, false)
-	_sloped_box(nm + "_Back", base + b * Vector3(0, 0.78, -0.24), Vector3(0.52, 0.56, 0.07), b, seat, false)
+	_sloped_box(nm + "_Col", base + Vector3(0, 0.22, 0), Vector3(0.14, 0.44, 0.14), b, _mat["black"], true)
+	_sloped_box(nm + "_Seat", base + Vector3(0, 0.46, 0), Vector3(0.52, 0.08, 0.52), b, seat, true)
+	_sloped_box(nm + "_Back", base + b * Vector3(0, 0.78, -0.24), Vector3(0.52, 0.56, 0.07), b, seat, true)
 
 
 ## 桌子：台面 + 两端黑腿板。
 func _desk(nm: String, center: Vector3, size: Vector2, height: float, top_mat: Material) -> void:
-	_deco(nm + "_Top", Vector3(center.x, center.y + height, center.z),
+	_solid(nm + "_Top", Vector3(center.x, center.y + height, center.z),
 		Vector3(size.x, 0.08, size.y), top_mat)
-	_deco(nm + "_LegW", Vector3(center.x - size.x * 0.5 + 0.14, center.y + height * 0.5, center.z),
+	_solid(nm + "_LegW", Vector3(center.x - size.x * 0.5 + 0.14, center.y + height * 0.5, center.z),
 		Vector3(0.12, height, size.y * 0.78), _mat["black"])
-	_deco(nm + "_LegE", Vector3(center.x + size.x * 0.5 - 0.14, center.y + height * 0.5, center.z),
+	_solid(nm + "_LegE", Vector3(center.x + size.x * 0.5 - 0.14, center.y + height * 0.5, center.z),
 		Vector3(0.12, height, size.y * 0.78), _mat["black"])
 
 
 ## 展台：白座 + 黑压边 + 顶上一个色块（当雕塑看）。
 func _pedestal(nm: String, base: Vector3, size: float, art: Material) -> void:
-	_deco(nm + "_Base", base + Vector3(0, size * 0.5, 0), Vector3(size, size, size), _mat["white"])
+	_solid(nm + "_Base", base + Vector3(0, size * 0.5, 0), Vector3(size, size, size), _mat["white"])
 	_deco(nm + "_Rim", base + Vector3(0, size + 0.01, 0),
 		Vector3(size + 0.05, 0.02, size + 0.05), _mat["black"])
-	_deco(nm + "_Art", base + Vector3(0, size + 0.32, 0),
+	_solid(nm + "_Art", base + Vector3(0, size + 0.32, 0),
 		Vector3(size * 0.5, 0.62, size * 0.5), art)
 
 
@@ -620,8 +620,8 @@ func _build_furniture_l1() -> void:
 	_pedestal("L1_Ped1", Vector3(-9.6, f, -4.4), 1.0, _mat["yellow"])
 	_pedestal("L1_Ped2", Vector3(-9.6, f, -1.4), 1.0, _mat["red"])
 	# 西墙长凳
-	_deco("L1_Bench", Vector3(-10.9, f + 0.42, 3.2), Vector3(0.55, 0.12, 3.0), _mat["yellow"])
-	_deco("L1_BenchBase", Vector3(-10.9, f + 0.20, 3.2), Vector3(0.32, 0.40, 2.4), _mat["black"])
+	_solid("L1_Bench", Vector3(-10.9, f + 0.42, 3.2), Vector3(0.55, 0.12, 3.0), _mat["yellow"])
+	_solid("L1_BenchBase", Vector3(-10.9, f + 0.20, 3.2), Vector3(0.32, 0.40, 2.4), _mat["black"])
 	# 挂画
 	_art("L1_Art1", "W", L1_MIN, L1_MAX, -4.8, 2.7, 1.9, 1.5)
 	_art("L1_Art2", "E", L1_MIN, L1_MAX, -3.4, 2.7, 1.7, 1.3)
@@ -642,10 +642,10 @@ func _build_furniture_l2() -> void:
 	_chair("L2_ChairS2", Vector3(-0.4, f, -2.8), 0.0, _mat["yellow"])
 	_chair("L2_ChairS3", Vector3(1.2, f, -2.8), 0.0, _mat["white"])
 	# 南墙沙发
-	_deco("L2_Sofa", Vector3(-5.4, f + 0.42, 4.9), Vector3(2.8, 0.45, 0.95), _mat["blue"])
-	_deco("L2_SofaBack", Vector3(-5.4, f + 0.88, 5.32), Vector3(2.8, 0.95, 0.18), _mat["blue"])
-	_deco("L2_SofaArmW", Vector3(-6.8, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
-	_deco("L2_SofaArmE", Vector3(-4.0, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
+	_solid("L2_Sofa", Vector3(-5.4, f + 0.42, 4.9), Vector3(2.8, 0.45, 0.95), _mat["blue"])
+	_solid("L2_SofaBack", Vector3(-5.4, f + 0.88, 5.32), Vector3(2.8, 0.95, 0.18), _mat["blue"])
+	_solid("L2_SofaArmW", Vector3(-6.8, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
+	_solid("L2_SofaArmE", Vector3(-4.0, f + 0.62, 4.9), Vector3(0.18, 0.6, 0.95), _mat["black"])
 	# 东侧展台
 	_pedestal("L2_Ped1", Vector3(6.4, f, -4.6), 0.9, _mat["blue"])
 	_art("L2_Art1", "W", L2_MIN, L2_MAX, -3.6, 7.2, 1.8, 1.4)
@@ -657,8 +657,8 @@ func _build_furniture_l2() -> void:
 func _build_furniture_l3() -> void:
 	var f := L2_TOP
 	# 西侧休息角
-	_deco("L3_Sofa", Vector3(-3.5, f + 0.42, -1.4), Vector3(0.95, 0.45, 2.8), _mat["red"])
-	_deco("L3_SofaBack", Vector3(-3.92, f + 0.88, -1.4), Vector3(0.18, 0.95, 2.8), _mat["red"])
+	_solid("L3_Sofa", Vector3(-3.5, f + 0.42, -1.4), Vector3(0.95, 0.45, 2.8), _mat["red"])
+	_solid("L3_SofaBack", Vector3(-3.92, f + 0.88, -1.4), Vector3(0.18, 0.95, 2.8), _mat["red"])
 	_desk("L3_Table", Vector3(-1.7, f, -1.4), Vector2(1.3, 1.3), 0.52, _mat["white"])
 	_deco("L3_TableTop", Vector3(-1.7, f + 0.56, -1.4), Vector3(1.4, 0.03, 1.4), _mat["black"])
 	_chair("L3_Chair1", Vector3(-0.5, f, -1.4), -PI * 0.5, _mat["yellow"])
