@@ -47,6 +47,8 @@ signal finished
 ## 玩家在一次 `choice` 步骤里选定了第 index 项（value 是选项自带的 `value`，
 ## 没写就用下标）。剧情会接着播选项里的 `then` 步骤。
 signal choice_made(index: int, value: Variant)
+## `custom` 步骤发出来给业务脚本（扣款、给道具之类），播放器自己不解释
+signal custom_step(name: String, data: Dictionary)
 
 ## ── 布局（**逻辑单位**，`canvas_items` 拉伸下再乘缩放）──
 ##
@@ -142,6 +144,8 @@ var _choice_options: Array = []
 var _choice_index := 0
 var _choosing := false
 var _choice_pulse: Tween
+## 选项区上方那行提示（余额不足之类）
+var _choice_notice: Label
 
 ## 剧情插图
 var _image_panel: Panel
@@ -464,6 +468,10 @@ func _run_current() -> void:
 			StoryScript.K_SHEET:
 				_show_sheet(s)
 				return
+			StoryScript.K_CUSTOM:
+				custom_step.emit(String(s.get("name", "")), s.get("data", {}))
+				_index += 1
+				continue
 			StoryScript.K_END:
 				finish()
 				return
@@ -545,6 +553,9 @@ func _begin_choice(step: Dictionary) -> void:
 
 func _build_choice_rows() -> void:
 	for c in _choice_panel.get_children():
+		# ⚠️ 提示标签也是面板的子节点，重建选项时别把它一起 free 掉
+		if c == _choice_notice:
+			continue
 		_choice_panel.remove_child(c)
 		c.queue_free()
 	_choice_rows.clear()
@@ -603,6 +614,8 @@ func _build_choice_rows() -> void:
 		_choice_arrows.append(arrow)
 		_choice_styles.append(sb)
 		_choice_hot_styles.append(sb_hot)
+		if bool(opt.get("disabled", false)):
+			row.modulate = Color(0.62, 0.60, 0.58, 1.0)
 
 
 ## 把「谁被选中」画出来：箭头只在当前项出现，边框做呼吸闪烁。
@@ -616,6 +629,13 @@ func _refresh_choices() -> void:
 			_choice_hot_styles[i] if sel else _choice_styles[i])
 		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else Color(0.80, 0.78, 0.75, 1.0)
 		_choice_arrows[i].modulate.a = 1.0 if sel else 0.0
+	if _choice_notice != null:
+		var sel_opt: Dictionary = _choice_options[_choice_index] if _choice_index < _choice_options.size() else {}
+		if bool(sel_opt.get("disabled", false)):
+			_choice_notice.text = String(sel_opt.get("disabled_hint", "暂时不能选"))
+			_choice_notice.visible = true
+		else:
+			_choice_notice.visible = false
 	if _choice_rows.is_empty():
 		return
 	# 呼吸灯做在**箭头**上：木板底图改不了边框色，箭头一亮一暗同样能勾住视线
@@ -639,8 +659,23 @@ func _confirm_choice() -> void:
 		return
 	var idx := _choice_index
 	var opt: Dictionary = _choice_options[idx]
+	# 禁用的选项点了不推进：抖一下 + 把提示亮出来
+	if bool(opt.get("disabled", false)):
+		_choice_notice.text = String(opt.get("disabled_hint", "暂时不能选"))
+		_choice_notice.visible = true
+		_choice_notice.modulate.a = 1.0
+		var tw := create_tween()
+		tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		tw.tween_property(_choice_notice, "modulate:a", 0.25, 0.10)
+		tw.tween_property(_choice_notice, "modulate:a", 1.0, 0.10)
+		tw.tween_property(_choice_notice, "modulate:a", 0.25, 0.10)
+		tw.tween_property(_choice_notice, "modulate:a", 1.0, 0.10)
+		Sfx.play("empty", -10.0)
+		return
 	_choosing = false
 	_choice_panel.visible = false
+	if _choice_notice != null:
+		_choice_notice.visible = false
 	if _choice_pulse != null and _choice_pulse.is_valid():
 		_choice_pulse.kill()
 	Sfx.play("ui_press")
@@ -928,6 +963,20 @@ func _build() -> void:
 	_choice_panel.anchor_bottom = 1.0
 	_choice_panel.visible = false
 	_root.add_child(_choice_panel)
+
+	# 选项上方的一行提示（「余额不足」之类）。挂在选项面板里、放在 y<0，
+	# 这样它跟着面板走、又不会把面板撑高。
+	_choice_notice = Label.new()
+	_choice_notice.name = "ChoiceNotice"
+	_choice_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_choice_notice.position = Vector2(0.0, -36.0)
+	_choice_notice.size = Vector2(CHOICE_WIDTH, 30.0)
+	_choice_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_choice_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_choice_notice.add_theme_font_size_override("font_size", 18)
+	_choice_notice.add_theme_color_override("font_color", Color(0.86, 0.26, 0.20))
+	_choice_notice.visible = false
+	_choice_panel.add_child(_choice_notice)
 
 	# 剧情插图：一块深色底板 + 一张按比例缩放的贴图，默认藏着。
 	_image_panel = Panel.new()

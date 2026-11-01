@@ -65,6 +65,9 @@ const K_IMAGE := "image"
 ##    "photo":{"x":1064,"y":146,"w":492,"h":560},        ← 源图像素坐标
 ##    "rows":[{"top":146,"bottom":212,"image":"…png"}, …]}
 const K_SHEET := "config_sheet"
+## 通用回调步骤：`{"kind":"custom","name":"pay","data":{...}}` → 播放器发 `custom_step` 信号，
+## 业务脚本接了自己做事（比如扣款）。解析器还没做对应指令，目前只在内联剧本里用。
+const K_CUSTOM := "custom"
 const K_END := "end"
 
 ## `@clear` 的空档时长（秒）。解析器只负责认这个词，时长归播放器用；

@@ -1,5 +1,7 @@
 class_name ParkourFutures
 extends Node3D
+
+const BankCard := preload("res://scripts/bank_card.gd")
 ## 第 3 段「同花顺期货通」的运行期总控。**场景里只有一个空节点**
 ## （`scenes/parkour.tscn` 的 `Futures`），会动的方块 / 蓝块强平 / 薛定谔坍缩 / 负债 HUD
 ## 全部在 `_build()` 里按**路线上的落脚板**算出来 —— 几何的唯一真相仍然是那 13 块板。
@@ -140,6 +142,8 @@ var _flash: ColorRect
 
 func _ready() -> void:
 	add_to_group("futures")
+	# 银行卡是全项目共用的一份（商店也读它），进场时从存档同步过来
+	bank_yuan = BankCard.balance()
 	_rng.seed = 2067
 	_lot_rng.seed = 2068          # 独立流，见 `_lot_rng` 的注释
 	margin = start_margin
@@ -937,6 +941,7 @@ func settle_all() -> String:
 	bank_yuan -= paid
 	debt -= int(round(float(paid) / 10000.0))
 	_update_hud_text()
+	BankCard.set_balance(bank_yuan)   # 落盘：商店那边读的是同一张卡
 	var msg := "结算：资产 ¥%s + 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
 		_fmt_yuan(sold), _fmt_yuan(refund), _fmt_yuan(bank_yuan),
 		_fmt_yuan(paid), debt]

@@ -122,6 +122,10 @@ const CLERK_LIFT := 0.0
 ## 交互方式跟屋里的电脑（`hut_computer.gd`）一致：**站在她面前按 F**。
 ## 说话用场景里的 `DialogueBox`（`play_steps` 是它的「内联播放」入口），
 ## 这样打字的节奏、翻页、暂停世界全部沿用现成的那一套，不另起炉灶。
+## 八卡 5090 整套的价格（元）。低于这个数就不能选第一项。
+const DESK_PRICE := 500000
+const BankCard := preload("res://scripts/bank_card.gd")
+
 const TALK_RADIUS := 2.6
 ## 垂直方向也限定一下：站在二层或楼下远一点的地方按 F 不该触发
 const TALK_DY_MAX := 2.0
@@ -230,16 +234,19 @@ const TALK_OPTIONS := [
 			# 报价之后弹配置单：悬停行会换右侧照片，按空格/左键关掉再往下
 			{"kind": "__sheet_b300__"},
 			{"kind": "say", "who": SPEAKER,
-				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百万起，配您正合适[TVT]"},
-			# 小桃拆台：数据中心卡塞不进宿舍，而且根本没货
+				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百二十万，适合给老师送礼,配您正合适,我也多赚钱[TVT]"},
+			# 小桃拆台：服务器卡没技巧，5090 才是硬核
+			{"kind": "say", "who": "小桃", "text": "我chovy,什么破卡."},
 			{"kind": "say", "who": "小桃",
-				"text": "等等等等——B300？那可是数据中心卡！八卡一柜、还得上冷板液冷，宿舍连电都带不动。"},
-			{"kind": "say", "who": "小桃",
-				"text": "而且现在根本买不到现货。要我说，八张 5090 才叫正经配置——能训、能跑、还能打游戏。"},
+				"text": "要我说,5090的硬核才是王道,你那服务器卡根本就没技巧"},
 			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。"},
 			{"kind": "__sheet_5090__"},
 			{"kind": "say", "who": SPEAKER,
-				"text": "八张 5090 加撕裂者，五十来万——这张才是真能装能跑的。"},
+				"text": "八张 5090 加撕裂者，五十来万——这套才是真适合给木的"},
+			{"kind": "say", "who": "爱丽丝", "text": "邦邦卡邦!就这套了!"},
+			# 成交：扣款由 shop_clerk 接 custom 步骤做，紧接着那句旁白报余额
+			{"kind": "custom", "name": "pay", "data": {"amount": DESK_PRICE, "label": "八卡 5090 工作站"}},
+			{"kind": "narrate", "text": "__BALANCE_AFTER__"},
 		],
 	},
 	{
@@ -531,6 +538,19 @@ func _input(event: InputEvent) -> void:
 
 ## 播放对话。`play_steps` 会自己暂停世界、打字、等翻页，结束后恢复。
 ## 第一句问「你配电脑吗?」，然后给玩家两个选项（W/S 选、空格确认）。
+## 播放器发来的业务回调（目前只有成交扣款）
+func _on_dialogue_custom(step_name: String, data: Dictionary) -> void:
+	if step_name != "pay":
+		return
+	var amount := int(data.get("amount", 0))
+	var label := String(data.get("label", "整机"))
+	if BankCard.spend(amount):
+		print("[Clerk] 成交：%s，扣款 %s，余额 %s" % [
+			label, BankCard.format_yuan(amount), BankCard.format_yuan(BankCard.balance())])
+	else:
+		push_warning("[Clerk] 扣款失败：卡上不够 %s" % BankCard.format_yuan(amount))
+
+
 func _talk(d: DialogueBox) -> void:
 	var steps: Array = []
 	for line in TALK_LINES:
@@ -539,6 +559,15 @@ func _talk(d: DialogueBox) -> void:
 	var opts: Array = []
 	for o in TALK_OPTIONS:
 		var opt: Dictionary = (o as Dictionary).duplicate(true)
+		# 买整机那一项：卡上钱不够就禁掉，选中会提示余额不足、不推进
+		if int(opt.get("value", 0)) == 1:
+			var bal := BankCard.balance()
+			if bal < DESK_PRICE:
+				opt["disabled"] = true
+				opt["disabled_hint"] = "银行卡余额不足：还差 %s（卡上 %s）" % [
+					BankCard.format_yuan(DESK_PRICE - bal), BankCard.format_yuan(bal)]
+				print("[Clerk] 余额 %s < %s，第一项禁用" % [
+					BankCard.format_yuan(bal), BankCard.format_yuan(DESK_PRICE)])
 		var fixed: Array = []
 		for st in opt.get("then", []):
 			var kind := String((st as Dictionary).get("kind", ""))
@@ -546,12 +575,24 @@ func _talk(d: DialogueBox) -> void:
 				fixed.append(_sheet_step(SHEET_B300))
 			elif kind == "__sheet_5090__":
 				fixed.append(_sheet_step(SHEET_5090))
+			elif kind == StoryScript.K_CUSTOM:
+				fixed.append(st)
+			elif String((st as Dictionary).get("text", "")) == "__BALANCE_AFTER__":
+				var after := {
+					"kind": "narrate",
+					"text": "银行卡 -%s，余额 %s。" % [
+						BankCard.format_yuan(DESK_PRICE),
+						BankCard.format_yuan(maxi(0, BankCard.balance() - DESK_PRICE))],
+				}
+				fixed.append(after)
 			else:
 				fixed.append(st)
 		if not fixed.is_empty():
 			opt["then"] = fixed
 		opts.append(opt)
 	steps.append({"kind": "choice", "options": opts})
+	if not d.custom_step.is_connected(_on_dialogue_custom):
+		d.custom_step.connect(_on_dialogue_custom)
 	d.play_steps(steps, "shop_clerk")
 	print("[Clerk] 芹香开口：%d 句 + %d 个选项（%s）"
 		% [TALK_LINES.size(), TALK_OPTIONS.size(), String(TALK_LINES[0])])
