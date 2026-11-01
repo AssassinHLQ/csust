@@ -153,7 +153,7 @@ func _ready() -> void:
 		_hud.bind_splats(splats)
 	_set_goal_open(false)
 	_update_scoreboard()
-	_show_message("击破 %d 个机关 —— 东门会下沉，可以出去看校园" % _total, 5.0)
+	_show_message("击破 %d 个机关 —— 北门会下沉，可以出去看校园" % _total, 5.0)
 	print("[ConstructivistLevel] 关卡就绪：靶子 %d 个，玩家落点 %s"
 		% [_total, str(point.snappedf(0.01))])
 	SceneFlow.report_memory("构成主义关卡就绪")
@@ -179,9 +179,9 @@ func _on_target_died(_by: float) -> void:
 	if _left <= 0:
 		_set_goal_open(true)
 		_open_exit_door()
-		_show_message("机关全部击破 —— 东门下沉，可以出去看校园", 6.0)
+		_show_message("机关全部击破 —— 北门下沉，可以出去看校园", 6.0)
 		Sfx.play("ui_open", -2.0)
-		print("[ConstructivistLevel] 机关清空，终点解锁 + 东门开启")
+		print("[ConstructivistLevel] 机关清空，终点解锁 + 北门开启")
 
 
 func _set_goal_open(on: bool) -> void:
@@ -199,7 +199,7 @@ func _on_goal_body(body: Node3D) -> void:
 	_complete = true
 	_goal.set_deferred("monitoring", false)
 	_goal_light.light_energy = 4.5
-	_show_message("关卡完成 · 构成主义大厅", 8.0)
+	_show_message("关卡完成 · 蒙德里安大楼", 8.0)
 	Sfx.play("ui_open")
 	print("[ConstructivistLevel] 关卡完成（靶子 %d/%d）" % [_total - _left, _total])
 
@@ -214,14 +214,14 @@ func _on_fall(body: Node3D) -> void:
 	print("[ConstructivistLevel] 玩家掉出广场，已送回出生点")
 
 
-## 东门下沉（动画 1.8 s），把碰撞一起沉到地板下面。
+## 北门下沉（动画 1.8 s），把碰撞一起沉到地板下面。
 func _open_exit_door() -> void:
 	if _door_open or _door == null:
 		return
 	_door_open = true
 	var tw := create_tween()
 	tw.tween_property(_door, "position:y", -3.3, 1.8) 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	print("[ConstructivistLevel] 东门下沉")
+	print("[ConstructivistLevel] 北门下沉")
 
 
 func _process(_delta: float) -> void:

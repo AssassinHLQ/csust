@@ -1,22 +1,24 @@
 [gd_scene load_steps=36 format=3]
 
-; 第二个场景：构成主义大厅（Constructivism）。
-; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」。
+; 第二个场景：蒙德里安大楼（De Stijl）。
+; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」；
+; 2026-11-01 把构成主义大厅换成 蒙德里安建筑/mondrian_building.blend 那栋，
+; 关卡逻辑不变，改成三层室内：一层 → 西侧斜坡 → 二层 → 东侧斜坡 → 三层 → 终点台。
 ;
-; 建筑本体在 scenes/constructivist_hall_baked.tscn（由 constructivist_hall.gd 烘出来，
-; 每一块都能在编辑器里拖）。本文件只摆**玩法实体**：
+; 建筑本体在 scenes/mondrian_hall.tscn（GLB 外壳 + 基座 + 烘焙好的室内，
+; 室内由 scripts/mondrian_hall.gd 烘出，每一块都能在编辑器里拖）。本文件只摆**玩法实体**：
 ;   入口的返回门、玩家出生点、HUD、3 个红靶、高台终点、计分牌、关卡提示。
 ;
-; 路线：地面 → 红楔坡道（顶 3.2）→ 平台 A（3.2）→ 平台 B（4.2）→
-;       终点台（5.2，贴北墙）→ 踩上终点圆盘。
-; 三个靶子：北墙 (8, 2.6) / (12, 5.4)、东墙 (13.76, 4.0, z=2)。
+; 路线：正门进 → 一层红靶 → 西侧斜坡井 → 二层红靶 → 东侧斜坡井 →
+;       三层红靶 → 起跳台（10.3）→ 终点台（11.3，北墙前）。
+; 三个靶子分别挂在一层 / 二层 / 三层；击破全部 → 终点解锁 + 北门下沉。
 
 [ext_resource type="Script" path="res://scripts/next_level.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" path="res://scenes/scene_gate.tscn" id="4_gate"]
 [ext_resource type="Script" uid="uid://dm2fk6l7uaqgw" path="res://scripts/settings_menu.gd" id="5_settings"]
-[ext_resource type="PackedScene" path="res://scenes/constructivist_hall_baked.tscn" id="6_hall"]
+[ext_resource type="PackedScene" path="res://scenes/mondrian_hall.tscn" id="6_hall"]
 [ext_resource type="Script" path="res://scripts/target.gd" id="7_target"]
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision.tscn" id="9_campuscol"]
@@ -150,6 +152,9 @@ directional_shadow_max_distance = 90.0
 
 [node name="Hall" parent="." instance=ExtResource("6_hall")]
 
+; ── 2026-11-01：构成主义大厅 → 蒙德里安建筑（蒙德里安建筑/mondrian_building）
+; 三层室内，靶子按楼层分布：L1 地面 / L2 二层 / L3 三层，终点台在 L3 北侧高台。
+
 [node name="Plaza" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.32, 0)
 
@@ -197,7 +202,7 @@ surface_material_override/0 = SubResource("Mat_pad_on")
 cast_shadow = 0
 
 [node name="ExitDoor" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.15, 3, 3)
+transform = Transform3D(1, 0, 0, 0, 0.62, 0, 0, 0, 0.9, 3.25, 2.41, -7.95)
 
 [node name="Collision" type="CollisionShape3D" parent="ExitDoor"]
 shape = SubResource("Shape_exit_door")
@@ -278,7 +283,7 @@ preload_on_gate = false
 [node name="CampusDeconstruct" parent="." instance=ExtResource("15_campusbuildings")]
 
 [node name="Scoreboard" type="Label3D" parent="."]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4.75, 8.72)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 4.1, 7.6)
 pixel_size = 0.008
 billboard = 0
 modulate = Color(0.08, 0.07, 0.06, 1)
@@ -289,7 +294,7 @@ outline_size = 26
 no_depth_test = false
 
 [node name="Target1" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2.6, -8.64)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2.6, -7.55)
 script = ExtResource("7_target")
 max_health = 100.0
 respawn_time = 9999.0
@@ -308,7 +313,7 @@ surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
 [node name="Target2" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 5.4, -8.64)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, -6.55)
 script = ExtResource("7_target")
 max_health = 100.0
 respawn_time = 9999.0
@@ -327,7 +332,7 @@ surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
 [node name="Target3" type="StaticBody3D" parent="."]
-transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -8, 4.2, 8.64)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -4.55, 11, 0)
 script = ExtResource("7_target")
 max_health = 100.0
 respawn_time = 9999.0
@@ -346,7 +351,7 @@ surface_material_override/0 = SubResource("Mat_target_ring")
 cast_shadow = 0
 
 [node name="Goal" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 5.9, -8.2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.6, 12, -4.9)
 collision_layer = 0
 collision_mask = 1
 monitoring = false
@@ -368,10 +373,10 @@ omni_range = 6.0
 shadow_enabled = false
 
 [node name="SpawnPoint" type="Marker3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.55, 5.2)
 
 [node name="ReturnGate" parent="." instance=ExtResource("4_gate")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 8.45)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 0.5, 10.4)
 target_scene = "res://scenes/game.tscn"
 target_spawn = "MondrianGate2F"
 gate_id = "ConstructivistReturn"
@@ -379,7 +384,7 @@ title = "返回 · 蒙德里安大楼"
 prompt = "按 F 返回"
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 6.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.55, 5.2)
 
 [node name="HUD" parent="." instance=ExtResource("3_hud")]
 

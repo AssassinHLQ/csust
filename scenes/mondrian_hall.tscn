@@ -1,0 +1,85 @@
+[gd_scene load_steps=10 format=3]
+
+; 第二关的蒙德里安建筑：外壳 GLB + 基座台阶 + 可走室内。
+; 外壳 models/mondrian/mondrian_building.glb 由 蒙德里安建筑/mondrian_building.blend 导出，
+; 导出时只保留 MASSING / DETAIL，并在正反面各布尔切了一个门洞（正门 4.5 m、北面出口 4.5 m）。
+; 室内在 scenes/mondrian_hall_interior_baked.tscn（scripts/mondrian_hall.gd 烘的）。
+
+[ext_resource type="PackedScene" path="res://models/mondrian/mondrian_building.glb" id="1_shell"]
+[ext_resource type="PackedScene" path="res://scenes/mondrian_hall_interior_baked.tscn" id="2_interior"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_plinth"]
+albedo_color = Color(0.78, 0.775, 0.755, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_plinth"]
+size = Vector3(31.2, 0.52, 21.05)
+
+[sub_resource type="BoxShape3D" id="Shape_plinth"]
+size = Vector3(31.2, 0.52, 21.05)
+
+[sub_resource type="BoxMesh" id="Mesh_step_s1"]
+size = Vector3(16, 0.24, 1.2)
+
+[sub_resource type="BoxShape3D" id="Shape_step_s1"]
+size = Vector3(16, 0.24, 1.2)
+
+[sub_resource type="BoxMesh" id="Mesh_step_s2"]
+size = Vector3(16, 0.28, 0.8)
+
+[sub_resource type="BoxShape3D" id="Shape_step_s2"]
+size = Vector3(16, 0.28, 0.8)
+
+[sub_resource type="BoxMesh" id="Mesh_step_n"]
+size = Vector3(5.5, 0.24, 1.2)
+
+[sub_resource type="BoxShape3D" id="Shape_step_n"]
+size = Vector3(5.5, 0.24, 1.2)
+
+[node name="MondrianHall" type="Node3D"]
+
+[node name="Shell" parent="." instance=ExtResource("1_shell")]
+
+[node name="Plinth" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0.24, 2.025)
+
+[node name="Collision" type="CollisionShape3D" parent="Plinth"]
+shape = SubResource("Shape_plinth")
+
+[node name="Mesh" type="MeshInstance3D" parent="Plinth"]
+mesh = SubResource("Mesh_plinth")
+surface_material_override/0 = SubResource("Mat_plinth")
+
+; 南面正门前的两级台阶
+[node name="StepS1" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 13.15)
+
+[node name="Collision" type="CollisionShape3D" parent="StepS1"]
+shape = SubResource("Shape_step_s1")
+
+[node name="Mesh" type="MeshInstance3D" parent="StepS1"]
+mesh = SubResource("Mesh_step_s1")
+surface_material_override/0 = SubResource("Mat_plinth")
+
+[node name="StepS2" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.36, 12.95)
+
+[node name="Collision" type="CollisionShape3D" parent="StepS2"]
+shape = SubResource("Shape_step_s2")
+
+[node name="Mesh" type="MeshInstance3D" parent="StepS2"]
+mesh = SubResource("Mesh_step_s2")
+surface_material_override/0 = SubResource("Mat_plinth")
+
+; 北面出口外的一级台阶
+[node name="StepN" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 0.1, -9.1)
+
+[node name="Collision" type="CollisionShape3D" parent="StepN"]
+shape = SubResource("Shape_step_n")
+
+[node name="Mesh" type="MeshInstance3D" parent="StepN"]
+mesh = SubResource("Mesh_step_n")
+surface_material_override/0 = SubResource("Mat_plinth")
+
+[node name="Interior" parent="." instance=ExtResource("2_interior")]
