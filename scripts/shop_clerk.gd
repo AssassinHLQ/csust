@@ -123,7 +123,7 @@ const CLERK_LIFT := 0.0
 ## 说话用场景里的 `DialogueBox`（`play_steps` 是它的「内联播放」入口），
 ## 这样打字的节奏、翻页、暂停世界全部沿用现成的那一套，不另起炉灶。
 ## 八卡 5090 整套的价格（元）。低于这个数就不能选第一项。
-const DESK_PRICE := 500000
+const DESK_PRICE := 670000
 const BankCard := preload("res://scripts/bank_card.gd")
 
 const TALK_RADIUS := 2.6
@@ -242,7 +242,7 @@ const TALK_OPTIONS := [
 			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。"},
 			{"kind": "__sheet_5090__"},
 			{"kind": "say", "who": SPEAKER,
-				"text": "八张 5090 加撕裂者，五十来万——这套才是真适合给木的"},
+				"text": "八张 5090 加撕裂者，六十七万——这套才是真适合给木的"},
 			{"kind": "say", "who": "爱丽丝", "text": "邦邦卡邦!就这套了!"},
 			# 成交：扣款由 shop_clerk 接 custom 步骤做，紧接着那句旁白报余额
 			{"kind": "custom", "name": "pay", "data": {"amount": DESK_PRICE, "label": "八卡 5090 工作站"}},

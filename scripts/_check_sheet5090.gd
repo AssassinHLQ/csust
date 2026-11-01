@@ -27,7 +27,7 @@ func _run() -> void:
 		{"kind": "config_sheet", "base": "res://assets/story/config_sheet_5090.png",
 			"photo": {"x": 1064, "y": 146, "w": 492, "h": 560}, "rows": rows,
 			"caption": "图上为八卡 5090 工作站"},
-		{"kind": "say", "who": "芹香", "text": "八张 5090 加撕裂者，五十来万——这张才是真能装能跑的。"},
+		{"kind": "say", "who": "芹香", "text": "八张 5090 加撕裂者，六十七万——这套才是真适合给木的"},
 	], "check")
 	for _i in 10:
 		await process_frame

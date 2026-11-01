@@ -75,7 +75,7 @@ SHEETS = [
         "out": "config_sheet_5090.png",
         "subtitle": "2026.11 / 八卡 5090 / 小桃改单",
         "rows": [
-            ("显卡", "NVIDIA RTX 5090 · 32GB GDDR7 · 575W", "8", "¥3.5 万/张", True),
+            ("显卡", "NVIDIA RTX 5090 · 32GB GDDR7 · 575W", "8", "¥5.5 万/张", True),
             ("整机", "WRX90 工作站主板 + 开放式机架", "1", "¥2.5 万", False),
             ("处理器", "Threadripper PRO 9995WX · 96 核 · 128 条 PCIe 5.0", "1", "¥10 万", False),
             ("内存", "DDR5-5600 ECC 32GB · 8 条 = 256GB", "8", "¥0.4 万/条", True),
@@ -85,13 +85,13 @@ SHEETS = [
             ("散热", "开放式机架 + 工业扇", "1", "¥0.3 万", False),
             ("显示器", "27 英寸 4K 160Hz", "2", "¥0.4 万", False),
         ],
-        "total": "≈ ¥51 万",
+        "total": "≈ ¥67 万",
         "total_note": "约 5 kW · 一张工位 · 能装能跑还能打游戏",
         "photo": os.path.join(STORY, "parts", "hero_5090.png"),
         "photo_crop": (0, 0, 1023, 620),   # 裁掉右下角的水印
         "pills": [("8 × RTX 5090 32GB", True), ("256GB ECC = 8 × 32GB", False)],
         "caption": "图上为八卡 5090 工作站：8 张显卡 + 8 条 ECC 内存",
-        "footer": "※ 同样的钱，买不起一张 B300。",
+        "footer": "※ 八张 5090 的钱，只够买一张半 B300。",
     },
 ]
 

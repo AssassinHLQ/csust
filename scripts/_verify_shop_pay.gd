@@ -1,5 +1,5 @@
 extends SceneTree
-## 验「余额不足不能买 / 买完扣 50 万 / custom 步骤能扣款」。
+## 验「余额不足不能买 / 买完扣 67 万 / custom 步骤能扣款」。
 ##   godot --path . --headless --script res://scripts/_verify_shop_pay.gd
 const BankCard := preload("res://scripts/bank_card.gd")
 
@@ -45,7 +45,7 @@ func _run() -> void:
 			{"text": "买", "value": 1},
 			{"text": "不买", "value": 2},
 		]},
-		{"kind": "custom", "name": "pay", "data": {"amount": 500000}},
+		{"kind": "custom", "name": "pay", "data": {"amount": 670000}},
 		{"kind": "narrate", "text": "扣完了"},
 	], "pay")
 	for _i in 10:
@@ -53,7 +53,7 @@ func _run() -> void:
 	_key(KEY_SPACE)
 	for _i in 20:
 		await process_frame
-	print("[pay] custom=%s 余额=%s（期望 30.0 万）" % [_seen, BankCard.format_yuan(BankCard.balance())])
+	print("[pay] custom=%s 余额=%s（期望 13.0 万）" % [_seen, BankCard.format_yuan(BankCard.balance())])
 	print("[pay] 旁白=%s" % box.current_text())
 
 	# ② 余额不足：禁用项按下不推进
@@ -65,7 +65,7 @@ func _run() -> void:
 	box2.play_steps([
 		{"kind": "choice", "options": [
 			{"text": "买", "value": 1, "disabled": true,
-				"disabled_hint": "银行卡余额不足：还差 ¥20.0 万（卡上 ¥30.0 万）"},
+				"disabled_hint": "银行卡余额不足：还差 ¥37.0 万（卡上 ¥13.0 万）"},
 			{"text": "不买", "value": 2},
 		]},
 		{"kind": "narrate", "text": "结束了"},
