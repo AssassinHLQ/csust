@@ -516,7 +516,11 @@ func _update_talk_range() -> void:
 		return
 	var d := p.global_position - global_position
 	var flat := Vector2(d.x, d.z).length()
-	var near := flat <= TALK_RADIUS and absf(d.y) <= TALK_DY_MAX
+	# 必须**站在地上**才能搭话：对话会暂停世界，半空中按 F 会把爱丽丝冻在天上
+	# （用户 2026-11：「空中对话，结果整个人浮空不动了」）。
+	var body := p as CharacterBody3D
+	var grounded := body != null and body.is_on_floor()
+	var near := grounded and flat <= TALK_RADIUS and absf(d.y) <= TALK_DY_MAX
 	if near == _in_range:
 		return
 	_in_range = near
@@ -528,6 +532,10 @@ func _input(event: InputEvent) -> void:
 	if k == null or not k.pressed or k.echo:
 		return
 	if k.keycode != KEY_F or not _in_range:
+		return
+	# 一帧兜底：`_in_range` 是 `_process` 里判的，这里再确认一次脚踩实地。
+	var body := _player_node() as CharacterBody3D
+	if body != null and not body.is_on_floor():
 		return
 	var d := _dialogue()
 	if d == null or d.is_active():

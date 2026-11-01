@@ -8,14 +8,12 @@ extends RefCounted
 ## 为什么不是 autoload：用户不让动 `project.godot`。和 `SceneFlow` / `UiSkin` 一样，
 ## 靠 `preload` + `static` 共享状态 —— 场景切换不影响，进程内只有一份。
 ##
-## ⚠️ 默认 **0 元**（用户 2026-11：「从 0 开始」）—— 想买那台 67 万的整机，
-##    得先去跑酷期货赚钱、打倭瓜优香拿掉落。调试时想看「买得起」的分支，
-##    把 `user://bank_card.cfg` 里的 yuan 改大即可（或临时改这里）。
+## ⚠️ **每次启动游戏都从 0 开始**（用户 2026-11：「每次新开一局时把银行卡清零」）。
+##    现在一轮跑酷就能挣够 67 万，不需要跨存档攒钱 —— 所以启动时不读旧余额，
+##    直接把卡清零落盘；同一进程内（场景切换 / 跑酷多轮）余额照常累计。
+##    调试时想看「买得起」的分支，直接调 `set_balance()` 或改这一行即可。
 
 const PATH := "user://bank_card.cfg"
-const BACKUP_PATH := "user://bank_card_pre_v2.cfg"
-## v1：Boss 掉落直接进卡；v2：掉落先记本轮资产，结算才进卡。
-## 老存档里两种钱混在一起分不出来，升级时备份 + 清零一次。
 const SAVE_VERSION := 2
 const DEFAULT_YUAN := 0
 
@@ -27,22 +25,7 @@ static func _ensure() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	var cf := ConfigFile.new()
-	if cf.load(PATH) == OK:
-		_yuan = int(cf.get_value("card", "yuan", DEFAULT_YUAN))
-		if int(cf.get_value("card", "v", 1)) < SAVE_VERSION:
-			_migrate_to_v2()
-	else:
-		_yuan = DEFAULT_YUAN
-		_save()
-
-
-static func _migrate_to_v2() -> void:
-	var backup := ConfigFile.new()
-	backup.set_value("card", "yuan", _yuan)
-	backup.save(BACKUP_PATH)
-	print("[BankCard] v1 → v2：旧余额 %s 已备份到 %s，卡清零重来" % [
-		format_yuan(_yuan), BACKUP_PATH])
+	# 不读旧存档：新开一局就是新的一张卡（旧余额可能留在文件里，但不再使用）。
 	_yuan = DEFAULT_YUAN
 	_save()
 
