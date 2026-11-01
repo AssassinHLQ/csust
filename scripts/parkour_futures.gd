@@ -113,6 +113,10 @@ var settlements := 0
 var _last_settle := ""
 ## 已经结算过的板（一块只结算一次，免得来回走刷钱）
 var settled := {}
+## 每块板第一次结算时的涨跌幅（回到旧格子时用来说「这格已经算过了」）
+var _settled_pct := {}
+## 当前脚下踩着的板名（空 = 不在任何板上）：跨帧比较，判断「刚跳上新的一格」
+var _on_plate := ""
 ## 13 块 K 线的包围盒 + 台面 + 牌子（结算要用）
 var plates: Array[Dictionary] = []
 ## 第 4 段：会跳价的牌子（现货 / 永续 / 币圈）—— 每帧按 `pct_period` 换档
@@ -133,14 +137,14 @@ var _rng := RandomNumberGenerator.new()
 ## 体育彩票专用随机流：**独立种子**，这样加不加彩票都不影响薛定谔块的坍缩序列
 ## （那三块的涨跌幅是 `_rng` 抽的，自检里有一节按它核对区间）。
 var _lot_rng := RandomNumberGenerator.new()
-## 已经**解释过规则**的产品（稳定基金 / 体育彩票）：只弹一次横幅，别每块板都糊一屏
-var _intro_done := {}
 var _t := 0.0
 var _cool := 0.0
 var _hud_layer: CanvasLayer
 var _debt_label: Label
 var _result_label: Label
 var _banner: Label
+## 大字横幅的淡出 tween：新的一条要先把旧的掐掉，不然透明度会被旧 tween 抢着改
+var _banner_tw: Tween
 var _flash: ColorRect
 
 
@@ -682,6 +686,19 @@ func _tick_schro() -> void:
 		_resolve(plate, top)
 
 
+## 脚下踩着的那块结算板（不在任何板上 → 空字典）
+func _plate_at(p: Vector3) -> Dictionary:
+	for pl in plates:
+		if absf(p.y - float(pl["top"])) > 0.45:
+			continue
+		if p.x < float(pl["x0"]) - 0.25 or p.x > float(pl["x1"]) + 0.25:
+			continue
+		if p.z < float(pl["z0"]) - 0.25 or p.z > float(pl["z1"]) + 0.25:
+			continue
+		return pl
+	return {}
+
+
 ## 结算：**每块 K 线第一次踩上去**，按它牌子上那个涨跌幅结算一次保证金。
 ##
 ## ⚠️ 牌子上写的就是真数：`+2.31%` 就是保证金 ×1.0231，`−3.87%` 就是 ×0.9613。
@@ -691,16 +708,24 @@ func _tick_plates() -> void:
 	if _player == null:
 		return
 	var p := _player.global_position
-	for pl in plates:
-		if settled.has(pl["name"]):
-			continue
-		if absf(p.y - float(pl["top"])) > 0.45:
-			continue
-		if p.x < float(pl["x0"]) - 0.25 or p.x > float(pl["x1"]) + 0.25:
-			continue
-		if p.z < float(pl["z0"]) - 0.25 or p.z > float(pl["z1"]) + 0.25:
-			continue
-		_settle(pl)
+	var pl := _plate_at(p)
+	var here := String(pl.get("name", ""))
+	if here.is_empty():
+		_on_plate = ""
+	else:
+		# 只在**刚跳上这一格**时给反馈：站在同一块板上不动不刷屏。
+		# 用户 2026-11：「跳一个格子就弹出一次」——第一遍每格都要结算大字；
+		# 回到结算过的格子也给一句，免得让人以为漏结算了。
+		if here != _on_plate:
+			if settled.has(here):
+				_on_plate = here
+				_announce_settled(here)
+			else:
+				_settle(pl)
+				# 薛定谔块牌子还是「?」时 `_settle` 会提前返回 —— 这时先别记「已经在板上」，
+				# 下一帧坍缩完还要再结一次。
+				if settled.has(here):
+					_on_plate = here
 	# 结算台 M0：保证金够门槛就解锁「对冲」（一次判定，站在上面就触发）
 	if _hedge_checked:
 		return
@@ -776,6 +801,7 @@ func _settle(pl: Dictionary) -> void:
 		pct *= PROFIT_MULT
 	var before := margin
 	margin = maxf(0.0, margin * (1.0 + pct / 100.0))
+	_settled_pct[pl["name"]] = pct
 	settlements += 1
 	var tail := "%s %+.2f%%　%+.2f 万" % [what, pct, margin - before]
 	_last_settle = "最近结算：" + tail
@@ -783,24 +809,22 @@ func _settle(pl: Dictionary) -> void:
 		_result_label.text = _last_settle
 		_result_label.add_theme_color_override("font_color",
 			Color(1.0, 0.55, 0.55, 1) if pct < 0.0 else Color(0.55, 1.0, 0.65, 1))
-	# 第一次踩到这两类产品时解释一句规则（只弹一次，别每块板都糊一屏）
-	if (kind == "fund" or kind == "lottery") and not _intro_done.has(kind):
-		_intro_done[kind] = true
-		if kind == "fund":
-			_banner_text("稳定基金：每踩一块 +%.2f%%（复利）" % FUND_PCT, Color(0.55, 1.0, 0.65))
-		else:
-			_banner_text("体育彩票：%.0f%% 中奖 %+.1f~%+.1f%%，%.0f%% 没中 −%.1f~%.1f%%" % [
-				LOT_WIN_P * 100.0, LOT_WIN_LO, LOT_WIN_HI,
-				(1.0 - LOT_WIN_P) * 100.0, LOT_LOSE_LO, LOT_LOSE_HI],
-				Color(1.0, 0.82, 0.42))
-	elif kind == "lottery":
-		# 每一注都给反馈：「未中」要让人看见钱少了，不然彩票段白跑
-		_banner_text(tail, Color(0.55, 1.0, 0.65) if pct > 0.0
-			else Color(1.0, 0.55, 0.55))
+	# 每一格都弹大字：钱变了就得让人看见。
+	# 用户 2026-11：「跳一个格子就弹出一次，现在只弹几个特定的格子」——
+	# 以前只有彩票段弹，K 线 / 跳价牌 / 稳定基金都只写小字行，走过路过感觉不到钱在动。
+	_banner_text(tail, Color(0.55, 1.0, 0.65) if pct > 0.0 else Color(1.0, 0.55, 0.55))
 	_update_hud_text()
 	Sfx.play("ui_slider", 0.0)
 	if margin <= 0.0:
 		liquidate("保证金耗尽")
+
+
+## 回到已经结算过的格子（摔落 / 回头重跳）：也给一次大字，
+## 说明这格的钱已经算过了，别让人误以为漏结算。
+func _announce_settled(nm: String) -> void:
+	var pct := float(_settled_pct.get(nm, 0.0))
+	_banner_text("本格已结算 %s %+.2f%%　保证金 ¥%.2f 万" % [nm, pct, margin],
+		Color(0.72, 0.84, 1.0))
 
 
 ## 体育彩票一注的结果（**纯函数**，自检直接调它核对规则）：
@@ -1041,9 +1065,11 @@ func _banner_text(text: String, col: Color) -> void:
 	_banner.text = text
 	_banner.add_theme_color_override("font_color", col)
 	_banner.modulate.a = 1.0
-	var tw := create_tween()
-	tw.tween_interval(1.6)
-	tw.tween_property(_banner, "modulate:a", 0.0, 0.9)
+	if _banner_tw != null and _banner_tw.is_valid():
+		_banner_tw.kill()
+	_banner_tw = create_tween()
+	_banner_tw.tween_interval(1.6)
+	_banner_tw.tween_property(_banner, "modulate:a", 0.0, 0.9)
 
 
 func _flash_screen() -> void:

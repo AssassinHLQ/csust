@@ -522,7 +522,8 @@ func _test_fund_lottery() -> void:
 	# ② 稳定基金：踩第 1 段的 P1 → 保证金 ×1.001
 	fut.margin = fut.start_margin
 	fut.settled.clear()
-	fut._intro_done.clear()
+	fut._settled_pct.clear()
+	fut._on_plate = ""
 	var i1 := _idx("P1")
 	var b1 := _pk.box_at(i1)
 	_put(b1.position.x + b1.size.x * 0.5, _pk.top_at(i1) + 0.05,
@@ -557,7 +558,8 @@ func _test_fund_lottery() -> void:
 	# 还原：后面的逐跳回放要用干净的账（不然 20 块板全被标成「已结算」）
 	fut.margin = fut.start_margin
 	fut.settled.clear()
-	fut._intro_done.clear()
+	fut._settled_pct.clear()
+	fut._on_plate = ""
 	_put(0.00, 0.10, 6.00)
 	await _wait(4)
 
@@ -1460,11 +1462,15 @@ func _test_futures() -> void:
 		"站进实体蓝块 → **强制平仓**：强平 %d→%d 次、负债 %d→%d 万（冷却 %.1f s，只扣一次）"
 		% [liq0, fut.liquidations, debt0, fut.debt, fut.cooldown])
 	var back := _p.global_position
-	var want_pos := _pk.respawn_point(ck)
+	# 强平和摔落一样回「本段起点」（`liquidate()` 用的是 `respawn_station()`），
+	# 不是回脚下那一站 —— 每段一个存档点之后的规则。
+	var back_station := _pk.respawn_station()
+	var want_pos := _pk.respawn_point(back_station)
 	_check(Vector2(back.x - want_pos.x, back.z - want_pos.z).length() < 0.50
 			and absf(back.y - want_pos.y) < 1.20,
-		"强制平仓后送回**最近踩过的落脚点**（第 %d 站 %s，实落 %.2f,%.2f,%.2f vs 期望 %.2f,%.2f,%.2f）"
-		% [ck + 1, _pk.label_at(ck), back.x, back.y, back.z, want_pos.x, want_pos.y, want_pos.z])
+		"强制平仓后送回**本段起点**（第 %d 站 %s；倒下时最近站 %d %s，实落 %.2f,%.2f,%.2f vs 期望 %.2f,%.2f,%.2f）"
+		% [back_station + 1, _pk.label_at(back_station), ck + 1, _pk.label_at(ck),
+			back.x, back.y, back.z, want_pos.x, want_pos.y, want_pos.z])
 	fut._t = saved_t
 
 	# ⑤ 薛定谔块：踩上去之前不知道颜色，第一次踩到才坍缩成红（阳线）/ 绿（阴线）
@@ -1490,6 +1496,7 @@ func _test_futures() -> void:
 	# 前面的小节可能已经把这块结算过了（一块只结算一次）—— 清掉重来，
 	# 顺便把保证金复位（强平之后是 0，不归位的话「0 乘任何数还是 0」会假绿）
 	fut.settled.erase(String(plate.name))
+	fut._on_plate = ""
 	fut.margin = fut.start_margin
 	var m_before := fut.margin
 	fut.blue_live = 0.0            # 这一段不要蓝块来捣乱
@@ -1567,6 +1574,7 @@ func _test_branch() -> void:
 	var bsp2 := fut._aabb_of(sp2)
 	fut.margin = 10.0
 	fut.settled.erase("SP2")
+	fut._on_plate = ""
 	_put(bsp2.position.x + bsp2.size.x * 0.5, bsp2.position.y + bsp2.size.y + 0.05,
 		bsp2.position.z + bsp2.size.z * 0.5)
 	await _wait(6)
@@ -1585,6 +1593,7 @@ func _test_branch() -> void:
 		fut._t = period * 0.75 - phase + slot * 0.25   # 拨到最后一档（四档里最高的那档）
 		fut.margin = 10.0
 		fut.settled.erase("BC1")
+		fut._on_plate = ""
 		var bb := fut._aabb_of(node)
 		_put(bb.position.x + bb.size.x * 0.5, bb.position.y + bb.size.y + 0.05,
 			bb.position.z + bb.size.z * 0.5)
@@ -2045,9 +2054,17 @@ func _test_ram_loot() -> void:
 		"捡走之后**不补货**（等 8 s，可捡 %d → %d 根）" % [n_before, ram.pickable_count()])
 	# ⑩ 最后平台房顶的 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……也是加入
 	#    资产的，全新正版现价 59999」）。它挂在 `Island/Props/Shed` 下，￥59999。
-	var gpu := _pk.get_node_or_null("Island/Props/Shed/RTX5090") as Rtx5090
-	_check(gpu != null and gpu.price() == 59999,
-		"最后平台的房顶上有 **RTX 5090**（¥%d）" % (gpu.price() if gpu != null else -1))
+	# 2026-11：屋顶换成**四张** 5090（`RTX5090_1` … `RTX5090_4`，2×2 摆开）。
+	var gpus: Array[Rtx5090] = []
+	var shed0 := _pk.get_node_or_null("Island/Props/Shed") as Node3D
+	if shed0 != null:
+		for c in shed0.get_children():
+			if c is Rtx5090 and String(c.name).begins_with("RTX5090"):
+				gpus.append(c as Rtx5090)
+	var gpu: Rtx5090 = gpus[0] if not gpus.is_empty() else null
+	_check(gpus.size() == 4 and gpu != null and gpu.price() == 59999,
+		"最后平台的房顶上有 **4 张 RTX 5090**（实测 %d 张，单价 ¥%d）" % [
+			gpus.size(), gpu.price() if gpu != null else -1])
 	if gpu != null:
 		var a0 := fut.assets_yuan
 		var gp := gpu.global_position
