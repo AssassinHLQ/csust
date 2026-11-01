@@ -154,6 +154,46 @@ const CONFIG_SHEET := [
 	{"part": "合计", "model": "整套（不含机房改造）",
 		"spec": "占地约 1 个 42U 机柜", "qty": 1, "price": "≈ ¥520 万"},
 ]
+## 配置单里每一行对应的零件图（顺序 = 排版图里从上往下的九行）。
+## 鼠标悬停在某一行，右侧那张照片就换成这一行对应零件的图。
+const SHEET_PARTS := [
+	"gpu", "server", "cpu", "ram", "ssd", "ssd", "nic", "cooling", "psu",
+]
+## 悬停时照片下面那行字（配 SHEET_PARTS 一一对应）
+const SHEET_LABELS := [
+	"显卡 · NVIDIA B300 · 288GB HBM3E ×8",
+	"整机 · HGX B300 八卡基板 + 8U 机箱",
+	"处理器 · Intel Xeon 6 6980P ×2",
+	"内存 · DDR5-6400 ECC RDIMM 64GB ×24 = 1.5TB",
+	"系统盘 · PCIe 5.0 NVMe 1.92TB ×2（RAID 1）",
+	"数据盘 · PCIe 5.0 NVMe 7.68TB ×8（RAID 10）",
+	"网络 · ConnectX-8 800G ×8",
+	"液冷 · 机架式 CDU + 冷板 ≥60 kW",
+	"配电 · 12kW 电源框 · 2N 冗余",
+]
+## 排版脚本（Pillow）里的行参数：首行 y=146、行高 66；右侧照片区 x=1064 y=146 w=492 h=560
+const SHEET_ROW_TOP := 146.0
+const SHEET_ROW_H := 66.0
+const SHEET_PHOTO := {"x": 1064, "y": 146, "w": 492, "h": 560}
+
+## 可交互配置单那一步（热区数据按上面的常量生成，别在剧本里手写九行）
+func _sheet_step() -> Dictionary:
+	var rows: Array = []
+	for i in SHEET_PARTS.size():
+		rows.append({
+			"top": SHEET_ROW_TOP + i * SHEET_ROW_H,
+			"bottom": SHEET_ROW_TOP + (i + 1) * SHEET_ROW_H,
+			"image": "res://assets/story/parts/%s.png" % SHEET_PARTS[i],
+			"label": SHEET_LABELS[i],
+		})
+	return {
+		"kind": "config_sheet",
+		"base": "res://assets/story/config_sheet.png",
+		"photo": SHEET_PHOTO,
+		"caption": "图上为八卡计算托盘：8 颗 B300 + 24 条 ECC 内存（鼠标移到左边的部件名试试）",
+		"rows": rows,
+	}
+
 ## 主角的两个回答（用户 2026-11-01 给的原文，标点照抄）。
 ## `then` 是选中之后接着播的台词 —— 对话播放器会把它们插在后面。
 const TALK_OPTIONS := [
@@ -162,8 +202,8 @@ const TALK_OPTIONS := [
 		"value": 1,
 		"then": [
 			{"kind": "say", "who": SPEAKER, "text": "老板,看这套配置怎么样[TVT]"},
-			# 报价之后弹一张配置单，玩家按空格关掉再往下
-			{"kind": "image", "path": "res://assets/story/config_sheet.png"},
+			# 报价之后弹配置单：悬停行会换右侧照片，按空格/左键关掉再往下
+			{"kind": "__sheet__"},
 			{"kind": "say", "who": SPEAKER,
 				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百万起，配您正合适[TVT]"},
 		],
@@ -461,7 +501,20 @@ func _talk(d: DialogueBox) -> void:
 	var steps: Array = []
 	for line in TALK_LINES:
 		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
-	steps.append({"kind": "choice", "options": TALK_OPTIONS.duplicate(true)})
+	# 选项里的 `__sheet__` 占位换成真正的配置单步骤（热区要按常量算，没法写进 const）
+	var opts: Array = []
+	for o in TALK_OPTIONS:
+		var opt: Dictionary = (o as Dictionary).duplicate(true)
+		var fixed: Array = []
+		for st in opt.get("then", []):
+			if String((st as Dictionary).get("kind", "")) == "__sheet__":
+				fixed.append(_sheet_step())
+			else:
+				fixed.append(st)
+		if not fixed.is_empty():
+			opt["then"] = fixed
+		opts.append(opt)
+	steps.append({"kind": "choice", "options": opts})
 	d.play_steps(steps, "shop_clerk")
 	print("[Clerk] 芹香开口：%d 句 + %d 个选项（%s）"
 		% [TALK_LINES.size(), TALK_OPTIONS.size(), String(TALK_LINES[0])])

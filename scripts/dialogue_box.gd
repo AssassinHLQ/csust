@@ -145,6 +145,22 @@ var _image_rect: TextureRect
 var _showing_image := false
 var _image_path := ""
 
+## 可交互配置单
+var _sheet_root: Control
+var _sheet_base: TextureRect
+var _sheet_hover: TextureRect
+var _sheet_zones: Array[Control] = []
+var _showing_sheet := false
+## 照片下方的动态说明（盖住底图上烧死的那行字）
+var _sheet_caption: Label
+## 配置单里「文字列」在源图上的左右边界（排版脚本里也是这两个数）
+const SHEET_COL_X0 := 40.0
+const SHEET_COL_X1 := 1032.0
+## 照片下面那行说明的位置（源图像素）—— 悬停时换成对应零件的名字，
+## 免得底图上「八卡托盘」那句话跟当前显示的图对不上。
+const SHEET_CAPTION := Rect2(1056.0, 694.0, 508.0, 54.0)
+const SHEET_CAPTION_DEFAULT := "图上为八卡计算托盘：8 颗 B300 + 24 条 ECC 内存"
+
 
 func _ready() -> void:
 	# 压在 HUD（层 1）之上、设置界面（层 10）之下
@@ -223,6 +239,9 @@ func play_steps(steps: Array, source := "") -> void:
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
+	_showing_sheet = false
+	if _sheet_root != null:
+		_sheet_root.visible = false
 	_stop_voice()
 	_body.text = ""
 	_body.visible_characters = 0
@@ -255,6 +274,9 @@ func finish() -> void:
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
+	_showing_sheet = false
+	if _sheet_root != null:
+		_sheet_root.visible = false
 	if _choice_pulse != null and _choice_pulse.is_valid():
 		_choice_pulse.kill()
 	set_process(false)
@@ -329,6 +351,9 @@ func advance() -> void:
 	if _showing_image:
 		_dismiss_image()
 		return
+	if _showing_sheet:
+		_dismiss_sheet()
+		return
 	if _hold > 0.0:
 		_hold = 0.0
 		_index += 1
@@ -392,6 +417,10 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		# 过场里不该转视角（`player.gd` 收到鼠标移动就改 `_yaw`）。
 		# ⚠️ 只吞鼠标移动，**不吞 Esc** —— 设置界面还等着它。
+		# ⚠️ 配置单要看悬停：这时不能吞，否则 GUI 收不到鼠标移动，
+		#    `mouse_entered` 永远不触发（世界是暂停的，转视角不用担心）。
+		if _showing_sheet:
+			return
 		get_viewport().set_input_as_handled()
 
 
@@ -428,6 +457,9 @@ func _run_current() -> void:
 			StoryScript.K_IMAGE:
 				_show_image(String(s.get("path", "")))
 				return
+			StoryScript.K_SHEET:
+				_show_sheet(s)
+				return
 			StoryScript.K_END:
 				finish()
 				return
@@ -443,7 +475,7 @@ func _process(delta: float) -> void:
 	# 选选项 / 看图的时候不推进：这两种状态的下一步要等玩家按键。
 	# ⚠️ 少了这条的话，`image` 如果排在剧本第一步（正文还是空的），会被下面
 	#    「空正文兜底」直接跳过去 —— 图一闪就没。
-	if _choosing or _showing_image:
+	if _choosing or _showing_image or _showing_sheet:
 		return
 
 	if _hold > 0.0:
@@ -696,6 +728,99 @@ func current_image_path() -> String:
 	return _image_path
 
 
+# --- 可交互配置单 -------------------------------------------------------------
+#
+# 底图就是那张排版好的配置单；右侧「照片区」上再盖一层 TextureRect，鼠标落在
+# 哪一行热区就换成那一行的零件图，移开就藏起来（露出底图里烧好的整机照）。
+
+func _show_sheet(step: Dictionary) -> void:
+	var base: Texture2D = load(String(step.get("base", ""))) as Texture2D
+	if base == null:
+		push_warning("[Dialogue] 配置单底图找不到：%s（这一步跳过）" % String(step.get("base", "")))
+		_index += 1
+		_run_current()
+		return
+	var s := minf(IMAGE_MAX_W / float(base.get_width()), IMAGE_MAX_H / float(base.get_height()))
+	var w := float(base.get_width()) * s
+	var h := float(base.get_height()) * s
+
+	_sheet_base.texture = base
+	_sheet_base.size = Vector2(w, h)
+	_sheet_root.size = Vector2(w, h)
+	_sheet_root.offset_left = -w * 0.5
+	_sheet_root.offset_right = w * 0.5
+	_sheet_root.offset_top = -h * 0.5 - IMAGE_LIFT
+	_sheet_root.offset_bottom = h * 0.5 - IMAGE_LIFT
+
+	# 右侧照片区的覆盖层（坐标是源图像素，按 s 缩放到显示尺寸）
+	var ph: Dictionary = step.get("photo", {})
+	_sheet_hover.position = Vector2(float(ph.get("x", 0.0)) * s, float(ph.get("y", 0.0)) * s)
+	_sheet_hover.size = Vector2(float(ph.get("w", 0.0)) * s, float(ph.get("h", 0.0)) * s)
+	_sheet_hover.visible = false
+
+	var cap_default := String(step.get("caption", SHEET_CAPTION_DEFAULT))
+	_sheet_caption.position = Vector2(SHEET_CAPTION.position.x * s, SHEET_CAPTION.position.y * s)
+	_sheet_caption.size = Vector2(SHEET_CAPTION.size.x * s, SHEET_CAPTION.size.y * s)
+	_sheet_caption.text = cap_default
+
+	for z in _sheet_zones:
+		z.queue_free()
+	_sheet_zones.clear()
+	for row in step.get("rows", []):
+		var r: Dictionary = row
+		var top := float(r.get("top", 0.0)) * s
+		var bottom := float(r.get("bottom", 0.0)) * s
+		var tex: Texture2D = null
+		var p := String(r.get("image", ""))
+		var label := String(r.get("label", ""))
+		if not p.is_empty():
+			tex = load(p) as Texture2D
+			if tex == null:
+				push_warning("[Dialogue] 零件图找不到：%s" % p)
+		var zone := Control.new()
+		zone.name = "Row%d" % _sheet_zones.size()
+		zone.mouse_filter = Control.MOUSE_FILTER_STOP
+		zone.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		zone.position = Vector2(SHEET_COL_X0 * s, top)
+		zone.size = Vector2((SHEET_COL_X1 - SHEET_COL_X0) * s, bottom - top)
+		if tex != null:
+			zone.mouse_entered.connect(func() -> void:
+				_sheet_hover.texture = tex
+				_sheet_hover.visible = true
+				_sheet_caption.text = label if not label.is_empty() else cap_default)
+			zone.mouse_exited.connect(func() -> void:
+				_sheet_hover.visible = false
+				_sheet_caption.text = cap_default)
+		_sheet_root.add_child(zone)
+		_sheet_zones.append(zone)
+
+	_sheet_root.visible = true
+	_showing_sheet = true
+	_shown = float(_body_text.length())
+	_body.visible_characters = int(_shown)
+	_update_hint()
+	print("[Dialogue] 配置单：%d 个热区（%s）" % [_sheet_zones.size(), String(step.get("base", ""))])
+
+
+func _dismiss_sheet() -> void:
+	if not _showing_sheet:
+		return
+	_showing_sheet = false
+	_sheet_root.visible = false
+	_sheet_hover.visible = false
+	_sheet_hover.texture = null
+	_index += 1
+	_run_current()
+
+
+func is_showing_sheet() -> bool:
+	return _showing_sheet
+
+
+func sheet_zone_count() -> int:
+	return _sheet_zones.size()
+
+
 # --- 暂停交接 ---------------------------------------------------------------
 
 ## 设置界面是不是开着。**必须有这层判断**：两个节点都会 `paused = true`，
@@ -832,6 +957,45 @@ func _build() -> void:
 	_image_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_image_rect.position = Vector2(6.0, 6.0)
 	_image_panel.add_child(_image_rect)
+
+	# 可交互配置单：底图 + 悬停换图的覆盖层 + 每行热区（热区按剧本里的行高临时建）
+	_sheet_root = Control.new()
+	_sheet_root.name = "ConfigSheet"
+	_sheet_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sheet_root.anchor_left = 0.5
+	_sheet_root.anchor_right = 0.5
+	_sheet_root.anchor_top = 0.5
+	_sheet_root.anchor_bottom = 0.5
+	_sheet_root.visible = false
+	_root.add_child(_sheet_root)
+
+	_sheet_base = TextureRect.new()
+	_sheet_base.name = "Base"
+	_sheet_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sheet_base.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_sheet_base.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_sheet_root.add_child(_sheet_base)
+
+	_sheet_hover = TextureRect.new()
+	_sheet_hover.name = "PartPhoto"
+	_sheet_hover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sheet_hover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_sheet_hover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_sheet_hover.visible = false
+	_sheet_root.add_child(_sheet_hover)
+
+	# 照片下面那行说明：用纸色底把底图上的字盖掉，换成当前悬停的零件名
+	_sheet_caption = Label.new()
+	_sheet_caption.name = "Caption"
+	_sheet_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sheet_caption.clip_text = true
+	_sheet_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_sheet_caption.add_theme_font_size_override("font_size", 12)
+	_sheet_caption.add_theme_color_override("font_color", Color(0.38, 0.33, 0.26))
+	var cap_sb := StyleBoxFlat.new()
+	cap_sb.bg_color = Color(0.949, 0.894, 0.788)
+	_sheet_caption.add_theme_stylebox_override("normal", cap_sb)
+	_sheet_root.add_child(_sheet_caption)
 
 	# 配音播放器。**单独一个**（不走 `Sfx` 的池子），理由见文件头「语音」。
 	_voice = AudioStreamPlayer.new()

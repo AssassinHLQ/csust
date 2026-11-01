@@ -60,6 +60,11 @@ const K_CHOICE := "choice"
 ## 弹一张图（配置单、照片之类）：`path` 指向 `res://` 下的贴图。
 ## 显示后等玩家按「继续」才关掉，再往下播。
 const K_IMAGE := "image"
+## 可交互配置单：底图 + 每行一个热区，鼠标悬停就把右侧照片换成那颗零件的图。
+##   {"kind":"config_sheet", "base":"…png",
+##    "photo":{"x":1064,"y":146,"w":492,"h":560},        ← 源图像素坐标
+##    "rows":[{"top":146,"bottom":212,"image":"…png"}, …]}
+const K_SHEET := "config_sheet"
 const K_END := "end"
 
 ## `@clear` 的空档时长（秒）。解析器只负责认这个词，时长归播放器用；
