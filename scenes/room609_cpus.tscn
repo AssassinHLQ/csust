@@ -3,34 +3,34 @@
 [ext_resource type="PackedScene" path="res://scenes/ryzen_9950x3d.tscn" id="1_cpu"]
 
 [node name="Room609Cpus" type="Node3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.893612, 1.19, 1.3329114)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, 5.665, 3.54)
 
 [node name="Cpu1" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, -0.920)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -1.00)
 
 [node name="Cpu2" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, -0.920)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -1.00)
 
 [node name="Cpu3" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, -0.460)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -0.50)
 
 [node name="Cpu4" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, -0.460)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -0.50)
 
 [node name="Cpu5" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.000)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.00)
 
 [node name="Cpu6" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.000)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.00)
 
 [node name="Cpu7" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.460)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.50)
 
 [node name="Cpu8" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.460)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.50)
 
 [node name="Cpu9" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.920)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 1.00)
 
 [node name="Cpu10" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.920)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 1.00)

@@ -79,13 +79,13 @@ const ENTRIES := [
 	{
 		"group": "角色与 Boss 模型",
 		"path": "models/cpu_9950x3d",
-		"title": "AMD Ryzen 9 9950X3D 处理器低模（609 桌上的十颗）",
+		"title": "AMD Ryzen 9 9950X3D 处理器低模（609 屋顶的十颗）",
 		"author": "本喵自建（参考爱给网用户上传的 SolidWorks 模型）",
 		"license": "自建低模随仓库分发；参考图仅学习交流、不可商用；AMD / RYZEN 是 AMD 的商标，本作为非商用同人",
 		"distributed": true,
 		"source": "用户提供的爱给网（aigei.com）`AMD Ryzen9 9950 X3D.SLDPRT`（SolidWorks，Godot/Blender 读不了，仅作外观参考）+ 同包 P1.PNG",
 		"license_file": "",
-		"note": "按参考图重建：蓝基板 + 银 IHS + 四排金手指 + IHS 丝印（Pillow 生成）；10 颗摆 609 画室桌上，¥4,599/颗（2026-10 京东盒装 4,549~4,819），10 颗 = ¥45,990",
+		"note": "按参考图重建：蓝基板 + 银 IHS + 四排金手指 + IHS 丝印（Pillow 生成）；10 颗摆 609 画室屋顶，¥4,599/颗（2026-10 京东盒装 4,549~4,819），10 颗 = ¥45,990",
 	},
 	{
 		"group": "角色与 Boss 模型",

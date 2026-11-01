@@ -1,5 +1,5 @@
 extends SceneTree
-## 验：609 桌上十颗 9950X3D —— 数量 / 尺寸 / 单价，以及按 F 收进本轮资产。
+## 验：609 屋顶十颗 9950X3D —— 数量 / 尺寸 / 单价，以及按 F 收进本轮资产。
 ##   godot --path . --headless --script res://scripts/_verify_room609_cpus.gd
 func _initialize() -> void:
 	_run.call_deferred()
@@ -11,12 +11,14 @@ func _run() -> void:
 	var cpus := (load("res://scenes/room609_cpus.tscn") as PackedScene).instantiate() as Node3D
 	root.add_child(cpus)
 
+	# 屋顶台面（CPU 现在摆在 609 屋顶，y ≈ 5.65）
+	var roof_top := 5.65
 	var floor_body := StaticBody3D.new()
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
 	bs.size = Vector3(12.0, 0.5, 12.0)
 	cs.shape = bs
-	cs.position = Vector3(0.9, -0.25, 1.3)
+	cs.position = Vector3(-0.5, roof_top - 0.25, 3.54)
 	floor_body.add_child(cs)
 	root.add_child(floor_body)
 
@@ -27,7 +29,7 @@ func _run() -> void:
 
 	var list: Array = cpus.get_children()
 	var cpu0 := list[0] as Node3D
-	print("[cpu] 609 桌上 %d 颗（期望 10）" % list.size())
+	print("[cpu] 609 屋顶 %d 颗（期望 10）" % list.size())
 	for c in list:
 		var n := c as Node3D
 		print("[cpu]   %-6s 世界位置 %s　单价 ¥%d" % [
@@ -49,15 +51,16 @@ func _run() -> void:
 	print("[cpu] 单颗世界包围盒 %.3f × %.3f × %.3f m（期望 0.12 见方、最薄轴是 Y）" % [
 		sz.x, sz.y, sz.z])
 
-	# 站到桌子旁边按 F（脚踩在地上，桌面在 1.19 m）
-	player.global_position = cpu0.global_position + Vector3(0.45, -1.14, 0.0)
+	# 站到屋顶上按 F（脚踩屋顶 y≈5.65）
+	player.global_position = Vector3(cpu0.global_position.x + 0.45, roof_top + 0.05,
+		cpu0.global_position.z)
 	player.velocity = Vector3.ZERO
 	for _i in 20:
 		await physics_frame
 	var fut := pk.get_node_or_null("Futures")
 	var a0 := int(fut.get("assets_yuan"))
 	var c0 := int(fut.get("cpu_count"))
-	print("[cpu] 站到桌旁：on_floor=%s　提示 owner=%s" % [
+	print("[cpu] 站上屋顶：on_floor=%s　提示 owner=%s" % [
 		str(player.is_on_floor()), str(fut.call("prompt_owner"))])
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_F

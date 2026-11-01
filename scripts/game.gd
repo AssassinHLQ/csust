@@ -1067,7 +1067,7 @@ func _spawn_room609_cpus() -> void:
 	var cpus := ROOM609_CPUS.instantiate()
 	cpus.name = "Room609Cpus"
 	add_child(cpus)
-	print("[Game] 609 画室桌上摆好十颗 Ryzen 9 9950X3D（¥4,599/颗，隐藏福利）")
+	print("[Game] 609 画室屋顶摆好十颗 Ryzen 9 9950X3D（¥4,599/颗，隐藏福利）")
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
