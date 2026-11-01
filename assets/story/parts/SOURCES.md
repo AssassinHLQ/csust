@@ -1,6 +1,6 @@
 # 配置单零件照片 · 逐张出处
 
-> 这 8 张是**第三方新闻 / 商品图**，未经授权。
+> 这 10 张是**第三方新闻 / 商品图**，未经授权。
 > 按 `CREDITS.md` 的规矩：**只允许本地学习演示，不得再分发、不得商用**，
 > 所以 `/assets/story/parts/*.png` 已被 `.gitignore` 排除 —— 克隆者需要自己取得，
 > 缺失时配置单照常显示，只是鼠标悬停不会换图（`dialogue_box.gd` 会 warning 后跳过）。
@@ -17,6 +17,8 @@
 | `nic.png` | 网络 | `https://img.ithome.com/newsuploadfiles/2025/8/278c2c8d-fcb1-4b9a-92ad-22cbea14a866.jpg` | IT之家 | 《CX-8 超级网卡：PCIe 6.0 接口，800 Gb/s》配图（图上有 IT之家水印） |
 | `cooling.png` | 液冷 | `https://pica.zhimg.com/v2-d70d3e37cda7f008f18594bd5d218ac0_r.jpg` | 知乎图床 | 《海悟液冷分配单元 CDU…》配图，机柜式 CDU + 管路 |
 | `psu.png` | 配电 | `https://upload.ca168.com/202509/05/18-21-15-86-544552.png` | 中国自动化网（ca168.com） | 《麦米电气 AI 服务器电源解决方案》配图，Power shelf / PCS / BBU shelf 结构 |
+| `gpu5090.png` | 显卡（5090 那张单） | `https://n.sinaimg.cn/spider20260305/240/w1440h1200/20260305/2592-4c5c20389afd98b8a97704418500d0f2.jpg` | 新浪（转华硕 ProArt 参数稿） | 华硕 ProArt RTX 5090 产品图 |
+| `hero_5090.png` | 5090 那张单的右侧整机照 | `http://i1.hdslb.com/bfs/archive/5e25e08f0855e275cda7c4b86ad264258b0da561.jpg` | 哔哩哔哩 | 《8 张 5090 显卡 + 512GB 内存 组装工作站》，裁掉右下角水印 |
 
 ## 换图时怎么做
 

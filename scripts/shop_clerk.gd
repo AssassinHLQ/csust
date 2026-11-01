@@ -156,43 +156,68 @@ const CONFIG_SHEET := [
 ]
 ## 配置单里每一行对应的零件图（顺序 = 排版图里从上往下的九行）。
 ## 鼠标悬停在某一行，右侧那张照片就换成这一行对应零件的图。
-const SHEET_PARTS := [
-	"gpu", "server", "cpu", "ram", "ssd", "ssd", "nic", "cooling", "psu",
-]
-## 悬停时照片下面那行字（配 SHEET_PARTS 一一对应）
-const SHEET_LABELS := [
-	"显卡 · NVIDIA B300 · 288GB HBM3E ×8",
-	"整机 · HGX B300 八卡基板 + 8U 机箱",
-	"处理器 · Intel Xeon 6 6980P ×2",
-	"内存 · DDR5-6400 ECC RDIMM 64GB ×24 = 1.5TB",
-	"系统盘 · PCIe 5.0 NVMe 1.92TB ×2（RAID 1）",
-	"数据盘 · PCIe 5.0 NVMe 7.68TB ×8（RAID 10）",
-	"网络 · ConnectX-8 800G ×8",
-	"液冷 · 机架式 CDU + 冷板 ≥60 kW",
-	"配电 · 12kW 电源框 · 2N 冗余",
-]
-## 排版脚本（Pillow）里的行参数：首行 y=146、行高 66；右侧照片区 x=1064 y=146 w=492 h=560
+## 两张配置单：店员先拿 B300 忽悠（¥520 万），小桃拆台后换成八卡 5090（¥51 万）。
+## `parts` / `labels` 与排版图里从上往下的行一一对应；空串 = 这一行悬停不换图。
+const SHEET_B300 := {
+	"base": "res://assets/story/config_sheet.png",
+	"caption": "图上为八卡计算托盘：8 颗 B300 + 24 条 ECC 内存（鼠标移到左边的部件名试试）",
+	"parts": ["gpu", "server", "cpu", "ram", "ssd", "ssd", "nic", "cooling", "psu"],
+	"labels": [
+		"显卡 · NVIDIA B300 · 288GB HBM3E ×8",
+		"整机 · HGX B300 八卡基板 + 8U 机箱",
+		"处理器 · Intel Xeon 6 6980P ×2",
+		"内存 · DDR5-6400 ECC RDIMM 64GB ×24 = 1.5TB",
+		"系统盘 · PCIe 5.0 NVMe 1.92TB ×2（RAID 1）",
+		"数据盘 · PCIe 5.0 NVMe 7.68TB ×8（RAID 10）",
+		"网络 · ConnectX-8 800G ×8",
+		"液冷 · 机架式 CDU + 冷板 ≥60 kW",
+		"配电 · 12kW 电源框 · 2N 冗余",
+	],
+}
+const SHEET_5090 := {
+	"base": "res://assets/story/config_sheet_5090.png",
+	"caption": "图上为八卡 5090 工作站：8 张显卡 + 8 条 ECC 内存（鼠标移到左边的部件名试试）",
+	"parts": ["gpu5090", "", "", "ram", "ssd", "ssd", "psu", "", ""],
+	"labels": [
+		"显卡 · RTX 5090 · 32GB GDDR7 ×8",
+		"整机 · WRX90 主板 + 开放式机架",
+		"处理器 · Threadripper PRO 7995WX · 96 核",
+		"内存 · DDR5-5600 ECC 32GB ×8 = 256GB",
+		"系统盘 · PCIe 5.0 NVMe 2TB ×2（RAID 1）",
+		"数据盘 · PCIe 5.0 NVMe 8TB ×4（RAID 0）",
+		"电源 · 2000W ATX 3.1 ×2 · 2N 冗余",
+		"散热 · 开放式机架 + 工业扇",
+		"显示器 · 27 英寸 4K 160Hz ×2",
+	],
+}
+## 排版脚本（tools/make_config_sheet.py）里的行参数：首行 y=146、行高 66；
+## 右侧照片区 x=1064 y=146 w=492 h=560
 const SHEET_ROW_TOP := 146.0
 const SHEET_ROW_H := 66.0
 const SHEET_PHOTO := {"x": 1064, "y": 146, "w": 492, "h": 560}
 
-## 可交互配置单那一步（热区数据按上面的常量生成，别在剧本里手写九行）
-func _sheet_step() -> Dictionary:
+
+## 把一张配置单的规格换成对话播放器要的步骤（热区按常量算，不手写行数据）
+func _sheet_step(spec: Dictionary) -> Dictionary:
+	var parts: Array = spec["parts"]
+	var labels: Array = spec["labels"]
 	var rows: Array = []
-	for i in SHEET_PARTS.size():
+	for i in parts.size():
+		var part := String(parts[i])
 		rows.append({
 			"top": SHEET_ROW_TOP + i * SHEET_ROW_H,
 			"bottom": SHEET_ROW_TOP + (i + 1) * SHEET_ROW_H,
-			"image": "res://assets/story/parts/%s.png" % SHEET_PARTS[i],
-			"label": SHEET_LABELS[i],
+			"image": "" if part.is_empty() else "res://assets/story/parts/%s.png" % part,
+			"label": String(labels[i]),
 		})
 	return {
 		"kind": "config_sheet",
-		"base": "res://assets/story/config_sheet.png",
+		"base": String(spec["base"]),
 		"photo": SHEET_PHOTO,
-		"caption": "图上为八卡计算托盘：8 颗 B300 + 24 条 ECC 内存（鼠标移到左边的部件名试试）",
+		"caption": String(spec["caption"]),
 		"rows": rows,
 	}
+
 
 ## 主角的两个回答（用户 2026-11-01 给的原文，标点照抄）。
 ## `then` 是选中之后接着播的台词 —— 对话播放器会把它们插在后面。
@@ -203,9 +228,18 @@ const TALK_OPTIONS := [
 		"then": [
 			{"kind": "say", "who": SPEAKER, "text": "老板,看这套配置怎么样[TVT]"},
 			# 报价之后弹配置单：悬停行会换右侧照片，按空格/左键关掉再往下
-			{"kind": "__sheet__"},
+			{"kind": "__sheet_b300__"},
 			{"kind": "say", "who": SPEAKER,
 				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百万起，配您正合适[TVT]"},
+			# 小桃拆台：数据中心卡塞不进宿舍，而且根本没货
+			{"kind": "say", "who": "小桃",
+				"text": "等等等等——B300？那可是数据中心卡！八卡一柜、还得上冷板液冷，宿舍连电都带不动。"},
+			{"kind": "say", "who": "小桃",
+				"text": "而且现在根本买不到现货。要我说，八张 5090 才叫正经配置——能训、能跑、还能打游戏。"},
+			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。"},
+			{"kind": "__sheet_5090__"},
+			{"kind": "say", "who": SPEAKER,
+				"text": "八张 5090 加撕裂者，五十来万——这张才是真能装能跑的。"},
 		],
 	},
 	{
@@ -507,8 +541,11 @@ func _talk(d: DialogueBox) -> void:
 		var opt: Dictionary = (o as Dictionary).duplicate(true)
 		var fixed: Array = []
 		for st in opt.get("then", []):
-			if String((st as Dictionary).get("kind", "")) == "__sheet__":
-				fixed.append(_sheet_step())
+			var kind := String((st as Dictionary).get("kind", ""))
+			if kind == "__sheet_b300__":
+				fixed.append(_sheet_step(SHEET_B300))
+			elif kind == "__sheet_5090__":
+				fixed.append(_sheet_step(SHEET_5090))
 			else:
 				fixed.append(st)
 		if not fixed.is_empty():
