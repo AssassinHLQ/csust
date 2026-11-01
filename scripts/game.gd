@@ -2,6 +2,8 @@ extends Node3D
 ## 玩法场景总控：把 Player / Weapon / HUD / 高斯泼溅校园接起来，记账击杀。
 
 const SceneFlow := preload("res://scripts/scene_flow.gd")
+## 609 画室桌上的十颗 9950X3D（隐藏福利）。单独一个场景，方便在编辑器里拖位置。
+const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
 
 ## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
 const FALL_LIMIT := -60.0
@@ -597,6 +599,8 @@ func _ready() -> void:
 	_build_summon_pad()
 	# 小屋桌子上的电脑（假 Arch Linux 终端，按 F 进出，见 scripts/hut_computer.gd）
 	_build_computer()
+	# 609 画室桌上的十颗 Ryzen 9 9950X3D（隐藏福利，2026-11 用户要求）
+	_spawn_room609_cpus()
 	# 商店与蒙德里安大楼**已经烘焙进场景**（`scenes/shop_baked.tscn` /
 	# `scenes/mondrian_house_baked.tscn`，在 game.tscn 里是实例节点），
 	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
@@ -1052,6 +1056,18 @@ func _build_computer() -> void:
 	var pc := HutComputer.new()
 	pc.name = "HutComputer"
 	hut.add_child(pc)
+
+
+## 609 画室桌上的十颗 Ryzen 9 9950X3D（2026-11 用户：「在 609 上面放十颗，
+## 按市场价算，这是隐藏的福利」）。整组是一个独立场景 `room609_cpus.tscn`，
+## 在编辑器里打开它能直接拖位置；这里只负责挂进本关。
+func _spawn_room609_cpus() -> void:
+	if get_node_or_null("Room609Cpus") != null:
+		return
+	var cpus := ROOM609_CPUS.instantiate()
+	cpus.name = "Room609Cpus"
+	add_child(cpus)
+	print("[Game] 609 画室桌上摆好十颗 Ryzen 9 9950X3D（¥4,599/颗，隐藏福利）")
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。

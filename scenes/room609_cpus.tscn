@@ -1,0 +1,36 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/ryzen_9950x3d.tscn" id="1_cpu"]
+
+[node name="Room609Cpus" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.893612, 1.19, 1.3329114)
+
+[node name="Cpu1" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, -0.920)
+
+[node name="Cpu2" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, -0.920)
+
+[node name="Cpu3" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, -0.460)
+
+[node name="Cpu4" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, -0.460)
+
+[node name="Cpu5" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.000)
+
+[node name="Cpu6" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.000)
+
+[node name="Cpu7" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.460)
+
+[node name="Cpu8" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.460)
+
+[node name="Cpu9" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.120, 0, 0.920)
+
+[node name="Cpu10" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.120, 0, 0.920)

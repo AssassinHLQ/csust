@@ -48,6 +48,7 @@
 | 七名同伴（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/companions/`，来源 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包，整理者 lihaohong6 / Peterli） | 均取初始形态；凯伊用 `Kei_ext.glb` |
 | RTX 5090 显卡模型（最后平台房顶的资产） | 爱给网（aigei.com）用户上传，作者未署名 | 专有（仅限学习交流，不可商用） | ❌ | `models/rtx5090/`，来源：爱给网下载的 `RTX5090.obj`（4.5 MB，29,480 面） | 2026-10-20 用户提供并当天换成高模（同目录还留着 945 KB 的 `RTX5090simplified.obj`）；`.gitignore` 排除了整个目录，缺它时屋顶用程序化占位卡 |
 | BANK 招牌模型（最后平台小屋屋顶） | **使用者自制**（Rhino 导出 OBJ） | 归使用者所有 | ✅ `models/bank/BANK.obj` | `models/bank/`，2026-10-20 桌面提供 | 1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 缺失，仓库补了一份最小 `BANK.mtl` |
+| AMD Ryzen 9 9950X3D 处理器低模（609 桌上的十颗） | 本喵自建（参考爱给网用户上传的 SolidWorks 模型） | 自建低模随仓库分发；参考图仅学习交流、不可商用；AMD / RYZEN 是 AMD 商标 | ✅ `models/cpu_9950x3d/ryzen_9950x3d.glb` | `models/cpu_9950x3d/`；参考用户提供的爱给网 `.SLDPRT`（Godot/Blender 读不了）与 `P1.PNG` | 蓝基板 + 银 IHS + 金手指 + IHS 丝印；10 颗摆 609 画室桌上，¥4,599/颗（2026-10 京东盒装 4,549~4,819），合计 ¥45,990 |
 | 主角 Arisu 模型与贴图、校园碰撞网格 | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/Arisu*.glb`、`Arisu*.png`、`school.collision.glb`，来源同上 | 贴图由 Godot 导入 glb 时自动解包 |
 | 校园 / 画室609 高斯泼溅数据 | **知天下 AI 生成**（由使用者提供） | 权利状态未核实（再分发权由使用者确认） | ❌ | `splatdata/*.sogdata` | 校园与画室609 的泼溅由 **知天下 AI** 生成；缺失时用 `-- --splat=off` |
 | 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |
