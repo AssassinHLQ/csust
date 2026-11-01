@@ -163,9 +163,11 @@ func _build() -> void:
 	if _pk == null:
 		push_warning("[Futures] 父节点不是 Parkour，期货通不工作")
 		return
-	_make_drift("K5", "K6", ParkourDrift.Mode.LIFT, 2.4, 1.8)
-	_make_drift("K7", "K8", ParkourDrift.Mode.SLIDE, 1.8, 2.2)
-	_make_drift("K9", "K10", ParkourDrift.Mode.BROWNIAN, 1.8, 1.4)
+	# 用户 2026-11「移动块要移动快很多」：原来的 1.4~2.2 m/s 整体翻倍，
+	# 端点停靠时间不动（上下船窗口要留着）。
+	_make_drift("K5", "K6", ParkourDrift.Mode.LIFT, 2.4, 3.6)
+	_make_drift("K7", "K8", ParkourDrift.Mode.SLIDE, 1.8, 4.4)
+	_make_drift("K9", "K10", ParkourDrift.Mode.BROWNIAN, 1.8, 2.8)
 	_make_hazard("K4", 0.0)
 	_make_hazard("K9", blue_period / 3.0)
 	_make_hazard("K12", blue_period * 2.0 / 3.0)
@@ -183,12 +185,11 @@ func _build() -> void:
 ## 第 4 段：三条道各一个渡船 + 蓝块 + 结算台。
 ## 三道在 z 上拉开 9 m（跨道缺口 6 m > 平地直跳 5.09 m，跳不过去）。
 func _build_branch() -> void:
-	# 现货道：慢速渡船（最稳）
-	_make_ferry_x("SP2", "SP3", 3.0, 1.6, 1.5)
-	# 永续道：中速渡船 + 爬 0.6 m
-	_make_ferry_x("PP2", "PP3", 2.6, 1.4, 1.5)
-	# 币圈道：**快船、到岸只停 1 s**（「见顶回落」——不等你就跟着船回去了）
-	_make_ferry_x("BC2", "BC3", 2.6, 2.2, 1.0)
+	# 三台渡船同样翻倍（用户 2026-11「移动块要移动快很多」），快慢次序保持：
+	# 现货最稳 < 永续 < 币圈快船（到岸只停 1 s）。
+	_make_ferry_x("SP2", "SP3", 3.0, 3.2, 1.5)
+	_make_ferry_x("PP2", "PP3", 2.6, 2.8, 1.5)
+	_make_ferry_x("BC2", "BC3", 2.6, 4.4, 1.0)
 	# 蓝块：币圈道两个（落偏就爆），结算台之后两个（对冲有没有解锁，从这里开始不一样）
 	_make_hazard("BC1", 0.0)
 	_make_hazard("BC3", blue_period * 0.5)

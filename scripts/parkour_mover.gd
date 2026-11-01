@@ -12,17 +12,17 @@ extends AnimatableBody3D
 ## ⚠️ 两个端点都要落在 **0.05 m 网格**上（几何纪律），而且平台在端点要**压住两岸的边**
 ##    （重叠 0.3 m 左右）—— 只留一条缝的话，`CharacterBody3D` 不会迈那一步，会掉下去。
 ##
-## ⚠️ 速度 1.2~2.0 m/s：太快站不稳，太慢没耐心。端点停 `wait_time` 秒，好让人上下。
-##    （0.8 s 实测**不够**：人下船时平台已经开始往回走，走路 2.4 m/s 对 1.8 m/s 只净剩
-##     0.6 m/s，600 ms 只挪 0.36 m —— 自检的「连续通关」就卡在 F2 那一站。改 1.2 s。）
+## ⚠️ 用户 2026-11「移动块要移动快很多」：速度从 1.8 提到 **3.6 m/s**。
+##   平台变快，回程也就更快，端点停靠时间相应从 1.2 s 加到 1.4 s，
+##   否则人还没走下来就被带回去了。
 
 signal arrived(end_name: String)
 
 @export var point_a := Vector3.ZERO
 @export var point_b := Vector3.ZERO
-@export var speed := 1.8
+@export var speed := 3.6
 ## 到端点后停多久（秒）
-@export var wait_time := 1.2
+@export var wait_time := 1.4
 
 var trips := 0
 var _t := 0.0
