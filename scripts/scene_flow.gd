@@ -160,7 +160,7 @@ static func _load_splats_behind_fade(tree: SceneTree) -> void:
 	var stack: Array[Node] = [scene]
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
-		if n.has_method("force_start") and n.has_method("is_ready") and bool(n.get("preload_on_gate")):
+		if n.has_method("force_start") and n.has_method("is_ready") 				and n.get("preload_on_gate") == true:
 			splats.append(n)
 		for c in n.get_children():
 			stack.append(c)
@@ -172,7 +172,7 @@ static func _load_splats_behind_fade(tree: SceneTree) -> void:
 	while float(Time.get_ticks_msec() - t0) / 1000.0 < 20.0:
 		var done := true
 		for s in splats:
-			if not bool(s.call("is_ready")) and not bool(s.get("load_failed")):
+			if s.call("is_ready") != true and s.get("load_failed") != true:
 				done = false
 				break
 		if done:

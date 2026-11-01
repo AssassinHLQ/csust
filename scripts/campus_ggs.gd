@@ -24,6 +24,12 @@ var _overlay: CanvasLayer
 var _overlay_label: Label
 var _total := 0
 var _active := false
+## 被 scene_flow 的「黑屏预载」认出来的接口（和 GDGS 的 SplatScene 同一套）：
+## 有 preload_on_gate + force_start() + is_ready()，切场景时就会先把校园点云
+## 加载完再淡入，而不是进场后卡几秒。实测 610 万点首次上传要 ~5 s。
+var preload_on_gate := true
+## 起不来的情况（headless / 没 bin / 没相机）置 true，免得预载白等 20 s
+var _gave_up := false
 var _want_size := Vector2i.ZERO
 ## 泼溅光栅化纹理的最大宽度（可用 `--ggs-max-w=1600` 改）
 var max_render_w := 1920.0
@@ -32,12 +38,14 @@ var _bin_path := BIN
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
+			_gave_up = true
 			set_process(false)
 			return
 		if a.begins_with("--ggs-max-w="):
 			max_render_w = maxf(640.0, float(a.substr(12)))
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
+		_gave_up = true
 		set_process(false)
 		return
 	if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
@@ -46,6 +54,7 @@ func _ready() -> void:
 	# 两处都没有就别硬撑：不碰 GDGS，让老泼溅照常工作（否则校园会整片消失）
 	if not FileAccess.file_exists(_bin_path):
 		push_error("[campus_ggs] 找不到 %s，回退 GDGS 泼溅" % _bin_path)
+		_gave_up = true
 		set_process(false)
 		return
 	var level := get_parent()
@@ -108,6 +117,24 @@ func _make_bundle() -> bool:
 
 	_ready_done = true
 	return true
+
+## scene_flow 在黑屏期间调它，把点云加载提前开始（本来 _process 第一帧也会做）。
+func force_start() -> void:
+	if _gave_up:
+		return
+	set_process(true)
+	if not _ready_done:
+		_make_bundle()
+
+
+## 点云全部上传完 = 可以淡入了。起不来的情况直接算「就绪」，别让切场景干等。
+func is_ready() -> bool:
+	if _gave_up:
+		return true
+	if not _ready_done or rasterizer == null:
+		return false
+	return rasterizer.is_loaded == true
+
 
 func _make_quad() -> void:
 	quad = MeshInstance3D.new()
