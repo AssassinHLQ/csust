@@ -80,7 +80,7 @@ func _run() -> void:
 	_key(KEY_S)
 	for _i in 4:
 		await process_frame
-	_key(KEY_SPACE)
+	_key(KEY_F)
 	for _i in 30:
 		await process_frame
 	print("[choice] 选第 2 项后的正文=%s" % box.current_text())
@@ -95,7 +95,7 @@ func _run() -> void:
 	box.advance()
 	for _i in 10:
 		await process_frame
-	_key(KEY_SPACE)
+	_key(KEY_F)
 	for _i in 30:
 		await process_frame
 	print("[choice] 选第 1 项后的正文=%s" % box.current_text())

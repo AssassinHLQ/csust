@@ -50,7 +50,7 @@ func _run() -> void:
 	], "pay")
 	for _i in 10:
 		await process_frame
-	_key(KEY_SPACE)
+	_key(KEY_F)
 	for _i in 20:
 		await process_frame
 	print("[pay] custom=%s 余额=%s（期望 13.0 万）" % [_seen, BankCard.format_yuan(BankCard.balance())])
@@ -73,7 +73,7 @@ func _run() -> void:
 	for _i in 10:
 		await process_frame
 	print("[pay] 选择中=%s 选项数=%d" % [str(box2.current_choice() >= 0), box2.choice_count()])
-	_key(KEY_SPACE)   # 按空格 = 确认禁用项
+	_key(KEY_F)   # 按空格 = 确认禁用项
 	for _i in 10:
 		await process_frame
 	print("[pay] 按确认后仍在选择=%s（期望 true）" % str(box2.current_choice() >= 0))

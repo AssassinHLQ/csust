@@ -75,7 +75,7 @@ const NAME_PLATE_HEIGHT := 46.0
 const NAME_PLATE_PAD := 32.0
 const NAME_FONT_SIZE := 22
 const HINT_FONT_SIZE := 14
-const HINT_TEXT := "空格 / 回车 / 左键　继续"
+const HINT_TEXT := "F / 左键　继续"
 
 ## ── 选项列（`choice` 步骤）──
 ## 钉在对话框正上方，一行一项。当前项左侧一个小箭头，边框做呼吸闪烁。
@@ -83,7 +83,7 @@ const CHOICE_WIDTH := 430.0
 const CHOICE_ROW_H := 50.0
 const CHOICE_GAP := 8.0
 const CHOICE_ARROW := "▶"
-const CHOICE_HINT_TEXT := "W / S 选择　空格 / 回车 确认"
+const CHOICE_HINT_TEXT := "W / S 选择　F 确认"
 ## 呼吸灯周期（秒）
 const CHOICE_PULSE := 0.85
 ## 选项列右边缘到画布右边的距离：和对话框右沿对齐
@@ -352,7 +352,7 @@ func get_cps() -> float:
 func advance() -> void:
 	if not _active:
 		return
-	# 选择时「继续」键归选择用（空格 = 确认），不能让 advance 顺手翻页
+	# 选择时「继续」键归选择用（F = 确认），不能让 advance 顺手翻页
 	if _choosing:
 		return
 	# 图还摊在屏幕上：这一下是按「关掉图」
@@ -386,7 +386,7 @@ func _input(event: InputEvent) -> void:
 	if _menu_open():
 		return
 
-	# 选择中：W/S（或上下方向键）移动，空格/回车确认，其余键不响应。
+	# 选择中：W/S（或上下方向键）移动，**F** 确认（照鸣潮那套），其余键不响应。
 	if _choosing:
 		if event is InputEventKey:
 			var ck := event as InputEventKey
@@ -396,7 +396,7 @@ func _input(event: InputEvent) -> void:
 						_move_choice(-1)
 					KEY_S, KEY_DOWN:
 						_move_choice(1)
-					KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
+					KEY_F:
 						_confirm_choice()
 					_:
 						return
@@ -414,7 +414,7 @@ func _input(event: InputEvent) -> void:
 		var k := event as InputEventKey
 		if not k.pressed or k.echo:
 			return
-		if k.keycode == KEY_SPACE or k.keycode == KEY_ENTER or k.keycode == KEY_KP_ENTER:
+		if k.keycode == KEY_F:
 			advance()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton:
@@ -512,7 +512,7 @@ func _process(delta: float) -> void:
 	_update_hint()
 
 
-## 右下角那行「空格 / 回车 / 左键 继续」：等按键时亮，正在打字时压暗。
+## 右下角那行「F / 左键 继续」：等按键时亮，正在打字时压暗。
 ## 它同时是**唯一的操作提示** —— 没有它，第一次玩的人不知道该按什么。
 func _update_hint() -> void:
 	_hint.text = CHOICE_HINT_TEXT if _choosing else HINT_TEXT
@@ -529,7 +529,7 @@ func _update_hint() -> void:
 # 问题句本身由上一条 `say` 负责显示；选项出现时把它立刻打完，不压在半截字上。
 # `then` 里的步骤会被**插到当前步之后**接着播，不需要动作节点。
 
-## 进入一次选择：把问题句打完、列选项、等 W/S + 空格。
+## 进入一次选择：把问题句打完、列选项、等 W/S + F。
 func _begin_choice(step: Dictionary) -> void:
 	var opts: Array = step.get("options", [])
 	if opts.size() < 2:
