@@ -360,6 +360,29 @@ const ENTRIES := [
 		"license_file": "",
 		"note": "",
 	},
+	# ---------- 剧情与图标 · 2026-11-01 柴关电脑城配置单 ----------
+	{
+		"group": "剧情与图标",
+		"path": "assets/story",
+		"title": "柴关电脑城「B300 整机配置单」插图",
+		"author": "本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 usa0.top）",
+		"license": "排版与文案为本项目原创（MIT）；右侧机器照是 AI 生成图，不含第三方摄影作品",
+		"distributed": true,
+		"source": "https://usa0.top",
+		"license_file": "LICENSE",
+		"note": "1600×970；中文用微软雅黑排版（AI 直接画中文字会糊），图上不出现厂商商标",
+	},
+	{
+		"group": "剧情与图标",
+		"path": "assets/story/parts",
+		"title": "配置单悬停用的零件照片（8 张）",
+		"author": "NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体",
+		"license": "第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用",
+		"distributed": false,
+		"source": "逐张出处见 assets/story/parts/SOURCES.md",
+		"license_file": "",
+		"note": "gpu / server / cpu / ram / ssd / nic / cooling / psu 各一张，统一裁成 492×560 深色底；缺图时配置单照常显示，只是悬停不换图",
+	},
 ]
 
 

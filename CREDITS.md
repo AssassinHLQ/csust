@@ -76,6 +76,12 @@
 |---|---|---|---|---|---|
 | 剧情文本（开场 / 设定） | 本项目作者 | MIT | ✅ | `story/` | 角色名来自 Blue Archive，属同人创作 |
 | 项目图标 `icon.png` | **待确认** | 待确认 | ✅ | `icon.png` | 若不是原创请替换为自有图标 |
+| 柴关电脑城「B300 整机配置单」插图 | 本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 [usa0.top](https://usa0.top)） | 排版与文案原创（MIT）；右侧机器照为 AI 生成图，不含第三方摄影作品 | ✅ | `assets/story/config_sheet.png` | 1600×970；中文用微软雅黑排版（AI 直接画中文字会糊），图上不出现厂商商标 |
+| 配置单悬停用的零件照片（8 张） | NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体 | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | ❌ | `assets/story/parts/` | gpu / server / cpu / ram / ssd / nic / cooling / psu 各一张，统一裁成 492×560 深色底；**逐张出处见 [`assets/story/parts/SOURCES.md`](assets/story/parts/SOURCES.md)**；缺图时配置单照常显示，只是悬停不换图 |
+
+> ⚠️ `assets/story/parts/` 里那 8 张是网上找来的产品照，**没有授权**。
+> 本地玩没问题，**任何形式的发布前必须换成**厂商 press kit、CC0 图或自己拍的，
+> 换完记得同步 `SOURCES.md` 与本表，再跑 `_verify_credits.gd`。
 
 ## 怎么改
 

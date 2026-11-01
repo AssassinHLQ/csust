@@ -92,5 +92,13 @@ __pycache__/
 # ---- GGS 校园的 packed bin（1.4 GB，导出时才需要；不进仓库）----
 /campus_ggs.bin
 
+# ---- 配置单悬停用的零件照片 ----
+# 8 张都是第三方新闻/商品图，**未获授权**：只允许本地学习演示，不得再分发、不得商用。
+# 逐张出处见 assets/story/parts/SOURCES.md；缺图时配置单照常显示，只是悬停不换图。
+/assets/story/parts/*.png
+/assets/story/parts/*.png.import
+!/assets/story/parts/SOURCES.md
+
+
 # ---- 导出产物 ----
 /build/
