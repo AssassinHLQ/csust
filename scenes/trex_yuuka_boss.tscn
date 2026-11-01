@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+; 霸王龙优香（第二关校园）。模型是 models/boss/trex_yuuka_rigged.glb ——
+; 原 FBX 的 73 根骨骼在 Blender 里做了 6 段动作再导出（Godot 直读 FBX 会拍平骨架）。
+; 攻击逻辑见 scripts/trex_yuuka_boss.gd：撕咬 / 尾扫 / 跺地 / 冲锋 / 咆哮 五段轮换。
+
+[ext_resource type="Script" path="res://scripts/trex_yuuka_boss.gd" id="1_trex"]
+
+[node name="TrexYuuka" type="StaticBody3D"]
+script = ExtResource("1_trex")
+model_path = "res://models/boss/trex_yuuka_rigged.glb"
+collision_mode = 1
+boot_distance = 60.0
+boot_max_wait = 20.0

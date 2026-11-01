@@ -26,4 +26,11 @@ func _run() -> void:
 		print("[check] Interior=%s  节点数=%d" % [
 			"OK" if interior != null else "缺失",
 			interior.get_child_count() if interior != null else 0])
+	var bosses := 0
+	for c in level.get_children():
+		if c.get_script() != null and str(c.get_script().resource_path).ends_with("trex_yuuka_boss.gd"):
+			bosses += 1
+			print("[check] %s 位置=%s 身高=%s" % [c.name, str(c.get("position").snappedf(0.1)),
+				str(c.get("height"))])
+	print("[check] 霸王龙优香 %d 只" % bosses)
 	quit(0)

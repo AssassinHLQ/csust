@@ -27,6 +27,7 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_preview.scn" id="12_campus_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
+[ext_resource type="PackedScene" path="res://scenes/trex_yuuka_boss.tscn" id="16_trex"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -280,6 +281,25 @@ preload_on_gate = false
 ; 2026-11-01：东门口那 4 栋解构主义小楼连同它们脚下 58×62 m 的地面盒子一起撤掉了
 ; （用户：「去掉之前高斯泼溅上面那四个建筑与建筑下面的地面盒子」）。
 ; 场景文件 scenes/campus_deconstruct.tscn 还留着，想恢复的话把 instance 加回来即可。
+
+; 2026-11-01：校园泼溅上放三只霸王龙优香（原来只有第一关场地上那只）。
+; 体型 9.0 / 7.5 / 10.5 m，走近 60 m 才建模型，最长等 20 s 兜底。
+[node name="TrexBossA" parent="." instance=ExtResource("16_trex")]
+transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -95, 0, -96)
+height = 9.0
+attack_range = 26.0
+
+[node name="TrexBossB" parent="." instance=ExtResource("16_trex")]
+transform = Transform3D(0.293, 0, -0.956, 0, 1, 0, 0.956, 0, 0.293, -120, 0, -115)
+height = 7.5
+attack_range = 24.0
+attack_start_delay = 4.0
+
+[node name="TrexBossC" parent="." instance=ExtResource("16_trex")]
+transform = Transform3D(0.410, 0, -0.912, 0, 1, 0, 0.912, 0, 0.410, -135, 0, -140)
+height = 10.5
+attack_range = 28.0
+attack_start_delay = 6.0
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 4.1, 7.6)
