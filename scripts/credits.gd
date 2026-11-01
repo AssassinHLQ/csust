@@ -79,13 +79,13 @@ const ENTRIES := [
 	{
 		"group": "角色与 Boss 模型",
 		"path": "models/cpu_9950x3d",
-		"title": "AMD Ryzen 9 9950X3D 处理器低模（609 屋顶的十颗）",
-		"author": "本喵自建（参考爱给网用户上传的 SolidWorks 模型）",
-		"license": "自建低模随仓库分发；参考图仅学习交流、不可商用；AMD / RYZEN 是 AMD 的商标，本作为非商用同人",
+		"title": "AMD Ryzen 9 9950X3D 处理器模型（609 屋顶的十颗，Rhino 源）",
+		"author": "基于用户 Rhino 导出的 9950X3D GLB 减面与分材质；参考模型来自爱给网用户上传",
+		"license": "处理后的低模随仓库分发；原始 SLDPRT 仅学习交流、不可商用；AMD / RYZEN 是 AMD 的商标，本作为非商用同人",
 		"distributed": true,
 		"source": "用户提供的爱给网（aigei.com）`AMD Ryzen9 9950 X3D.SLDPRT`（SolidWorks，Godot/Blender 读不了，仅作外观参考）+ 同包 P1.PNG",
 		"license_file": "",
-		"note": "按参考图重建：蓝基板 + 银 IHS + 四排金手指 + IHS 丝印（Pillow 生成）；10 颗摆 609 画室屋顶，¥4,599/颗（2026-10 京东盒装 4,549~4,819），10 颗 = ¥45,990",
+		"note": "Rhino 导出 23.6 万面 → 焊接后减到 12,192 面；12 cm 见方、蓝基板 / 银 IHS / 32 颗金手指 + IHS 丝印；10 颗摆 609 画室屋顶，¥4,599/颗（2026-10 京东盒装 4,549~4,819），10 颗 = ¥45,990",
 	},
 	{
 		"group": "角色与 Boss 模型",

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d4ejk5dqt5cik"
-path="res://.godot/imported/ryzen_9950x3d_ihs_label.png-37959d9c125b416d005eb6da336a81e8.ctex"
+path.s3tc="res://.godot/imported/ryzen_9950x3d_ihs_label.png-37959d9c125b416d005eb6da336a81e8.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fc186f255b8f932a51679ed15ebf8a17"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/cpu_9950x3d/ryzen_9950x3d_ihs_label.png"
-dest_files=["res://.godot/imported/ryzen_9950x3d_ihs_label.png-37959d9c125b416d005eb6da336a81e8.ctex"]
+dest_files=["res://.godot/imported/ryzen_9950x3d_ihs_label.png-37959d9c125b416d005eb6da336a81e8.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
