@@ -1611,7 +1611,7 @@ outline_size = 14
 [node name="FX1" type="StaticBody3D" parent="Route" unique_id=344984908]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -320.85, 1.4, -1.7)
 metadata/pct_kind = "fx"
-metadata/pct_seq = "15.00,-15.00"
+metadata/pct_seq = "8.00,-8.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 0
 metadata/lane = "FX"
@@ -1638,7 +1638,7 @@ outline_size = 14
 [node name="FX2" type="StaticBody3D" parent="Route" unique_id=1603306186]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -326.65, 1.7, -1.7)
 metadata/pct_kind = "fx_lev"
-metadata/pct_seq = "40.00,-40.00"
+metadata/pct_seq = "20.00,-20.00"
 metadata/pct_period = 0.3
 metadata/pct_phase = 0.4
 metadata/lane = "FX"
@@ -1665,7 +1665,7 @@ outline_size = 14
 [node name="FX3" type="StaticBody3D" parent="Route" unique_id=882947066]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -332.65, 1.4, -1.7)
 metadata/pct_kind = "fx_crash"
-metadata/pct_seq = "-30.00"
+metadata/pct_seq = "-10.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "FX"
@@ -1692,7 +1692,7 @@ outline_size = 14
 [node name="FX4" type="StaticBody3D" parent="Route" unique_id=1057954375]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -338.45, 1.6, -1.7)
 metadata/pct_kind = "fx"
-metadata/pct_seq = "15.00,-15.00"
+metadata/pct_seq = "8.00,-8.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 1.2
 metadata/lane = "FX"
@@ -1719,7 +1719,7 @@ outline_size = 14
 [node name="FX5" type="StaticBody3D" parent="Route" unique_id=589368442]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -344.45, 1.4, -1.7)
 metadata/pct_kind = "fx_lev"
-metadata/pct_seq = "40.00,-40.00"
+metadata/pct_seq = "20.00,-20.00"
 metadata/pct_period = 0.4
 metadata/pct_phase = 1.6
 metadata/lane = "FX"
@@ -1746,7 +1746,7 @@ outline_size = 14
 [node name="FX6" type="StaticBody3D" parent="Route" unique_id=70943705]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -350.45, 1.6, -1.7)
 metadata/pct_kind = "fx_crash"
-metadata/pct_seq = "-30.00"
+metadata/pct_seq = "-10.00"
 metadata/pct_period = 0
 metadata/pct_phase = 2
 metadata/lane = "FX"
@@ -1773,7 +1773,7 @@ outline_size = 14
 [node name="FX7" type="StaticBody3D" parent="Route" unique_id=96242541]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -356.45, 1.4, -1.7)
 metadata/pct_kind = "fx"
-metadata/pct_seq = "15.00,-15.00"
+metadata/pct_seq = "8.00,-8.00"
 metadata/pct_period = 0.5
 metadata/pct_phase = 2.4
 metadata/lane = "FX"
