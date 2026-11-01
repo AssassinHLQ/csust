@@ -129,15 +129,30 @@ const TALK_DY_MAX := 2.0
 const TALK_LINES := [
 	"你配电脑吗?",
 ]
-## 配置单内容：店员拿来「糊弄」爱丽丝的就是这套 —— 直接把数据中心卡当家用机卖。
-## 图还没做（`res://assets/story/config_sheet.png`），出图时按这份排版。
+## 配置单内容：店员拿来「糊弄」爱丽丝的就是这套 —— 直接把数据中心机柜当家用机卖。
+## 图还没做（`res://assets/story/config_sheet.png`），出图时按这份逐行排版。
+## 价格都是 2026-11 的估算/渠道价，只求「离谱得真实」，不是采购报价。
 const CONFIG_SHEET := [
-	{"part": "显卡", "model": "NVIDIA B300（Blackwell Ultra）", "spec": "288GB HBM3E × 8", "price": "¥40 万起 / 张"},
-	{"part": "整机", "model": "HGX B300 8 卡服务器", "spec": "SXM 模块 + NVLink 5，冷板液冷", "price": "¥300 万起"},
-	{"part": "处理器", "model": "双路 Xeon 6 / Grace", "spec": "64 核起", "price": "—"},
-	{"part": "内存", "model": "ECC DDR5", "spec": "1.5 TB", "price": "—"},
-	{"part": "存储", "model": "企业级 NVMe", "spec": "8 × 7.68TB RAID", "price": "—"},
-	{"part": "供电", "model": "机柜配电", "spec": "12 kW / 冷板液冷", "price": "—"},
+	{"part": "显卡", "model": "NVIDIA B300（Blackwell Ultra）",
+		"spec": "288GB HBM3E · NVLink 5 · 1400W", "qty": 8, "price": "¥40 万/张"},
+	{"part": "整机", "model": "HGX B300 八卡基板 + 8U 机箱",
+		"spec": "SXM 模块直插 · 冷板液冷", "qty": 1, "price": "¥60 万"},
+	{"part": "处理器", "model": "Intel Xeon 6 6980P",
+		"spec": "128 核 · 500W", "qty": 2, "price": "¥9 万/颗"},
+	{"part": "内存", "model": "DDR5-6400 ECC RDIMM 64GB",
+		"spec": "双路 24 通道 · 共 1.5TB", "qty": 24, "price": "¥0.7 万/条"},
+	{"part": "系统盘", "model": "PCIe 5.0 NVMe 1.92TB",
+		"spec": "RAID 1", "qty": 2, "price": "¥0.3 万"},
+	{"part": "数据盘", "model": "PCIe 5.0 NVMe 7.68TB",
+		"spec": "RAID 10", "qty": 8, "price": "¥1 万"},
+	{"part": "网络", "model": "ConnectX-8 800G 网卡",
+		"spec": "每卡一路 · InfiniBand", "qty": 8, "price": "¥4 万"},
+	{"part": "液冷", "model": "机架式 CDU + 冷板",
+		"spec": "≥ 60 kW", "qty": 1, "price": "¥50 万"},
+	{"part": "配电", "model": "12kW 电源框",
+		"spec": "2N 冗余 · 整节点 ≈ 12 kW", "qty": 1, "price": "¥20 万"},
+	{"part": "合计", "model": "整套（不含机房改造）",
+		"spec": "占地约 1 个 42U 机柜", "qty": 1, "price": "≈ ¥520 万"},
 ]
 ## 主角的两个回答（用户 2026-11-01 给的原文，标点照抄）。
 ## `then` 是选中之后接着播的台词 —— 对话播放器会把它们插在后面。
@@ -150,7 +165,7 @@ const TALK_OPTIONS := [
 			# 报价之后弹一张配置单，玩家按空格关掉再往下
 			{"kind": "image", "path": "res://assets/story/config_sheet.png"},
 			{"kind": "say", "who": SPEAKER,
-				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，配您正合适[TVT]"},
+				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百万起，配您正合适[TVT]"},
 		],
 	},
 	{
