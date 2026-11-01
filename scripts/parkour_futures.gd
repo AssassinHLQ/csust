@@ -937,6 +937,8 @@ func settle_all() -> String:
 	if assets_yuan <= 0 and margin <= 0.0 and bank_yuan <= 0 and debt <= 0:
 		return "没有可结算的东西"
 	var sold := assets_yuan
+	var ram_n := ram_count
+	var gpu_n := gpu_count
 	var refund := int(round(margin * 10000.0))
 	bank_yuan += sold + refund
 	assets_yuan = 0
@@ -949,8 +951,8 @@ func settle_all() -> String:
 	debt -= int(round(float(paid) / 10000.0))
 	_update_hud_text()
 	BankCard.set_balance(bank_yuan)   # 落盘：商店那边读的是同一张卡
-	var msg := "结算：资产 ¥%s + 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
-		_fmt_yuan(sold), _fmt_yuan(refund), _fmt_yuan(bank_yuan),
+	var msg := "结算：资产 ¥%s（RAM %d 根 + 5090 ×%d）+ 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
+		_fmt_yuan(sold), ram_n, gpu_n, _fmt_yuan(refund), _fmt_yuan(bank_yuan),
 		_fmt_yuan(paid), debt]
 	_banner_text(msg, Color(0.55, 1.0, 0.7))
 	Sfx.play("ui_slider", 2.0)

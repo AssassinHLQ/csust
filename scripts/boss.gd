@@ -63,6 +63,10 @@ enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
 ## 目标身高（m）。Arisu 约 1.7、靶子柱 1.15；木桩默认 4.5（约 2.6 个 Arisu）
 @export var height := 4.5
 @export var max_health := 3000.0
+## 被打倒时掉进银行卡的钱（元）。0 = 不掉；飞猪优香 1 万（用户 2026-11）
+## ⚠️ 倭瓜优香那 20 万**不走这里** —— 它由 `parkour.gd::_on_avenger_died()` 发，
+##    两边都写会重复掉钱。
+@export var drop_yuan := 0
 @export var respawn_time := 6.0
 ## 倒下后要不要站起来。默认 true（练枪木桩 / 比纳以外的那几位）；
 ## 2026-10-20 的剧情 Boss 倭瓜优香设成 false —— 用户：「倭瓜优香不能复活」，
@@ -98,6 +102,7 @@ var _collisions: Array[CollisionShape3D] = []
 var _booted := false
 
 const BootGate := preload("res://scripts/boot_gate.gd")
+const BankCard := preload("res://scripts/bank_card.gd")
 
 
 func _ready() -> void:
@@ -487,6 +492,10 @@ func _flash() -> void:
 
 func _die(by_damage: float) -> void:
 	_dead = true
+	if drop_yuan > 0:
+		BankCard.add(drop_yuan)
+		print("[Boss %s] 打倒 → 掉进银行卡 %s（余额 %s）" % [display_name,
+			BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
 	died.emit(by_damage)
 	for c in _collisions:
 		c.set_deferred("disabled", true)

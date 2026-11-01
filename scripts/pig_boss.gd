@@ -11,6 +11,8 @@ var _base_model_y := 0.0
 
 
 func _init() -> void:
+	# 用户 2026-11：「击败飞猪优香一次获得 1w」
+	drop_yuan = 10000
 	attack_interval = 3.0              # 比霸王龙勤快
 	attack_start_delay = 3.5           # 但它更懒得起手
 	windup_time = 0.7
