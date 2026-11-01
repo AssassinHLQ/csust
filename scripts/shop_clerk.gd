@@ -129,6 +129,16 @@ const TALK_DY_MAX := 2.0
 const TALK_LINES := [
 	"你配电脑吗?",
 ]
+## 配置单内容：店员拿来「糊弄」爱丽丝的就是这套 —— 直接把数据中心卡当家用机卖。
+## 图还没做（`res://assets/story/config_sheet.png`），出图时按这份排版。
+const CONFIG_SHEET := [
+	{"part": "显卡", "model": "NVIDIA B300（Blackwell Ultra）", "spec": "288GB HBM3E × 8", "price": "¥40 万起 / 张"},
+	{"part": "整机", "model": "HGX B300 8 卡服务器", "spec": "SXM 模块 + NVLink 5，冷板液冷", "price": "¥300 万起"},
+	{"part": "处理器", "model": "双路 Xeon 6 / Grace", "spec": "64 核起", "price": "—"},
+	{"part": "内存", "model": "ECC DDR5", "spec": "1.5 TB", "price": "—"},
+	{"part": "存储", "model": "企业级 NVMe", "spec": "8 × 7.68TB RAID", "price": "—"},
+	{"part": "供电", "model": "机柜配电", "spec": "12 kW / 冷板液冷", "price": "—"},
+]
 ## 主角的两个回答（用户 2026-11-01 给的原文，标点照抄）。
 ## `then` 是选中之后接着播的台词 —— 对话播放器会把它们插在后面。
 const TALK_OPTIONS := [
@@ -137,8 +147,10 @@ const TALK_OPTIONS := [
 		"value": 1,
 		"then": [
 			{"kind": "say", "who": SPEAKER, "text": "老板,看这套配置怎么样[TVT]"},
-			# 报价之后弹一张配置单，玩家按空格关掉再结束
+			# 报价之后弹一张配置单，玩家按空格关掉再往下
 			{"kind": "image", "path": "res://assets/story/config_sheet.png"},
+			{"kind": "say", "who": SPEAKER,
+				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，配您正合适[TVT]"},
 		],
 	},
 	{
