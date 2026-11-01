@@ -156,7 +156,8 @@ MATERIALS = {
     # ⚠️ 用户 2026-10-19：「黑市太黑了」—— 上一版 albedo 0.02 进场景几乎纯黑，
     #    板沿 / 台面高度全看不见，跳哪块只能靠猜。抬到 0.16（仍是黑市的深紫，
     #    但顶面吃得到光、边角有轮廓），紫霓虹发光保留。
-    "m_spot_dark": ("Mat_s_dark", (0.16, 0.13, 0.24), (0.42, 0.13, 0.78), 0.30),
+    # 2026-11 用户：「变成宝藏丰富的危险黑市」→ 暗紫改成暗金
+    "m_spot_dark": ("Mat_s_dark", (0.24, 0.18, 0.08), (0.95, 0.72, 0.20), 0.35),
 }
 
 
@@ -612,26 +613,27 @@ SECTIONS = [
          ]),
     # 第 8 段「暗网黑市交易」：2026-10-20 从 10 块减到 9 块，再减到 **7 块**
     # （用户两轮：「暗网短一点点」「暗网还要缩短，暗网减少 2」）。
-    # 头顶有**比纳**（dark_boss.gd）一边跑一边打。比纳不吃「跳过去」那套 ——
-    # 它在上方 10 m，激光 + 炮弹。
+    # 头顶有**霍德**（dark_boss.gd）一边跑一边打。四个技能轮着放（弹幕 / 三连炮 /
+    # 震地波 / 触手砸击），不吃「跳过去」那套 —— 它在上方 10 m 绕着你飞。
+    # 2026-11 用户：「变成宝藏丰富的危险黑市」→ 七块板改成固定 **+1%**（原来是 −0.8%）。
     # ⚠️ 用户 2026-10-19：「比纳不能一开始就加载，得进入黑市才加载」→
     #    这里不再摆 `DarkBoss` 节点，只摆一个空的 `DarkGate`（dark_gate.gd）；
     #    玩家跑到闸门处才由它 `instantiate` 出比纳（见 build_section_nodes 末尾）。
     dict(name="暗网黑市交易", z=-1.70, boss=True, mat="m_spot_dark",
          plates=[
-             dict(nm="DK1", kind="spot", seq="-0.80", period=0.0, top=2.00,
+             dict(nm="DK1", kind="spot", seq="1.00", period=0.0, top=2.00,
                   width=3.4, depth=3.0, gap=3.00),
-             dict(nm="DK2", kind="spot", seq="-0.80", period=0.0, top=2.40,
+             dict(nm="DK2", kind="spot", seq="1.00", period=0.0, top=2.40,
                   width=2.8, depth=3.0, gap=3.00),
-             dict(nm="DK3", kind="spot", seq="-0.80", period=0.0, top=2.00,
+             dict(nm="DK3", kind="spot", seq="1.00", period=0.0, top=2.00,
                   width=3.0, depth=3.0, gap=2.80),
-             dict(nm="DK4", kind="spot", seq="-0.80", period=0.0, top=2.60,
+             dict(nm="DK4", kind="spot", seq="1.00", period=0.0, top=2.60,
                   width=3.0, depth=3.0, gap=3.00),
-             dict(nm="DK5", kind="spot", seq="-0.80", period=0.0, top=3.00,
+             dict(nm="DK5", kind="spot", seq="1.00", period=0.0, top=3.00,
                   width=2.8, depth=3.0, gap=3.00),
-             dict(nm="DK6", kind="spot", seq="-0.80", period=0.0, top=2.60,
+             dict(nm="DK6", kind="spot", seq="1.00", period=0.0, top=2.60,
                   width=3.4, depth=3.0, gap=2.80),
-             dict(nm="DK7", kind="spot", seq="-0.80", period=0.0, top=2.20,
+             dict(nm="DK7", kind="spot", seq="1.00", period=0.0, top=2.20,
                   width=3.0, depth=3.0, gap=3.00),
          ]),
 ]

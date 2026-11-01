@@ -9,13 +9,14 @@ extends Boss
 ##   · 模型换成 `models/boss_hod/HOD_Original.fbx`（3 万面 / 164 骨 / **没有动画**）；
 ##   · 走位从「跟着一个固定偏移平移」改成**绕着爱丽丝游走**（见下面 `_fly()`）。
 ##
-## ── 和竞技场那六位的区别 ──
-## 那六位是**近战扇形**（`boss_attacker.gd`：预警 → 横扫），玩家站在场地上躲；
-## 这一位是**空中炮台**，两种远程攻击：
-##   · **激光**：0.6 s 预警（半透明细束，瞄准你**那一刻**的位置）→ 实体 0.25 s。
-##     只要不在束线上就没事 —— 跑酷里「别停」就是躲它。
-##   · **炮弹**：每 1.8 s 一发，朝你**出膛那一刻**的位置飞（带上抛），命中掉血 + 击退 ——
-##     真正的威胁是**被击退掉下板**。
+## 2026-11 用户：「变成宝藏丰富的危险黑市……代价是增强霍德，多做几个技能，激光不要了」
+## → 黑市七块板从「固定 −0.8%」改成「固定 +1%」（见 make_flush_section.py），
+##   霍德**删掉激光**，换成四个轮着放的技能：
+##   · **弹幕**：两发炮弹，间隔 0.12 s，追着你落点打；
+##   · **三连炮**：按你的速度预判，左中右三发覆盖跑道；
+##   · **震地波**：脚下亮起 3.4 m 预警圈，0.9 s 后爆炸（16 伤 + 9 击退）；
+##   · **触手砸击**：预判你 0.55 s 后的位置，青光柱从天上砸下来（24 伤 + 13 击退）。
+##   真正的威胁仍然是**被击退掉下板**。
 ##
 ## ⚠️ 用户：「这个 boss 不会复活」→ 覆写 `_respawn()`：`_die()` 之后
 ##    模型前扑、碰撞关掉，躺 `vanish_delay` 秒后**淡出消失**（2026-10-19 用户：
@@ -23,22 +24,37 @@ extends Boss
 ##
 ## ⚠️ 血量、名字在 `_init()` 里给默认值（场景里不写），这样场景只需要挂脚本 + 位置。
 
-const BEAM_ON := Color(1.0, 0.22, 0.18, 0.92)
-const BEAM_WARN := Color(1.0, 0.35, 0.30, 0.28)
 const SHELL_COL := Color(0.95, 0.35, 0.12)
+const QUAKE_COL := Color(1.0, 0.52, 0.14, 0.55)
+const SLAM_COL := Color(0.35, 0.92, 1.0, 0.55)
 
-## 激光：多久一发 / 预警 / 实体 / 伤害 / 判定半径
-@export var laser_interval := 3.4
-@export var laser_aim_time := 0.6
-@export var laser_live_time := 0.25
-@export var laser_damage := 14.0
-@export var laser_radius := 1.1
-## 炮弹：多久一发 / 速度 / 重力 / 伤害 / 击退
-@export var shell_interval := 1.8
+## 四个技能的名字（轮着放；自检按它核对）
+const SKILL_NAMES := ["弹幕", "三连炮", "震地波", "触手砸击"]
+const SKILL_COUNT := 4
+
+## 技能节奏：每隔 skill_interval 秒放一个，第一次晚 skill_start_delay
+@export var skill_interval := 2.2
+@export var skill_start_delay := 1.5
+
+## 炮弹：速度 / 重力 / 伤害 / 击退 / 弹幕两发之间的间隔
 @export var shell_speed := 20.0
 @export var shell_gravity := 12.0
 @export var shell_damage := 18.0
 @export var shell_knockback := 6.0
+@export var shell_gap := 0.12
+
+## 震地波：预警时长 / 半径 / 伤害 / 击退
+@export var quake_warn := 0.9
+@export var quake_radius := 3.4
+@export var quake_damage := 16.0
+@export var quake_knockback := 9.0
+
+## 触手砸击：预警时长 / 半径 / 伤害 / 击退
+@export var slam_warn := 1.1
+@export var slam_radius := 2.2
+@export var slam_damage := 24.0
+@export var slam_knockback := 13.0
+
 ## 只在这个半径里有玩家时才开火（跑酷路线长，别隔着 100 m 打空气）
 @export var engage_range := 46.0
 ## 绕着爱丽丝飞的**半径带**（m）：太近会糊住镜头，太远又不像在缠着你
@@ -55,19 +71,16 @@ const SHELL_COL := Color(0.95, 0.35, 0.12)
 @export var vanish_delay := 5.0
 @export var vanish_time := 1.4
 
-var _beam: MeshInstance3D
-var _beam_mat: StandardMaterial3D
 var _shell_mat: StandardMaterial3D
-var _t_laser := 0.0
-var _t_shell := 0.0
-var _laser_state := 0          # 0 空闲 / 1 预警 / 2 实体
-var _laser_timer := 0.0
-var _aim_from := Vector3.ZERO
-var _aim_to := Vector3.ZERO
 var _shells: Array[Dictionary] = []
+## 预警圈 / 砸击柱：死亡时一起清掉，别在地上留一圈红印
+var _marks: Array[Node3D] = []
 var _shots := 0
 var _player: Player
 var _killed := false
+var _t_skill := 0.0
+var _skill_i := 0
+var _last_skill := ""
 ## 程序化动画（这份 FBX **没有动画**：164 骨、纯静态、连 AnimationPlayer 都没有）——
 ## 悬停上下浮动 + 缓慢摆头 + 开火时的一下「反冲」。基准值在 `_ready` 里量。
 var _anim_t := 0.0
@@ -98,7 +111,7 @@ func _init() -> void:
 	height = 6.0
 	# 2026-10-19 上午用户：「比纳血条增加 3 倍」→ 900 → 2700；
 	# 同一天下午：「比纳太肉了，削弱一点点血量」→ **2200**（−18.5%）。
-	# 血条是按比例画的，长度不变，只是少打 500 点。想再调就改这一行。
+	# 2026-11 增强走的是**技能**（四个轮放），血量维持 2200，别又变肉。
 	max_health = 2200.0
 	# 倒下后躺多久：`_ready()` 会再按导出参数 `vanish_delay` 覆盖一次
 	respawn_time = 5.0
@@ -117,9 +130,8 @@ func _ready() -> void:
 	# 这个数就是「倒下后躺多久」。这里把它接到 `vanish_delay`（导出参数），
 	# 之后 `_respawn()` 被覆写成「消失」而不是「站起来」。
 	respawn_time = vanish_delay
-	# 先用**半速**开火：玩家第一次见到它时还在 K 线上，别一上来就被激光点名
-	_t_laser = laser_interval * 0.5
-	_t_shell = 0.8
+	# 第一次出手留一点反应时间：玩家刚进黑市时还在 DK1 上
+	_t_skill = skill_start_delay
 
 
 ## **不会复活，而且会消失**（用户 2026-10-19：「比纳死后过一段时间消失」）。
@@ -150,29 +162,25 @@ func _vanish() -> void:
 
 func _on_died(_by_damage: float) -> void:
 	_killed = true
-	_beam.visible = false
 	for s in _shells:
 		var n := s["node"] as Node3D
 		if is_instance_valid(n):
 			n.queue_free()
 	_shells.clear()
+	_clear_marks()
 	print("[DarkBoss] 霍德被击败（不复活）")
 
 
+func _clear_marks() -> void:
+	# 只藏不删：预警圈/光柱身上还挂着 tween，硬删会让 tween 找不到目标；
+	# 让它们（≤1.1 s 内）自己走完回调，回调里看到 `_killed` 会自行清掉。
+	for m in _marks:
+		if is_instance_valid(m):
+			m.visible = false
+	_marks.clear()
+
+
 func _build_fx() -> void:
-	_beam = MeshInstance3D.new()
-	_beam.name = "LaserBeam"
-	var bm := BoxMesh.new()
-	bm.size = Vector3(1, 1, 1)
-	_beam.mesh = bm
-	_beam_mat = StandardMaterial3D.new()
-	_beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_beam_mat.albedo_color = BEAM_WARN
-	_beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_beam.material_override = _beam_mat
-	_beam.visible = false
-	add_child(_beam)
 	_shell_mat = StandardMaterial3D.new()
 	_shell_mat.albedo_color = SHELL_COL
 	_shell_mat.emission_enabled = true
@@ -197,7 +205,7 @@ func _process(delta: float) -> void:
 	_animate_bones(delta)
 
 
-## 开火时的一下反冲：缩一下再弹回来（激光/炮弹都调）
+## 开火时的一下反冲：缩一下再弹回来（四个技能都调）
 func _kick() -> void:
 	if model == null or _dead:
 		return
@@ -206,7 +214,7 @@ func _kick() -> void:
 	tw.tween_property(model, "scale", _base_model_scale, 0.22) 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-# --- 程序化骨骼动画（待机 / 瞄准 / 开火）---------------------------------------
+# --- 程序化骨骼动画（待机 / 施法 / 开火）---------------------------------------
 #
 # 这份 FBX **没有动画剪辑**（164 骨、纯静态、连 AnimationPlayer 都没有），所以动画只能
 # 直接扭骨头：每帧写 `Skeleton3D.set_bone_pose_rotation()`（pose 是**相对 rest** 的，
@@ -214,8 +222,8 @@ func _kick() -> void:
 #
 # 挑的几组骨头（名字来自 `_probe_hod_bones.gd` 的导出）：
 #   · `bone_center`        —— 整只的呼吸俯仰 / 侧摆
-#   · `bone_Head_01/02`    —— 左右看、点头；瞄准时低头对准
-#   · `bone_L/R_Lasergun`  —— 待机轻晃 / 瞄准抬起 / 开火反冲
+#   · `bone_Head_01/02`    —— 左右看、点头
+#   · `bone_L/R_Lasergun`  —— 待机轻晃 / 施法时抬起
 #   · `bone_Body_Tentacle_{B,L,LB,R,RB}_00..11` —— 身上五排骨链，行波摆动
 #   · `bone_Tentacle_{L,R}_00..15`             —— 两条主触手，更慢更大，开火时外张
 #
@@ -230,8 +238,8 @@ var _b_gun_l := -1
 var _b_gun_r := -1
 var _chains_body: Array = []
 var _chains_arm: Array = []
-## 瞄准进度 0→1（激光预警段涨上去）、开火脉冲 1→0（0.2 s 内衰掉）
-var _aim := 0.0
+## 施法脉冲 1→0（0.3 s 内衰掉，抬枪 / 触手外张都用它）
+var _cast := 0.0
 var _pulse := 0.0
 
 
@@ -280,19 +288,19 @@ func _animate_bones(delta: float) -> void:
 	if _skel == null:
 		return
 	var t := _anim_t
-	_aim = move_toward(_aim, 1.0 if _laser_state == 1 else 0.0, delta * 4.0)
+	_cast = maxf(_cast - delta * 3.0, 0.0)
 	_pulse = maxf(_pulse - delta * 5.0, 0.0)
 	# 身体：呼吸（俯仰）+ 慢摇（侧摆）
 	_pose(_b_center, Quaternion(Vector3.RIGHT, sin(t * 1.1) * 0.035)
 		* Quaternion(Vector3.BACK, sin(t * 0.43) * 0.045))
-	# 头：待机左右看；瞄准时低头对准目标
-	_pose(_b_head1, Quaternion(Vector3.UP, sin(t * 0.31) * 0.16 * (1.0 - _aim))
-		* Quaternion(Vector3.RIGHT, sin(t * 0.57 + 1.0) * 0.05 - 0.34 * _aim))
-	_pose(_b_head2, Quaternion(Vector3.RIGHT, sin(t * 0.9 + 0.7) * 0.03 - 0.12 * _aim))
-	# 两门激光炮：待机轻晃 / 瞄准抬起 / 开火反冲
+	# 头：待机左右看；施法时略微低头
+	_pose(_b_head1, Quaternion(Vector3.UP, sin(t * 0.31) * 0.16 * (1.0 - _cast))
+		* Quaternion(Vector3.RIGHT, sin(t * 0.57 + 1.0) * 0.05 - 0.20 * _cast))
+	_pose(_b_head2, Quaternion(Vector3.RIGHT, sin(t * 0.9 + 0.7) * 0.03 - 0.08 * _cast))
+	# 两门炮：待机轻晃 / 施法时抬起、开火反冲
 	var gun_idle := sin(t * 0.83) * 0.03
-	_pose(_b_gun_l, Quaternion(Vector3.RIGHT, gun_idle - 0.75 * _aim + 0.55 * _pulse))
-	_pose(_b_gun_r, Quaternion(Vector3.RIGHT, -gun_idle - 0.75 * _aim + 0.55 * _pulse))
+	_pose(_b_gun_l, Quaternion(Vector3.RIGHT, gun_idle - 0.35 * _cast + 0.55 * _pulse))
+	_pose(_b_gun_r, Quaternion(Vector3.RIGHT, -gun_idle - 0.35 * _cast + 0.55 * _pulse))
 	# 身上五排骨链：行波，越靠链尾摆得越大
 	for ch in _chains_body:
 		var n: int = ch.size()
@@ -301,7 +309,7 @@ func _animate_bones(delta: float) -> void:
 			var amp := 0.035 + 0.045 * float(k) / float(maxi(n - 1, 1))
 			_pose(int(ch[k]), Quaternion(Vector3.RIGHT, sin(ph) * amp)
 				* Quaternion(Vector3.BACK, cos(ph * 0.8) * amp * 0.7))
-	# 两条主触手：更慢更大，开火时往外张
+	# 两条主触手：更慢更大，施法时往外张
 	for ch in _chains_arm:
 		var n2: int = ch.size()
 		for k in n2:
@@ -320,20 +328,190 @@ func _physics_process(delta: float) -> void:
 	var pc := _player_point()
 	# 用户 2026-10-19：「如果比纳没打完，也会追过来的」——
 	# **追击不看距离**：玩家跑过第 8 段、进了内存条市场，它照样跟着飞过去；
-	# 只有**开火**看 `engage_range`（打不到的远处不浪费炮弹）。
+	# 只有**出手**看 `engage_range`（打不到的远处不浪费技能）。
 	_fly(pc, delta)
-	if global_position.distance_to(pc) > engage_range:
-		_beam.visible = false
-		_laser_state = 0
-		_laser_timer = 0.0
-		_tick_shells(delta)
-		return
-	_tick_laser(pc, delta)
 	_tick_shells(delta)
-	_t_shell -= delta
-	if _t_shell <= 0.0:
-		_t_shell = shell_interval
-		_spawn_shell(pc)
+	if global_position.distance_to(pc) > engage_range:
+		_t_skill = maxf(_t_skill, 0.5)
+		return
+	_t_skill -= delta
+	if _t_skill <= 0.0:
+		_t_skill = skill_interval
+		_cast_skill(_skill_i, pc)
+		_skill_i += 1
+
+
+## 四个技能轮着放（顺序固定，保证每种都会出现，不靠随机）
+func _cast_skill(i: int, pc: Vector3) -> void:
+	_last_skill = SKILL_NAMES[i % SKILL_COUNT]
+	_cast = 1.0
+	_pulse = 1.0
+	_kick()
+	print("[DarkBoss] 霍德放技能：%s" % _last_skill)
+	match i % SKILL_COUNT:
+		0:
+			_skill_barrage(pc)
+		1:
+			_skill_triple(pc)
+		2:
+			_skill_quake(pc)
+		_:
+			_skill_slam(pc)
+
+
+## 弹幕：两发炮弹，间隔 shell_gap；第二发追你**那时候**的位置
+func _skill_barrage(pc: Vector3) -> void:
+	_spawn_shell(pc)
+	await get_tree().create_timer(shell_gap).timeout
+	if _killed or _dead or not is_inside_tree():
+		return
+	_spawn_shell(_player_point())
+
+
+## 三连炮：按速度预判 0.5 s，左中右三个落点同时落下
+func _skill_triple(pc: Vector3) -> void:
+	var vel := _player.velocity if _player != null else Vector3.ZERO
+	var pred := pc + Vector3(vel.x, 0.0, vel.z) * 0.5
+	var side := Vector3(pred.z - global_position.z, 0.0, -(pred.x - global_position.x))
+	if side.length_squared() < 0.01:
+		side = Vector3.RIGHT
+	side = side.normalized()
+	for k in [-1.7, 0.0, 1.7]:
+		_spawn_shell(pred + side * float(k))
+
+
+## 震地波：脚下预警圈 → 0.9 s 后爆炸
+func _skill_quake(pc: Vector3) -> void:
+	var center := Vector3(pc.x, _foot_y(pc.y), pc.z)
+	var ring := _make_disc(center, quake_radius, QUAKE_COL)
+	var tw := create_tween()
+	tw.tween_property(ring, "scale", Vector3(quake_radius, 1.0, quake_radius), quake_warn) 		.from(Vector3(quake_radius * 0.25, 1.0, quake_radius * 0.25))
+	tw.tween_callback(func() -> void:
+		_resolve_quake(ring, center))
+
+
+func _resolve_quake(ring: Node3D, center: Vector3) -> void:
+	_marks.erase(ring)
+	if _killed or _dead:
+		if is_instance_valid(ring):
+			ring.queue_free()
+		return
+	_hit_area(center, quake_radius, quake_damage, quake_knockback)
+	_flash_mark(ring, 1.6, 0.28)
+
+
+## 触手砸击：预判 0.55 s 后的落点，青光柱从天上砸下来
+func _skill_slam(pc: Vector3) -> void:
+	var vel := _player.velocity if _player != null else Vector3.ZERO
+	var pred := pc + Vector3(vel.x, 0.0, vel.z) * 0.55
+	var center := Vector3(pred.x, _foot_y(pred.y), pred.z)
+	var disc := _make_disc(center, slam_radius, SLAM_COL)
+	var pillar := _make_pillar(center + Vector3(0.0, 7.5, 0.0))
+	var tw := create_tween()
+	tw.tween_property(pillar, "global_position", center + Vector3(0.0, 3.9, 0.0),
+		slam_warn).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		_resolve_slam(disc, pillar, center))
+
+
+func _resolve_slam(disc: Node3D, pillar: Node3D, center: Vector3) -> void:
+	_marks.erase(disc)
+	_marks.erase(pillar)
+	if _killed or _dead:
+		if is_instance_valid(disc):
+			disc.queue_free()
+		if is_instance_valid(pillar):
+			pillar.queue_free()
+		return
+	_hit_area(center, slam_radius, slam_damage, slam_knockback)
+	Sfx.play("ui_close", -2.0)
+	_flash_mark(disc, 1.4, 0.22)
+	if is_instance_valid(pillar):
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(pillar, "scale", Vector3(0.2, 0.2, 0.2), 0.22)
+		tw.tween_property(pillar, "global_position", pillar.global_position + Vector3(0, 2.0, 0), 0.22)
+		tw.chain().tween_callback(pillar.queue_free)
+
+
+## 预警圈在爆开后放大一点再淡掉
+func _flash_mark(mark: Node3D, grow: float, time: float) -> void:
+	if not is_instance_valid(mark):
+		return
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mark, "scale", mark.scale * grow, time)
+	var mat: StandardMaterial3D = null
+	if mark is MeshInstance3D:
+		mat = (mark as MeshInstance3D).material_override as StandardMaterial3D
+	if mat != null:
+		tw.tween_property(mat, "albedo_color:a", 0.0, time)
+	tw.chain().tween_callback(mark.queue_free)
+
+
+## 一块平放的预警圆盘（半径用 scale 控制；y 抬高 4 cm 免得和台面打架）
+func _make_disc(center: Vector3, radius: float, col: Color) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 1.0
+	mesh.bottom_radius = 1.0
+	mesh.height = 0.06
+	mesh.radial_segments = 32
+	mi.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = col
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.emission_enabled = true
+	mat.emission = Color(col.r, col.g, col.b)
+	mat.emission_energy_multiplier = 1.6
+	mi.material_override = mat
+	mi.scale = Vector3(radius, 1.0, radius)
+	mi.global_position = center + Vector3(0.0, 0.04, 0.0)
+	add_child(mi)
+	_marks.append(mi)
+	return mi
+
+
+## 砸击用的光柱（8 m 长，底部落到落点上）
+func _make_pillar(top_center: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.55
+	mesh.bottom_radius = 0.85
+	mesh.height = 8.0
+	mesh.radial_segments = 24
+	mi.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = SLAM_COL
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.emission_enabled = true
+	mat.emission = Color(SLAM_COL.r, SLAM_COL.g, SLAM_COL.b)
+	mat.emission_energy_multiplier = 1.8
+	mi.material_override = mat
+	mi.global_position = top_center
+	add_child(mi)
+	_marks.append(mi)
+	return mi
+
+
+## 落点高度 = 玩家脚底（`pc` 是身体中心 +0.9，减回去再让出一点点）
+func _foot_y(pc_y: float) -> float:
+	return pc_y - 0.85
+
+
+## 范围伤害：只认水平距离 + 一个宽松的竖直带（人站在板上、被弹起来都算）
+func _hit_area(center: Vector3, radius: float, dmg: float, knock: float) -> void:
+	if _player == null:
+		return
+	var p := _player.global_position
+	var flat := Vector2(p.x - center.x, p.z - center.z).length()
+	if flat <= radius and absf(p.y - center.y) <= 3.2:
+		_player.take_damage(dmg, center, knock)
+		Sfx.play("ui_toggle", -4.0)
 
 
 ## 绕着爱丽丝游走 —— 2026-10-21 用户：「不要一直在一个地方，要在爱丽丝附近到处飞来飞去」。
@@ -378,47 +556,6 @@ func _fly(pc: Vector3, delta: float) -> void:
 		_orbit_dyaw = wrapf(rotation.y - before, -PI, PI)
 	else:
 		_orbit_dyaw = 0.0
-
-
-func _tick_laser(pc: Vector3, delta: float) -> void:
-	_laser_timer -= delta
-	match _laser_state:
-		0:
-			if _laser_timer <= 0.0:
-				_laser_state = 1
-				_laser_timer = laser_aim_time
-				_aim_from = global_position + Vector3(0, -1.2, 0)
-				_aim_to = pc
-				_place_beam(_aim_from, _aim_to)
-				_beam_mat.albedo_color = BEAM_WARN
-				_beam.visible = true
-		1:
-			if _laser_timer <= 0.0:
-				_laser_state = 2
-				_laser_timer = laser_live_time
-				_beam_mat.albedo_color = BEAM_ON
-				_pulse = 1.0
-				_kick()
-				_hit_laser(pc)
-		2:
-			if _laser_timer <= 0.0:
-				_laser_state = 0
-				_laser_timer = laser_interval
-				_beam.visible = false
-
-
-func _place_beam(a: Vector3, b: Vector3) -> void:
-	var len := maxf(a.distance_to(b), 0.1)
-	_beam.global_position = (a + b) * 0.5
-	_beam.look_at_from_position((a + b) * 0.5, b, Vector3.UP)
-	_beam.scale = Vector3(0.26, 0.26, len)
-
-
-func _hit_laser(pc: Vector3) -> void:
-	var cp := Geometry3D.get_closest_point_to_segment(pc, _aim_from, _aim_to)
-	if cp.distance_to(pc) <= laser_radius:
-		_player.take_damage(laser_damage, _aim_from, 0.0)
-		Sfx.play("ui_close", -6.0)
 
 
 func _spawn_shell(pc: Vector3) -> void:
@@ -472,18 +609,31 @@ func _player_point() -> Vector3:
 	return _player.global_position + Vector3(0, 0.9, 0)
 
 
-## 自检用：现在有几发炮弹在飞 / 激光是不是实体段
+## 自检用：现在有几发炮弹在飞 / 一共打出过几发
 func shell_count() -> int:
 	return _shells.size()
 
 
-## 自检用：一共打出过几发（在飞的可能一瞬间就命中/落地，`shell_count` 会闪）
 func shots_fired() -> int:
 	return _shots
 
 
-func laser_live() -> bool:
-	return _laser_state == 2
+## 自检用：当前有几个预警圈/光柱
+func mark_count() -> int:
+	return _marks.size()
+
+
+## 自检用：技能表 / 上一次放的技能
+func skill_count() -> int:
+	return SKILL_COUNT
+
+
+func skill_name(i: int) -> String:
+	return SKILL_NAMES[i % SKILL_COUNT]
+
+
+func last_skill() -> String:
+	return _last_skill
 
 
 func killed() -> bool:

@@ -84,7 +84,7 @@ func _run() -> void:
 	var fut0 := _pk.get_node_or_null("Futures") as ParkourFutures
 	if fut0 != null:
 		fut0.blue_live = 0.0          # 第 1~4 节只测跳；蓝块由 5c 自己打开
-	# 第 8 段的霍德会朝人打激光/炮弹（带击退）：逐跳回放和连续通关不能被它打断。
+	# 第 8 段的霍德会朝人打炮弹/震地波/砸击（带击退）：逐跳回放和连续通关不能被它打断。
 	# 它现在**不在场景里**（玩家进黑市才由 `DarkGate` 生成），所以关的是闸门：
 	# 闸门不触发 = 霍德不会出现；§5f 再打开测「延迟加载 + 开火」。
 	var gate0 := _pk.get_node_or_null("Route/DarkGate") as DarkGate
@@ -1689,14 +1689,15 @@ func _test_branch() -> void:
 	fut.blue_live = 3.0
 
 
-## ── 5f. 第 8 段「暗网黑市交易」：霍德（延迟加载 / 绕飞 / 激光 / 炮弹 / 不会复活）───
+## ── 5f. 第 8 段「暗网黑市交易」：霍德（延迟加载 / 绕飞 / 四技能 / 不会复活）───
 ## 用户要的是「跑酷同时击败 boss，这个 boss 不会复活」，2026-10-19 又补了四条：
 ## 「比纳不能一开始就加载，得进入黑市才加载」「血条增加 3 倍」
-## 「死亡后不要一直残留空血条」；2026-10-21 换成霍德并要求「在爱丽丝附近到处飞来飞去」。
-## 所以这一节验五件事：开场不在 / 过闸门才出现 / 两套火力 / 打得死 / 死了不站起来且血条收起。
+## 「死亡后不要一直残留空血条」；2026-10-21 换成霍德并要求「在爱丽丝附近到处飞来飞去」；
+## 2026-11「激光不要了，多做几个技能」→ 现在是弹幕 / 三连炮 / 震地波 / 触手砸击。
+## 所以这一节验五件事：开场不在 / 过闸门才出现 / 四套技能 / 打得死 / 死了不站起来且血条收起。
 func _test_dark_boss() -> void:
 	print("
-========== 5f. 暗网黑市：霍德（延迟加载 / 绕飞 / 激光 / 炮弹 / 不会复活）==========")
+========== 5f. 暗网黑市：霍德（延迟加载 / 绕飞 / 四技能 / 不会复活）==========")
 	# ① 开场**不该有**霍德：模型（3 万面 FBX）+ 凹包碰撞很贵，用户要求进黑市才加载
 	_check(_pk.get_node_or_null("Route/DarkBoss") == null,
 		"开场时霍德**没有加载**（Route 下找不到 DarkBoss）")
@@ -1731,6 +1732,14 @@ func _test_dark_boss() -> void:
 		_check(hud.boss_row_shown("霍德"),
 			"HUD 上补出了「霍德」那条血条（中途加载也能接上）")
 	db.set_physics_process(true)
+	# 量绕飞前先把人放到 **DK1** 上：闸门本身是空的，站在那儿会直接掉下去，
+	# 全局保险再把人送回出生点 —— 之前量出「水平距离 349 m」就是这个原因（假红）。
+	var dk1 := _pk.get_node_or_null("Route/DK1") as Node3D
+	var b1 := _dark_box(dk1)
+	_put(b1.position.x + b1.size.x * 0.5, b1.position.y + b1.size.y + 0.05,
+		b1.position.z + b1.size.z * 0.5)
+	db.set("_t_skill", 999.0)      # 量绕飞时别放技能，免得把玩家打下板
+	await _wait(6)
 	# 2026-10-21 用户：「不要一直在一个地方，要在爱丽丝附近到处飞来飞去」
 	await _wait_ms(1200)
 	var fp0 := db.global_position
@@ -1779,35 +1788,54 @@ func _test_dark_boss() -> void:
 	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
 		b.position.z + b.size.z * 0.5)
 	await _wait(4)
-	# ⚠️ 霍德是**刚刚**才生成的，激光相位早已跑过好几轮；只重置 `_t_laser` 不够，
-	#    必须把 `_laser_state` / `_laser_timer` 一起归零，否则采样时可能刚好在束线熄灭的
-	#    那 2.8 s 空档里（无头模式一帧比一帧快，`_wait_ms` 是**真实时间**，
-	#    模拟时间早就跑出去老远 —— 第一次改完就是这样假红的）。
 	db.set_physics_process(false)
-	db._laser_state = 0
-	db._laser_timer = 0.0
-	db._t_laser = 0.05
-	db._t_shell = 0.05
+
+	# ① 技能表：四个，而且**激光已经删掉**
+	var consts_db: Dictionary = db.get_script().get_script_constant_map()
+	_check(int(consts_db.get("SKILL_COUNT", -1)) == 4,
+		"霍德有 4 个技能：%s" % str(consts_db.get("SKILL_NAMES", [])))
+	_check(db.get_node_or_null("LaserBeam") == null,
+		"激光已经删掉（身上没有 LaserBeam）")
+
+	# ② 弹幕：两发（中间隔 shell_gap）
+	var shots0 := db.shots_fired()
+	db.call("_skill_barrage", db.call("_player_point"))
+	await _wait_ms(260)
+	_check(db.shots_fired() >= shots0 + 2,
+		"弹幕：一次打出 %d 发炮弹" % (db.shots_fired() - shots0))
+
+	# ③ 三连炮：一次 3 发
+	var shots1 := db.shots_fired()
+	db.call("_skill_triple", db.call("_player_point"))
 	await _wait(2)
+	_check(db.shots_fired() >= shots1 + 3,
+		"三连炮：一次打出 %d 发（左中右）" % (db.shots_fired() - shots1))
+
+	# ④ 震地波：脚下先有预警圈，0.9 s 后站在圈里会掉血
+	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
+		b.position.z + b.size.z * 0.5)
+	_p.health = _p.max_health
+	db.call("_skill_quake", db.call("_player_point"))
+	await _wait(2)
+	_check(db.mark_count() >= 1, "震地波：脚下出现预警圈（%d 个）" % db.mark_count())
+	await _wait_ms(1150)
+	_check(_p.health < _p.max_health,
+		"震地波：站在圈里被炸掉 %.0f 血（%.0f / %.0f）"
+		% [_p.max_health - _p.health, _p.health, _p.max_health])
+
+	# ⑤ 触手砸击：预判点先亮圈 + 天降光柱，1.1 s 后砸中掉血
+	_put(b.position.x + b.size.x * 0.5, b.position.y + b.size.y + 0.05,
+		b.position.z + b.size.z * 0.5)
+	_p.health = _p.max_health
+	db.call("_skill_slam", db.call("_player_point"))
+	await _wait(2)
+	_check(db.mark_count() >= 2, "触手砸击：预警圈 + 光柱（%d 个）" % db.mark_count())
+	await _wait_ms(1350)
+	_check(_p.health < _p.max_health,
+		"触手砸击：被砸掉 %.0f 血（%.0f / %.0f）"
+		% [_p.max_health - _p.health, _p.health, _p.max_health])
+	_p.health = _p.max_health
 	db.set_physics_process(true)
-	var beam := db.get_node_or_null("LaserBeam") as MeshInstance3D
-	# 逐帧等两件事出现，而不是等固定时长后碰运气：
-	#   ① 激光的**预警**段（`_laser_state == 1`，只存在 0.6 s）
-	#   ② 炮弹累计发射数 ≥ 1（`_t_shell = 0.05` → 三帧内打出第一发；
-	#      上一版跟激光一起等 700 ms，结果激光先亮、炮弹还没出膛就判了红）
-	var saw_warn := false
-	var t_laser := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t_laser < 1500:
-		await process_frame
-		if beam != null and db._laser_state == 1 and beam.visible:
-			saw_warn = true
-		if saw_warn and db.shots_fired() >= 1:
-			break
-	_check(saw_warn, "激光先出**预警**细束（0.6 s 后才实体）")
-	# ⚠️ 别查「在飞几发」：炮弹 20 m/s，0.4 s 就打到人，采样时常常刚好 0 发。
-	#    查**累计发射数**才稳。
-	_check(db.shots_fired() >= 1, "炮弹真的打出来了（累计 %d 发，同时最多在飞 %d 发）"
-		% [db.shots_fired(), db.shell_count()])
 	var hp0 := db.health
 	db.take_damage(120.0)
 	_check(db.health < hp0, "被打掉血：%.0f → %.0f（打光 %.0f 就倒）"

@@ -206,12 +206,12 @@ emission = Color(0.3, 0.01, 0.02, 1)
 emission_energy_multiplier = 0.4
 
 [sub_resource type="StandardMaterial3D" id="Mat_s_dark"]
-albedo_color = Color(0.16, 0.13, 0.24, 1)
-metallic = 0.1
-roughness = 0.45
+albedo_color = Color(0.24, 0.18, 0.08, 1)
+metallic = 0.55
+roughness = 0.35
 emission_enabled = true
-emission = Color(0.42, 0.13, 0.78, 1)
-emission_energy_multiplier = 0.3
+emission = Color(0.95, 0.72, 0.20, 1)
+emission_energy_multiplier = 0.35
 
 [sub_resource type="StandardMaterial3D" id="Mat_mech"]
 albedo_color = Color(0.86, 0.72, 0.28, 1)
@@ -1826,7 +1826,7 @@ outline_size = 14
 [node name="DK1" type="StaticBody3D" parent="Route" unique_id=1868797275]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -362.45, 1.4, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0
 metadata/lane = "DK"
@@ -1853,7 +1853,7 @@ outline_size = 14
 [node name="DK2" type="StaticBody3D" parent="Route" unique_id=875592905]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -368.45, 1.8, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.4
 metadata/lane = "DK"
@@ -1880,7 +1880,7 @@ outline_size = 14
 [node name="DK3" type="StaticBody3D" parent="Route" unique_id=937978225]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -374.25, 1.4, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 0.8
 metadata/lane = "DK"
@@ -1907,7 +1907,7 @@ outline_size = 14
 [node name="DK4" type="StaticBody3D" parent="Route" unique_id=1040180840]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -380.25, 2, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 1.2
 metadata/lane = "DK"
@@ -1934,7 +1934,7 @@ outline_size = 14
 [node name="DK5" type="StaticBody3D" parent="Route" unique_id=2097227785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -386.25, 2.4, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 1.6
 metadata/lane = "DK"
@@ -1961,7 +1961,7 @@ outline_size = 14
 [node name="DK6" type="StaticBody3D" parent="Route" unique_id=1345927580]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -392.05, 2, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 2
 metadata/lane = "DK"
@@ -1988,7 +1988,7 @@ outline_size = 14
 [node name="DK7" type="StaticBody3D" parent="Route" unique_id=345173754]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -398.05, 1.6, -1.7)
 metadata/pct_kind = "spot"
-metadata/pct_seq = "-0.80"
+metadata/pct_seq = "1.00"
 metadata/pct_period = 0
 metadata/pct_phase = 2.4
 metadata/lane = "DK"

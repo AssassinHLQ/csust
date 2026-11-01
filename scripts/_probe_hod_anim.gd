@@ -1,6 +1,6 @@
 extends SceneTree
-## 探针：**霍德的骨骼动画**出图 —— 待机 / 瞄准 / 开火 三个瞬间，同一机位。
-## 顺便打印骨骼 pose 是否真的在动（`_aim` / `_pulse` 是否生效）。
+## 探针：**霍德的骨骼动画**出图 —— 待机 / 施法 / 开火 三个瞬间，同一机位。
+## 顺便打印骨骼 pose 是否真的在动（`_cast` / `_pulse` 是否生效）。
 ##
 ## 用法：godot --path <工程> --script res://scripts/_probe_hod_anim.gd [-- --splat=off]
 ## 出图：…/_arisu_captures/_hodanim/*.png
@@ -72,10 +72,9 @@ func _run() -> void:
 	_cam.look_at(mid, Vector3.UP)
 	await _wait(10)
 	await _seq("idle", 8)              # 待机 8 帧
-	_db.set("_laser_state", 1)         # 瞄准 → `_aim` 涨满（4 帧 ≈ 0.7 s）
-	await _seq("aim", 4)
-	_db.set("_laser_state", 2)
-	_db.set("_pulse", 1.0)
+	_db.set("_cast", 1.0)              # 施法 → 抬枪 / 低头
+	await _seq("cast", 4)
+	_db.set("_pulse", 1.0)             # 开火反冲
 	await _seq("fire", 4)
 	print("\n出图目录：%s" % _out)
 	quit(0)
@@ -89,8 +88,8 @@ func _seq(prefix: String, n: int) -> void:
 			await process_frame
 		await process_frame
 		root.get_texture().get_image().save_png(_out.path_join("%s_%d.png" % [prefix, i]))
-		print("HODANIM %s_%d  aim=%.2f pulse=%.2f" % [prefix, i,
-			float(_db.get("_aim")), float(_db.get("_pulse"))])
+		print("HODANIM %s_%d  cast=%.2f pulse=%.2f" % [prefix, i,
+			float(_db.get("_cast")), float(_db.get("_pulse"))])
 
 
 func _shot(name: String, pos: Vector3, look: Vector3) -> void:
