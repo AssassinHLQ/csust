@@ -69,21 +69,24 @@ const BODY_TOP := 26.0
 const BODY_BOTTOM := 34.0
 const BODY_FONT_SIZE := 24
 ## 名字牌：骑在对话框**上沿**上（下半个在框内），所以框顶之上还要留它的高度。
-const NAME_PLATE_HEIGHT := 40.0
-const NAME_PLATE_PAD := 22.0
+const NAME_PLATE_HEIGHT := 46.0
+const NAME_PLATE_PAD := 32.0
 const NAME_FONT_SIZE := 22
 const HINT_FONT_SIZE := 14
 const HINT_TEXT := "空格 / 回车 / 左键　继续"
 
 ## ── 选项列（`choice` 步骤）──
 ## 钉在对话框正上方，一行一项。当前项左侧一个小箭头，边框做呼吸闪烁。
-const CHOICE_WIDTH := 860.0
-const CHOICE_ROW_H := 46.0
+const CHOICE_WIDTH := 430.0
+const CHOICE_ROW_H := 50.0
 const CHOICE_GAP := 8.0
 const CHOICE_ARROW := "▶"
 const CHOICE_HINT_TEXT := "W / S 选择　空格 / 回车 确认"
 ## 呼吸灯周期（秒）
 const CHOICE_PULSE := 0.85
+## 选项列右边缘到画布右边的距离：和对话框右沿对齐
+## （对话框 1120 宽居中 → 右沿 = 画布中线 + 560，离右边缘 (W − 1120) / 2 = 240）
+const CHOICE_RIGHT_MARGIN := 240.0
 
 ## ── 剧情插图（`image` 步骤）──
 ## 弹在画面中间偏上，下面还留着对话框；按「继续」关掉。
@@ -133,7 +136,8 @@ var _cps := CHARS_PER_SEC
 var _choice_panel: Control
 var _choice_rows: Array[Panel] = []
 var _choice_arrows: Array[Label] = []
-var _choice_styles: Array[StyleBoxFlat] = []
+var _choice_styles: Array = []
+var _choice_hot_styles: Array = []
 var _choice_options: Array = []
 var _choice_index := 0
 var _choosing := false
@@ -546,11 +550,15 @@ func _build_choice_rows() -> void:
 	_choice_rows.clear()
 	_choice_arrows.clear()
 	_choice_styles.clear()
+	_choice_hot_styles.clear()
 
 	var n := _choice_options.size()
 	var total := n * CHOICE_ROW_H + (n - 1) * CHOICE_GAP
-	_choice_panel.offset_left = -CHOICE_WIDTH * 0.5
-	_choice_panel.offset_right = CHOICE_WIDTH * 0.5
+	# 贴右边、和对话框右沿对齐（窄条，不再横跨半屏）
+	_choice_panel.anchor_left = 1.0
+	_choice_panel.anchor_right = 1.0
+	_choice_panel.offset_left = -(CHOICE_RIGHT_MARGIN + CHOICE_WIDTH)
+	_choice_panel.offset_right = -CHOICE_RIGHT_MARGIN
 	_choice_panel.offset_bottom = -(BOX_BOTTOM + BOX_HEIGHT + 14.0)
 	_choice_panel.offset_top = _choice_panel.offset_bottom - total
 
@@ -561,7 +569,8 @@ func _build_choice_rows() -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.position = Vector2(0.0, i * (CHOICE_ROW_H + CHOICE_GAP))
 		row.size = Vector2(CHOICE_WIDTH, CHOICE_ROW_H)
-		var sb := _choice_style(0.25, 0.62)
+		var sb := UiSkin.button_style(_skin, "normal")
+		var sb_hot := UiSkin.button_style(_skin, "hover")
 		row.add_theme_stylebox_override("panel", sb)
 		_choice_panel.add_child(row)
 
@@ -574,7 +583,7 @@ func _build_choice_rows() -> void:
 		arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		arrow.add_theme_font_size_override("font_size", 20)
-		arrow.add_theme_color_override("font_color", _skin["dialogue_name"])
+		arrow.add_theme_color_override("font_color", _skin["text"])
 		arrow.modulate.a = 0.0
 		row.add_child(arrow)
 
@@ -582,52 +591,39 @@ func _build_choice_rows() -> void:
 		text.name = "Text"
 		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		text.text = String(opt.get("text", ""))
-		text.position = Vector2(46.0, 0.0)
+		text.position = Vector2(44.0, 0.0)
 		text.size = Vector2(CHOICE_WIDTH - 60.0, CHOICE_ROW_H)
 		text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		text.clip_text = true
-		text.add_theme_font_size_override("font_size", 22)
+		text.add_theme_font_size_override("font_size", 21)
 		text.add_theme_color_override("font_color", _skin["text"])
 		row.add_child(text)
 
 		_choice_rows.append(row)
 		_choice_arrows.append(arrow)
 		_choice_styles.append(sb)
-
-
-func _choice_style(border_a: float, bg_a: float) -> StyleBoxFlat:
-	var accent: Color = _skin["dialogue_name"]
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.055, 0.05, bg_a)
-	sb.border_color = Color(accent.r, accent.g, accent.b, border_a)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(4)
-	return sb
+		_choice_hot_styles.append(sb_hot)
 
 
 ## 把「谁被选中」画出来：箭头只在当前项出现，边框做呼吸闪烁。
 func _refresh_choices() -> void:
 	if _choice_pulse != null and _choice_pulse.is_valid():
 		_choice_pulse.kill()
-	var accent: Color = _skin["dialogue_name"]
 	for i in _choice_rows.size():
 		var sel := i == _choice_index
-		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else Color(1, 1, 1, 0.70)
+		# 选中项换皮肤的 hover 木板，未选中压暗一档（不用半透明，字才看得清）
+		_choice_rows[i].add_theme_stylebox_override("panel",
+			_choice_hot_styles[i] if sel else _choice_styles[i])
+		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else Color(0.80, 0.78, 0.75, 1.0)
 		_choice_arrows[i].modulate.a = 1.0 if sel else 0.0
-		_choice_styles[i].border_color = Color(accent.r, accent.g, accent.b,
-			1.0 if sel else 0.26)
 	if _choice_rows.is_empty():
 		return
-	# 呼吸灯：当前项的边框在 0.30 ↔ 1.0 之间来回。暂停时也要跑。
-	var sb: StyleBoxFlat = _choice_styles[_choice_index]
-	var bright := Color(accent.r, accent.g, accent.b, 1.0)
-	var dim := Color(accent.r, accent.g, accent.b, 0.30)
+	# 呼吸灯做在**箭头**上：木板底图改不了边框色，箭头一亮一暗同样能勾住视线
+	var arrow: Label = _choice_arrows[_choice_index]
 	_choice_pulse = create_tween().set_loops()
 	_choice_pulse.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	_choice_pulse.tween_property(sb, "border_color", dim, CHOICE_PULSE) \
-		.set_trans(Tween.TRANS_SINE)
-	_choice_pulse.tween_property(sb, "border_color", bright, CHOICE_PULSE) \
-		.set_trans(Tween.TRANS_SINE)
+	_choice_pulse.tween_property(arrow, "modulate:a", 0.40, CHOICE_PULSE) 		.set_trans(Tween.TRANS_SINE)
+	_choice_pulse.tween_property(arrow, "modulate:a", 1.0, CHOICE_PULSE) 		.set_trans(Tween.TRANS_SINE)
 
 
 func _move_choice(step: int) -> void:
@@ -880,7 +876,7 @@ func _build() -> void:
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
-	_name_label.add_theme_color_override("font_color", _skin["dialogue_name"])
+	_name_label.add_theme_color_override("font_color", _skin["text"])
 	_name_plate.add_child(_name_label)
 
 	_body = Label.new()
@@ -1034,7 +1030,7 @@ func _layout_name_plate(who: String) -> void:
 	_name_plate.anchor_top = 0.0
 	_name_plate.anchor_bottom = 0.0
 	_name_plate.offset_left = BOX_PAD_X - 10.0
-	_name_plate.offset_right = BOX_PAD_X - 10.0 + maxf(w, 96.0)
+	_name_plate.offset_right = BOX_PAD_X - 10.0 + maxf(w, 132.0)
 	_name_plate.offset_top = -NAME_PLATE_HEIGHT * 0.5
 	_name_plate.offset_bottom = NAME_PLATE_HEIGHT * 0.5
 
