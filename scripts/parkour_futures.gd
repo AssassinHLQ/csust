@@ -69,12 +69,15 @@ const SCH_UNKNOWN := Color(0.34, 0.30, 0.46)
 ##
 ## ⚠️ 这两段**没有牌子**（`Pct` Label3D），涨跌幅是这里算出来的，不是读牌子 ——
 ##    所以 `_settle()` 里按 `pl["kind"]` 分流，别再去找 `Pct`。
-const FUND_PCT := 0.10
-const LOT_WIN_P := 0.22
-const LOT_WIN_LO := 0.20
-const LOT_WIN_HI := 0.80
+const FUND_PCT := 0.50
+const LOT_WIN_P := 0.35
+const LOT_WIN_LO := 0.60
+const LOT_WIN_HI := 2.00
 const LOT_LOSE_LO := 0.40
 const LOT_LOSE_HI := 1.60
+## 盈利倍率（2026-11 用户要求）：**只放大正收益**，亏损照原样。
+## 原来一局最多把 10 万滚到十几万，够不到商店那 50 万的坎。
+const PROFIT_MULT := 2.0
 
 ## ── 账户（单位：万）──
 ## `margin` = 保证金（真实结算：每块 K 线第一次踩上去，就按它牌子上那个涨跌幅结算一次）
@@ -767,6 +770,9 @@ func _settle(pl: Dictionary) -> void:
 			pct = 0.0
 			_banner_text("期权到期：行权作废（0%）", Color(1.0, 0.72, 0.35))
 	settled[pl["name"]] = true
+	# 正收益 ×PROFIT_MULT（亏损不加成），见常量注释
+	if pct > 0.0:
+		pct *= PROFIT_MULT
 	var before := margin
 	margin = maxf(0.0, margin * (1.0 + pct / 100.0))
 	settlements += 1

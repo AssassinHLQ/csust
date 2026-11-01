@@ -43,6 +43,13 @@ const EDGE_MARGIN := 0.30
 ## `\n` 是硬换行（`BossLine` 那个 Label 的 autowrap 关着,换行只认这里）。
 const BOSS_LINE := "敢动我5090？！\n爱丽丝还我十万美刀！！！"
 
+## 倭瓜优香倒下掉进银行卡的钱（元）。用户 2026-11：「倭瓜优香掉落 10w」
+const AVENGER_DROP := 100000
+## 通关后立在跑道口的传送门，踩上去直接送到岛上的结算屋
+const PORTAL_DEST := "Island/Props/Shed"
+## 传送门送到的地方：屋里那台结算台会自动把资产 + 保证金转进这张卡
+const BankCard := preload("res://scripts/bank_card.gd")
+
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
 ## 进度存档：最近踩过的站号（+ 一份最好成绩）。
@@ -104,6 +111,8 @@ var _resume_pending := false
 
 func _ready() -> void:
 	_build_route()
+	if not run_finished.is_connected(_on_run_finished):
+		run_finished.connect(_on_run_finished)
 	_load_best()
 	_load_run()
 	_spawn_roof_gpu()
@@ -363,6 +372,7 @@ func _save_best() -> void:
 # --- 每帧 ---------------------------------------------------------------------
 
 func _physics_process(_delta: float) -> void:
+	_portal_cooldown = maxf(0.0, _portal_cooldown - _delta)
 	if not enabled:
 		return
 	if _player == null:
@@ -615,6 +625,9 @@ func _spawn_settlement() -> void:
 ## 牢笼罩住 `ReturnPad`（回初始平台的传送台）—— 它本来就是唯一的退路，罩住就回不去。
 ## 信号塔现在也挪到了同一个位置（`Island/Props/Tower`），牢笼就是从塔顶滑下来的。
 var _trap_done := false
+## 通关后立的传送门（见 _spawn_finish_portal）
+var _finish_portal: Node3D
+var _portal_cooldown := 0.0
 var _cage: Node3D
 var _avenger: Boss
 
@@ -727,6 +740,109 @@ func _spawn_avenger(pad: Node3D) -> void:
 
 ## 倭瓜优香倒下：牢笼升回去消失（用户：「打败倭瓜优香后牢笼解除」），它本人不复活
 ## （`respawn_on_death = false`，见 `boss.gd::_die()`）。
+## ── 通关后的「直达终点」传送门（2026-11 用户要求）──
+##
+## 用户：「通关跑酷后，在跑酷开始的地方可以设置传送门直接抵达结束处，方便玩家将资产
+## 转化银行卡里面」。所以 `run_finished` 一响，就在跑道口旁边立一座发光的门；
+## 踩上去直接送到岛上的结算屋 —— 屋里那台 SettlementPad 会自动把资产 + 保证金
+## 转进银行卡，省得再跑一遍全程。
+func _on_run_finished(_seconds: float, _best: float) -> void:
+	_spawn_finish_portal()
+
+
+func _spawn_finish_portal() -> void:
+	if is_instance_valid(_finish_portal):
+		return
+	var launch := get_node_or_null("Launch") as Node3D
+	var shed := get_node_or_null(PORTAL_DEST) as Node3D
+	if launch == null or shed == null:
+		push_warning("[Parkour] 传送门缺 Launch 或 %s，跳过" % PORTAL_DEST)
+		return
+
+	var door := Node3D.new()
+	door.name = "FinishPortal"
+	add_child(door)
+	# 跑道口往 +Z 挪 4.5 m：离开跑道（z 2.5~5.5），又还在主平台上
+	door.global_position = launch.global_position + Vector3(0.0, 0.0, 4.5)
+
+	var frame := StandardMaterial3D.new()
+	frame.albedo_color = Color(0.05, 0.05, 0.06)
+	frame.roughness = 0.45
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.albedo_color = Color(0.42, 0.80, 1.0, 0.5)
+	glow.emission_enabled = true
+	glow.emission = Color(0.42, 0.80, 1.0)
+	glow.emission_energy_multiplier = 1.4
+
+	for x in [-1.05, 1.05]:
+		var post := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.14, 2.7, 0.22)
+		post.mesh = bm
+		post.material_override = frame
+		post.position = Vector3(x, 1.35, 0.0)
+		door.add_child(post)
+	var lintel := MeshInstance3D.new()
+	var lm := BoxMesh.new()
+	lm.size = Vector3(2.24, 0.16, 0.22)
+	lintel.mesh = lm
+	lintel.material_override = frame
+	lintel.position = Vector3(0.0, 2.74, 0.0)
+	door.add_child(lintel)
+
+	var panel := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.96, 2.4)
+	panel.mesh = qm
+	panel.material_override = glow
+	panel.position = Vector3(0.0, 1.34, 0.0)
+	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	door.add_child(panel)
+
+	var label := Label3D.new()
+	label.text = "终点 · 结算屋"
+	label.font_size = 64
+	label.pixel_size = 0.008
+	label.modulate = Color(0.75, 0.92, 1.0, 1.0)
+	label.outline_modulate = Color(0.05, 0.05, 0.08, 1.0)
+	label.outline_size = 18
+	label.position = Vector3(0.0, 3.05, 0.0)
+	door.add_child(label)
+
+	var area := Area3D.new()
+	area.name = "Trigger"
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(2.2, 2.6, 0.9)
+	cs.shape = bs
+	cs.position = Vector3(0.0, 1.3, 0.0)
+	area.add_child(cs)
+	area.body_entered.connect(_on_finish_portal_body)
+	door.add_child(area)
+
+	_finish_portal = door
+	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s）" % [
+		str(door.global_position.snappedf(0.1)), PORTAL_DEST])
+
+
+func _on_finish_portal_body(body: Node3D) -> void:
+	if body == null or not body.is_in_group("player"):
+		return
+	if _portal_cooldown > 0.0:
+		return
+	var shed := get_node_or_null(PORTAL_DEST) as Node3D
+	if shed == null:
+		return
+	_portal_cooldown = 2.0
+	body.global_position = shed.global_position + Vector3(0.0, 0.1, 0.6)
+	if body is CharacterBody3D:
+		(body as CharacterBody3D).velocity = Vector3.ZERO
+	Sfx.play("ui_open", -2.0)
+	print("[Parkour] 传送门 → 结算屋（%s）" % str(shed.global_position.snappedf(0.1)))
+
+
 func _on_avenger_died(_by_damage: float) -> void:
 	if _cage != null and is_instance_valid(_cage):
 		var cage := _cage
@@ -736,4 +852,10 @@ func _on_avenger_died(_by_damage: float) -> void:
 			cage.global_position + Vector3(0.0, 9.0, 0.0), 0.5) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_callback(cage.queue_free)
 		Sfx.play("ui_open", 4.0)
-	print("[Parkour] 倭瓜优香倒下 → 牢笼解除")
+	BankCard.add(AVENGER_DROP)
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.has_method("boss_line"):
+		fut.call("boss_line", "倭瓜优香掉落 ¥%d → 银行卡 （余额 %s）" % [
+			AVENGER_DROP, BankCard.format_yuan(BankCard.balance())])
+	print("[Parkour] 倭瓜优香倒下 → 牢笼解除；掉落 %s（银行卡 %s）" % [
+		BankCard.format_yuan(AVENGER_DROP), BankCard.format_yuan(BankCard.balance())])

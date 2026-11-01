@@ -1,0 +1,51 @@
+extends SceneTree
+## 验：钱包从 0 开始 / 倭瓜掉 10 万 / 通关传送门能送到结算屋
+##   godot --path . --headless --script res://scripts/_verify_economy.gd
+const BankCard := preload("res://scripts/bank_card.gd")
+
+
+func _initialize() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	print("[eco] 新存档默认余额 = %s（期望 ¥0）" % BankCard.format_yuan(BankCard.balance()))
+
+	var lvl := (load("res://scenes/parkour.tscn") as PackedScene).instantiate() as Node3D
+	root.add_child(lvl)
+	var player := (load("res://scenes/player.tscn") as PackedScene).instantiate() as CharacterBody3D
+	root.add_child(player)
+	for _i in 30:
+		await process_frame
+
+	# ① 倭瓜掉落
+	BankCard.set_balance(0)
+	lvl.call("_on_avenger_died", 1.0)
+	for _i in 5:
+		await process_frame
+	print("[eco] 倭瓜倒下后余额 = %s（期望 ¥10.0 万）" % BankCard.format_yuan(BankCard.balance()))
+
+	# ② 通关 → 传送门
+	var launch := lvl.get_node_or_null("Launch") as Node3D
+	var shed := lvl.get_node_or_null("Island/Props/Shed") as Node3D
+	lvl.call("_on_run_finished", 60.0, 55.0)
+	for _i in 10:
+		await process_frame
+	var portal := lvl.get_node_or_null("FinishPortal") as Node3D
+	print("[eco] 传送门=%s 位置=%s（跑道口 %s）" % [
+		"有" if portal != null else "无",
+		str(portal.global_position.snappedf(0.1)) if portal != null else "-",
+		str(launch.global_position.snappedf(0.1)) if launch != null else "-"])
+
+	# ③ 踩上去 → 送到结算屋
+	if portal != null:
+		player.global_position = portal.global_position + Vector3(0.0, 1.0, 0.0)
+		player.velocity = Vector3.ZERO
+		for _i in 20:
+			await process_frame
+		var d: float = player.global_position.distance_to(shed.global_position) if shed != null else -1.0
+		print("[eco] 踩门后玩家到结算屋距离 = %.2f m（期望 < 2）" % d)
+
+	BankCard.set_balance(0)
+	print("[eco] 余额已重置为 ¥0（正式开局状态）")
+	quit(0)

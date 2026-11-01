@@ -8,12 +8,12 @@ extends RefCounted
 ## 为什么不是 autoload：用户不让动 `project.godot`。和 `SceneFlow` / `UiSkin` 一样，
 ## 靠 `preload` + `static` 共享状态 —— 场景切换不影响，进程内只有一份。
 ##
-## ⚠️ 第一版默认给 ¥80 万（够买一台、买完剩 30 万），这样剧情里「买得起」和
-##    「余额不足」两条路都能走到。想从 0 开始就改 `DEFAULT_YUAN`，
-##    或者把 `user://bank_card.cfg` 删掉再进游戏。
+## ⚠️ 默认 **0 元**（用户 2026-11：「从 0 开始」）—— 想买那台 50 万的整机，
+##    得先去跑酷期货赚钱、打倭瓜优香拿掉落。调试时想看「买得起」的分支，
+##    把 `user://bank_card.cfg` 里的 yuan 改大即可（或临时改这里）。
 
 const PATH := "user://bank_card.cfg"
-const DEFAULT_YUAN := 800000
+const DEFAULT_YUAN := 0
 
 static var _loaded := false
 static var _yuan := 0
