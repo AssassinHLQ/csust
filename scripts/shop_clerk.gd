@@ -232,20 +232,20 @@ const TALK_OPTIONS := [
 		"text": "商人啊!我正是为此而来!",
 		"value": 1,
 		"then": [
-			{"kind": "say", "who": SPEAKER, "text": "老板,看这套配置怎么样[TVT]"},
+			{"kind": "say", "who": SPEAKER, "text": "老板,看这套配置怎么样[TVT]", "voice": "shop/serika_02"},
 			# 报价之后弹配置单：悬停行会换右侧照片，按空格/左键关掉再往下
 			{"kind": "__sheet_b300__"},
-			{"kind": "say", "who": SPEAKER,
+			{"kind": "say", "who": SPEAKER, "voice": "shop/serika_03",
 				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百二十万，适合给老师送礼,配您正合适,我也多赚钱[TVT]"},
 			# 小桃拆台：服务器卡没技巧，5090 才是硬核
-			{"kind": "say", "who": "小桃", "text": "我chovy,什么破卡."},
-			{"kind": "say", "who": "小桃",
+			{"kind": "say", "who": "小桃", "text": "我chovy,什么破卡.", "voice": "shop/momoi_01"},
+			{"kind": "say", "who": "小桃", "voice": "shop/momoi_02",
 				"text": "要我说,5090的硬核才是王道,你那服务器卡根本就没技巧"},
-			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。"},
+			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。", "voice": "shop/serika_04"},
 			{"kind": "__sheet_5090__"},
-			{"kind": "say", "who": SPEAKER,
+			{"kind": "say", "who": SPEAKER, "voice": "shop/serika_05",
 				"text": "八张 5090 加撕裂者，六十七万——这套才是真适合给木的"},
-			{"kind": "say", "who": "爱丽丝", "text": "邦邦卡邦!就这套了!"},
+			{"kind": "say", "who": "爱丽丝", "text": "邦邦卡邦!就这套了!", "voice": "shop/aris_01"},
 			# 成交：扣款由 shop_clerk 接 custom 步骤做，紧接着那句旁白报余额
 			{"kind": "custom", "name": "pay", "data": {"amount": DESK_PRICE, "label": "八卡 5090 工作站"}},
 			{"kind": "narrate", "text": "__BALANCE_AFTER__"},
@@ -254,7 +254,7 @@ const TALK_OPTIONS := [
 	{
 		"text": "[观察了银行卡的余额,摇了摇头]",
 		"value": 2,
-		"then": [{"kind": "say", "who": SPEAKER,
+		"then": [{"kind": "say", "who": SPEAKER, "voice": "shop/serika_06",
 			"text": "……先看看也行，不着急买。"}],
 	},
 ]
@@ -552,17 +552,17 @@ func _input(event: InputEvent) -> void:
 func _talk_after_buy(d: DialogueBox) -> void:
 	var opts := [
 		{"text": "再次查看配置单", "then": [
-			{"kind": "say", "who": SPEAKER, "text": "好嘞,马上给您拿过来!"},
+			{"kind": "say", "who": SPEAKER, "text": "好嘞,马上给您拿过来!", "voice": "shop/serika_07"},
 			_sheet_step(SHEET_5090),
 		]},
 		{"text": "确认收货地址", "then": [
-			{"kind": "say", "who": SPEAKER, "text": "来,老板确认下是这个地址不?"},
+			{"kind": "say", "who": SPEAKER, "text": "来,老板确认下是这个地址不?", "voice": "shop/serika_08"},
 			{"kind": "image", "path": "res://assets/story/gamedev_room.jpg",
 				"caption": "千禧年学院一年级游戏开发部活动室"},
 		]},
 	]
 	d.play_steps([
-		{"kind": "say", "who": SPEAKER, "text": "老板慢走!电脑我马上给您安排送货上门!"},
+		{"kind": "say", "who": SPEAKER, "text": "老板慢走!电脑我马上给您安排送货上门!", "voice": "shop/serika_09"},
 		{"kind": "choice", "options": opts},
 	], "shop_clerk_after")
 	print("[Clerk] 已成交过 → 送货/查单/确认地址对话")
@@ -599,8 +599,11 @@ func _talk(d: DialogueBox) -> void:
 		_talk_after_buy(d)
 		return
 	var steps: Array = []
-	for line in TALK_LINES:
-		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
+	for i in TALK_LINES.size():
+		var line_st := {"kind": "say", "who": SPEAKER, "text": String(TALK_LINES[i])}
+		if i == 0:
+			line_st["voice"] = "shop/serika_01"
+		steps.append(line_st)
 	# 选项里的 `__sheet__` 占位换成真正的配置单步骤（热区要按常量算，没法写进 const）
 	var opts: Array = []
 	for o in TALK_OPTIONS:

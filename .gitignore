@@ -111,3 +111,6 @@ __pycache__/
 
 # ---- 导出产物 ----
 /build/
+
+# 商店配音（GPT-SoVITS 音色模型由 SLNeil 训练；声音沿用 BA 角色，仅本地演示）
+/story/voice/shop/

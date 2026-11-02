@@ -279,6 +279,17 @@ const ENTRIES := [
 	},
 	{
 		"group": "音效",
+		"path": "story/voice/shop",
+		"title": "商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS）",
+		"author": "音色模型：**SLNeil**（B站）；台词由本项目撰写",
+		"license": "模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发",
+		"distributed": false,
+		"source": "https://space.bilibili.com/523537077",
+		"license_file": "",
+		"note": "12 句中文台词（serika_01..09 / momoi_01..02 / aris_01），由 tools/gen_shop_voice.py 经本机 GPT-SoVITS API 生成；.gitignore 排除整个目录",
+	},
+	{
+		"group": "音效",
 		"path": "assets/music",
 		"title": "商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版）",
 		"author": "Toby Fox / Materia Collective",

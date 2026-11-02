@@ -73,6 +73,7 @@
 |---|---|---|---|---|---|
 | [Interface Sounds](https://kenney.nl/assets/interface-sounds) / [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) / [RPG Audio](https://kenney.nl/assets/rpg-audio) | Kenney | **CC0 1.0** | ✅ | `assets/sfx/`，许可原文 `assets/sfx/LICENSE_Kenney_CC0.md` | `click_*`、`toggle_*`、`tick_*`、`open_*`、`close_*`、`laserSmall_000..004`、`metalLatch`、`metalClick` |
 | 枪声 | 本项目作者（Python 合成） | MIT | ✅ | `assets/sfx/gunshot_000.wav` ~ `gunshot_004.wav` | 不是采样，是算出来的：噪声 + 包络 + 带通，见 README §1.19 |
+| 商店配音（芹香 / 小桃 / 爱丽丝） | 音色模型 **SLNeil**（[B站空间](https://space.bilibili.com/523537077)）；台词由本项目撰写 | 模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发 | ❌ | `story/voice/shop/` | GPT-SoVITS 生成 12 句（serika_01…09 / momoi_01…02 / aris_01）；`tools/gen_shop_voice.py` 可重生成；整个目录被 `.gitignore` 排除 |
 | 商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版） | Toby Fox / Materia Collective | 专有版权 —— 仅本地学习，不得再分发、不得用于任何发布产物 | ❌ | `assets/music/`，来源 UNDERTALE | 音频本体被 `.gitignore` 排除；`*.ogg.import` 进仓库（循环开关在里面），克隆者需自备文件 |
 
 ## 五、剧情与图标
