@@ -4,18 +4,8 @@ extends Node3D
 const SceneFlow := preload("res://scripts/scene_flow.gd")
 ## 609 画室桌上的十颗 9950X3D（隐藏福利）。单独一个场景，方便在编辑器里拖位置。
 const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
-## 商店东侧延长的地块 + 游戏开发部部室（2026-11-02 用户：「往右边延长地块，
-## 然后在右边空地放置」）。两个都是独立场景，在编辑器里打开就能拖。
-## 地砖用 world triplanar（0.4 循环/米），和商店 Deck 同一套贴图，接缝对得上。
-const LOT_EAST := preload("res://scenes/lot_east.tscn")
-## 部室模型授权未核实、`.gitignore` 排除了 `models/gamedev_room/`，
-## 所以**不能 preload**：克隆者没放模型时这里只少一栋房子，游戏照常跑。
-const GAMEDEV_ROOM_SCENE := "res://scenes/gamedev_room.tscn"
-const GAMEDEV_ROOM_MODEL := "res://models/gamedev_room/gamedev_room.glb"
-## 原 Deck 东沿 x = 40，新地块 24 m 宽 → 40 ~ 64，中心 52。
-const LOT_EAST_CENTER := Vector3(52.0, 0.0, 0.0)
-## 部室地面比地砖高 1 cm，免得两块地板共面 z-fighting。
-const GAMEDEV_ROOM_POS := Vector3(52.0, 0.01, 0.0)
+## 商店东侧延长的地块与游戏开发部部室直接摆在 `scenes/game.tscn` 里
+## （`LotEast` / `GameDevRoom` 两个实例），编辑器里能选中拖动。
 
 ## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
 const FALL_LIMIT := -60.0
@@ -613,8 +603,6 @@ func _ready() -> void:
 	_build_computer()
 	# 609 画室桌上的十颗 Ryzen 9 9950X3D（隐藏福利，2026-11 用户要求）
 	_spawn_room609_cpus()
-	# 商店东侧：先把地块往东延长 24 m，再把游戏开发部部室摆在新空地上
-	_spawn_east_lot()
 	# 商店与蒙德里安大楼**已经烘焙进场景**（`scenes/shop_baked.tscn` /
 	# `scenes/mondrian_house_baked.tscn`，在 game.tscn 里是实例节点），
 	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
@@ -1082,27 +1070,6 @@ func _spawn_room609_cpus() -> void:
 	cpus.name = "Room609Cpus"
 	add_child(cpus)
 	print("[Game] 609 画室屋顶摆好149 颗 Ryzen 9 9950X3D（¥4,599/颗直接进卡，隐藏福利）")
-
-
-## 商店东侧的新地块 + 游戏开发部部室。地块是 `lot_east.tscn`（24 × 40 m，
-## 顶面 y = 0，和商店 Deck 同高）；部室是 `gamedev_room.tscn`，门朝西，
-## 正对商店门口的走道。碰撞由 `gamedev_room.gd` 运行时从合并网格生成。
-func _spawn_east_lot() -> void:
-	if get_node_or_null("LotEast") == null:
-		var lot := LOT_EAST.instantiate()
-		lot.name = "LotEast"
-		lot.position = LOT_EAST_CENTER
-		add_child(lot)
-	if get_node_or_null("GameDevRoom") == null:
-		if not ResourceLoader.exists(GAMEDEV_ROOM_MODEL):
-			push_warning("[Game] 没有 %s，游戏开发部部室不建（地块照常延长）" % GAMEDEV_ROOM_MODEL)
-			return
-		var room := (load(GAMEDEV_ROOM_SCENE) as PackedScene).instantiate()
-		room.name = "GameDevRoom"
-		room.position = GAMEDEV_ROOM_POS
-		add_child(room)
-		print("[Game] 商店东侧地块延长到 x = %.0f，游戏开发部部室摆在 (%.1f, %.2f, %.1f)，门朝西"
-			% [LOT_EAST_CENTER.x + 12.0, GAMEDEV_ROOM_POS.x, GAMEDEV_ROOM_POS.y, GAMEDEV_ROOM_POS.z])
 
 
 ## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。

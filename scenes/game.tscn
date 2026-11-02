@@ -16,6 +16,8 @@
 [ext_resource type="PackedScene" path="res://scenes/mondrian_house_baked.tscn" id="16_mondrian_baked"]
 [ext_resource type="PackedScene" path="res://scenes/room609_proxy_baked.tscn" id="17_roomproxy"]
 [ext_resource type="PackedScene" path="res://scenes/scene_gate.tscn" id="18_gate"]
+[ext_resource type="PackedScene" path="res://scenes/lot_east.tscn" id="19_lot_east"]
+[ext_resource type="PackedScene" path="res://scenes/gamedev_room.tscn" id="20_gamedev_room"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_arena"]
 sky_top_color = Color(0.22, 0.28, 0.42, 1)
@@ -186,6 +188,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
 [node name="Parkour" parent="." unique_id=1687720817 instance=ExtResource("13_parkour")]
 
 [node name="Shop" parent="." unique_id=1996334488 instance=ExtResource("15_shopbaked")]
+
+[node name="LotEast" parent="." instance=ExtResource("19_lot_east")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52, 0, 0)
+
+[node name="GameDevRoom" parent="." instance=ExtResource("20_gamedev_room")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52, 0.01, 0)
 
 [node name="MondrianHouse" parent="." unique_id=2115650812 instance=ExtResource("16_mondrian_baked")]
 
