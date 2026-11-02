@@ -1,5 +1,7 @@
 class_name Ryzen9950x3d
 extends Node3D
+
+const BankCard := preload("res://scripts/bank_card.gd")
 ## 609 画室桌子上的 **AMD Ryzen 9 9950X3D**（2026-11 用户：
 ## 「在 609 上面放十颗，按市场价算，这是隐藏的福利」）。
 ##
@@ -11,14 +13,16 @@ extends Node3D
 ## 蓝色基板 + 银色 IHS + 四排金手指 + IHS 丝印。参考素材来自爱给网，
 ## 仅供学习参考、不商用（见 CREDITS / credits.gd）。
 ##
-## 手感：和屋顶 5090 一样，**站在地上 + 靠近**才亮「按 F 拾取」；一按就收，
-## 不用二次确认（十颗，别按二十次）。
+## 手感：**站在地上 + 靠近**就亮「按 F 拾取」；一按就收，不用二次确认。
+## 2026-11 用户：模型放大 3 倍（36 cm）、拾取范围加大、收进**银行卡**（速通路线）。
 
 const MODEL := "res://models/cpu_9950x3d/ryzen_9950x3d.glb"
 const PRICE := 4599
 const DISPLAY_NAME := "AMD Ryzen 9 9950X3D"
-const PICK_RADIUS := 1.5
-const PICK_DY_MAX := 1.4
+const PICK_RADIUS := 3.2
+const PICK_DY_MAX := 2.0
+## 模型放大倍数（用户：「大一点，大三倍，不然很难捡到」）
+const MODEL_SCALE := 3.0
 
 var _built := false
 var _taken := false
@@ -38,6 +42,7 @@ func _build() -> void:
 	var ps := load(MODEL) as PackedScene
 	if ps != null:
 		_model = ps.instantiate() as Node3D
+		_model.scale = Vector3.ONE * MODEL_SCALE
 		add_child(_model)
 	else:
 		push_warning("[9950X3D] 没有 %s → 用程序化占位 CPU" % MODEL)
@@ -61,6 +66,7 @@ func _add_glow() -> void:
 	g.emission = Color(1.0, 0.74, 0.22)
 	g.emission_energy_multiplier = 0.6
 	ring.material_override = g
+	ring.scale = Vector3.ONE * MODEL_SCALE
 	ring.position.y = 0.001
 	add_child(ring)
 
@@ -104,7 +110,7 @@ func _physics_process(_delta: float) -> void:
 	if near and not _prompting:
 		_prompting = true
 		if fut != null:
-			fut.ask_prompt(self, "按 F 拾取 Ryzen 9 9950X3D（¥4,599）")
+			fut.ask_prompt(self, "按 F 拾取 Ryzen 9 9950X3D（¥4,599 → 银行卡）")
 	elif not near and _prompting:
 		_prompting = false
 		if fut != null:
@@ -134,11 +140,12 @@ func _take() -> void:
 	var fut := _futures()
 	if fut != null:
 		fut.clear_prompt(self)
-		fut.add_cpu(PRICE)
+		fut.add_bank(PRICE, DISPLAY_NAME)
 	else:
-		push_warning("[9950X3D] 场上没有 Futures，¥%d 没进资产账" % PRICE)
+		BankCard.add(PRICE)
+		push_warning("[9950X3D] 场上没有 Futures，¥%d 直接进银行卡" % PRICE)
 	Sfx.play("ui_toggle", 4.0)
-	print("[9950X3D] 收走一颗 Ryzen 9 9950X3D → 资产 +¥%d" % PRICE)
+	print("[9950X3D] 收走一颗 Ryzen 9 9950X3D → 银行卡 +¥%d" % PRICE)
 	queue_free()
 
 

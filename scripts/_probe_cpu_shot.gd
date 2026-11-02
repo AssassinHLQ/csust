@@ -41,13 +41,13 @@ func _run() -> void:
 	cam.far = 50.0
 	cam.current = true
 	root.add_child(cam)
-	cam.global_position = center + Vector3(0.55, 0.42, 0.55)
-	cam.look_at(center, Vector3.UP)
+	cam.global_position = center + Vector3(3.2, 2.6, 3.2)
+	cam.look_at(center + Vector3(0.0, 0.6, 0.0), Vector3.UP)
 	await _wait(12)
 	root.get_texture().get_image().save_png(OUT + "/01_desk_cpus.png")
 
-	cam.global_position = center + Vector3(0.28, 0.16, 0.30)
-	cam.look_at(center + Vector3(-0.05, 0.0, -0.1), Vector3.UP)
+	cam.global_position = center + Vector3(0.85, 0.55, 0.85)
+	cam.look_at(center + Vector3(-0.15, 0.0, -0.3), Vector3.UP)
 	await _wait(6)
 	root.get_texture().get_image().save_png(OUT + "/02_close.png")
 	print("[cpu-shot] 存图 %s/01_desk_cpus.png / 02_close.png" % OUT)

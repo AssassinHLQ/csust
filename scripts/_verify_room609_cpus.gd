@@ -1,5 +1,6 @@
 extends SceneTree
-## 验：609 屋顶十颗 9950X3D —— 数量 / 尺寸 / 单价，以及按 F 收进本轮资产。
+## 验：609 屋顶十五颗 9950X3D —— 数量 / 尺寸（×3）/ 单价，以及按 F **直接进银行卡**。
+const BankCard := preload("res://scripts/bank_card.gd")
 ##   godot --path . --headless --script res://scripts/_verify_room609_cpus.gd
 func _initialize() -> void:
 	_run.call_deferred()
@@ -32,7 +33,7 @@ func _run() -> void:
 		if c.has_method("price"):
 			list.append(c)
 	var cpu0 := list[0] as Node3D
-	print("[cpu] 609 屋顶 %d 颗（期望 10）" % list.size())
+	print("[cpu] 609 屋顶 %d 颗（期望 15）" % list.size())
 	for c in list:
 		var n := c as Node3D
 		print("[cpu]   %-6s 世界位置 %s　单价 ¥%d" % [
@@ -51,18 +52,19 @@ func _run() -> void:
 			lo = lo.min(w)
 			hi = hi.max(w)
 	var sz := hi - lo
-	print("[cpu] 单颗世界包围盒 %.3f × %.3f × %.3f m（期望 0.12 见方、最薄轴是 Y）" % [
+	print("[cpu] 单颗世界包围盒 %.3f × %.3f × %.3f m（期望 0.36 见方、含光环 0.39）" % [
 		sz.x, sz.y, sz.z])
 
-	# 站到屋顶上按 F（脚踩屋顶 y≈5.65）
-	player.global_position = Vector3(cpu0.global_position.x + 0.45, roof_top + 0.05,
+	# 站到屋顶上按 F（脚踩屋面 y≈5.79）
+	player.global_position = Vector3(cpu0.global_position.x + 0.9, roof_top + 0.05,
 		cpu0.global_position.z)
 	player.velocity = Vector3.ZERO
 	for _i in 20:
 		await physics_frame
 	var fut := pk.get_node_or_null("Futures")
-	var a0 := int(fut.get("assets_yuan"))
-	var c0 := int(fut.get("cpu_count"))
+	BankCard.set_balance(0)
+	fut.set("bank_yuan", 0)
+	var b0 := BankCard.balance()
 	print("[cpu] 站上屋顶：on_floor=%s　提示 owner=%s" % [
 		str(player.is_on_floor()), str(fut.call("prompt_owner"))])
 	var ev := InputEventKey.new()
@@ -72,10 +74,9 @@ func _run() -> void:
 	Input.parse_input_event(ev)
 	for _i in 8:
 		await physics_frame
-	print("[cpu] 按 F 后：资产 %d → %d（期望 +4599）、CPU 计数 %d → %d、这颗还在=%s" % [
-		a0, int(fut.get("assets_yuan")), c0, int(fut.get("cpu_count")),
-		str(is_instance_valid(cpu0))])
+	print("[cpu] 按 F 后：银行卡 %d → %d、HUD 银行卡 %d → %d、这颗还在=%s" % [
+		b0, BankCard.balance(), 0, int(fut.get("bank_yuan")), str(is_instance_valid(cpu0))])
 	print("[cpu] 结论：%s" % (
-		"OK" if list.size() == 10 and int(fut.get("assets_yuan")) == a0 + 4599
-		and int(fut.get("cpu_count")) == c0 + 1 and not is_instance_valid(cpu0) else "FAIL"))
+		"OK" if list.size() == 15 and BankCard.balance() == b0 + 4599
+		and int(fut.get("bank_yuan")) == 4599 and not is_instance_valid(cpu0) else "FAIL"))
 	quit(0)

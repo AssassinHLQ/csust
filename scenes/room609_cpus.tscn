@@ -6,34 +6,49 @@
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, 5.79, 3.54)
 
 [node name="Cpu1" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -1.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, -1.20)
 
 [node name="Cpu2" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -1.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, -1.20)
 
 [node name="Cpu3" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -0.50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, -1.20)
 
 [node name="Cpu4" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -0.50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, -0.60)
 
 [node name="Cpu5" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, -0.60)
 
 [node name="Cpu6" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, -0.60)
 
 [node name="Cpu7" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 0.00)
 
 [node name="Cpu8" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 0.00)
 
 [node name="Cpu9" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 1.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 0.00)
 
 [node name="Cpu10" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 1.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 0.60)
+
+[node name="Cpu11" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 0.60)
+
+[node name="Cpu12" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 0.60)
+
+[node name="Cpu13" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 1.20)
+
+[node name="Cpu14" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 1.20)
+
+[node name="Cpu15" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 1.20)
 
 [node name="Beacon" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
@@ -42,6 +57,6 @@ billboard = 1
 no_depth_test = true
 modulate = Color(1, 0.88, 0.45, 1)
 outline_modulate = Color(0.05, 0.05, 0.08, 1)
-text = "隐藏福利 · Ryzen 9 9950X3D ×10"
+text = "隐藏福利 · Ryzen 9 9950X3D ×15"
 font_size = 64
 outline_size = 16

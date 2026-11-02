@@ -100,8 +100,6 @@ var ram_count := 0
 var ram_inventory := {}
 ## 非内存条的实物件数（屋顶那四张 RTX 5090）
 var gpu_count := 0
-## 609 画室桌上捡到的 9950X3D 颗数（¥4,599/颗）
-var cpu_count := 0
 ## 银行卡（元）：结算区把「资产 + 保证金」转进来，负债也从这里扣。
 var bank_yuan := 0
 
@@ -939,11 +937,17 @@ func add_asset(label: String, price: int) -> void:
 	_add_asset(label, price)
 
 
-## 609 画室桌上的 Ryzen 9 9950X3D（¥4,599/颗，10 颗隐藏福利）。
-## 单独记数，结算时能和「5090 ×N」分开写清楚。
-func add_cpu(price: int) -> void:
-	cpu_count += 1
-	_add_asset("AMD Ryzen 9 9950X3D", price)
+## 直接进银行卡的钱（609 屋顶的 9950X3D 用）：同步更新 HUD 的「银行卡」列，
+## 否则结算时 `BankCard.set_balance(bank_yuan)` 会把直接入账的钱盖掉。
+func add_bank(yuan: int, label: String) -> void:
+	var amount := maxi(yuan, 0)
+	if amount <= 0:
+		return
+	bank_yuan += amount
+	BankCard.add(amount)
+	_update_hud_text()
+	_banner_text("%s → 银行卡 +¥%s（余额 ¥%s）" % [
+		label, _fmt_yuan(amount), _fmt_yuan(bank_yuan)], Color(1.0, 0.86, 0.42))
 
 
 ## 打怪掉落的现金：**先记成本轮资产**，踩结算台时才转进银行卡。
@@ -983,13 +987,11 @@ func settle_all() -> String:
 	var sold := assets_yuan
 	var ram_n := ram_count
 	var gpu_n := gpu_count
-	var cpu_n := cpu_count
 	var refund := int(round(margin * 10000.0))
 	bank_yuan += sold + refund
 	assets_yuan = 0
 	ram_count = 0
 	gpu_count = 0
-	cpu_count = 0
 	ram_inventory.clear()
 	margin = 0.0
 	var paid := mini(bank_yuan, debt * 10000)
@@ -997,8 +999,8 @@ func settle_all() -> String:
 	debt -= int(round(float(paid) / 10000.0))
 	_update_hud_text()
 	BankCard.set_balance(bank_yuan)   # 落盘：商店那边读的是同一张卡
-	var msg := "结算：资产 ¥%s（RAM %d 根 + 5090 ×%d + 9950X3D ×%d）+ 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
-		_fmt_yuan(sold), ram_n, gpu_n, cpu_n, _fmt_yuan(refund), _fmt_yuan(bank_yuan),
+	var msg := "结算：资产 ¥%s（RAM %d 根 + 5090 ×%d）+ 保证金 ¥%s → 银行卡 ¥%s；还债 ¥%s（剩 %d 万）" % [
+		_fmt_yuan(sold), ram_n, gpu_n, _fmt_yuan(refund), _fmt_yuan(bank_yuan),
 		_fmt_yuan(paid), debt]
 	_banner_text(msg, Color(0.55, 1.0, 0.7))
 	Sfx.play("ui_slider", 2.0)
@@ -1065,8 +1067,6 @@ func _update_hud_text() -> void:
 	if _debt_label == null:
 		return
 	var extra := "" if gpu_count <= 0 else " + %d 件" % gpu_count
-	if cpu_count > 0:
-		extra += " + %d CPU" % cpu_count
 	_debt_label.text = "保证金 ¥%.2f 万　负债 ¥%d 万　资产 ¥%s 元（%d 根%s）　银行卡 ¥%s 元　强平 %d 次%s" % [
 		margin, debt, _fmt_yuan(assets_yuan), ram_count, extra,
 		_fmt_yuan(bank_yuan), liquidations,
