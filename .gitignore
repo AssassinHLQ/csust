@@ -88,6 +88,10 @@ __pycache__/
 # RTX 5090 模型：爱给网下载，仅限本地学习使用（不可再分发）
 /models/rtx5090/
 
+# 游戏开发部部室（Sketchfab 作者：起航扬帆了）—— 下载包无许可文件、原页面 404，
+# 授权未核实，只允许本地学习演示，不随仓库分发。见 credits.gd 与 CREDITS.md
+/models/gamedev_room/
+
 # 校园分块（离线切成 3×3，用 scripts/_split_sog.gd 重新生成）
 /splatdata/campus_chunks/
 

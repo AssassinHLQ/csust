@@ -89,6 +89,17 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/gamedev_room",
+		"title": "游戏开发部部室（商店东侧新地块）",
+		"author": "模型：**起航扬帆了**（Sketchfab）；围合四面墙、天花板与 Rhino 导出由使用者完成",
+		"license": "授权未核实（下载包没有许可文件，原模型页 UID 现在查 API 返回 404）——只允许本地学习演示，不可再分发、不可商用",
+		"distributed": false,
+		"source": "Sketchfab《游戏开发部部室》by 起航扬帆了；用户下载包目录名 `游戏开发部部室_by_起航扬帆了_ebd4291471b4ef51514e232113d2c349`",
+		"license_file": "",
+		"note": "Rhino 导出 6.95 MB（含整屋重复的一份、Draco 压缩、坐标轴未转）→ Blender 去重 + 摆正 + 合并成 31 个材质面 / 21,892 面，导出不带 Draco 的 4.56 MB GLB，见 `tools/build_gamedev_room.py`；摆在延长后的东侧地块 (52, 0.01, 0)，门朝西；`.gitignore` 排除整个目录",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/bank",
 		"title": "BANK 招牌（最后平台小屋屋顶）",
 		"author": "使用者自制（Rhino 导出 OBJ）",

@@ -24,6 +24,7 @@
 | `boss_binah/Binah_Original.fbx` | 可选 | 第六位 Boss（**备用**，README §7.7）。44 骨、无动画、3 个材质（本体+4 环 / 武器面 / 光环）。只有 `-- --bosses=all` 才上场 |
 | `boss_goliath/Goliath_Decagram_Vulcan.fbx` | 可选 | 第七位 Boss（**备用**，README §7.7）。34 骨、单网格单材质。同上 |
 | `npc/sensei.glb` | 可选 | **老师** NPC（站在学生身后）。**卡通版**：338 骨、**0 条动作**、**0 张贴图**（颜色全烘在顶点色里，绿皮肤 + 马克笔五官）；2.5 MB、8 材质。自带 55 个 `cs_*` 控制器网格（载入即删）、网格几乎整块绑在 `head.x` 上（手臂只能掰顶点）。见 `scripts/sensei_npc.gd` 与 README §8.9 |
+| `gamedev_room/gamedev_room.glb` | 可选 | 「游戏开发部部室」——商店东侧延长地块上的整间屋子（Sketchfab《游戏开发部部室》by **起航扬帆了**；四面墙与天花板由使用者用 Rhino 补）。去重、摆正后 21,892 面 / 31 个材质面，`tools/build_gamedev_room.py` 重新生成；缺它时只少这栋房子，地块照常延长 |
 
 同伴与 Boss 都是**可选**的。**默认场上只有飞猪优香一位**（不挤），其余六位在
 `scenes/bosses_standby.tscn` 里待命 —— 要全部上场就用 `-- --bosses=all`，
@@ -44,6 +45,10 @@
 >
 > `npc/`（老师）的作者是**张伟事务所**（卡通版；旧版 MMD 模型是**食小派蒙辣**），
 > 同样派生自 Blue Archive、专有版权。
+>
+> `gamedev_room/`（游戏开发部部室）的模型来自 **Sketchfab 作者「起航扬帆了」** 的
+> 《游戏开发部部室》，下载包没有许可文件、原模型页现在查不到，**授权未核实**，
+> 只做本地学习演示；四面墙、天花板和 Rhino 导出由使用者完成。
 >
 > 主角 Arisu 与七名同伴的模型**取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)**
 > （Blue Archive 官方素材的解包整理版，整理者 lihaohong6 / Peterli）——

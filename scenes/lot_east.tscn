@@ -1,0 +1,33 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/tex/lot_paver.png" id="1_paver"]
+[ext_resource type="Texture2D" path="res://assets/tex/lot_paver_n.png" id="2_paver_n"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_deck"]
+albedo_color = Color(0.58, 0.62, 0.68, 1)
+albedo_texture = ExtResource("1_paver")
+roughness = 0.95
+normal_enabled = true
+normal_scale = 0.7
+normal_texture = ExtResource("2_paver_n")
+uv1_scale = Vector3(0.4, 0.4, 0.4)
+uv1_triplanar = true
+uv1_world_triplanar = true
+texture_filter = 5
+
+[sub_resource type="BoxMesh" id="Mesh_deck"]
+size = Vector3(24, 0.5, 40)
+
+[sub_resource type="BoxShape3D" id="Shape_deck"]
+size = Vector3(24, 0.5, 40)
+
+[node name="LotEast" type="StaticBody3D"]
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+mesh = SubResource("Mesh_deck")
+material_override = SubResource("Mat_deck")
+
+[node name="Shape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+shape = SubResource("Shape_deck")
