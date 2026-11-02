@@ -21,8 +21,8 @@ MODELS = {
     "serika": {
         "gpt": "D:/gptsovits_models/QinXiang/gpt.ckpt",
         "sovits": "D:/gptsovits_models/QinXiang/sovits.pth",
-        "ref": "D:/gptsovits_models/QinXiang/ref.wav",
-        "prompt": "なんか……みんな忙しそうね。",
+        "ref": "D:/gptsovits_models/QinXiang/ref_tsun.wav",
+        "prompt": "べ、別に、先生のために努力したわけじゃないからぁ！",
     },
     "momoi": {
         "gpt": "D:/gptsovits_models/Momoi/gpt.ckpt",
