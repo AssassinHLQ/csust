@@ -50,6 +50,8 @@
 | BANK 招牌模型（最后平台小屋屋顶） | **使用者自制**（Rhino 导出 OBJ） | 归使用者所有 | ✅ `models/bank/BANK.obj` | `models/bank/`，2026-10-20 桌面提供 | 1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 缺失，仓库补了一份最小 `BANK.mtl` |
 | AMD Ryzen 9 9950X3D 处理器模型（609 屋顶的 149 颗，Rhino 源） | 基于用户 Rhino 导出的 9950X3D GLB 减面与分材质；参考模型来自爱给网用户上传 | 处理后的低模随仓库分发；原始 SLDPRT 仅学习交流、不可商用；AMD / RYZEN 是 AMD 商标 | ✅ `models/cpu_9950x3d/ryzen_9950x3d.glb` | `models/cpu_9950x3d/`；参考用户提供的爱给网 `.SLDPRT`（Godot/Blender 读不了）与 `P1.PNG` | Rhino 源减到 12,192 面；蓝基板 + 银 IHS + 32 颗金手指 + IHS 丝印；149 颗摆 609 画室屋顶（模型 ×3 → 36 cm），¥4,599/颗直接进银行卡（京东 2026-10 行情），合计 ¥685,251 |
 | **游戏开发部部室**（商店东侧新地块） | 模型：**起航扬帆了**（Sketchfab）；围合四面墙、天花板与 Rhino 导出由使用者完成 | 授权未核实（下载包无许可文件，原模型页 UID 查 API 返回 404）——仅本地学习演示，不可再分发、不可商用 | ❌ | `models/gamedev_room/`，来源：Sketchfab《游戏开发部部室》by 起航扬帆了，下载包目录名 `游戏开发部部室_by_起航扬帆了_ebd4291471b4ef51514e232113d2c349` | Rhino 导出 6.95 MB（整屋重复一份 + Draco + 坐标轴未转）→ Blender 去重、摆正、合并成 31 个材质面 / 21,892 面，导出 4.56 MB 无 Draco GLB（`tools/build_gamedev_room.py`）；地块东延 24 m 后摆在 (52, 0.01, 0)，门朝西 |
+| 游戏开发部部室碰撞网格 | 本项目作者（由部室 GLB 烘焙） | 跟随源模型：仅本地学习演示，不可再分发、不可商用 | ✅ `assets/collision/gamedev_room_trimesh.res` | `assets/collision/`，`scripts/_bake_gamedev_trimesh.gd` 生成 | 1 块凹面 trimesh，21,892 三角 / 788 KB；`gamedev_room.tscn` 的墙、家具与门洞都靠它挡人 |
+| **壁挂 8×5090 机箱外壳**（游戏开发部活动室） | 爱给网（aigei.com）用户上传的 **CUSTOM GAMING PC**，作者未署名；减面 / 开窗 / 改白漆由本项目完成 | 原始模型仅限学习交流、不可商用；处理后的 2,917 面外壳随仓库分发（非商用同人） | ✅ `models/pc_case/pc_case_shell.glb` | `models/pc_case/`，来源：用户下载的 `游戏电脑机箱主机，白色 i7 RTX3090…_爱给网_aigei_com.zip` 中的 `CUSTOM GAMING PC.blend` | 94 MB / 1,035,668 面 → 只取外壳 Cube.007、开窗、白漆、0.1 比例，导出 2,917 面 / 143 KB（`tools/_export_pc_case_shell.py`）；放大 2.6× 挂南墙，内部 8 张 5090 + 托板 + 玻璃由 `scripts/_build_pc_wall_case.gd` 程序化生成 |
 | 主角 Arisu 模型与贴图、校园碰撞网格 | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/Arisu*.glb`、`Arisu*.png`、`school.collision.glb`，来源同上 | 贴图由 Godot 导入 glb 时自动解包 |
 | 校园 / 画室609 高斯泼溅数据 | **知天下 AI 生成**（由使用者提供） | 权利状态未核实（再分发权由使用者确认） | ❌ | `splatdata/*.sogdata` | 校园与画室609 的泼溅由 **知天下 AI** 生成；缺失时用 `-- --splat=off` |
 | 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |
@@ -63,7 +65,7 @@
 |---|---|---|---|---|---|
 | [UI Pack: Pixel Adventure](https://kenney.nl/assets/ui-pack-pixel-adventure) 2.0 | Kenney | **CC0 1.0** | ✅ | `assets/ui/`，许可原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 九宫格面板 / 按钮切片；`tile_panel.png`、`tile_button_hover.png` 的中心被填成白色（原图中空），CC0 允许修改 |
 | [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/font.ttf`，许可原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 中文像素字体，覆盖 19214/20992 个 CJK 汉字；整套 UI 的兜底字 |
-| Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留「游戏开发部楼梯→临时服务器据点」十四字；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
+| Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留招牌/铭牌用字（游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线等，7.5 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
 | Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
 | [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
 
@@ -73,7 +75,7 @@
 |---|---|---|---|---|---|
 | [Interface Sounds](https://kenney.nl/assets/interface-sounds) / [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) / [RPG Audio](https://kenney.nl/assets/rpg-audio) | Kenney | **CC0 1.0** | ✅ | `assets/sfx/`，许可原文 `assets/sfx/LICENSE_Kenney_CC0.md` | `click_*`、`toggle_*`、`tick_*`、`open_*`、`close_*`、`laserSmall_000..004`、`metalLatch`、`metalClick` |
 | 枪声 | 本项目作者（Python 合成） | MIT | ✅ | `assets/sfx/gunshot_000.wav` ~ `gunshot_004.wav` | 不是采样，是算出来的：噪声 + 包络 + 带通，见 README §1.19 |
-| 商店配音（芹香 / 小桃 / 爱丽丝） | 音色模型 **SLNeil**（[B站空间](https://space.bilibili.com/523537077)）；台词由本项目撰写 | 模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发 | ❌ | `story/voice/shop/` | GPT-SoVITS 生成 12 句（serika_01…09 / momoi_01…02 / aris_01）；爱丽丝前半句「邦邦咔邦」替换为用户提供的 DSH 余额挂件皮肤视频原声（BA 角色声音，NEXON/Yostar，仅本地），与 TTS「就这套了」拼接成 aris_01，候选 `aris_01_authentic_v1..3`；整个目录被 `.gitignore` 排除 |
+| 商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS） | 音色模型：**SLNeil**（B站）；台词由本项目撰写（[B站空间](https://space.bilibili.com/523537077)） | 模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发 | ❌ | `story/voice/shop/` | GPT-SoVITS 生成 12 句（serika_01…09 / momoi_01…02 / aris_01）；爱丽丝前半句「邦邦咔邦」替换为用户提供的 DSH 余额挂件皮肤视频原声（BA 角色声音，NEXON/Yostar，仅本地），与 TTS「就这套了」拼接成 aris_01，候选 `aris_01_authentic_v1..3`；整个目录被 `.gitignore` 排除 |
 | 商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版） | Toby Fox / Materia Collective | 专有版权 —— 仅本地学习，不得再分发、不得用于任何发布产物 | ❌ | `assets/music/`，来源 UNDERTALE | 音频本体被 `.gitignore` 排除；`*.ogg.import` 进仓库（循环开关在里面），克隆者需自备文件 |
 
 ## 五、剧情与图标

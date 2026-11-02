@@ -1,7 +1,8 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="PackedScene" path="res://models/gamedev_room/gamedev_room.glb" id="1_room"]
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
+[ext_resource type="PackedScene" path="res://scenes/pc_wall_case.tscn" id="5_pc_rig"]
 [ext_resource type="ConcavePolygonShape3D" path="res://assets/collision/gamedev_room_trimesh.res" id="4_room_shape"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_sign"]
@@ -119,3 +120,5 @@ modulate = Color(0.93, 0.96, 1, 1)
 [node name="Mesh" type="CollisionShape3D" parent="Model/Collision"]
 shape = ExtResource("4_room_shape")
 
+[node name="PC5090Rig" parent="." instance=ExtResource("5_pc_rig")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.94, 5.03)
