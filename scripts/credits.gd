@@ -326,9 +326,9 @@ const ENTRIES := [
 	{
 		"group": "界面与字体",
 		"path": "assets/ui/gamedev_sign_12px.ttf",
-		"title": "游戏开发部招牌用的 5 字像素子集",
+		"title": "游戏开发部招牌/楼梯指示牌用的 7 字像素子集",
 		"author": "TakWolf（Fusion Pixel Font 子集）",
-		"license": "SIL OFL 1.1（允许随软件分发；仅保留「游戏开发部」五字与 notdef）",
+		"license": "SIL OFL 1.1（允许随软件分发；仅保留「游戏开发部楼梯→」七字与 notdef）",
 		"distributed": true,
 		"source": "https://github.com/TakWolf/fusion-pixel-font",
 		"license_file": "assets/ui/LICENSE_FusionPixel_OFL.txt",

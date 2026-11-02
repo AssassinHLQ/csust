@@ -422,7 +422,9 @@ func _build_stairs() -> void:
 		Vector3(STAIR_W, RAMP_THICKNESS, slope_len), tilt)
 
 	# ── ③ 东侧斜栏板：底面贴斜面，垂直坡面往上 0.95 m
-	var guard_x := cx + STAIR_W * 0.5 - 0.06
+	# 护栏放在楼梯**外侧**（原来缩进 0.06，1.6 m 宽的楼梯只剩 0.94 m 可走，
+	# 东侧靠边的玩家会被端头卡在入口）
+	var guard_x := cx + STAIR_W * 0.5 + 0.06
 	var guard_c := Vector3(guard_x, mid.y, mid.z) + normal * (GUARD_HEIGHT * 0.5)
 	var guard_mesh := MeshInstance3D.new()
 	guard_mesh.name = "Guard"
@@ -434,6 +436,49 @@ func _build_stairs() -> void:
 	_decor.add_child(guard_mesh)
 	decor_count += 1
 	_collide("GuardShape", guard_c, gm.size, tilt)
+
+	# ── ③b 东侧三角封板 + 南端竖墙：把楼梯底下封成实体 ──
+	# 不封的话玩家会从东边钻进坡道底下，抬头看到一整块灰色底面，
+	# 误以为「楼梯被堵住」（用户 2026-11-02 截图就是坡道底面）。
+	# 东侧三角梯帮：视觉是一块直角三角形（跟着坡度收口），
+	# 碰撞用一块贴坡面的厚盒把楼梯底下封死 —— 玩家从东边钻不进去。
+	var side_x := cx + STAIR_W * 0.5 + 0.08
+	var side := MeshInstance3D.new()
+	side.name = "StairSide"
+	var sp := PrismMesh.new()
+	sp.size = Vector3(run, rise, 0.14)
+	sp.left_to_right = 1.0
+	side.mesh = sp
+	side.material_override = _mat["white"]
+	side.rotation.y = -PI * 0.5
+	side.position = Vector3(side_x, rise * 0.5, z0 + run * 0.5)
+	_decor.add_child(side)
+	decor_count += 1
+	_collide("StairSideShape", Vector3(side_x, rise * 0.5, z0 + run * 0.5) - normal * 1.2,
+		Vector3(0.14, 2.4, slope_len), tilt)
+	# 南端竖墙：封住楼梯背面。宽缩 4 cm、顶停 4.10（埋在楼板里）、北面退到 2.72，
+	# 避免和二层楼板的北面/顶面共面闪。
+	_solid("StairEnd", Vector3(cx, 2.05, z0 + run + 0.08),
+		Vector3(STAIR_W - 0.04, 4.10, 0.14), _mat["white"])
+	# 南端指示牌：从屋里南侧过来会先撞到这面墙，牌子上写「楼梯 →」绕到东侧上口
+	_deco("StairSignPlate", Vector3(cx, 1.90, z0 + run + 0.18),
+		Vector3(2.00, 0.70, 0.05), _mat["black"])
+	var sign := Label3D.new()
+	sign.name = "StairSign"
+	sign.text = "楼梯 →"
+	var sign_font := load("res://assets/ui/gamedev_sign_12px.ttf") as FontFile
+	if sign_font != null:
+		sign.font = sign_font
+	sign.font_size = 12
+	sign.pixel_size = 0.035
+	sign.position = Vector3(cx, 1.90, z0 + run + 0.21)
+	sign.modulate = Color(0.95, 0.93, 0.86, 1)
+	sign.outline_size = 0
+	sign.alpha_cut = 1
+	sign.alpha_antialiasing_mode = 0
+	sign.texture_filter = 2
+	_decor.add_child(sign)
+	decor_count += 1
 
 	# ── ④ 侧面（朝屋里的 +X 面）贴三块色板：整块三角白墙太素，
 	#      照原来彩色踏步的配色留三段颜色。都在斜面下方的三角形里、凸出侧面 1.2 cm。

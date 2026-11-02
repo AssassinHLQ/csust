@@ -63,7 +63,7 @@
 |---|---|---|---|---|---|
 | [UI Pack: Pixel Adventure](https://kenney.nl/assets/ui-pack-pixel-adventure) 2.0 | Kenney | **CC0 1.0** | ✅ | `assets/ui/`，许可原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 九宫格面板 / 按钮切片；`tile_panel.png`、`tile_button_hover.png` 的中心被填成白色（原图中空），CC0 允许修改 |
 | [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/font.ttf`，许可原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 中文像素字体，覆盖 19214/20992 个 CJK 汉字；整套 UI 的兜底字 |
-| Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留「游戏开发部」五字（2.7 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
+| Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留「游戏开发部楼梯→」七字（约 3 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
 | Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
 | [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
 
