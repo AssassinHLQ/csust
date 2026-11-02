@@ -81,6 +81,10 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var start_delay := 0.0
 @export var start_distance := 0.0
 @export var low_priority := false
+## 玩家在这个世界空间盒子里时隐藏泼溅。室内场景用：GDGS 没有深度测试，
+## 室外校园会直接糊在墙/天花板上；同时 615 万点的投影/排序也能省掉。
+## 尺寸为 0 = 关闭。
+@export var hide_inside_aabb := AABB()
 ## 场景门切换时，要不要在「载入中」黑屏里把它预载完。
 ## 小场地（画室 609，~700 MB）预载能消掉进场后那次上传卡顿；
 ## 长沙理工校园（615 万点、约 2.9 GiB）不行 —— 预载会把黑屏拖到几十秒，
@@ -320,6 +324,20 @@ func _process(delta: float) -> void:
 		_finish(result)
 	_advance_collapse(delta)
 	_advance_dynamic(delta)
+	_update_inside_hide()
+
+
+func _update_inside_hide() -> void:
+	if splat_node == null or hide_inside_aabb.size == Vector3.ZERO:
+		return
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	if p == null:
+		var scene := get_tree().current_scene
+		if scene != null:
+			p = scene.get_node_or_null("Player") as Node3D
+	if p == null:
+		return
+	splat_node.visible = not hide_inside_aabb.has_point(p.global_position)
 
 
 # --- 对外接口 ---

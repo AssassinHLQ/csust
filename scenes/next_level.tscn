@@ -264,6 +264,8 @@ start_delay = 8.0
 start_distance = 0.0
 low_priority = true
 preload_on_gate = false
+hide_inside_aabb = AABB(-17, -3, -11, 33, 19, 25)
+use_default_orientation = true
 
 ; 校园碰撞：campus_collision_walls_final.scn（2026-10-29 默认）
 ;   = collider-forge 的 Poisson 网格经 _tools/campus_collision_refine.py 三步处理：
