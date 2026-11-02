@@ -140,6 +140,8 @@ const AIM_FOV_RATIO := 0.55
 const STEP_LAG_TAU := 0.075
 const STEP_LAG_MAX := 0.45
 var _step_lag := 0.0
+var _stuck_t := 0.0
+var _unstick_cool := 0.0
 
 var aiming := false
 var sprinting := false
@@ -398,6 +400,33 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_blocked_last_frame = StepClimb.blocked(
 		global_position - before, horiz * delta)
+
+	# ── 卡角自救（2026-11-02 用户：「卡在这个角落居然出不来」）──
+	# 家具碰撞是轴对齐盒，桌子和椅子之间可能留下 < 胶囊直径的 V 形口袋；
+	# 同时贴两面墙、推了 0.8 s 还几乎没动，就沿两面法线之和轻推 0.28 m 出来。
+	_unstick_cool = maxf(_unstick_cool - delta, 0.0)
+	var hs := Vector2(velocity.x, velocity.z).length()
+	var pushing := dir.length_squared() > 0.01
+	if is_on_floor() and pushing and hs < 0.20:
+		_stuck_t += delta
+	else:
+		_stuck_t = 0.0
+	if _stuck_t > 1.0 and _unstick_cool <= 0.0:
+		# 先按墙法线退；法线拿不到就沿输入反方向退
+		var away := Vector3.ZERO
+		for ci in get_slide_collision_count():
+			away += get_slide_collision(ci).get_normal()
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			away = -dir
+			away.y = 0.0
+		if away.length_squared() > 0.01:
+			var was := global_position
+			global_position += away.normalized() * 0.22
+			velocity = Vector3.ZERO
+			_stuck_t = 0.0
+			_unstick_cool = 1.2
+			print("[Player] 卡角自救：%s → %s" % [str(was.snappedf(0.01)), str(global_position.snappedf(0.01))])
 
 	# --- 角色朝向：开火/开镜时必对准准星，否则对着移动方向 ---
 	#
