@@ -129,6 +129,8 @@ const BankCard := preload("res://scripts/bank_card.gd")
 const TALK_RADIUS := 2.6
 ## 垂直方向也限定一下：站在二层或楼下远一点的地方按 F 不该触发
 const TALK_DY_MAX := 2.0
+## 是否已经买过整机（同一进程内保留；买完后对话换成「送货/查单/确认地址」）。
+static var _bought := false
 ## 对话内容。第一句是用户指定的原话。
 const TALK_LINES := [
 	"你配电脑吗?",
@@ -544,6 +546,33 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
+## 买完电脑后的对话（用户 2026-11）：送货上门 → 两个选项：
+##   ① 再次查看配置单 → 再看一遍 5090 整机那张；
+##   ② 确认收货地址 → 游戏开发部活动室配图（图在本地、不随仓库分发）。
+func _talk_after_buy(d: DialogueBox) -> void:
+	var opts := [
+		{"text": "再次查看配置单", "then": [
+			{"kind": "say", "who": SPEAKER, "text": "好嘞,马上给您拿过来!"},
+			_sheet_step(SHEET_5090),
+		]},
+		{"text": "确认收货地址", "then": [
+			{"kind": "say", "who": SPEAKER, "text": "来,老板确认下是这个地址不?"},
+			{"kind": "image", "path": "res://assets/story/gamedev_room.jpg",
+				"caption": "千禧年学院一年级游戏开发部活动室"},
+		]},
+	]
+	d.play_steps([
+		{"kind": "say", "who": SPEAKER, "text": "老板慢走!电脑我马上给您安排送货上门!"},
+		{"kind": "choice", "options": opts},
+	], "shop_clerk_after")
+	print("[Clerk] 已成交过 → 送货/查单/确认地址对话")
+
+
+## 自检用
+func bought() -> bool:
+	return _bought
+
+
 ## 播放对话。`play_steps` 会自己暂停世界、打字、等翻页，结束后恢复。
 ## 第一句问「你配电脑吗?」，然后给玩家两个选项（W/S 选、空格确认）。
 ## 播放器发来的业务回调（目前只有成交扣款）
@@ -553,6 +582,7 @@ func _on_dialogue_custom(step_name: String, data: Dictionary) -> void:
 	var amount := int(data.get("amount", 0))
 	var label := String(data.get("label", "整机"))
 	if BankCard.spend(amount):
+		_bought = true
 		print("[Clerk] 成交：%s，扣款 %s，余额 %s" % [
 			label, BankCard.format_yuan(amount), BankCard.format_yuan(BankCard.balance())])
 	else:
@@ -560,6 +590,9 @@ func _on_dialogue_custom(step_name: String, data: Dictionary) -> void:
 
 
 func _talk(d: DialogueBox) -> void:
+	if _bought:
+		_talk_after_buy(d)
+		return
 	var steps: Array = []
 	for line in TALK_LINES:
 		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})

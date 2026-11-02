@@ -396,6 +396,17 @@ const ENTRIES := [
 	},
 	{
 		"group": "剧情与图标",
+		"path": "assets/story/gamedev_room.jpg",
+		"title": "游戏开发部活动室配图（买完电脑 · 确认收货地址）",
+		"author": "Blue Archive 游戏内场景（NEXON Games / Yostar）；截图由使用者提供",
+		"license": "专有：仅本地学习演示，不可商用、不可再分发",
+		"distributed": false,
+		"source": "用户 2026-11 提供的桌面文件 BG_GameDevRoom.jpg",
+		"license_file": "",
+		"note": "商店买完整机后，选「确认收货地址」弹出；下方配文「千禧年学院一年级游戏开发部活动室」。`.gitignore` 排除，缺图时对话会跳过这一步",
+	},
+	{
+		"group": "剧情与图标",
 		"path": "assets/story/parts",
 		"title": "配置单悬停用的零件照片（10 张）",
 		"author": "NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体",

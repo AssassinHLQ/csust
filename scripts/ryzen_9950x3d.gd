@@ -103,19 +103,51 @@ func _physics_process(_delta: float) -> void:
 	if player == null:
 		return
 	var fut := _futures()
-	var d := player.global_position - global_position
-	var flat := Vector2(d.x, d.z).length()
+	var d0 := player.global_position - global_position
 	var body := player as CharacterBody3D
 	var standing := body != null and body.is_on_floor()
-	var near := standing and flat <= PICK_RADIUS and absf(d.y) <= PICK_DY_MAX
-	if near and not _prompting:
-		_prompting = true
-		if fut != null:
+	# 远的一律不参与（149 颗时省掉大部分扫描）
+	if not standing or Vector2(d0.x, d0.z).length() > PICK_RADIUS + 1.0 \
+			or absf(d0.y) > PICK_DY_MAX + 1.0:
+		if _prompting:
+			_prompting = false
+			if fut != null:
+				fut.clear_prompt(self)
+		return
+	# 只让**离玩家最近的那一颗**占用提示：149 颗挤在一起时，
+	# 之前的「先到先得」会让远处那颗抢着 owner，按 F 捡到的不是脚下这颗。
+	var near := _nearest(player) == self
+	if near:
+		if fut == null:
+			return
+		var owner := fut.prompt_owner()
+		if owner == null or owner == self:
+			_prompting = true
 			fut.ask_prompt(self, "按 F 拾取 Ryzen 9 9950X3D（¥4,599 → 银行卡）")
-	elif not near and _prompting:
+		else:
+			_prompting = false
+	elif _prompting:
 		_prompting = false
 		if fut != null:
 			fut.clear_prompt(self)
+
+
+## 玩家拾取范围内、离得最近的一颗（都够不着时返回 null）
+func _nearest(player: Node3D) -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	for c in get_tree().get_nodes_in_group("ryzen9950x3d"):
+		if c == null or not is_instance_valid(c) or bool(c.get("_taken")):
+			continue
+		var n := c as Node3D
+		var d := player.global_position - n.global_position
+		if Vector2(d.x, d.z).length() > PICK_RADIUS or absf(d.y) > PICK_DY_MAX:
+			continue
+		var score := d.length_squared()
+		if score < best_d:
+			best_d = score
+			best = n
+	return best
 
 
 func _input(event: InputEvent) -> void:

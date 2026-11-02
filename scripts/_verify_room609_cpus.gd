@@ -55,9 +55,9 @@ func _run() -> void:
 	print("[cpu] 单颗世界包围盒 %.3f × %.3f × %.3f m（期望 0.36 见方、含光环 0.39）" % [
 		sz.x, sz.y, sz.z])
 
-	# 站到屋顶上按 F（脚踩屋面 y≈5.79）
-	player.global_position = Vector3(cpu0.global_position.x + 0.9, roof_top + 0.05,
-		cpu0.global_position.z)
+	# 站到**中间某颗**旁边（149 颗挤在一起，验「提示归最近那颗」）
+	var target := list[list.size() / 2] as Node3D
+	player.global_position = target.global_position + Vector3(0.2, roof_top + 0.05 - target.global_position.y, 0.0)
 	player.velocity = Vector3.ZERO
 	for _i in 20:
 		await physics_frame
@@ -65,8 +65,8 @@ func _run() -> void:
 	BankCard.set_balance(0)
 	fut.set("bank_yuan", 0)
 	var b0 := BankCard.balance()
-	print("[cpu] 站上屋顶：on_floor=%s　提示 owner=%s" % [
-		str(player.is_on_floor()), str(fut.call("prompt_owner"))])
+	print("[cpu] 站在 %s 旁：on_floor=%s　提示 owner=%s（期望 = %s）" % [
+		target.name, str(player.is_on_floor()), str(fut.call("prompt_owner")), target.name])
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_F
 	ev.physical_keycode = KEY_F
@@ -75,8 +75,8 @@ func _run() -> void:
 	for _i in 8:
 		await physics_frame
 	print("[cpu] 按 F 后：银行卡 %d → %d、HUD 银行卡 %d → %d、这颗还在=%s" % [
-		b0, BankCard.balance(), 0, int(fut.get("bank_yuan")), str(is_instance_valid(cpu0))])
+		b0, BankCard.balance(), 0, int(fut.get("bank_yuan")), str(is_instance_valid(target))])
 	print("[cpu] 结论：%s" % (
 		"OK" if list.size() == 149 and BankCard.balance() == b0 + 4599
-		and int(fut.get("bank_yuan")) == 4599 and not is_instance_valid(cpu0) else "FAIL"))
+		and int(fut.get("bank_yuan")) == 4599 and not is_instance_valid(target) else "FAIL"))
 	quit(0)

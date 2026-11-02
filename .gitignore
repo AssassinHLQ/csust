@@ -100,6 +100,9 @@ __pycache__/
 /assets/story/parts/*.png
 /assets/story/parts/*.png.import
 !/assets/story/parts/SOURCES.md
+# 游戏开发部活动室截图（Blue Archive 游戏内画面，仅本地学习，不随仓库分发）
+/assets/story/gamedev_room.jpg
+/assets/story/gamedev_room.jpg.import
 
 
 # ---- 导出产物 ----

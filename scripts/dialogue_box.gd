@@ -150,6 +150,8 @@ var _choice_notice: Label
 ## 剧情插图
 var _image_panel: Panel
 var _image_rect: TextureRect
+## 插图下方的一行说明（剧本 image 步骤可选 `caption`）
+var _image_caption: Label
 var _showing_image := false
 var _image_path := ""
 
@@ -248,6 +250,9 @@ func play_steps(steps: Array, source := "") -> void:
 	if _choice_panel != null:
 		_choice_panel.visible = false
 	_showing_image = false
+	if _image_caption != null:
+		_image_caption.visible = false
+		_image_caption.text = ""
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
@@ -286,6 +291,9 @@ func finish() -> void:
 	if _choice_panel != null:
 		_choice_panel.visible = false
 	_showing_image = false
+	if _image_caption != null:
+		_image_caption.visible = false
+		_image_caption.text = ""
 	_image_path = ""
 	if _image_panel != null:
 		_image_panel.visible = false
@@ -473,7 +481,7 @@ func _run_current() -> void:
 				_begin_choice(s)
 				return
 			StoryScript.K_IMAGE:
-				_show_image(String(s.get("path", "")))
+				_show_image(String(s.get("path", "")), String(s.get("caption", "")))
 				return
 			StoryScript.K_SHEET:
 				_show_sheet(s)
@@ -720,7 +728,7 @@ func choice_text(index: int) -> String:
 
 ## 弹一张图：按原图比例缩到 IMAGE_MAX 之内，居中偏上（下面留对话框）。
 ## 图缺失只 warning 并跳过这一步 —— 演出不该因为一张图挂掉。
-func _show_image(path: String) -> void:
+func _show_image(path: String, caption := "") -> void:
 	var tex: Texture2D = null
 	if not path.is_empty():
 		tex = load(path) as Texture2D
@@ -741,6 +749,10 @@ func _show_image(path: String) -> void:
 	_image_panel.offset_right = _image_panel.size.x * 0.5
 	_image_panel.offset_top = -_image_panel.size.y * 0.5 - IMAGE_LIFT
 	_image_panel.offset_bottom = _image_panel.size.y * 0.5 - IMAGE_LIFT
+	_image_caption.position = Vector2(6.0, h + 12.0)
+	_image_caption.size = Vector2(w, 30.0)
+	_image_caption.text = caption
+	_image_caption.visible = not caption.is_empty()
 	_image_panel.visible = true
 	_image_path = path
 	_showing_image = true
@@ -756,6 +768,9 @@ func _dismiss_image() -> void:
 		return
 	_showing_image = false
 	_image_panel.visible = false
+	if _image_caption != null:
+		_image_caption.visible = false
+		_image_caption.text = ""
 	_image_path = ""
 	_index += 1
 	_run_current()
@@ -763,6 +778,10 @@ func _dismiss_image() -> void:
 
 func is_showing_image() -> bool:
 	return _showing_image
+
+
+func current_image_caption() -> String:
+	return _image_caption.text if _image_caption != null else ""
 
 
 func current_image_path() -> String:
@@ -1031,6 +1050,18 @@ func _build() -> void:
 	_image_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_image_rect.position = Vector2(6.0, 6.0)
 	_image_panel.add_child(_image_rect)
+
+	_image_caption = Label.new()
+	_image_caption.name = "Caption"
+	_image_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_image_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_image_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_image_caption.add_theme_font_size_override("font_size", 22)
+	_image_caption.add_theme_color_override("font_color", Color(1.0, 0.95, 0.86, 1))
+	_image_caption.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.04, 0.95))
+	_image_caption.add_theme_constant_override("outline_size", 6)
+	_image_caption.visible = false
+	_image_panel.add_child(_image_caption)
 
 	# 可交互配置单：底图 + 悬停换图的覆盖层 + 每行热区（热区按剧本里的行高临时建）
 	_sheet_root = Control.new()

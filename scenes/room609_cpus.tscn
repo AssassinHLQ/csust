@@ -451,14 +451,3 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 3.50)
 
 [node name="Cpu149" parent="." instance=ExtResource("1_cpu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 3.50)
-
-[node name="Beacon" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
-pixel_size = 0.004
-billboard = 1
-no_depth_test = true
-modulate = Color(1, 0.88, 0.45, 1)
-outline_modulate = Color(0.05, 0.05, 0.08, 1)
-text = "隐藏福利 · Ryzen 9 9950X3D ×149"
-font_size = 64
-outline_size = 16
