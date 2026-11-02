@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3]
+[gd_scene load_steps=37 format=3]
 
 [ext_resource type="PackedScene" path="res://models/gamedev_room/gamedev_room.glb" id="1_room"]
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
@@ -7,9 +7,38 @@
 size = Vector3(4.2, 0.86, 0.06)
 
 [sub_resource type="StandardMaterial3D" id="Mat_sign"]
-albedo_color = Color(0.07, 0.1, 0.16, 1)
-metallic = 0.25
-roughness = 0.45
+albedo_color = Color(0.1, 0.22, 0.58, 1)
+metallic = 0.18
+roughness = 0.5
+
+[sub_resource type="CylinderMesh" id="Cyl_lamp_stem"]
+top_radius = 0.03
+bottom_radius = 0.03
+height = 0.45
+radial_segments = 12
+
+[sub_resource type="CylinderMesh" id="Cyl_lamp_shade"]
+top_radius = 0.30
+bottom_radius = 0.30
+height = 0.08
+radial_segments = 24
+
+[sub_resource type="CylinderMesh" id="Cyl_lamp_rim"]
+top_radius = 0.32
+bottom_radius = 0.32
+height = 0.03
+radial_segments = 24
+
+[sub_resource type="StandardMaterial3D" id="Mat_lamp_metal"]
+albedo_color = Color(0.08, 0.09, 0.11, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="Mat_lamp_glow"]
+albedo_color = Color(1, 0.97, 0.9, 1)
+emission_enabled = true
+emission = Color(1, 0.95, 0.85, 1)
+emission_energy_multiplier = 1.2
 
 [sub_resource type="BoxShape3D" id="BoxShape_Floor"]
 size = Vector3(10.06, 0.4, 13.41)
@@ -110,6 +139,43 @@ light_color = Color(1, 0.95, 0.87, 1)
 light_energy = 1.6
 shadow_enabled = false
 omni_range = 9.5
+
+
+[node name="LampA_Stem" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, -3)
+mesh = SubResource("Cyl_lamp_stem")
+material_override = SubResource("Mat_lamp_metal")
+cast_shadow = 0
+
+[node name="LampA_Rim" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.99, -3)
+mesh = SubResource("Cyl_lamp_rim")
+material_override = SubResource("Mat_lamp_metal")
+cast_shadow = 0
+
+[node name="LampA_Glow" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.95, -3)
+mesh = SubResource("Cyl_lamp_shade")
+material_override = SubResource("Mat_lamp_glow")
+cast_shadow = 0
+
+[node name="LampB_Stem" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, 3)
+mesh = SubResource("Cyl_lamp_stem")
+material_override = SubResource("Mat_lamp_metal")
+cast_shadow = 0
+
+[node name="LampB_Rim" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.99, 3)
+mesh = SubResource("Cyl_lamp_rim")
+material_override = SubResource("Mat_lamp_metal")
+cast_shadow = 0
+
+[node name="LampB_Glow" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.95, 3)
+mesh = SubResource("Cyl_lamp_shade")
+material_override = SubResource("Mat_lamp_glow")
+cast_shadow = 0
 
 [node name="SignBoard" type="MeshInstance3D" parent="Model"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.48, 3.62, -6.86)

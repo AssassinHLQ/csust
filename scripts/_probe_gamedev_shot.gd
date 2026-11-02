@@ -48,5 +48,15 @@ func _run() -> void:
 	await _shot(cam, Vector3(42.4, 3.5, 3.5), Vector3(45.15, 3.5, 3.5), "05_sign.png", 45.0)
 	# 6) 掠射角（之前墙会映出天空，看着像通透）
 	await _shot(cam, Vector3(42.3, 1.1, -6.2), Vector3(45.17, 6.0, 3.6), "06_graze.png", 62.0)
+	# 7) 地上那台手持游戏机的屏幕（查重叠面）
+	await _shot(cam, Vector3(52.7, 1.45, -0.9), Vector3(53.29, 0.38, -2.76), "07_handheld.png", 45.0)
+	# 8) 屋顶两盏实体灯
+	await _shot(cam, Vector3(52.0, 2.2, 4.6), Vector3(52.0, 5.85, 0.0), "08_lamps.png", 70.0)
+	# 9) 手持游戏机本体（用户截图里屏幕左下角那台）
+	await _shot(cam, Vector3(52.0, 1.25, -0.7), Vector3(52.75, 0.38, -2.0), "09_handheld2.png", 42.0)
+	await _shot(cam, Vector3(52.6, 6.2, 1.2), Vector3(52.6, 0.0, -2.2), "10_cluster_top.png", 58.0)
+	await _shot(cam, Vector3(52.65, 1.05, -1.35), Vector3(52.78, 0.36, -2.15), "11_handheld_close.png", 38.0)
+	await _shot(cam, Vector3(51.93, 2.2, 2.8), Vector3(51.93, 0.2, 0.6), "12_rug_handheld.png", 42.0)
+	await _shot(cam, Vector3(51.15, 0.95, 2.85), Vector3(51.25, 0.30, 1.65), "13_pink_handheld.png", 40.0)
 	print("[gamedev-shot] fps=", Engine.get_frames_per_second())
 	quit(0)

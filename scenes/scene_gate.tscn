@@ -58,6 +58,7 @@ omni_range = 4.5
 shadow_enabled = false
 
 [node name="Title" type="Label3D" parent="."]
+visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.12, 0)
 pixel_size = 0.0032
 billboard = 1
@@ -69,6 +70,7 @@ outline_size = 24
 no_depth_test = true
 
 [node name="Prompt" type="Label3D" parent="."]
+visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.82, 0)
 pixel_size = 0.003
 billboard = 1

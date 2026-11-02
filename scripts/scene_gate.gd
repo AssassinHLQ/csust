@@ -5,7 +5,8 @@ extends Node3D
 ## 走近 → 提示牌亮起 → 按 F。判定半径用 `Trigger`（Area3D）的球体，改大小直接
 ## 拖 `Trigger/Shape` 的 `radius` 即可。
 ##
-## 几何体全部写在 `scenes/scene_gate.tscn` 里（门框三块 + 发光门板 + 两块字），
+## 几何体全部写在 `scenes/scene_gate.tscn` 里（门框三块 + 发光门板；
+## 标题/提示两块字保留在场景里但始终隐藏），
 ## 编辑器里看得见、拖得动、缩放也行；这个脚本只负责交互和落点。
 ##
 ## 落点：玩家从目标场景回来时，落在本门**正面**（本地 +Z）`arrival_offset` 处。
@@ -39,18 +40,14 @@ func _ready() -> void:
 	add_to_group(SceneFlow.GATE_GROUP)
 	_title.text = title
 	_prompt.text = prompt
+	# 2026-11-02 用户：「这个浮空字去掉」——门只留发光门板，标题/按键提示不再浮在场景里
+	_title.visible = false
 	_prompt.visible = false
 	_trigger.body_entered.connect(_on_body_entered)
 	_trigger.body_exited.connect(_on_body_exited)
 	print("[SceneGate] 「%s」id=%s → %s（落点门「%s」），世界位置 %s"
 		% [title, gate_id, target_scene, target_spawn,
 			str(global_position.snappedf(0.01))])
-
-
-func _process(_delta: float) -> void:
-	var want := _in_range and enabled and not SceneFlow.switching
-	if _prompt.visible != want:
-		_prompt.visible = want
 
 
 func _input(event: InputEvent) -> void:

@@ -82,6 +82,65 @@ def main():
     for o in removed:
         bpy.data.objects.remove(o, do_unlink=True)
     print("DEDUPED_OBJECTS", len(removed), "LEFT", len(keep))
+    by_name = {o.name: o for o in keep}
+
+    # 地毯上的小物件（书、平板、手持游戏机）贴在地毯顶面上，屏幕/封面会和地毯
+    # 共面闪出黑色阶梯（用户 2026-11-02 截图）。把地毯上除地毯本体外的连通块整体
+    # 抬 2 mm：肉眼看不出来，但不再和地毯抢同一层像素。
+    rug = by_name.get("my_gamedevdept_01_rug_01_0")
+    if rug is not None and rug.type == "MESH":
+        me = rug.data
+        parent = list(range(len(me.vertices)))
+        def find(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+        for e in me.edges:
+            ra, rb = find(e.vertices[0]), find(e.vertices[1])
+            if ra != rb:
+                parent[rb] = ra
+        comps = {}
+        for v in me.vertices:
+            comps.setdefault(find(v.index), []).append(v.index)
+        inv = rug.matrix_world.inverted()
+        raised = 0
+        for vs in comps.values():
+            lo = Vector((1e9, 1e9, 1e9))
+            hi = Vector((-1e9, -1e9, -1e9))
+            for vi in vs:
+                w = rug.matrix_world @ me.vertices[vi].co
+                for k in range(3):
+                    lo[k] = min(lo[k], w[k])
+                    hi[k] = max(hi[k], w[k])
+            dims = hi - lo
+            if max(dims) > 2.0 or hi.y < 7.02:
+                continue
+            # 屏幕/封面这种薄片再多抬 1.5 mm，和下面的壳/地毯彻底分开
+            lift = 0.002 + (0.0015 if dims.y < 0.006 else 0.0)
+            for vi in vs:
+                w = rug.matrix_world @ me.vertices[vi].co
+                w.y += lift
+                me.vertices[vi].co = inv @ w
+            raised += 1
+        print("RUG_DECOR_RAISED", raised)
+
+    # 屏幕贴面和壳面共面会闪（用户 2026-11-02：地上那台手持游戏机屏幕左下角）。
+    # 把屏幕网格沿「壳中心 → 屏幕中心」方向抬 1.5 mm，肉眼看不出来但不再同面。
+    for screen_name in ("my_gamedevdept_01_monitor_01_1", "my_gamedevdept_01_monitor_02_1"):
+        scr = by_name.get(screen_name)
+        case = by_name.get(screen_name.rsplit("_", 1)[0] + "_0")
+        if scr is None or case is None:
+            continue
+        slo, shi = world_aabb(scr)
+        clo, chi = world_aabb(case)
+        direction = ((slo + shi) * 0.5) - ((clo + chi) * 0.5)
+        if direction.length < 1e-6:
+            continue
+        m = scr.matrix_world.copy()
+        m.translation += direction.normalized() * 0.0015
+        scr.matrix_world = m
+        print("SCREEN_OFFSET", screen_name, tuple(round(v, 5) for v in direction.normalized()))
 
     # ── 2. 摆正（Z-up）+ 转 180°（门朝 -Z）──
     rot = Matrix.Rotation(math.radians(180), 4, "Z") @ Matrix.Rotation(math.radians(-90), 4, "X")

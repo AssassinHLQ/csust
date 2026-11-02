@@ -461,7 +461,8 @@ func _build_shell() -> void:
 		Vector3(door_w + 0.24, 0.12, 0.08), _mat["trim"])
 
 	# 招牌：门正上方一块发光板 + `Label3D`
-	_box_decor("SignBoard", Vector3(0.0, H + 0.55, D * 0.5 + 0.06),
+	# 2026-11-02 用户：「白色发光板子要碰撞」——从装饰改成带碰撞的箱子
+	_box("SignBoard", Vector3(0.0, H + 0.55, D * 0.5 + 0.06),
 		Vector3(3.4, 0.72, 0.08), _mat["sign"])
 	var lb := Label3D.new()
 	lb.name = "SignText"

@@ -1,58 +1,33 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=20 format=3 uid="uid://cl08irr7qd06t"]
 
-; ── 网格小屋（MeshHut）──────────────────────────────────────────────────────
-; **手工用基元搭的小场景**，作为「记忆平台」上的第三块场地（前两块是平台本身
-; 和泼溅扫描的画室609）。搭它的理由：泼溅那两块是**扫描数据**，改不动、吃显存
-; （画室 277 万点、校园 615 万点），而这块是**一格一格摆出来的**，轻、可编辑、
-; 碰撞干净 —— 拿它当「不想再扫一份数据时怎么办」的对照。
-;
-; ── 怎么读这个文件 ──
-;   1. 整份场景只用**一个网格资源** `Box_unit`（1 × 1 × 1 的方块），
-;      每件东西靠节点的 `scale` 拉伸成需要的尺寸 —— 所以「尺寸」写在 scale 里。
-;      只有灯柱用了 CylinderMesh，因为它是圆的。
-;   2. **所有位置与尺寸都落在 0.05 m 网格上**（自检 `_verify_mesh_hut.gd`
-;      第 2 节会逐个核对）。想改尺寸请保持这个习惯。
-;   3. **只有屋壳用 CSG** —— 因为要在墙上掏出「门 + 两扇窗」，这正是不做布尔
-;      运算就干不成的事。桌子/凳子/货架只是几个方块，直接用 MeshInstance3D +
-;      一个粗碰撞盒，比 CSG 更省、也更好改。
-;
-; ── 三个容易踩的点（都写在正文注释里）──
-;   · 屋壳**没有地板**（Cavity 往下挖穿到 y = −0.20）：抬高的地板会变成台阶，
-;     而 CharacterBody3D **不会自己上台阶**，玩家会被 2 cm 的坎挡在门外。
-;     所以地板就用平台地面，屋壳只做墙 + 屋顶。
-;   · 屋顶做成**单独一个 UNION 子节点**，才有独立的材质（不然屋顶会是墙的颜色）。
-;   · CSG 的碰撞要 `use_collision = true` 才生成（默认是关的）。
-;
-; 摆放位置写在 `scenes/game.tscn` 的 `MeshHut` 节点上（现在 = (14, 0, −15.5)），
-; 落点是 `_probe_platform_free.gd` 量出来的：与最近障碍（霸王龙的碰撞盒）留 2.95 m。
+[ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="1_sign_font"]
 
-[sub_resource type="BoxMesh" id="Box_unit"]
-size = Vector3(1, 1, 1)
+[sub_resource type="BoxMesh" id="Mesh_hut_sign"]
+size = Vector3(0.06, 0.6, 2.6)
 
-[sub_resource type="CylinderMesh" id="Cyl_pole"]
-top_radius = 0.1
-bottom_radius = 0.1
-height = 3.4
-radial_segments = 12
-rings = 1
-
-; 吊灯的吊线：细圆柱（r = 0.025、长 1.15）。灯升高到 4.55 之后，靠这一根
-; 把它和屋顶底面（5.70）连起来 —— 没有它，灯就是「悬在半空的发光板」。
-[sub_resource type="CylinderMesh" id="Cyl_cord"]
-top_radius = 0.025
-bottom_radius = 0.025
-height = 1.15
-radial_segments = 8
-rings = 1
+[sub_resource type="StandardMaterial3D" id="Mat_hut_sign"]
+albedo_color = Color(0.1, 0.22, 0.58, 1)
+metallic = 0.18
+roughness = 0.5
 
 [sub_resource type="StandardMaterial3D" id="Mat_wall"]
 albedo_color = Color(0.76, 0.74, 0.69, 1)
 roughness = 0.88
 
+[sub_resource type="StandardMaterial3D" id="Mat_trim"]
+albedo_color = Color(0.52, 0.49, 0.45, 1)
+roughness = 0.7
+
 [sub_resource type="StandardMaterial3D" id="Mat_roof"]
 albedo_color = Color(0.29, 0.32, 0.37, 1)
 metallic = 0.05
 roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.42, 0.4, 0.37, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="Box_unit"]
 
 [sub_resource type="StandardMaterial3D" id="Mat_wood"]
 albedo_color = Color(0.6, 0.45, 0.29, 1)
@@ -62,10 +37,20 @@ roughness = 0.8
 albedo_color = Color(0.55, 0.4, 0.25, 1)
 roughness = 0.85
 
+[sub_resource type="BoxShape3D" id="Shape_crate"]
+size = Vector3(0.9, 0.9, 0.9)
+
 [sub_resource type="StandardMaterial3D" id="Mat_metal"]
 albedo_color = Color(0.44, 0.46, 0.5, 1)
 metallic = 0.7
 roughness = 0.45
+
+[sub_resource type="CylinderMesh" id="Cyl_pole"]
+top_radius = 0.1
+bottom_radius = 0.1
+height = 3.4
+radial_segments = 12
+rings = 1
 
 [sub_resource type="StandardMaterial3D" id="Mat_lamp"]
 albedo_color = Color(0.95, 0.9, 0.75, 1)
@@ -74,13 +59,8 @@ emission_enabled = true
 emission = Color(1, 0.9, 0.66, 1)
 emission_energy_multiplier = 2.0
 
-[sub_resource type="StandardMaterial3D" id="Mat_trim"]
-albedo_color = Color(0.52, 0.49, 0.45, 1)
-roughness = 0.7
-
-[sub_resource type="StandardMaterial3D" id="Mat_floor"]
-albedo_color = Color(0.42, 0.4, 0.37, 1)
-roughness = 0.95
+[sub_resource type="BoxShape3D" id="Shape_post"]
+size = Vector3(0.2, 3.4, 0.2)
 
 [sub_resource type="BoxShape3D" id="Shape_desk"]
 size = Vector3(1.6, 0.8, 0.8)
@@ -91,316 +71,421 @@ size = Vector3(0.5, 1.1, 0.5)
 [sub_resource type="BoxShape3D" id="Shape_shelf"]
 size = Vector3(1.4, 1.8, 0.4)
 
-[sub_resource type="BoxShape3D" id="Shape_crate"]
-size = Vector3(0.9, 0.9, 0.9)
+[sub_resource type="CylinderMesh" id="Cyl_cord"]
+top_radius = 0.025
+bottom_radius = 0.025
+height = 1.15
+radial_segments = 8
+rings = 1
 
-[sub_resource type="BoxShape3D" id="Shape_post"]
-size = Vector3(0.2, 3.4, 0.2)
+[node name="MeshHut" type="Node3D" unique_id=128419031]
 
-[node name="MeshHut" type="Node3D"]
-
-; ══ 屋壳：外壳 − 掏空 − 门 − 两窗 ∪ 屋顶 ══
-; 顺序要紧：CSG 按**子节点顺序**依次合并，减法会把它**之前**累积的所有东西一起挖掉。
-;
-; ⚠️ 2026-10-21 用户「门这里上面有破绽要去除」—— 真正的病根不是门，是**顺序**：
-;    原来是 外壳 → 掏空 → 屋顶 → 雨篷 → 门 → 两窗，而门洞顶在 y = 2.20、雨篷底面在
-;    y = 2.05，两者在高度上重叠 ⇒ 门这道减法把**雨篷靠墙的那一截**（x −3.60 ~ −3.10、
-;    |z| ≤ 0.60）也咬掉了，门框正上方于是留了一道能看穿的缝（远看是个黑洞）。
-;    现在门与两窗排在屋顶/雨篷**之前**：门只挖得到墙，屋顶/雨篷在它之后重新加回来。
-;
-; ⚠️ 2026-10-21 用户「这个开始平台房子顶上的板子也要删掉」—— **雨篷 `Canopy` 整块删了**。
-;    它是一块 1.60 × 1.00 的深挑檐，把门框上方那 0.30 m 墙条（y 2.20 ~ 2.50）整个罩进
-;    自己的阴影里，站在门外看就是「门上有一条黑缝」。删掉之后门上方是正常受光的墙。
-;    （墙高/门高都没动，所以 `_verify_mesh_hut.gd` 的屋顶射线不用改数。）
-;
-; 2026-10-20 用户「最后这个平台的房子，矮一点点」：墙 3.00 → **2.50**、屋顶
-; 3.10 → **2.60**、窗 1.85 → **1.60**（全部仍在 0.05 网格上，门 2.20 高不变）。
-[node name="Hut" type="CSGCombiner3D" parent="."]
+[node name="Hut" type="CSGCombiner3D" parent="." unique_id=519130765]
 use_collision = true
 
-[node name="Walls" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 2.85, 0)
+[node name="Walls" type="CSGBox3D" parent="Hut" unique_id=1074138766]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.85, 0)
 size = Vector3(6.6, 5.7, 5.6)
 material = SubResource("Mat_wall")
 
-; 掏空：比外壳小 0.2（= 墙厚），但**上下都捅穿** —— 上捅穿是为了让屋顶当盖子，
-; 下捅穿是为了**不留地板**（见文件头第 1 个坑）。
-[node name="Cavity" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 2.9, 0)
+[node name="Cavity" type="CSGBox3D" parent="Hut" unique_id=1152653917]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.9, 0)
+operation = 2
 size = Vector3(6.2, 6.6, 5.2)
-operation = 2
 
-; 门：开在 −X 墙（朝平台中心，玩家从那边过来正好看见门）。
-; 洞 1.20 宽 × 2.20 高，挖穿 0.60（墙只有 0.20 厚，给足余量）。
-;
-; ⚠️ 减法节点上的 `material` 决定**挖出来的那些面**用什么材质（不是默认值）：
-;    不给的话门套/窗套会是 Godot 的默认白灰，在暖色墙上格外突兀（第一版就是这样）。
-;    这里给门窗套一个略深的暖灰，让它们读起来是「特意做的框」。
-;
-; ⚠️ 位置**必须排在 Roof 之前**（见上面第一条「顺序」），否则会挖到屋顶/雨篷。
-[node name="Door" type="CSGBox3D" parent="Hut"]
-position = Vector3(-3.3, 1.1, 0)
+[node name="Door" type="CSGBox3D" parent="Hut" unique_id=1810900378]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.3, 1.1, 0)
+operation = 2
 size = Vector3(0.6, 2.2, 1.2)
-operation = 2
 material = SubResource("Mat_trim")
 
-[node name="WindowA" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 1.6, 2.8)
+[node name="WindowA" type="CSGBox3D" parent="Hut" unique_id=228269265]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 2.8)
+operation = 2
 size = Vector3(1.2, 0.9, 0.6)
-operation = 2
 material = SubResource("Mat_trim")
 
-[node name="WindowB" type="CSGBox3D" parent="Hut"]
-position = Vector3(3.3, 1.6, 0)
+[node name="WindowB" type="CSGBox3D" parent="Hut" unique_id=1658387499]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3, 1.6, 0)
+operation = 2
 size = Vector3(0.6, 0.9, 1.2)
-operation = 2
 material = SubResource("Mat_trim")
 
-; 加高到 5.7 m 之后，二层不能是整面白墙 —— 同样的窗在 y = 4.05 再开一排。
-; ⚠️ 必须仍然排在 Roof **之前**（减法要在盖子之前算）。
-[node name="WindowC" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 4.05, 2.8)
+[node name="WindowC" type="CSGBox3D" parent="Hut" unique_id=1486462335]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.05, 2.8)
+operation = 2
 size = Vector3(1.2, 0.9, 0.6)
-operation = 2
 material = SubResource("Mat_trim")
 
-[node name="WindowD" type="CSGBox3D" parent="Hut"]
-position = Vector3(3.3, 4.05, 0)
+[node name="WindowD" type="CSGBox3D" parent="Hut" unique_id=617797787]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3, 4.05, 0)
+operation = 2
 size = Vector3(0.6, 0.9, 1.2)
-operation = 2
 material = SubResource("Mat_trim")
 
-; 屋顶：7.40 × 6.40（比墙大 0.40×0.80，四周挑檐），底面 y = 2.50 = 墙顶。
-; 它是**盖子**，必须排在掏空和门窗之后，否则中间会被掏穿。
-[node name="Roof" type="CSGBox3D" parent="Hut"]
-position = Vector3(0, 5.8, 0)
+[node name="Roof" type="CSGBox3D" parent="Hut" unique_id=1793052738]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.8, 0)
 size = Vector3(7.4, 0.2, 6.4)
 material = SubResource("Mat_roof")
 
-; ══ 室内地面：**只有外观、故意没有碰撞** ══
-; 0.05 厚、中心在 y = 0 → 顶面在 +0.025（位置与尺寸都还在 0.05 网格上）。
-;
-; ⚠️ 为什么不给它碰撞（这是这一版唯一的「作弊」，值得写清楚）：
-;   有碰撞的地板 = 一道 2.5 cm 的坎，而 **CharacterBody3D 不会自己上台阶** ——
-;   `_verify_mesh_hut` 第 3 节量过：门口放一道 10 cm 的坎，`cast_motion` 的
-;   safe 从 1.000 掉到 0.387，人就被挡在门外了。
-;   「正确」的做法是把平台地板在小屋 footprint 里挖掉（game.gd 为画室609 就是这么
-;   干的），但那条路要改 `_carve_fallback_floor()`，而且 `--splat=off` 时不挖洞、
-;   两块地面会共面闪烁。原型阶段不值当，所以：**没有碰撞 → 绝不可能挡人**，
-;   代价是玩家模型的小腿会陷进这 2.5 cm（4 m 外的越肩相机上约 2~3 px，看不出来）。
-;   哪天要正经用，就照 game.gd 那条挖洞的路走。
-[node name="FloorPlate" type="MeshInstance3D" parent="."]
-scale = Vector3(6.2, 0.05, 5.2)
-mesh = SubResource("Box_unit")
+[node name="SignBoard" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.35, 2.85, 0)
+mesh = SubResource("Mesh_hut_sign")
+material_override = SubResource("Mat_hut_sign")
+
+[node name="SignText" type="Label3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -3.39, 2.85, 0)
+pixel_size = 0.03
+text = "临时服务器据点"
+font = ExtResource("1_sign_font")
+font_size = 12
+outline_size = 0
+alpha_cut = 1
+alpha_antialiasing_mode = 0
+texture_filter = 2
+modulate = Color(0.95, 0.93, 0.86, 1)
+
+[node name="FloorPlate" type="MeshInstance3D" parent="." unique_id=164245715]
+transform = Transform3D(6.2, 0, 0, 0, 0.05, 0, 0, 0, 5.2, 0, 0, 0)
 material_override = SubResource("Mat_floor")
-
-; ══ 桌子：1.60 × 0.80，台面顶 y = 0.80。贴在 −Z 墙上，避开「门正对着的走道」══
-; 走道 = 门洞中心线（局部 z = 0）左右各 0.90 m。玩家从门进来是直着走的，
-; 家具全塞在走道之外，免得一进门就撞桌子（`_verify_mesh_hut` 第 3 节量这条）。
-[node name="Desk" type="Node3D" parent="."]
-
-[node name="Top" type="MeshInstance3D" parent="Desk"]
-position = Vector3(-0.6, 0.75, -2.2)
-scale = Vector3(1.6, 0.1, 0.8)
 mesh = SubResource("Box_unit")
+
+[node name="Desk" type="Node3D" parent="." unique_id=1662987761]
+
+[node name="Top" type="MeshInstance3D" parent="Desk" unique_id=2112795088]
+transform = Transform3D(1.6, 0, 0, 0, 0.1, 0, 0, 0, 0.8, -0.6, 0.75, -2.2)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg0" type="MeshInstance3D" parent="Desk"]
-position = Vector3(-1.35, 0.35, -2.55)
-scale = Vector3(0.05, 0.7, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg0" type="MeshInstance3D" parent="Desk" unique_id=1109358840]
+transform = Transform3D(0.05, 0, 0, 0, 0.7, 0, 0, 0, 0.05, -1.35, 0.35, -2.55)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg1" type="MeshInstance3D" parent="Desk"]
-position = Vector3(0.15, 0.35, -2.55)
-scale = Vector3(0.05, 0.7, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg1" type="MeshInstance3D" parent="Desk" unique_id=1551175714]
+transform = Transform3D(0.05, 0, 0, 0, 0.7, 0, 0, 0, 0.05, 0.15, 0.35, -2.55)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg2" type="MeshInstance3D" parent="Desk"]
-position = Vector3(-1.35, 0.35, -1.85)
-scale = Vector3(0.05, 0.7, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg2" type="MeshInstance3D" parent="Desk" unique_id=107474108]
+transform = Transform3D(0.05, 0, 0, 0, 0.7, 0, 0, 0, 0.05, -1.35, 0.35, -1.85)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg3" type="MeshInstance3D" parent="Desk"]
-position = Vector3(0.15, 0.35, -1.85)
-scale = Vector3(0.05, 0.7, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg3" type="MeshInstance3D" parent="Desk" unique_id=954088006]
+transform = Transform3D(0.05, 0, 0, 0, 0.7, 0, 0, 0, 0.05, 0.15, 0.35, -1.85)
 material_override = SubResource("Mat_wood")
-
-; ══ 凳子（带靠背）：座面顶 y = 0.60，摆在桌子前面、背朝走道 ══
-[node name="Stool" type="Node3D" parent="."]
-
-[node name="Seat" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.6, 0.55, -1.3)
-scale = Vector3(0.45, 0.1, 0.45)
 mesh = SubResource("Box_unit")
+
+[node name="Stool" type="Node3D" parent="." unique_id=589118004]
+
+[node name="Seat" type="MeshInstance3D" parent="Stool" unique_id=1923755107]
+transform = Transform3D(0.45, 0, 0, 0, 0.1, 0, 0, 0, 0.45, -0.6, 0.55, -1.3)
 material_override = SubResource("Mat_wood")
-
-[node name="Back" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.6, 0.85, -1.1)
-scale = Vector3(0.45, 0.5, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Back" type="MeshInstance3D" parent="Stool" unique_id=888086922]
+transform = Transform3D(0.45, 0, 0, 0, 0.5, 0, 0, 0, 0.05, -0.6, 0.85, -1.1)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg0" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.8, 0.25, -1.5)
-scale = Vector3(0.05, 0.5, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg0" type="MeshInstance3D" parent="Stool" unique_id=726201836]
+transform = Transform3D(0.05, 0, 0, 0, 0.5, 0, 0, 0, 0.05, -0.8, 0.25, -1.5)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg1" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.4, 0.25, -1.5)
-scale = Vector3(0.05, 0.5, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg1" type="MeshInstance3D" parent="Stool" unique_id=757009385]
+transform = Transform3D(0.05, 0, 0, 0, 0.5, 0, 0, 0, 0.05, -0.4, 0.25, -1.5)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg2" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.8, 0.25, -1.1)
-scale = Vector3(0.05, 0.5, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg2" type="MeshInstance3D" parent="Stool" unique_id=1392784929]
+transform = Transform3D(0.05, 0, 0, 0, 0.5, 0, 0, 0, 0.05, -0.8, 0.25, -1.1)
 material_override = SubResource("Mat_wood")
-
-[node name="Leg3" type="MeshInstance3D" parent="Stool"]
-position = Vector3(-0.4, 0.25, -1.1)
-scale = Vector3(0.05, 0.5, 0.05)
 mesh = SubResource("Box_unit")
+
+[node name="Leg3" type="MeshInstance3D" parent="Stool" unique_id=579902799]
+transform = Transform3D(0.05, 0, 0, 0, 0.5, 0, 0, 0, 0.05, -0.4, 0.25, -1.1)
 material_override = SubResource("Mat_wood")
-
-; ══ 货架：贴 +Z 墙，三层 ══
-[node name="Shelf" type="Node3D" parent="."]
-
-[node name="Board0" type="MeshInstance3D" parent="Shelf"]
-position = Vector3(2.35, 0.5, 2.4)
-scale = Vector3(1.3, 0.05, 0.35)
 mesh = SubResource("Box_unit")
+
+[node name="Shelf" type="Node3D" parent="." unique_id=1789255386]
+
+[node name="Board0" type="MeshInstance3D" parent="Shelf" unique_id=1154326466]
+transform = Transform3D(1.3, 0, 0, 0, 0.05, 0, 0, 0, 0.35, 2.35, 0.5, 2.4)
 material_override = SubResource("Mat_wood")
-
-[node name="Board1" type="MeshInstance3D" parent="Shelf"]
-position = Vector3(2.35, 1, 2.4)
-scale = Vector3(1.3, 0.05, 0.35)
 mesh = SubResource("Box_unit")
+
+[node name="Board1" type="MeshInstance3D" parent="Shelf" unique_id=1697170156]
+transform = Transform3D(1.3, 0, 0, 0, 0.05, 0, 0, 0, 0.35, 2.35, 1, 2.4)
 material_override = SubResource("Mat_wood")
-
-[node name="Board2" type="MeshInstance3D" parent="Shelf"]
-position = Vector3(2.35, 1.5, 2.4)
-scale = Vector3(1.3, 0.05, 0.35)
 mesh = SubResource("Box_unit")
+
+[node name="Board2" type="MeshInstance3D" parent="Shelf" unique_id=1209140451]
+transform = Transform3D(1.3, 0, 0, 0, 0.05, 0, 0, 0, 0.35, 2.35, 1.5, 2.4)
 material_override = SubResource("Mat_wood")
-
-[node name="Side0" type="MeshInstance3D" parent="Shelf"]
-position = Vector3(1.7, 1, 2.4)
-scale = Vector3(0.05, 1.6, 0.35)
 mesh = SubResource("Box_unit")
+
+[node name="Side0" type="MeshInstance3D" parent="Shelf" unique_id=1558469262]
+transform = Transform3D(0.05, 0, 0, 0, 1.6, 0, 0, 0, 0.35, 1.7, 1, 2.4)
 material_override = SubResource("Mat_wood")
-
-[node name="Side1" type="MeshInstance3D" parent="Shelf"]
-position = Vector3(3, 1, 2.4)
-scale = Vector3(0.05, 1.6, 0.35)
 mesh = SubResource("Box_unit")
+
+[node name="Side1" type="MeshInstance3D" parent="Shelf" unique_id=188968421]
+transform = Transform3D(0.05, 0, 0, 0, 1.6, 0, 0, 0, 0.35, 3, 1, 2.4)
 material_override = SubResource("Mat_wood")
-
-; ══ 木箱 ×3（两个并排 + 一个叠上去），带碰撞 ══
-[node name="Crates" type="StaticBody3D" parent="."]
-
-[node name="Crate0" type="MeshInstance3D" parent="Crates"]
-position = Vector3(4.2, 0.45, -1.2)
-scale = Vector3(0.9, 0.9, 0.9)
 mesh = SubResource("Box_unit")
+
+[node name="Crates" type="StaticBody3D" parent="." unique_id=1125198392]
+
+[node name="Crate0" type="MeshInstance3D" parent="Crates" unique_id=182228205]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 0.45, -1.2)
 material_override = SubResource("Mat_crate")
-
-[node name="Crate1" type="MeshInstance3D" parent="Crates"]
-position = Vector3(4.2, 0.45, -0.2)
-scale = Vector3(0.9, 0.9, 0.9)
 mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_crate")
 
-[node name="Crate2" type="MeshInstance3D" parent="Crates"]
-position = Vector3(4.2, 1.35, -1.2)
-scale = Vector3(0.9, 0.9, 0.9)
+[node name="Crate1" type="MeshInstance3D" parent="Crates" unique_id=1405700915]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 0.45, -0.2)
+material_override = SubResource("Mat_crate")
 mesh = SubResource("Box_unit")
-material_override = SubResource("Mat_crate")
 
-[node name="Shape0" type="CollisionShape3D" parent="Crates"]
-position = Vector3(4.2, 0.45, -1.2)
+[node name="Crate2" type="MeshInstance3D" parent="Crates" unique_id=2016348501]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 1.35, -1.2)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape0" type="CollisionShape3D" parent="Crates" unique_id=993435536]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45, -1.2)
 shape = SubResource("Shape_crate")
 
-[node name="Shape1" type="CollisionShape3D" parent="Crates"]
-position = Vector3(4.2, 0.45, -0.2)
+[node name="Shape1" type="CollisionShape3D" parent="Crates" unique_id=1296988278]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45, -0.2)
 shape = SubResource("Shape_crate")
 
-[node name="Shape2" type="CollisionShape3D" parent="Crates"]
-position = Vector3(4.2, 1.35, -1.2)
+[node name="Crate3" type="MeshInstance3D" parent="Crates" unique_id=460438941]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 0.45, 0.81841725)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape3" type="CollisionShape3D" parent="Crates" unique_id=2063746916]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45, 0.81841725)
 shape = SubResource("Shape_crate")
 
-; ══ 灯柱（圆的，所以是全场景唯一的圆柱）══
-[node name="LampPost" type="Node3D" parent="."]
+[node name="Crate4" type="MeshInstance3D" parent="Crates" unique_id=297452463]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 2.254602, -1.3419778)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
 
-[node name="Pole" type="MeshInstance3D" parent="LampPost"]
-position = Vector3(-4.2, 1.7, -2.2)
-mesh = SubResource("Cyl_pole")
+[node name="Shape4" type="CollisionShape3D" parent="Crates" unique_id=1190619928]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 2.254602, -1.3419778)
+shape = SubResource("Shape_crate")
+
+[node name="Crate5" type="MeshInstance3D" parent="Crates" unique_id=2069132588]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 1.1824785, -0.3359692)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape5" type="CollisionShape3D" parent="Crates" unique_id=1413381736]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1.1824785, -0.3359692)
+shape = SubResource("Shape_crate")
+
+[node name="Crate6" type="MeshInstance3D" parent="Crates" unique_id=106815756]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 1.1824785, 0.3860184)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape6" type="CollisionShape3D" parent="Crates" unique_id=2027812156]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1.1824785, 0.3860184)
+shape = SubResource("Shape_crate")
+
+[node name="Crate7" type="MeshInstance3D" parent="Crates" unique_id=1715118576]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 2.0418944, -0.36035252)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape7" type="CollisionShape3D" parent="Crates" unique_id=425308877]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 2.0418944, -0.36035252)
+shape = SubResource("Shape_crate")
+
+[node name="Crate8" type="MeshInstance3D" parent="Crates" unique_id=552078842]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 2.9336593, -0.9135268)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape8" type="CollisionShape3D" parent="Crates" unique_id=478519787]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 2.9336593, -0.9135268)
+shape = SubResource("Shape_crate")
+
+[node name="Crate9" type="MeshInstance3D" parent="Crates" unique_id=390138375]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 3.0928013, -1.5705556)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape9" type="CollisionShape3D" parent="Crates" unique_id=772984512]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 3.0928013, -1.5705556)
+shape = SubResource("Shape_crate")
+
+[node name="Crate10" type="MeshInstance3D" parent="Crates" unique_id=2067491640]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 3.6840687, -2.408422)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape10" type="CollisionShape3D" parent="Crates" unique_id=1694202846]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 3.6840687, -2.408422)
+shape = SubResource("Shape_crate")
+
+[node name="Crate11" type="MeshInstance3D" parent="Crates" unique_id=1845218677]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 4.3371463, -3.021222)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape11" type="CollisionShape3D" parent="Crates" unique_id=1888694997]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 4.3371463, -3.021222)
+shape = SubResource("Shape_crate")
+
+[node name="Crate12" type="MeshInstance3D" parent="Crates" unique_id=1765816529]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 5.2320347, -3.7064447)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape12" type="CollisionShape3D" parent="Crates" unique_id=1755007770]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 5.2320347, -3.7064447)
+shape = SubResource("Shape_crate")
+
+[node name="Crate13" type="MeshInstance3D" parent="Crates" unique_id=1540975328]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 5.2320347, -3.7064447)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape13" type="CollisionShape3D" parent="Crates" unique_id=1021582769]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 5.2320347, -3.7064447)
+shape = SubResource("Shape_crate")
+
+[node name="Shape2" type="CollisionShape3D" parent="Crates" unique_id=1349877909]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1.35, -1.2)
+shape = SubResource("Shape_crate")
+
+[node name="Crate14" type="MeshInstance3D" parent="Crates" unique_id=1057748586]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 1.35, -2.1373043)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape14" type="CollisionShape3D" parent="Crates" unique_id=904831365]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1.35, -2.1373043)
+shape = SubResource("Shape_crate")
+
+[node name="Crate15" type="MeshInstance3D" parent="Crates" unique_id=578642947]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 1.35, -3.1077204)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape15" type="CollisionShape3D" parent="Crates" unique_id=771687860]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1.35, -3.1077204)
+shape = SubResource("Shape_crate")
+
+[node name="Crate16" type="MeshInstance3D" parent="Crates" unique_id=1069824565]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 0.45338118, -2.151441)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape16" type="CollisionShape3D" parent="Crates" unique_id=1778245995]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45338118, -2.151441)
+shape = SubResource("Shape_crate")
+
+[node name="Crate17" type="MeshInstance3D" parent="Crates" unique_id=1213672992]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 0.45338118, -3.115016)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape17" type="CollisionShape3D" parent="Crates" unique_id=326044093]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45338118, -3.115016)
+shape = SubResource("Shape_crate")
+
+[node name="Crate18" type="MeshInstance3D" parent="Crates" unique_id=1648910356]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 2.2623148, -3.115016)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape18" type="CollisionShape3D" parent="Crates" unique_id=718412455]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 2.2623148, -3.115016)
+shape = SubResource("Shape_crate")
+
+[node name="Crate19" type="MeshInstance3D" parent="Crates" unique_id=155719858]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 2.2763221, -2.247346)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape19" type="CollisionShape3D" parent="Crates" unique_id=1050929538]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 2.2763221, -2.247346)
+shape = SubResource("Shape_crate")
+
+[node name="Crate20" type="MeshInstance3D" parent="Crates" unique_id=523901806]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 3.0298264, -2.6915536)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape20" type="CollisionShape3D" parent="Crates" unique_id=107923990]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 3.0298264, -2.6915536)
+shape = SubResource("Shape_crate")
+
+[node name="Crate21" type="MeshInstance3D" parent="Crates" unique_id=497928511]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 4.2, 3.0298264, -2.6915536)
+material_override = SubResource("Mat_crate")
+mesh = SubResource("Box_unit")
+
+[node name="Shape21" type="CollisionShape3D" parent="Crates" unique_id=461975546]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 3.0298264, -2.6915536)
+shape = SubResource("Shape_crate")
+
+[node name="LampPost" type="Node3D" parent="." unique_id=308824286]
+
+[node name="Pole" type="MeshInstance3D" parent="LampPost" unique_id=1007794611]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.2, 1.7, -2.2)
 material_override = SubResource("Mat_metal")
+mesh = SubResource("Cyl_pole")
 
-[node name="Head" type="MeshInstance3D" parent="LampPost"]
-position = Vector3(-4.2, 3.55, -2.2)
-scale = Vector3(0.5, 0.3, 0.5)
-mesh = SubResource("Box_unit")
+[node name="Head" type="MeshInstance3D" parent="LampPost" unique_id=1311826631]
+transform = Transform3D(0.5, 0, 0, 0, 0.3, 0, 0, 0, 0.5, -4.2, 3.55, -2.2)
 material_override = SubResource("Mat_lamp")
+mesh = SubResource("Box_unit")
 
-[node name="LampBody" type="StaticBody3D" parent="."]
+[node name="LampBody" type="StaticBody3D" parent="." unique_id=1395379353]
 
-[node name="Shape" type="CollisionShape3D" parent="LampBody"]
-position = Vector3(-4.2, 1.7, -2.2)
+[node name="Shape" type="CollisionShape3D" parent="LampBody" unique_id=32138066]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.2, 1.7, -2.2)
 shape = SubResource("Shape_post")
 
-; ══ 家具的碰撞：一件一个粗盒，不做逐腿碰撞（跑图时没人会去撞桌腿）══
-[node name="FurnitureBody" type="StaticBody3D" parent="."]
+[node name="FurnitureBody" type="StaticBody3D" parent="." unique_id=265555417]
 
-[node name="DeskShape" type="CollisionShape3D" parent="FurnitureBody"]
-position = Vector3(-0.6, 0.4, -2.2)
+[node name="DeskShape" type="CollisionShape3D" parent="FurnitureBody" unique_id=643643175]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0.4, -2.2)
 shape = SubResource("Shape_desk")
 
-[node name="StoolShape" type="CollisionShape3D" parent="FurnitureBody"]
-position = Vector3(-0.6, 0.55, -1.3)
+[node name="StoolShape" type="CollisionShape3D" parent="FurnitureBody" unique_id=377898684]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0.55, -1.3)
 shape = SubResource("Shape_stool")
 
-[node name="ShelfShape" type="CollisionShape3D" parent="FurnitureBody"]
-position = Vector3(2.35, 0.9, 2.4)
+[node name="ShelfShape" type="CollisionShape3D" parent="FurnitureBody" unique_id=987458732]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.35, 0.9, 2.4)
 shape = SubResource("Shape_shelf")
 
-; ══ 灯：两盏都关阴影（省电；本项目对功耗敏感）══
-;
-; ⚠️ 2026-10-22 用户「灯没提上去啊，还是浮空」—— 墙从 2.50 升到 5.70 的时候，
-;    这盏吊灯**留在 y = 2.45 没动**。旧墙高下它离天花板只有 5 cm（看着就是吸顶灯），
-;    加高之后它变成一块孤零零悬在 3.2 m 空中的发光板。现在：
-;      · 灯板抬到 4.50（顶面 4.55），下方留 4.5 m 够人走、上方留 1.15 m 吊线；
-;      · 新增 `LampCord`（细圆柱 5.700 → 4.550），把灯和屋顶底面连起来；
-;      · `HutLight` 跟着上到 4.40（灯板下方一点，避免灯光被灯板自身挡）；
-;        omni_range 仍是 8 m，从 4.4 m 打到地面还有余量。
-;    量过的数（`_probe_hut_lamp.gd`）：改前 灯顶 2.50 → 屋顶底面 5.70 差 3.20 m，
-;    灯正上方/正下方都没有任何东西（纯悬空）；改后吊线顶 5.700 与屋顶底面**贴合**。
-[node name="HutLamp" type="MeshInstance3D" parent="."]
-position = Vector3(0, 4.5, 0)
-scale = Vector3(0.4, 0.1, 0.4)
-mesh = SubResource("Box_unit")
+[node name="HutLamp" type="MeshInstance3D" parent="." unique_id=1536977828]
+transform = Transform3D(0.4, 0, 0, 0, 0.1, 0, 0, 0, 0.4, 0, 4.5, 0)
 material_override = SubResource("Mat_lamp")
+mesh = SubResource("Box_unit")
 
-[node name="LampCord" type="MeshInstance3D" parent="."]
-position = Vector3(0, 5.125, 0)
-mesh = SubResource("Cyl_cord")
+[node name="LampCord" type="MeshInstance3D" parent="." unique_id=1150084508]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.125, 0)
 material_override = SubResource("Mat_metal")
+mesh = SubResource("Cyl_cord")
 
-[node name="HutLight" type="OmniLight3D" parent="."]
-position = Vector3(0, 4.4, 0)
+[node name="HutLight" type="OmniLight3D" parent="." unique_id=1698406229]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 light_color = Color(1, 0.93, 0.8, 1)
 light_energy = 2.0
-shadow_enabled = false
 omni_range = 8.0
 
-[node name="PostLight" type="OmniLight3D" parent="."]
-position = Vector3(-4.2, 3.2, -2.2)
+[node name="PostLight" type="OmniLight3D" parent="." unique_id=183296008]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.2, 3.2, -2.2)
 light_color = Color(1, 0.88, 0.7, 1)
 light_energy = 3.0
-shadow_enabled = false
 omni_range = 14.0
