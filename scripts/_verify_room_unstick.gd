@@ -18,8 +18,8 @@ func _run() -> void:
 	var player := game.get_node_or_null("Player") as CharacterBody3D
 	if player == null:
 		quit(1); return
-	var chair_shape := game.find_child("Chair02", true, false)
-	print("[unstick] Chair02 shape = %s" % (chair_shape.get("shape").get_class() if chair_shape else "missing"))
+	var col := game.get_node_or_null("GameDevRoom/Model/Collision/Mesh") as CollisionShape3D
+	print("[unstick] 开发部碰撞 = %s" % (col.shape.get_class() if col and col.shape else "missing"))
 	player.global_position = Vector3(52.70, 0.80, 4.30)
 	player.velocity = Vector3.ZERO
 	player.set("_yaw", PI)
