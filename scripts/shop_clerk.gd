@@ -581,10 +581,15 @@ func _on_dialogue_custom(step_name: String, data: Dictionary) -> void:
 		return
 	var amount := int(data.get("amount", 0))
 	var label := String(data.get("label", "整机"))
-	if BankCard.spend(amount):
+	# ⚠️ 必须走期货那边扣：`bank_yuan` 是 HUD 和结算用的缓存，只扣 BankCard 会
+	#    出现「HUD 余额没变」，而且下一次结算会按旧 bank_yuan 把钱写回去。
+	var fut := get_tree().get_first_node_in_group("futures") as ParkourFutures
+	var paid := fut.spend_bank(amount, label) if fut != null else BankCard.spend(amount)
+	if paid:
 		_bought = true
-		print("[Clerk] 成交：%s，扣款 %s，余额 %s" % [
-			label, BankCard.format_yuan(amount), BankCard.format_yuan(BankCard.balance())])
+		print("[Clerk] 成交：%s，扣款 %s，银行卡余额 %s%s" % [
+			label, BankCard.format_yuan(amount), BankCard.format_yuan(BankCard.balance()),
+			"" if fut == null else "，HUD/期货余额 %s" % BankCard.format_yuan(fut.bank_yuan)])
 	else:
 		push_warning("[Clerk] 扣款失败：卡上不够 %s" % BankCard.format_yuan(amount))
 

@@ -950,6 +950,22 @@ func add_bank(yuan: int, label: String) -> void:
 		label, _fmt_yuan(amount), _fmt_yuan(bank_yuan)], Color(1.0, 0.86, 0.42))
 
 
+## 商店买整机用：从银行卡扣钱，同步 HUD 的「银行卡」列和结算用的 `bank_yuan`。
+## 只调 `BankCard.spend()` 的话 HUD 不会动，而且下一次结算
+## `BankCard.set_balance(bank_yuan)` 会把已经花掉的钱**写回去**。
+func spend_bank(yuan: int, label: String) -> bool:
+	var amount := maxi(yuan, 0)
+	if amount <= 0:
+		return true
+	if not BankCard.spend(amount):
+		return false
+	bank_yuan = BankCard.balance()
+	_update_hud_text()
+	_banner_text("%s ← 银行卡 -¥%s（余额 ¥%s）" % [
+		label, _fmt_yuan(amount), _fmt_yuan(bank_yuan)], Color(1.0, 0.7, 0.42))
+	return true
+
+
 ## 打怪掉落的现金：**先记成本轮资产**，踩结算台时才转进银行卡。
 ## 用户 2026-11「为什么我还没有结算就 40w 了」——掉落直接进卡会让卡里凭空多钱；
 ## 资产栏里能看到，结算台照旧一次转卡，钱的来路才说得清。
