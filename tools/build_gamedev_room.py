@@ -131,7 +131,19 @@ def main():
     print("TRIS", len(room.data.loop_triangles), "VERTS", len(room.data.vertices),
           "MATERIALS", len(room.data.materials))
 
-    # ── 5. 导出（Godot 不认 Draco，务必关掉）──
+    # ── 5. 材质统一哑光：Rhino/MMD 导出的默认材质很光，掠射角会像玻璃一样
+    #       映出天空（用户 2026-11-02：「这房子怎么这么通透」）──
+    for mat in room.data.materials:
+        if mat is None or not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type == "BSDF_PRINCIPLED":
+                node.inputs["Metallic"].default_value = 0.0
+                node.inputs["Roughness"].default_value = 0.85
+                if "Specular IOR Level" in node.inputs:
+                    node.inputs["Specular IOR Level"].default_value = 0.25
+
+    # ── 6. 导出（Godot 不认 Draco，务必关掉）──
     bpy.ops.object.select_all(action="DESELECT")
     room.select_set(True)
     bpy.context.view_layer.objects.active = room

@@ -46,4 +46,7 @@ func _run() -> void:
 	await _shot(cam, Vector3(48.5, 2.0, 4.5), Vector3(55.0, 1.4, 0.0), "04_inside.png", 66.0)
 	# 5) 字牌近景（看字体是否糊）
 	await _shot(cam, Vector3(42.4, 3.5, 3.5), Vector3(45.15, 3.5, 3.5), "05_sign.png", 45.0)
+	# 6) 掠射角（之前墙会映出天空，看着像通透）
+	await _shot(cam, Vector3(42.3, 1.1, -6.2), Vector3(45.17, 6.0, 3.6), "06_graze.png", 62.0)
+	print("[gamedev-shot] fps=", Engine.get_frames_per_second())
 	quit(0)

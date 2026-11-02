@@ -1,7 +1,6 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="PackedScene" path="res://models/gamedev_room/gamedev_room.glb" id="1_room"]
-[ext_resource type="Script" path="res://scripts/gamedev_room.gd" id="2_script"]
 
 [sub_resource type="SystemFont" id="SystemFont_sign"]
 font_names = PackedStringArray("Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif")
@@ -15,8 +14,88 @@ albedo_color = Color(0.07, 0.1, 0.16, 1)
 metallic = 0.25
 roughness = 0.45
 
+[sub_resource type="BoxShape3D" id="BoxShape_Floor"]
+size = Vector3(10.06, 0.4, 13.41)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Ceiling"]
+size = Vector3(10.66, 0.301, 13.41)
+
+[sub_resource type="BoxShape3D" id="BoxShape_WallWest"]
+size = Vector3(0.302, 6.433, 13.41)
+
+[sub_resource type="BoxShape3D" id="BoxShape_WallEast"]
+size = Vector3(0.301, 6.433, 13.41)
+
+[sub_resource type="BoxShape3D" id="BoxShape_WallSouth"]
+size = Vector3(10.06, 6.431, 0.3)
+
+[sub_resource type="BoxShape3D" id="BoxShape_WallNorthL"]
+size = Vector3(0.763, 6.43, 0.3)
+
+[sub_resource type="BoxShape3D" id="BoxShape_WallNorthR"]
+size = Vector3(7.109, 6.43, 0.3)
+
+[sub_resource type="BoxShape3D" id="BoxShape_DoorLintel"]
+size = Vector3(2.186, 3.655, 0.3)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Sofa"]
+size = Vector3(3.004, 1.139, 1.265)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Teddy"]
+size = Vector3(2.113, 2.019, 1.571)
+
+[sub_resource type="BoxShape3D" id="BoxShape_LockerA"]
+size = Vector3(1.212, 2.358, 0.776)
+
+[sub_resource type="BoxShape3D" id="BoxShape_LockerB"]
+size = Vector3(1.212, 2.358, 0.776)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Shelf03A"]
+size = Vector3(0.718, 3.061, 1.355)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Shelf03B"]
+size = Vector3(0.718, 3.061, 1.355)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Shelf01"]
+size = Vector3(0.781, 3.554, 1.36)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Shelf02"]
+size = Vector3(0.715, 3.41, 1.349)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Desk01"]
+size = Vector3(1.88, 1.823, 1.737)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Desk02"]
+size = Vector3(1.009, 1.042, 1.738)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Desk03A"]
+size = Vector3(0.89, 1.129, 1.739)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Desk03B"]
+size = Vector3(0.89, 1.129, 1.739)
+
+[sub_resource type="BoxShape3D" id="BoxShape_TvStand"]
+size = Vector3(2.875, 2.246, 2.097)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Monitor01"]
+size = Vector3(1.515, 1.407, 1.383)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Chair01"]
+size = Vector3(0.794, 0.521, 0.794)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Chair02"]
+size = Vector3(1.36, 1.179, 1.259)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Plant"]
+size = Vector3(1.259, 2.066, 0.855)
+
+[sub_resource type="BoxShape3D" id="BoxShape_BoxesA"]
+size = Vector3(1.316, 1.139, 1.957)
+
+[sub_resource type="BoxShape3D" id="BoxShape_BoxesB"]
+size = Vector3(1.316, 1.139, 1.957)
+
 [node name="GameDevRoom" type="Node3D"]
-script = ExtResource("2_script")
 
 [node name="Model" parent="." instance=ExtResource("1_room")]
 rotation = Vector3(0, 1.5707964, 0)
@@ -25,14 +104,14 @@ rotation = Vector3(0, 1.5707964, 0)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.9, -3)
 light_color = Color(1, 0.95, 0.87, 1)
 light_energy = 1.6
-shadow_enabled = true
+shadow_enabled = false
 omni_range = 9.5
 
 [node name="LightB" type="OmniLight3D" parent="Model"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.9, 3)
 light_color = Color(1, 0.95, 0.87, 1)
 light_energy = 1.6
-shadow_enabled = true
+shadow_enabled = false
 omni_range = 9.5
 
 [node name="SignBoard" type="MeshInstance3D" parent="Model"]
@@ -47,3 +126,113 @@ text = "游戏开发部"
 font = SubResource("SystemFont_sign")
 font_size = 75
 modulate = Color(0.93, 0.96, 1, 1)
+
+[node name="Collision" type="StaticBody3D" parent="Model"]
+
+[node name="Floor" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.31, -0.2, -0.125)
+shape = SubResource("BoxShape_Floor")
+
+[node name="Ceiling" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.31, 6.581, -0.123)
+shape = SubResource("BoxShape_Ceiling")
+
+[node name="WallWest" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.49, 3.215, -0.123)
+shape = SubResource("BoxShape_WallWest")
+
+[node name="WallEast" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.868, 3.215, -0.123)
+shape = SubResource("BoxShape_WallEast")
+
+[node name="WallSouth" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.31, 3.214, 6.187)
+shape = SubResource("BoxShape_WallSouth")
+
+[node name="WallNorthL" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.957, 3.215, -6.679)
+shape = SubResource("BoxShape_WallNorthL")
+
+[node name="WallNorthR" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.165, 3.215, -6.679)
+shape = SubResource("BoxShape_WallNorthR")
+
+[node name="DoorLintel" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.483, 4.603, -6.679)
+shape = SubResource("BoxShape_DoorLintel")
+
+[node name="Sofa" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.33, 0.569, -5.058)
+shape = SubResource("BoxShape_Sofa")
+
+[node name="Teddy" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.508, 1.014, 5.218)
+shape = SubResource("BoxShape_Teddy")
+
+[node name="LockerA" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.262, 1.178, 5.606)
+shape = SubResource("BoxShape_LockerA")
+
+[node name="LockerB" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.051, 1.178, 5.609)
+shape = SubResource("BoxShape_LockerB")
+
+[node name="Shelf03A" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.411, 1.531, 0.848)
+shape = SubResource("BoxShape_Shelf03A")
+
+[node name="Shelf03B" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.419, 1.531, -1.849)
+shape = SubResource("BoxShape_Shelf03B")
+
+[node name="Shelf01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.39, 1.789, 2.194)
+shape = SubResource("BoxShape_Shelf01")
+
+[node name="Shelf02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.413, 1.716, -0.504)
+shape = SubResource("BoxShape_Shelf02")
+
+[node name="Desk01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.464, 0.904, 3.46)
+shape = SubResource("BoxShape_Desk01")
+
+[node name="Desk02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.948, 0.52, -0.012)
+shape = SubResource("BoxShape_Desk02")
+
+[node name="Desk03A" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.895, 0.564, 1.723)
+shape = SubResource("BoxShape_Desk03A")
+
+[node name="Desk03B" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.895, 0.564, -1.75)
+shape = SubResource("BoxShape_Desk03B")
+
+[node name="TvStand" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.257, 1.122, 4.879)
+shape = SubResource("BoxShape_TvStand")
+
+[node name="Monitor01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.23, 0.702, 1.279)
+shape = SubResource("BoxShape_Monitor01")
+
+[node name="Chair01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.287, 0.26, -1.849)
+shape = SubResource("BoxShape_Chair01")
+
+[node name="Chair02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.466, 0.662, 0.703)
+shape = SubResource("BoxShape_Chair02")
+
+[node name="Plant" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.464, 1.028, -5.269)
+shape = SubResource("BoxShape_Plant")
+
+[node name="BoxesA" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.961, 0.577, 4.203)
+shape = SubResource("BoxShape_BoxesA")
+
+[node name="BoxesB" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.779, 0.577, -3.148)
+shape = SubResource("BoxShape_BoxesB")
