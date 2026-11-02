@@ -44,4 +44,6 @@ func _run() -> void:
 	await _shot(cam, Vector3(43.4, 1.7, 3.5), Vector3(54.0, 2.2, 1.5), "03_door.png", 62.0)
 	# 4) 室内
 	await _shot(cam, Vector3(48.5, 2.0, 4.5), Vector3(55.0, 1.4, 0.0), "04_inside.png", 66.0)
+	# 5) 字牌近景（看字体是否糊）
+	await _shot(cam, Vector3(42.4, 3.5, 3.5), Vector3(45.15, 3.5, 3.5), "05_sign.png", 45.0)
 	quit(0)
