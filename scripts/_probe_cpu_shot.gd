@@ -41,8 +41,8 @@ func _run() -> void:
 	cam.far = 50.0
 	cam.current = true
 	root.add_child(cam)
-	cam.global_position = center + Vector3(3.2, 2.6, 3.2)
-	cam.look_at(center + Vector3(0.0, 0.6, 0.0), Vector3.UP)
+	cam.global_position = center + Vector3(5.5, 4.5, 5.5)
+	cam.look_at(center + Vector3(0.0, 0.4, 0.0), Vector3.UP)
 	await _wait(12)
 	root.get_texture().get_image().save_png(OUT + "/01_desk_cpus.png")
 

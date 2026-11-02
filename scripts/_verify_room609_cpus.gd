@@ -33,9 +33,9 @@ func _run() -> void:
 		if c.has_method("price"):
 			list.append(c)
 	var cpu0 := list[0] as Node3D
-	print("[cpu] 609 屋顶 %d 颗（期望 15）" % list.size())
-	for c in list:
-		var n := c as Node3D
+	print("[cpu] 609 屋顶 %d 颗（期望 149）" % list.size())
+	for i in [0, 1, list.size() - 2, list.size() - 1]:
+		var n := list[i] as Node3D
 		print("[cpu]   %-6s 世界位置 %s　单价 ¥%d" % [
 			n.name, str(n.global_position.snappedf(0.01)), int(n.call("price"))])
 
@@ -77,6 +77,6 @@ func _run() -> void:
 	print("[cpu] 按 F 后：银行卡 %d → %d、HUD 银行卡 %d → %d、这颗还在=%s" % [
 		b0, BankCard.balance(), 0, int(fut.get("bank_yuan")), str(is_instance_valid(cpu0))])
 	print("[cpu] 结论：%s" % (
-		"OK" if list.size() == 15 and BankCard.balance() == b0 + 4599
+		"OK" if list.size() == 149 and BankCard.balance() == b0 + 4599
 		and int(fut.get("bank_yuan")) == 4599 and not is_instance_valid(cpu0) else "FAIL"))
 	quit(0)

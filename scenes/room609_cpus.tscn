@@ -6,49 +6,451 @@
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, 5.79, 3.54)
 
 [node name="Cpu1" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, -1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -3.50)
 
 [node name="Cpu2" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, -1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -3.50)
 
 [node name="Cpu3" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, -1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -3.50)
 
 [node name="Cpu4" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, -0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -3.50)
 
 [node name="Cpu5" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, -0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -3.50)
 
 [node name="Cpu6" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, -0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -3.50)
 
 [node name="Cpu7" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 0.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -3.50)
 
 [node name="Cpu8" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 0.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -3.50)
 
 [node name="Cpu9" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 0.00)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -3.50)
 
 [node name="Cpu10" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -3.50)
 
 [node name="Cpu11" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -3.00)
 
 [node name="Cpu12" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 0.60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -3.00)
 
 [node name="Cpu13" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.60, 0, 1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -3.00)
 
 [node name="Cpu14" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00, 0, 1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -3.00)
 
 [node name="Cpu15" parent="." instance=ExtResource("1_cpu")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.60, 0, 1.20)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -3.00)
+
+[node name="Cpu16" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -3.00)
+
+[node name="Cpu17" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -3.00)
+
+[node name="Cpu18" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -3.00)
+
+[node name="Cpu19" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -3.00)
+
+[node name="Cpu20" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -3.00)
+
+[node name="Cpu21" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -2.50)
+
+[node name="Cpu22" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -2.50)
+
+[node name="Cpu23" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -2.50)
+
+[node name="Cpu24" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -2.50)
+
+[node name="Cpu25" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -2.50)
+
+[node name="Cpu26" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -2.50)
+
+[node name="Cpu27" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -2.50)
+
+[node name="Cpu28" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -2.50)
+
+[node name="Cpu29" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -2.50)
+
+[node name="Cpu30" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -2.50)
+
+[node name="Cpu31" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -2.00)
+
+[node name="Cpu32" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -2.00)
+
+[node name="Cpu33" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -2.00)
+
+[node name="Cpu34" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -2.00)
+
+[node name="Cpu35" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -2.00)
+
+[node name="Cpu36" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -2.00)
+
+[node name="Cpu37" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -2.00)
+
+[node name="Cpu38" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -2.00)
+
+[node name="Cpu39" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -2.00)
+
+[node name="Cpu40" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -2.00)
+
+[node name="Cpu41" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -1.50)
+
+[node name="Cpu42" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -1.50)
+
+[node name="Cpu43" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -1.50)
+
+[node name="Cpu44" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -1.50)
+
+[node name="Cpu45" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -1.50)
+
+[node name="Cpu46" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -1.50)
+
+[node name="Cpu47" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -1.50)
+
+[node name="Cpu48" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -1.50)
+
+[node name="Cpu49" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -1.50)
+
+[node name="Cpu50" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -1.50)
+
+[node name="Cpu51" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -1.00)
+
+[node name="Cpu52" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -1.00)
+
+[node name="Cpu53" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -1.00)
+
+[node name="Cpu54" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -1.00)
+
+[node name="Cpu55" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -1.00)
+
+[node name="Cpu56" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -1.00)
+
+[node name="Cpu57" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -1.00)
+
+[node name="Cpu58" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -1.00)
+
+[node name="Cpu59" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -1.00)
+
+[node name="Cpu60" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -1.00)
+
+[node name="Cpu61" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -0.50)
+
+[node name="Cpu62" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, -0.50)
+
+[node name="Cpu63" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, -0.50)
+
+[node name="Cpu64" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, -0.50)
+
+[node name="Cpu65" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, -0.50)
+
+[node name="Cpu66" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, -0.50)
+
+[node name="Cpu67" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, -0.50)
+
+[node name="Cpu68" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, -0.50)
+
+[node name="Cpu69" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, -0.50)
+
+[node name="Cpu70" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, -0.50)
+
+[node name="Cpu71" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 0.00)
+
+[node name="Cpu72" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 0.00)
+
+[node name="Cpu73" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 0.00)
+
+[node name="Cpu74" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 0.00)
+
+[node name="Cpu75" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.00)
+
+[node name="Cpu76" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.00)
+
+[node name="Cpu77" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 0.00)
+
+[node name="Cpu78" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 0.00)
+
+[node name="Cpu79" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 0.00)
+
+[node name="Cpu80" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 0.00)
+
+[node name="Cpu81" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 0.50)
+
+[node name="Cpu82" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 0.50)
+
+[node name="Cpu83" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 0.50)
+
+[node name="Cpu84" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 0.50)
+
+[node name="Cpu85" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 0.50)
+
+[node name="Cpu86" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 0.50)
+
+[node name="Cpu87" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 0.50)
+
+[node name="Cpu88" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 0.50)
+
+[node name="Cpu89" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 0.50)
+
+[node name="Cpu90" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 0.50)
+
+[node name="Cpu91" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 1.00)
+
+[node name="Cpu92" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 1.00)
+
+[node name="Cpu93" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 1.00)
+
+[node name="Cpu94" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 1.00)
+
+[node name="Cpu95" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 1.00)
+
+[node name="Cpu96" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 1.00)
+
+[node name="Cpu97" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 1.00)
+
+[node name="Cpu98" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 1.00)
+
+[node name="Cpu99" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 1.00)
+
+[node name="Cpu100" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 1.00)
+
+[node name="Cpu101" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 1.50)
+
+[node name="Cpu102" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 1.50)
+
+[node name="Cpu103" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 1.50)
+
+[node name="Cpu104" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 1.50)
+
+[node name="Cpu105" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 1.50)
+
+[node name="Cpu106" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 1.50)
+
+[node name="Cpu107" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 1.50)
+
+[node name="Cpu108" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 1.50)
+
+[node name="Cpu109" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 1.50)
+
+[node name="Cpu110" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 1.50)
+
+[node name="Cpu111" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 2.00)
+
+[node name="Cpu112" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 2.00)
+
+[node name="Cpu113" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 2.00)
+
+[node name="Cpu114" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 2.00)
+
+[node name="Cpu115" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 2.00)
+
+[node name="Cpu116" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 2.00)
+
+[node name="Cpu117" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 2.00)
+
+[node name="Cpu118" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 2.00)
+
+[node name="Cpu119" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 2.00)
+
+[node name="Cpu120" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 2.00)
+
+[node name="Cpu121" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 2.50)
+
+[node name="Cpu122" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 2.50)
+
+[node name="Cpu123" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 2.50)
+
+[node name="Cpu124" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 2.50)
+
+[node name="Cpu125" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 2.50)
+
+[node name="Cpu126" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 2.50)
+
+[node name="Cpu127" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 2.50)
+
+[node name="Cpu128" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 2.50)
+
+[node name="Cpu129" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 2.50)
+
+[node name="Cpu130" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 2.50)
+
+[node name="Cpu131" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 3.00)
+
+[node name="Cpu132" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 3.00)
+
+[node name="Cpu133" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 3.00)
+
+[node name="Cpu134" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 3.00)
+
+[node name="Cpu135" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 3.00)
+
+[node name="Cpu136" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 3.00)
+
+[node name="Cpu137" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 3.00)
+
+[node name="Cpu138" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 3.00)
+
+[node name="Cpu139" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 3.00)
+
+[node name="Cpu140" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0, 3.00)
+
+[node name="Cpu141" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 3.50)
+
+[node name="Cpu142" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 0, 3.50)
+
+[node name="Cpu143" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0, 3.50)
+
+[node name="Cpu144" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 3.50)
+
+[node name="Cpu145" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0, 3.50)
+
+[node name="Cpu146" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0, 3.50)
+
+[node name="Cpu147" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 3.50)
+
+[node name="Cpu148" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0, 3.50)
+
+[node name="Cpu149" parent="." instance=ExtResource("1_cpu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0, 3.50)
 
 [node name="Beacon" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
@@ -57,6 +459,6 @@ billboard = 1
 no_depth_test = true
 modulate = Color(1, 0.88, 0.45, 1)
 outline_modulate = Color(0.05, 0.05, 0.08, 1)
-text = "隐藏福利 · Ryzen 9 9950X3D ×15"
+text = "隐藏福利 · Ryzen 9 9950X3D ×149"
 font_size = 64
 outline_size = 16
