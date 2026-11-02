@@ -286,7 +286,7 @@ const ENTRIES := [
 		"distributed": false,
 		"source": "https://space.bilibili.com/523537077",
 		"license_file": "",
-		"note": "12 句中文台词（serika_01..09 / momoi_01..02 / aris_01），由 tools/gen_shop_voice.py 经本机 GPT-SoVITS API 生成；.gitignore 排除整个目录",
+		"note": "12 句中文台词（serika_01..09 / momoi_01..02 / aris_01），由 tools/gen_shop_voice.py 经本机 GPT-SoVITS API 生成；爱丽丝前半句「邦邦咔邦」改用用户提供的 DSH 余额挂件皮肤视频原声（BA 角色声音，版权 NEXON/Yostar），与 TTS「就这套了」拼接，候选 aris_01_authentic_v1..3；.gitignore 排除整个目录",
 	},
 	{
 		"group": "音效",
