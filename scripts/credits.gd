@@ -325,6 +325,17 @@ const ENTRIES := [
 	},
 	{
 		"group": "界面与字体",
+		"path": "assets/ui/gamedev_sign_12px.ttf",
+		"title": "游戏开发部招牌用的 5 字像素子集",
+		"author": "TakWolf（Fusion Pixel Font 子集）",
+		"license": "SIL OFL 1.1（允许随软件分发；仅保留「游戏开发部」五字与 notdef）",
+		"distributed": true,
+		"source": "https://github.com/TakWolf/fusion-pixel-font",
+		"license_file": "assets/ui/LICENSE_FusionPixel_OFL.txt",
+		"note": "从 font.ttf 子集化（2.7 KB），12 px 原生网格；导入关抗锯齿、关子像素定位、开 mipmap，Label3D 用 nearest 采样，招牌才是真·像素字",
+	},
+	{
+		"group": "界面与字体",
 		"path": "assets/ui_font",
 		"title": "Aa 字库「Aa暗夜深渊」（界面显示字体）",
 		"author": "Aa 字库",

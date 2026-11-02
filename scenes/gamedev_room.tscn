@@ -1,10 +1,7 @@
 [gd_scene load_steps=32 format=3]
 
 [ext_resource type="PackedScene" path="res://models/gamedev_room/gamedev_room.glb" id="1_room"]
-
-[sub_resource type="SystemFont" id="SystemFont_sign"]
-font_names = PackedStringArray("Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif")
-font_weight = 700
+[ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_sign"]
 size = Vector3(4.2, 0.86, 0.06)
@@ -121,10 +118,14 @@ material_override = SubResource("Mat_sign")
 
 [node name="Sign" type="Label3D" parent="Model"]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -3.48, 3.62, -6.9)
-pixel_size = 0.008
+pixel_size = 0.05
 text = "游戏开发部"
-font = SubResource("SystemFont_sign")
-font_size = 75
+font = ExtResource("3_sign_font")
+font_size = 12
+outline_size = 0
+alpha_cut = 1
+alpha_antialiasing_mode = 0
+texture_filter = 2
 modulate = Color(0.93, 0.96, 1, 1)
 
 [node name="Collision" type="StaticBody3D" parent="Model"]
