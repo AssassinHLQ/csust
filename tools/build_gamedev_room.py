@@ -157,46 +157,6 @@ def main():
             me.vertices[vi].co = inv @ w
         print("SCREEN_FACE_RAISED", screen_faces, "verts", len(screen_verts))
 
-    # 粉色手持机真正的黑色屏幕在 z≈1.24 的台面上（和地毯顶共面）。
-    # 按 UV 采样只抬“黑”的那一层，白底/白键不动 —— 用户说抬 1 mm 就够。
-    if rug is not None and rug.type == "MESH":
-        me = rug.data
-        inv = rug.matrix_world.inverted()
-        img = None
-        for m in me.materials:
-            if m and m.use_nodes:
-                for n in m.node_tree.nodes:
-                    if n.type == "TEX_IMAGE" and n.image:
-                        img = n.image
-                        break
-            if img:
-                break
-        uv_layer = me.uv_layers.active.data
-        lifted_v = set()
-        lifted_f = 0
-        if img is not None:
-            w, h = img.size
-            for p in me.polygons:
-                vs = [rug.matrix_world @ me.vertices[i].co for i in p.vertices]
-                c = sum(vs, Vector((0, 0, 0))) / len(vs)
-                n = (rug.matrix_world.to_3x3() @ p.normal).normalized()
-                if not (abs(c.y - 7.052) < 0.004 and abs(c.x - 6.67) < 0.14
-                        and abs(c.z - 1.24) < 0.14 and n.y > 0.8 and p.area < 0.08):
-                    continue
-                uvs = [uv_layer[li].uv for li in p.loop_indices]
-                uc = sum(uvs, Vector((0, 0))) / len(uvs)
-                px = int((uc.x % 1.0) * w)
-                py = int((uc.y % 1.0) * h)
-                idx = (py * w + px) * 4
-                # 整个屏幕区（黑屏 + 白底）一起抬 1 mm，但不动大块地毯面
-                lifted_v.update(p.vertices)
-                lifted_f += 1
-        for vi in lifted_v:
-            wpos = rug.matrix_world @ me.vertices[vi].co
-            wpos.y += 0.001
-            me.vertices[vi].co = inv @ wpos
-        print("BLACK_SCREEN_RAISED", lifted_f, "verts", len(lifted_v))
-
     # 屏幕贴面和壳面共面会闪（用户 2026-11-02：地上那台手持游戏机屏幕左下角）。
     # 屏幕贴面和壳面共面会闪（用户 2026-11-02：地上那台手持游戏机屏幕左下角）。
     # 把屏幕网格沿「壳中心 → 屏幕中心」方向抬 1.5 mm，肉眼看不出来但不再同面。

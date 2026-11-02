@@ -6,7 +6,7 @@
 size = Vector3(0.06, 0.6, 2.6)
 
 [sub_resource type="StandardMaterial3D" id="Mat_hut_sign"]
-albedo_color = Color(0.1, 0.22, 0.58, 1)
+albedo_color = Color(0.2, 0.45, 0.85, 1)
 metallic = 0.18
 roughness = 0.5
 
