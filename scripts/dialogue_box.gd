@@ -92,9 +92,18 @@ const CHOICE_RIGHT_MARGIN := 240.0
 
 ## ── 剧情插图（`image` 步骤）──
 ## 弹在画面中间偏上，下面还留着对话框；按「继续」关掉。
-const IMAGE_MAX_W := 860.0
-const IMAGE_MAX_H := 520.0
-const IMAGE_LIFT := 90.0
+const IMAGE_MAX_W := 1120.0
+const IMAGE_MAX_H := 680.0
+## 配置单可以比普通插图再大一圈（它下面没有独立配文）
+const SHEET_MAX_W := 1200.0
+const SHEET_MAX_H := 720.0
+## 图片区可用高度：对话框顶（900 - BOX_BOTTOM - BOX_HEIGHT = 734）再留 6 px
+const IMAGE_SAFE_TOP := 6.0
+const IMAGE_SAFE_BOTTOM := 900.0 - BOX_BOTTOM - BOX_HEIGHT
+## 父控件中心 y（1600×900 的设计画布）
+const SAFE_CENTER_Y := 450.0
+## 图片底板内：6 px 边框 + 图片 + 6 px + 30 px 配文
+const IMAGE_CAPTION_BAND := 42.0
 
 ## 打字速度（字/秒）。剧本里 `@speed` 可以中途改。30 大致是「比默读稍快」。
 const CHARS_PER_SEC := 30.0
@@ -742,13 +751,18 @@ func _show_image(path: String, caption := "") -> void:
 	var s := minf(IMAGE_MAX_W / maxf(iw, 1.0), IMAGE_MAX_H / maxf(ih, 1.0))
 	var w := iw * s
 	var h := ih * s
+	var pw := w + 12.0
+	var ph := h + IMAGE_CAPTION_BAND
+	# 整块（图 + 配文）在上方可用区域里居中；以前先设 size 再改 offset，
+	# 会把底板撑到两倍大（2026-11-02 用户截图里底板跑出屏幕底部）。
+	var top := clampf((IMAGE_SAFE_BOTTOM - ph) * 0.5, IMAGE_SAFE_TOP,
+		maxf(IMAGE_SAFE_TOP, IMAGE_SAFE_BOTTOM - ph))
 	_image_rect.texture = tex
 	_image_rect.size = Vector2(w, h)
-	_image_panel.size = Vector2(w + 12.0, h + 12.0)
-	_image_panel.offset_left = -_image_panel.size.x * 0.5
-	_image_panel.offset_right = _image_panel.size.x * 0.5
-	_image_panel.offset_top = -_image_panel.size.y * 0.5 - IMAGE_LIFT
-	_image_panel.offset_bottom = _image_panel.size.y * 0.5 - IMAGE_LIFT
+	_image_panel.offset_left = -pw * 0.5
+	_image_panel.offset_right = pw * 0.5
+	_image_panel.offset_top = top - SAFE_CENTER_Y
+	_image_panel.offset_bottom = top + ph - SAFE_CENTER_Y
 	_image_caption.position = Vector2(6.0, h + 12.0)
 	_image_caption.size = Vector2(w, 30.0)
 	_image_caption.text = caption
@@ -804,17 +818,18 @@ func _show_sheet(step: Dictionary) -> void:
 		push_warning("[Dialogue] 两张配置单加载成了同一张底图：%s（检查导入缓存 / 是否重新导入）"
 			% base.resource_path)
 	_last_sheet_base = base
-	var s := minf(IMAGE_MAX_W / float(base.get_width()), IMAGE_MAX_H / float(base.get_height()))
+	var s := minf(SHEET_MAX_W / float(base.get_width()), SHEET_MAX_H / float(base.get_height()))
 	var w := float(base.get_width()) * s
 	var h := float(base.get_height()) * s
 
 	_sheet_base.texture = base
 	_sheet_base.size = Vector2(w, h)
-	_sheet_root.size = Vector2(w, h)
+	var sheet_top := clampf((IMAGE_SAFE_BOTTOM - h) * 0.5, IMAGE_SAFE_TOP,
+		maxf(IMAGE_SAFE_TOP, IMAGE_SAFE_BOTTOM - h))
 	_sheet_root.offset_left = -w * 0.5
 	_sheet_root.offset_right = w * 0.5
-	_sheet_root.offset_top = -h * 0.5 - IMAGE_LIFT
-	_sheet_root.offset_bottom = h * 0.5 - IMAGE_LIFT
+	_sheet_root.offset_top = sheet_top - SAFE_CENTER_Y
+	_sheet_root.offset_bottom = sheet_top + h - SAFE_CENTER_Y
 
 	# 右侧照片区的覆盖层（坐标是源图像素，按 s 缩放到显示尺寸）
 	var ph: Dictionary = step.get("photo", {})
@@ -1093,7 +1108,9 @@ func _build() -> void:
 	_sheet_caption = Label.new()
 	_sheet_caption.name = "Caption"
 	_sheet_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sheet_caption.clip_text = true
+	# 放大会后默认配文会顶到右边被截断，改成自动换行（配文底色板有 54 px，够两行）
+	_sheet_caption.clip_text = false
+	_sheet_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_sheet_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_sheet_caption.add_theme_font_size_override("font_size", 12)
 	_sheet_caption.add_theme_color_override("font_color", Color(0.38, 0.33, 0.26))
