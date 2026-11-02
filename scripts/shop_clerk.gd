@@ -238,7 +238,7 @@ const TALK_OPTIONS := [
 			{"kind": "say", "who": SPEAKER, "voice": "shop/serika_03",
 				"text": "B300，288G 显存，八卡一柜——光卡就四十来万一张，整机五百二十万，适合给老师送礼,配您正合适,我也多赚钱[TVT]"},
 			# 小桃拆台：服务器卡没技巧，5090 才是硬核
-			{"kind": "say", "who": "小桃", "text": "我超威,配电脑给我配好的啊.", "voice": "shop/momoi_01"},
+			{"kind": "say", "who": "小桃", "text": "我chovy,配电脑给我配好的啊.", "voice": "shop/momoi_01"},
 			{"kind": "say", "who": "小桃", "voice": "shop/momoi_02",
 				"text": "要我说,5090的硬核才是王道,你那服务器卡根本就没技巧"},
 			{"kind": "say", "who": SPEAKER, "text": "……行吧，那给您换一张单子。", "voice": "shop/serika_04"},
