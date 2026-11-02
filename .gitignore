@@ -114,3 +114,6 @@ __pycache__/
 
 # 商店配音（GPT-SoVITS 音色模型由 SLNeil 训练；声音沿用 BA 角色，仅本地演示）
 /story/voice/shop/
+
+# 配音候选（每句 5 个 take，人工挑选用；声音版权同 shop）
+/story/voice/_audition/
