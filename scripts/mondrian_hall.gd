@@ -235,6 +235,11 @@ func _slope(nm: String, x: Vector2, z0: float, z1: float,
 	var length := sqrt(run * run + rise * rise)
 	var c := Vector3((x.x + x.y) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5)
 	var basis := Basis(Vector3.RIGHT, -atan2(rise, run))
+	# 盒厚 0.3 是沿坡面法线算的；把中心往坡面下方退半个厚度，
+	# 让**上表面**正好落在 y0→y1 这条线上。原来直接用 c 当中心，
+	# 坡面比两端地面高 13 cm —— 上下口都有一道坎（用户：「楼梯不够连续」）。
+	var half := 0.15 * signf(basis.y.y)
+	c -= basis.y * half
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = Vector3(x.y - x.x, 0.3, length)
@@ -251,6 +256,21 @@ func _slope(nm: String, x: Vector2, z0: float, z1: float,
 	cs.transform = Transform3D(basis, c)
 	_body.add_child(cs)
 	solid_count += 1
+	# 视觉踏步线：坡面还是整块（走起来顺），但每 0.6 m 一条黑压边，
+	# 远看就是楼梯，不再是光秃秃一条大白坡（用户 2026-11-02：「楼梯好粗糙」）。
+	var n_steps := 14
+	for i in range(1, n_steps):
+		var t := float(i) / float(n_steps)
+		var at := Vector3((x.x + x.y) * 0.5, lerpf(y0, y1, t) + 0.015, lerpf(z0, z1, t))
+		var tread := MeshInstance3D.new()
+		tread.name = _unique(_decor, "%s_Tread%d" % [nm, i])
+		var tm := BoxMesh.new()
+		tm.size = Vector3(x.y - x.x - 0.05, 0.02, 0.055)
+		tread.mesh = tm
+		tread.material_override = _mat["black"]
+		tread.transform = Transform3D(basis, at)
+		_decor.add_child(tread)
+		decor_count += 1
 
 
 ## 一道墙。openings 每项 = [沿墙起, 沿墙止, 底, 顶]。
@@ -311,7 +331,8 @@ func _slab(nm: String, lo: Vector2, hi: Vector2, y: float, holes: Array = []) ->
 # ══════════════════════════ 三层房间 ══════════════════════════
 
 func _build_room1() -> void:
-	_solid("F1_Floor", Vector3((L1_MIN.x + L1_MAX.x) * 0.5, FLOOR_Y - 0.03,
+	# 顶面 0.51：比外面的基座（0.50）高 1 cm，避免和基座顶面共面闪
+	_solid("F1_Floor", Vector3((L1_MIN.x + L1_MAX.x) * 0.5, FLOOR_Y - 0.02,
 		(L1_MIN.y + L1_MAX.y) * 0.5),
 		Vector3(L1_MAX.x - L1_MIN.x, 0.06, L1_MAX.y - L1_MIN.y), _mat["floor"])
 	_wall("W1_S", true, L1_MAX.y, L1_MIN.x, L1_MAX.x, FLOOR_Y, L1_TOP,
@@ -355,6 +376,31 @@ func _build_room3() -> void:
 		Vector3(4.9, 0.02, 1.2), _mat["red"])
 	_deco("PlatformB_Blue", Vector3(PLAT_C.x, PLAT_TOP + 0.01, PLAT_C.y),
 		Vector3(2.6, 0.02, 2.0), _mat["blue"])
+	# 终点台阶：红垫顶 11.3，直接从三层地面（9.2）跳 2.1 m 上不去；
+	# 从起跳台（10.3）跳 1.0 m 也太吃操作。补五级 0.4 m 的台阶，
+	# 从房间南侧顺着走上去（用户 2026-11-02：「红终点卡住了上不去」）。
+	for i in 5:
+		var top: float = L2_TOP + 0.4 * float(i + 1)      # 9.6 ~ 11.2
+		var zc: float = -3.85 + 0.5 * float(4 - i)        # 从红垫前沿往南铺
+		_solid("GoalStep%d" % i, Vector3(LEDGE_C.x, (L2_TOP + top) * 0.5, zc),
+			Vector3(2.2, top - L2_TOP, 0.5), _mat["white"])
+	# 终点提示：解锁条件/踩上去通关，省得玩家猜顶上有什么
+	var hint := Label3D.new()
+	hint.name = "GoalHint"
+	hint.text = "终点 踩上去通关"
+	hint.font = load("res://assets/ui/gamedev_sign_12px.ttf") as FontFile
+	hint.font_size = 12
+	hint.pixel_size = 0.045
+	hint.position = Vector3(LEDGE_C.x, LEDGE_TOP + 0.72, L3_MIN.y + 0.235)
+	hint.modulate = Color(0.95, 0.92, 0.86, 1)
+	hint.outline_size = 0
+	hint.alpha_cut = 1
+	hint.alpha_antialiasing_mode = 0
+	hint.texture_filter = 2
+	_decor.add_child(hint)
+	decor_count += 1
+	_deco("GoalHintPlate", Vector3(LEDGE_C.x, LEDGE_TOP + 0.72, L3_MIN.y + 0.22),
+		Vector3(4.6, 0.62, 0.02), _mat["black"])
 
 
 func _build_roof() -> void:
@@ -375,8 +421,9 @@ func _ramp_rail(nm: String, x: Vector2, z0: float, z1: float, y0: float, y1: flo
 	var rise: float = y1 - y0
 	var length := sqrt(run * run + rise * rise)
 	var basis := Basis(Vector3.RIGHT, -atan2(rise, run))
+	var drop := 0.15 * absf(basis.y.y)
 	var mid_u := (x.x + x.y) * 0.5
-	var mid_y: float = (y0 + y1) * 0.5
+	var mid_y: float = (y0 + y1) * 0.5 - drop
 	var mid_z: float = (z0 + z1) * 0.5
 	for k in range(2):
 		var side: float = x.x + 0.10 if k == 0 else x.y - 0.10
