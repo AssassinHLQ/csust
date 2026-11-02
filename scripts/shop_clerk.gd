@@ -167,7 +167,7 @@ const CONFIG_SHEET := [
 const SHEET_B300 := {
 	"base": "res://assets/story/config_sheet.png",
 	"caption": "图上为八卡计算托盘：8 颗 B300 + 24 条 ECC 内存（鼠标移到左边的部件名试试）",
-	"parts": ["gpu", "server", "cpu", "ram", "ssd", "ssd", "nic", "cooling", "psu"],
+	"parts": ["gpu", "server", "cpu", "ram", "ssd_m2b", "ssd", "nic", "cooling", "psu"],
 	"labels": [
 		"显卡 · NVIDIA B300 · 288GB HBM3E ×8",
 		"整机 · HGX B300 八卡基板 + 8U 机箱",
@@ -183,7 +183,7 @@ const SHEET_B300 := {
 const SHEET_5090 := {
 	"base": "res://assets/story/config_sheet_5090.png",
 	"caption": "图上为八卡 5090 工作站：8 张显卡 + 8 条 ECC 内存（鼠标移到左边的部件名试试）",
-	"parts": ["gpu5090", "", "", "ram", "ssd", "ssd", "psu", "", ""],
+	"parts": ["gpu5090", "frame", "cpu_tr", "ram_udimm", "ssd_m2", "ssd_t705", "psu_atx", "cooling_fan", "monitor"],
 	"labels": [
 		"显卡 · RTX 5090 · 32GB GDDR7 ×8",
 		"整机 · WRX90 主板 + 开放式机架",

@@ -419,13 +419,13 @@ const ENTRIES := [
 	{
 		"group": "剧情与图标",
 		"path": "assets/story/parts",
-		"title": "配置单悬停用的零件照片（10 张）",
-		"author": "NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体",
+		"title": "配置单悬停用的零件照片（19 张）",
+		"author": "NVIDIA / Intel / AMD / 三星 / 金百达 / 超花（Super Flower）/ Corsair 等厂商及知乎、IT之家、搜狐、什么值得买、阿里巴巴、中国制造网等媒体/商城",
 		"license": "第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用",
 		"distributed": false,
 		"source": "逐张出处见 assets/story/parts/SOURCES.md",
 		"license_file": "",
-		"note": "gpu / server / cpu / ram / ssd / nic / cooling / psu 各一张，统一裁成 492×560 深色底；缺图时配置单照常显示，只是悬停不换图",
+		"note": "gpu / server / cpu / ram / ssd_m2b / ssd / nic / cooling / psu / gpu5090 / hero_5090 / frame / cpu_tr / ram_udimm / ssd_m2 / ssd_t705 / psu_atx / cooling_fan / monitor，统一裁成 492×560 深色底；两张配置单的九行都是各自独立的照片，没有一张重复，缺图时配置单照常显示，只是悬停不换图",
 	},
 ]
 

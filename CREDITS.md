@@ -82,10 +82,10 @@
 | 项目图标 `icon.png` | **待确认** | 待确认 | ✅ | `icon.png` | 若不是原创请替换为自有图标 |
 | 工具墙图标（7-Zip / GitHub / hashcat / Ollama / 知天下） | Simple Icons（CC0 矢量）+ 各商标持有人；hashcat / 知天下 图标由使用者提供 | 矢量图 CC0 1.0；图标本身是各厂商商标，仅作演示与识别用 | ✅ | `assets/icons/`，[simpleicons.org](https://simpleicons.org/) | CC0 只覆盖著作权、不授予商标权；知天下图标对外发布前需向主办方确认 |
 | 柴关电脑城配置单插图（B300 / 八卡 5090 两张） | 本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 [usa0.top](https://usa0.top)） | 排版与文案原创（MIT）；B300 那张右侧为 AI 生成图，5090 那张右侧为网络整机图（见 SOURCES.md） | ✅ | `assets/story/config_sheet.png`、`config_sheet_5090.png`、`hero_b300.png` | 两张都是 1600×970；中文用微软雅黑排版（AI 直接画中文字会糊） |
-| 配置单悬停用的零件照片（10 张） | NVIDIA / Intel / Corsair / WD 等厂商及知乎、IT之家、搜狐、中国自动化网等媒体 | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | ❌ | `assets/story/parts/` | gpu / server / cpu / ram / ssd / nic / cooling / psu 各一张，统一裁成 492×560 深色底；**逐张出处见 [`assets/story/parts/SOURCES.md`](assets/story/parts/SOURCES.md)**；缺图时配置单照常显示，只是悬停不换图 |
+| 配置单悬停用的零件照片（19 张） | NVIDIA / Intel / AMD / 三星 / 金百达 / 超花（Super Flower）/ Corsair 等厂商及知乎、IT之家、搜狐、什么值得买、阿里巴巴、中国制造网等媒体/商城 | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | ❌ | `assets/story/parts/` | gpu / server / cpu / ram / ssd_m2b / ssd / nic / cooling / psu / gpu5090 / hero_5090 / frame / cpu_tr / ram_udimm / ssd_m2 / ssd_t705 / psu_atx / cooling_fan / monitor，统一裁成 492×560 深色底；两张单九行都是各自独立的照片，没有一张重复；**逐张出处见 [`assets/story/parts/SOURCES.md`](assets/story/parts/SOURCES.md)**；缺图时配置单照常显示，只是悬停不换图 |
 | 游戏开发部活动室配图（买完电脑 · 确认收货地址） | Blue Archive 游戏内场景（NEXON Games / Yostar）；截图由使用者提供 | 专有：仅本地学习演示，不可商用、不可再分发 | ❌ `assets/story/gamedev_room.jpg` | `资产/story/`；用户 2026-11 提供 `BG_GameDevRoom.jpg` | 商店买完整机后「确认收货地址」弹图，配文「千禧年学院一年级游戏开发部活动室」；`.gitignore` 排除 |
 
-> ⚠️ `assets/story/parts/` 里那 8 张是网上找来的产品照，**没有授权**。
+> ⚠️ `assets/story/parts/` 里那 19 张是网上找来的产品照，**没有授权**。
 > 本地玩没问题，**任何形式的发布前必须换成**厂商 press kit、CC0 图或自己拍的，
 > 换完记得同步 `SOURCES.md` 与本表，再跑 `_verify_credits.gd`。
 

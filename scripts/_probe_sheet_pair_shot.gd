@@ -42,6 +42,18 @@ func _hover_row(box: DialogueBox, i: int) -> void:
 		hov.name if hov != null else "null"))
 
 
+
+## 鼠标模拟在无头/窗口脚本里不稳定，出图直接按行数据把覆盖层换成对应零件图，
+## 证明「这一行该显示哪张」；真正的悬停逻辑由 _verify_config_parts.gd 与旧探针保证。
+func _force_row(box: DialogueBox, spec: Dictionary, i: int) -> void:
+	var part := String((spec["parts"] as Array)[i])
+	var tex := load("res://assets/story/parts/%s.png" % part) as Texture2D
+	var hv := box.get("_sheet_hover") as TextureRect
+	hv.texture = tex
+	hv.visible = true
+	var cap := box.get("_sheet_caption") as Label
+	cap.text = String((spec["labels"] as Array)[i])
+
 func _run() -> void:
 	DisplayServer.window_move_to_foreground()
 	root.grab_focus()
@@ -77,6 +89,9 @@ func _run() -> void:
 	print("[sheet-shot] 悬停第 1 行：可见=%s 图=%s" % [
 		str(hv1.visible), hv1.texture.resource_path if hv1.texture != null else "-"])
 	await _shot("01_sheet_b300")
+	for idx in [4, 5]:
+		_force_row(box, ShopClerk.SHEET_B300, int(idx))
+		await _shot("01b_b300_row%d" % (int(idx) + 1))
 	box.advance()
 	await _wait(4)
 	print("[sheet-shot] 关掉第一张后 mouse_mode=%d（2=CAPTURED 才对）" % Input.mouse_mode)
@@ -92,6 +107,10 @@ func _run() -> void:
 	print("[sheet-shot] 悬停第 1 行：可见=%s 图=%s（期望 gpu5090.png）" % [
 		str(hv2.visible), hv2.texture.resource_path if hv2.texture != null else "-"])
 	await _shot("02_sheet_5090")
+	for idx in [1, 3, 7, 8]:
+		_force_row(box, ShopClerk.SHEET_5090, int(idx))
+		await _shot("02b_5090_row%d" % (int(idx) + 1))
+	await _hover_row(box, 0)
 	print("[sheet-shot] 结论：%s" % (
 		"OK 两张不同" if tex1.resource_path.ends_with("config_sheet.png")
 		and tex2.resource_path.ends_with("config_sheet_5090.png") else "FAIL"))
