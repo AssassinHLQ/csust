@@ -1,6 +1,6 @@
 [gd_scene load_steps=12 format=3]
 
-[ext_resource type="PackedScene" path="res://models/gamedev_room/gamedev_room.glb" id="1_room"]
+[ext_resource type="Script" path="res://scripts/gamedev_room.gd" id="1_script"]
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
 [ext_resource type="PackedScene" path="res://scenes/pc_wall_case.tscn" id="5_pc_rig"]
 [ext_resource type="ConcavePolygonShape3D" path="res://assets/collision/gamedev_room_trimesh.res" id="4_room_shape"]
@@ -43,8 +43,9 @@ emission = Color(1, 0.95, 0.85, 1)
 emission_energy_multiplier = 1.2
 
 [node name="GameDevRoom" type="Node3D"]
+script = ExtResource("1_script")
 
-[node name="Model" parent="." instance=ExtResource("1_room")]
+[node name="Model" type="Node3D" parent="."]
 rotation = Vector3(0, 1.5707964, 0)
 
 [node name="LightA" type="OmniLight3D" parent="Model"]

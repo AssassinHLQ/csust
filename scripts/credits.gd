@@ -153,6 +153,28 @@ const ENTRIES := [
 		"license_file": "",
 		"note": "1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 没给出来，仓库补了一份最小 `BANK.mtl`",
 	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/ram",
+		"title": "DDR4 内存条（跑酷第 9~10 段「内存条市场」，121 根）",
+		"author": "suuugar_mommy（Sketchfab）",
+		"license": "**CC BY-NC 4.0** —— 必须署名、**不可商用**；GLB 的 `asset.extras` 自带这条声明，用 `tools/glb_meta.py` 可复核",
+		"distributed": true,
+		"source": "https://sketchfab.com/3d-models/random-access-memory-ram-ddr4-6f37195ac2b84b21a901471485351b37",
+		"license_file": "",
+		"note": "⚠️ NC 条款：要放进商业版本，这个文件必须换成程序化盒子模型。2026-11-03 补登记 —— 之前只在 README §1.16.4 提过，`credits.gd` / `CREDITS.md` 里一直没有，而 `models` 那条整体条目（讲的是 Arisu）把 `models/ram` 前缀盖住了，自检没报",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "models/mondrian",
+		"title": "蒙德里安大楼外壳（第二关）",
+		"author": "使用者提供（来源未注明）",
+		"license": "授权未核实 —— 暂按「使用者自有」处理，对外发布前必须补证",
+		"distributed": true,
+		"source": "工作区里的 `蒙德里安建筑/mondrian_building.blend`（2026-10-31）",
+		"license_file": "",
+		"note": "⚠️ 待补证：GLB 的 `asset` 段没有 copyright / extras，仓库里也没有对应的导出脚本记录。158 个网格 / 8 个材质；导出时对正门、北门两面做了布尔切洞。2026-11-03 补登记 —— 之前被 `models` 整体条目盖住，自检没报",
+	},
 	# ---------- 代码与插件 ----------
 	{
 		"group": "代码与插件",
@@ -387,7 +409,7 @@ const ENTRIES := [
 		"distributed": true,
 		"source": "https://github.com/TakWolf/fusion-pixel-font",
 		"license_file": "assets/ui/LICENSE_FusionPixel_OFL.txt",
-		"note": "从 font.ttf 子集化（7.5 KB），含游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线等；12 px 原生网格，导入关抗锯齿、关子像素定位、开 mipmap，Label3D 用 nearest 采样，招牌才是真·像素字",
+		"note": "从 font.ttf 子集化（8 KB 级），含游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线、电竞房、凯伊、9995WX、DDR5 ECC 等；12 px 原生网格，导入关抗锯齿、关子像素定位、开 mipmap，Label3D 用 nearest 采样，招牌才是真·像素字",
 	},
 	{
 		"group": "界面与字体",

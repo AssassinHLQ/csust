@@ -21,6 +21,11 @@ const FIELD_KEYS := ["group", "path", "title", "author", "license",
 ## 覆盖率检查的根目录。`story/`、`scripts/` 等本项目自己的目录不在此列
 ## （它们在表里以单条「本项目作者 / MIT」整体登记）。
 const COVER_ROOTS := ["models", "assets", "addons", "splatdata"]
+## 这些根目录下**每个子目录都必须有自己的条目**，不能只靠父目录前缀覆盖。
+## `addons/` 属于整包引入的第三方插件，用一条包级条目覆盖整个子树是对的；
+## 但 `models/`、`assets/` 里的每套素材都要单独署名 —— 前缀匹配会把
+## 「忘了署名的新素材」藏起来（2026-11-03 的 CC BY-NC 内存条模型就是这么漏的）。
+const STRICT_COVER_ROOTS := ["models", "assets"]
 
 
 func _initialize() -> void:
@@ -59,9 +64,17 @@ func _run() -> void:
 	print("\n========== 2. 覆盖率：每个素材目录都登记过 ==========")
 	for r in COVER_ROOTS:
 		var dirs := _subdirs("res://" + r)
-		print("  %s/ 下 %d 个目录" % [r, dirs.size()])
+		var strict := STRICT_COVER_ROOTS.has(r)
+		print("  %s/ 下 %d 个目录%s" % [r, dirs.size(), "（要求逐目录登记）" if strict else "（允许整包条目覆盖）"])
 		for sub in dirs:
-			_check(Credits.covers(sub), "%s 已登记（有署名）" % sub)
+			if strict:
+				# 必须有自己的条目。只用 Credits.covers() 会漏 —— 它是前缀匹配，
+				# `models` 那条讲的是 Arisu，却会顺带盖住 models/ram、models/mondrian，
+				# 于是「新素材忘了署名」查不出来（2026-11-03 就这么漏掉一个 CC BY-NC 的模型）。
+				_check(not Credits.entry_for(sub).is_empty(),
+					"%s 有自己的署名条目（不能只靠上级覆盖）" % sub)
+			else:
+				_check(Credits.covers(sub), "%s 已登记（有署名）" % sub)
 	# 根目录下直接放的素材文件（models/Arisu.glb 等）也要被覆盖
 	for f in _files("res://models"):
 		_check(Credits.covers("models/" + f) or Credits.covers("models"),

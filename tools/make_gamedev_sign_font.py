@@ -16,7 +16,7 @@ from fontTools import subset
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "ui", "font.ttf")
 DST = os.path.join(ROOT, "assets", "ui", "gamedev_sign_12px.ttf")
-TEXT = "游戏开发部楼梯→临时服务器据点终点 踩上去通关8×5090x工作站按F开机已在线"
+TEXT = "游戏开发部楼梯→临时服务器据点终点 踩上去通关8×5090x工作站按F开机已在线电竞房凯伊9995WX+DDR ECC·"
 
 opts = subset.Options()
 opts.name_IDs = ["*"]          # 保留 OFL 许可字段
