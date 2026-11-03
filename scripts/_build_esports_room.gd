@@ -179,7 +179,10 @@ func _desk(root: Node3D, nm: String, pos: Vector3, size: Vector3,
 
 func _poster(root: Node3D, nm: String, pos: Vector3, size: Vector2, rot_y: float,
 		tex_path: String, frame: Material) -> void:
-	_box(root, nm + "Frame", pos - Vector3(0, 0, cos(rot_y) * 0.012),
+	# 框厚 0.03（半厚 0.015）。框中心必须退到海报后面 0.015 以上，
+	# 否则框的正面会盖住海报 —— 原来写的是 0.012，正好差 3 mm，
+	# 结果两张海报一直是隐形的（2026-11-03 用 _probe_poster_shot.gd 对照查出）。
+	_box(root, nm + "Frame", pos - Vector3(0, 0, cos(rot_y) * 0.020),
 		Vector3(size.x + 0.10, size.y + 0.10, 0.03), frame)
 	var q := MeshInstance3D.new()
 	var qm := QuadMesh.new()

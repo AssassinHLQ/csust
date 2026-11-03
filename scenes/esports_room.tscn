@@ -2750,7 +2750,7 @@ font_size = 12
 outline_size = 0
 
 [node name="Poster5090Frame" type="MeshInstance3D" parent="." unique_id=959838532]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.72, 4.782)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.72, 4.79)
 material_override = SubResource("StandardMaterial3D_iupym")
 mesh = SubResource("BoxMesh_gv2lk")
 
@@ -2760,7 +2760,7 @@ material_override = SubResource("StandardMaterial3D_yc856")
 mesh = SubResource("QuadMesh_1gtfr")
 
 [node name="PosterRoomFrame" type="MeshInstance3D" parent="." unique_id=1467824532]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 1.82, -4.782)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 1.82, -4.79)
 material_override = SubResource("StandardMaterial3D_iupym")
 mesh = SubResource("BoxMesh_kddta")
 
