@@ -176,7 +176,41 @@ export LOCALAPPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local'
 ### 局内读数工具
 
 按 **F3** 开关性能浮层（`scripts/game.gd`）：FPS、最近 120 帧的 p50/p99/max 帧间隔、
-draw call、图元、显存、物体数、物理耗时、玩家坐标。浮层自身开销 197.7 → 194.6 fps（-1.6%）。
+draw call、图元、显存、物体数、**物理步/帧**、物理耗时、玩家坐标、物理步上限。
+浮层自身开销 197.7 → 194.6 fps（-1.6%）。
+
+### 物理雪球：用户现场 7 fps（2026-11-03 夜，**未定案**）
+
+用户现场读数（部室里、画质已全关）：`p50 133 ms`、FPS 7、物理 65~82 ms、
+draw 914~1370、图元 30~47 万、显存 2985 MiB。
+日志确认：`3D 缩放 0.50 / 垂直同步 / 80 fps / AA 关 / 阴影 低 / 渲染距离 100 m /
+SSAO・辉光・SSR・雾 全关 / 最大化`，GPU 是 4060 —— **渲染侧已无可省，7 fps 不可能是画得多**。
+日志另有 11 次「窗口没有前台焦点」，以及开场 `等画面 10.3 s / 34 帧`（≈3.3 fps）。
+
+**形态**：`133 ms ≈ 8 × 1/60 s` = Godot 每帧物理步上限，配合物理 65~82 ms ⇒ 疑似物理雪球
+（帧慢 → 每帧补最多 8 步物理 → 帧更慢）。
+
+**但本机复现不出来**（同配置、泼溅加载中）：609 室内（泼溅可见）88 fps / 11.4 ms；
+部室 141 fps / 7.1 ms；1080p 满配 + 同伴进屋 137 fps / 7.3 ms。
+**每步物理成本实测 ≈ 1.8 ms**（240 Hz 放大法）；关掉 7 个同伴的物理：103.9 → 147.1 fps。
+8 步 ≈ 15 ms，凑不出 133 ms ⇒ 用户机器上一步约 16 ms，是本机的 9 倍。
+
+**待用户读 F3 的「物理步/帧」**：`8.00` ⇒ 雪球成立，去砍物理成本；`~1.00` ⇒ 方向要换。
+
+候选修法（**都还没做**）：降 `max_physics_steps_per_frame`（代价：物理时间被稀释，
+就是 `game.gd` 注释里那条「WASD 按了不动」的坑）；同伴互不碰撞（`collision_layer/mask`）；
+部室那面 21,892 面凹面 trimesh 换盒体。
+
+### 物理测量的口径陷阱
+
+- ⚠️ **不能**用「帧时间 ÷ 物理步数」当每步成本 —— 步数是跟着帧时间算出来的
+  （`steps = min(上限, 帧时间 × 步频)`），除出来恒等于 1/步频。本喵用这个算法得出过
+  「5 ms/步」，是纯陷阱。
+- 想放大物理占比，就把 `Engine.physics_ticks_per_second` 拉到 240（每帧逼近 8 步）。
+- 本次新增的探针：`_probe_scene_perf.gd`（现场同配置）、`_probe_physics_cost.gd`、
+  `_probe_physics_gauge.gd`（口径判定）、`_probe_physics_breakdown.gd`、
+  `_probe_physics_levers.gd`、`_probe_inside609.gd`、`_probe_splat_visible.gd`、
+  `_probe_room_playercam.gd`、`_probe_facefill.gd`、`_probe_perf_overlay_cost.gd`。
 
 ## 11. 下一步
 
