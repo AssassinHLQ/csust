@@ -22,6 +22,7 @@ CaptureTool="*res://scripts/_capture.gd"
 PoseShots="*res://scripts/_pose_shots.gd"
 PlayShots="*res://scripts/_play_shots.gd"
 SplatCompositor="*res://scripts/splat_compositor.gd"
+TimeOfDay="*res://scripts/time_of_day.gd"
 
 [display]
 
