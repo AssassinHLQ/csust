@@ -24,6 +24,11 @@ const PICK_RADIUS := 3.2
 const PICK_DY_MAX := 2.0
 ## 模型放大倍数（用户：「大一点，大三倍，不然很难捡到」）
 const MODEL_SCALE := 3.0
+## 149 颗散在 609 屋顶上：单颗 12,386 面，合计 184 万面。从部室（约 50 m 外）看过去
+## 每帧都要过一遍顶点 —— 实测站在部室东侧那个角，帧率 220 → 127（图元 30 万 → 214 万）。
+## 但拾取半径只有 3.2 m，更远的 CPU 只有几个像素，画了纯属白烧。
+## 22 m 外整颗不提交（引擎侧剔除，不是每帧脚本判断）；小物件也不投影。
+const VIEW_DISTANCE := 22.0
 
 var _built := false
 var _taken := false
@@ -49,6 +54,15 @@ func _build() -> void:
 		push_warning("[9950X3D] 没有 %s → 用程序化占位 CPU" % MODEL)
 		_build_placeholder()
 	_add_glow()
+	_apply_view_range()
+
+
+## 远处不画、也不投影。放在 `_build()` 末尾，占位模型和光环一视同仁。
+func _apply_view_range() -> void:
+	for n in find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		mi.visibility_range_end = VIEW_DISTANCE
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## 桌子上的「宝藏」提示：CPU 底下垫一圈很细的金色光环（不挡视线）。
