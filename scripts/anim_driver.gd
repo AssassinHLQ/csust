@@ -579,14 +579,16 @@ func _setup_upper_layer() -> void:
 		return
 	upper = _make_overlay(host, "UpperBody", [])
 	# 移动层：躯干 + **手臂 + 武器**都滤掉（只剩头发/眼/领子/挂饰），见 `ARM_FREEZE_WHY`
+	# 最后那个 `true` = 连**节点轨道**（模型根节点的 position / rotation）一起丢掉，
+	# 否则跑着换弹时整个模型会被根节点轨道掰歪。见 `_make_overlay()` 里那段注释。
 	upper_move = _make_overlay(host, "UpperBodyMove",
-		TRUNK_KEYWORDS + ARM_KEYWORDS + WEAPON_KEYWORDS, ROOT_BONES)
+		TRUNK_KEYWORDS + ARM_KEYWORDS + WEAPON_KEYWORDS, ROOT_BONES, true)
 	arms = _make_arms_layer(host)
 
 
 ## 造一层叠加层：轨道路径是相对 `root_node` 的字符串，两层必须指向**同一个**根节点。
 func _make_overlay(host: Node, layer_name: String, extra: Array,
-		exact: Array = []) -> AnimationPlayer:
+		exact: Array = [], drop_node_tracks: bool = false) -> AnimationPlayer:
 	var ov := AnimationPlayer.new()
 	ov.name = layer_name
 	ov.root_node = player.root_node
@@ -603,7 +605,20 @@ func _make_overlay(host: Node, layer_name: String, extra: Array,
 		var arm_n := 0
 		var root_n := 0
 		for t in range(a.get_track_count() - 1, -1, -1):
-			var bone := _bone_of(String(a.track_get_path(t)))
+			var path_s := String(a.track_get_path(t))
+			var bone := _bone_of(path_s)
+			# ⚠️ **节点轨道**（路径里没有 `:`，`_bone_of()` 返回空串）——
+			#    它们是 `Aris_Original_Mesh/bone_root/Bip001` 的 position / rotation
+			#    和 `Aris_Original_Mesh/bone_root` 的 position，也就是**模型根节点**。
+			#    任何骨骼关键字都匹配不上，所以原来两层都原样留着。
+			#    后果（用户 2026-11-03：「换弹时如果在跑步并且没有在开火，就会整个人歪着」）：
+			#    跑着换弹走 `UpperBodyMove`，这条根节点旋转把**整个模型**按站桩换弹的姿势
+			#    在跑步姿势上又转了一遍 —— 实拍图里人是整个往前折下去的。
+			#    移动层必须丢掉它们：根节点归基础层的 `Move_Ing` 管。
+			if drop_node_tracks and not path_s.contains(":"):
+				root_n += 1
+				a.remove_track(t)
+				continue
 			var is_low := _in_keywords(bone, LOWER_KEYWORDS)
 			# ⚠️ 根骨**必须精确匹配**：把 "Bip001" 当关键字会连 `Bip001 Spine1` 一起滤掉
 			var is_root := exact.has(bone)
