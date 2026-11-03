@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="长沙理工：2067"
+config/name="爱丽丝梦游长理"
 config/description="长沙理工：2067 —— 本地学习用：Arisu.glb 的骨骼/动画验证 + 可玩的第三人称射击原型 + 高斯泼溅场地（画室609 / 校园）+ Boss 与同伴。请勿用于发行。"
 run/main_scene="res://scenes/game.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
