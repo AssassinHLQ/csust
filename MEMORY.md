@@ -150,8 +150,21 @@ export LOCALAPPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local'
 - 阴影级联距离：60 m → 30 m 只换回 1.1 帧（噪声内）。但阴影 pass 仍占该机位
   **约 46% 的 draw call**（1517 → 关阴影 817）；全关值 **+19%**（163.7 → 194.8 fps），代价是画面，未做。
 - 泼溅没释放：`Performance` 报 3011 MiB，开关泼溅差别不大。
+- **贴脸补光 `FaceFill`**（`3b9ffb4`，Player 下 0.32 能量 / 2.2 m / 无阴影的 OmniLight）：
+  它就是墙上那团跟着人走的光斑的来源，但**不吃帧**。同机位交替开关：
+  开 171.4 fps / 关 163.0 fps（关掉那轮反而更慢 ⇒ 噪声），draw call 1540 vs 1539 完全一样。
+  已按「只照角色」修掉观感问题（`6998d1d`，见下）。
 
 **没复现出「非常卡」**：最差 98 fps。若用户现场确实低得多，得先拿局内读数。
+
+### 渲染层约定：贴脸补光只照角色
+
+- 玩家自己的网格（`Arisu` + `Weapon` 子树里的所有 `MeshInstance3D`）在 `player.gd::_setup_face_fill()`
+  里被设为 **`layers = 1 | 2`**；`FaceFill.light_cull_mask` 只留第 2 层。
+- 于是：这盏灯照不到墙（墙在第 1 层），**太阳和屋内灯默认照所有层，角色受光完全不变**。
+  仍然保留第 1 层，是为了万一别处按层剔除时角色不会消失。
+- 全工程此前**没有任何 `layers` / `cull_mask` 用法**（`addons/` 之外），第 2 层是空着的。
+- 验证图：`_log/facefill_before.png`（灯照所有层，墙上一团光斑）／`_log/facefill_after.png`（干净）。
 
 ### 测量陷阱（下次别再踩）
 
