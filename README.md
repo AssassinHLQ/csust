@@ -1,19 +1,23 @@
-# 长沙理工：2067
+# 爱丽丝梦游长理
 
-> 工程与窗口标题：`长沙理工：2067`（`project.godot` 的 `config/name`）。
+> 工程与窗口标题：`爱丽丝梦游长理`（`project.godot` 的 `config/name`）。
+> 历史名：`长沙理工：2067`（文档正文里仍会用「长沙理工」指代**地点**，那是游戏里的地名，不是工程名）。
 > 下面是这个沙盒里做过的事。
 
 > **A third-person shooter + parkour + trading sandbox in Godot 4.7** — over-the-shoulder
 > camera, turn-to-aim firing gate, 60-round magazine, a hand-rolled animation driver,
 > a 12-segment / 571 m parkour course over a **3D Gaussian Splatting campus**, bosses,
-> companions, and a margin/debt/liquidation ledger.
+> companions, a two-level campaign, and a margin/debt/liquidation ledger.
 > Code and docs are **MIT**; the character models and the splat data are *not* included.
 
 一个用 Godot 4.7 手搓的**越肩射击 + 跑酷 + 期货交易沙盒**：一边在 12 段 / 571 m 的
 悬浮跑酷路线上跳，一边在「保证金 / 负债 / 强平」的账本里赌命；路上有 7 名同伴、
 6 位 Boss，还有一间能召唤同伴的小屋。
 
-## 现在能玩到什么（2026-10-19）
+**第一关**是 40 × 40 m 悬浮平台上的射击场 + 跑酷塔；**第二关**是一栋蒙德里安风格的
+大楼，室内三层，楼梯口站着三只霸王龙优香。
+
+## 现在能玩到什么（2026-11-03）
 
 | 模块 | 内容 |
 |---|---|
@@ -22,9 +26,14 @@
 | **Boss** | 飞猪优香 + 备用 6 位（霸王龙 / 倭瓜 / 霍德 / 佩洛洛斯拉 / 比纳 / 哥利亚）。**第 8 段的霍德**进黑市才加载，**2200 血**，绕着爱丽丝飞 + 四个技能（弹幕 / 三连炮 / 震地波 / 触手砸击），打倒后躺 5 s 淡出消失 |
 | **同伴** | 7 名同伴跟随（越肩站位不挡镜头）。跑酷准备区让她们**原地待命**；跑完回小屋踩金垫子**把她们召唤回来** |
 | **场景** | 真人尺度画室 609（**277 万点**高斯泼溅）+ 40 × 40 m 悬浮记忆平台 + 手工小屋 + AllSky 全景天空盒 |
+| **第二关** | `scenes/next_level.tscn`：蒙德里安大楼外壳 + 室内三层；**三只霸王龙优香**（`TrexBossA/B/C`），补了骨骼动画 + 五段攻击。校园泼溅 614 万点在这里，**进大厅释放、出门重建**（§12.2） |
+| **商店** | 「**柴关电脑城**」：芹香站柜台，可买整机、看两张**可悬停的配置单**（1188 × 720，每行独立零件图），成交同步扣期货账户与 HUD |
+| **房间** | 部室（27 个盒碰撞 + 哑光材质 + 像素字招牌）、开发部（凹面三角网格碰撞）、**电竞房**（4 主力位 + 凯伊 1 桌 + 8 卡 9995WX 开放架，世界坐标 `(52, 0.01, 13)`） |
+| **性能** | 局内按 **F3** 开性能浮层：FPS / p50·p99·max 帧间隔 / draw call / 图元 / 显存 / 物体数 / 物理耗时 / 玩家坐标，自身开销 −1.6%（§12.3） |
 
 > 详细设计、实测数据、踩过的坑都在下面：先看 **§1.16 跑酷**、**§1.16.3 霍德**、
-> **§1.16.4 内存条市场**、**§1.16.0a 小屋召唤台**、**§1.16.0b 稳定基金 / 体育彩票**。
+> **§1.16.4 内存条市场**、**§1.16.0a 小屋召唤台**、**§1.16.0b 稳定基金 / 体育彩票**，
+> 以及 **第十二节**（2026-10-19 之后的变更记录）。
 
 **许可：除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。** 详见
 [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -38,7 +47,10 @@
 
 | 场景 | 用途 |
 |---|---|
-| `scenes/game.tscn` | **默认启动场景**（F5 直接玩：射击 + 跑酷 + 经济） |
+| `scenes/game.tscn` | **默认启动场景**（F5 直接玩：射击 + 跑酷 + 经济 + 商店 + 第二关入口） |
+| `scenes/next_level.tscn` | **第二关**：蒙德里安大楼 + 校园泼溅 + 三只霸王龙优香 |
+| `scenes/esports_room.tscn` | 电竞房（已实例化进 `game.tscn`，世界坐标 `(52, 0.01, 13)`） |
+| `scenes/gamedev_room.tscn` | 开发部（凹面三角网格碰撞） |
 | `scenes/main.tscn` | 动画查看器：24 条动作逐条播、切镜头 |
 
 没有素材也能跑射击部分：
@@ -3257,8 +3269,16 @@ _arisu_learn/
 │  ├─ game.tscn             玩法场景（40×40 悬浮平台 + 平台上的画室609（§6.8，有墙碰撞和门洞）
 │  │                        + 手工搭的**网格小屋**（§1.13）+ 2 位 Boss + 7 名同伴 + 对话框；
 │  │                        **无护栏**；校园**不在**这里）
+│  ├─ next_level.tscn       **第二关**：蒙德里安大楼 + 校园泼溅 + 三只霸王龙优香（§12.1）
+│  ├─ esports_room.tscn     电竞房（已实例化进 game.tscn，`(52, 0.01, 13)`，§12.7）
+│  ├─ gamedev_room.tscn     开发部（凹面三角网格碰撞，§12.7）
+│  ├─ shop_baked.tscn       「柴关电脑城」烘焙后的几何（§12.6；空壳 shop.tscn 只挂 shop.gd）
+│  ├─ mondrian_house_baked.tscn / mondrian_hall*.tscn / constructivist_hall_baked.tscn
+│  │                        同类「空壳 + 烘焙」配对，来历见 §12.10
 │  ├─ mesh_hut.tscn         手工网格场景：基元 + CSG 的小屋子（§1.13，不依赖任何外部素材）
 │  ├─ campus_venue.tscn     校园泼溅的**独立场地**（已从 game.tscn 搬出，按需实例化，§6.5）
+│  ├─ campus_collision*.tscn / campus_deconstruct.tscn / lot_east.tscn   校园侧布景与碰撞
+│  ├─ bosses_standby.tscn   6 位备用 Boss 的待命库（§7.7）
 │  ├─ player.tscn           玩家（模型 + 动画 + 武器 + 相机）
 │  ├─ companion.tscn        同伴（模型由 companion.gd 按 model_path 运行时实例化）
 │  └─ main.tscn             动画查看器
@@ -5740,6 +5760,8 @@ match path.get_extension().to_lower():
 
 # 十、下一步
 
+> 2026-10-19 之后新开的条目在最后（10~13），前面的编号保持原样不动。
+
 1. ~~**重做 `Move_Ing`** —— 跑动前倾偏大（见 §1.10），走 Blender 管线改躯干角度~~
    **已完成并启用**：`Move_Ing` 胸腔前倾 Blender 侧 +13.5° → +5.2°、
    Godot 侧复测 +36.5° → +29.6°；`player.tscn` 已切到 `Arisu_ext.glb`（§5.1 / §5.4.1）
@@ -5772,6 +5794,21 @@ match path.get_extension().to_lower():
    - **让它参与玩法**：现在它纯粹是块布景（`game.gd` 按类型收 `SplatScene` /
      `Boss` / `Companion`，`MeshHut` 是普通 `Node3D`，谁也看不见它）。想让它当
      掩体 / 触发剧情的区域，就照 §9.8 场景表里那个 `hut` 代号接线
+
+**2026-10-19 之后新增：**
+
+10. **眉毛多重表情叠加** —— 三版图层判据（z 分层、连通块计数、左右对称）**全部误判**，
+    已全部回退，`FaceFix.simplify_brows()` 保留但**不调用**。
+    下一个人别再照着这三条重写第四遍；换判据方向（UV 比对 / 逐角色白名单 / 表情索引）
+    才有戏。详见 §12.8
+11. **准星右下多像素** —— 只查了一半。怀疑 `dot_px` 取奇数导致 Dot 矩形偏半像素
+    （`dh = dot_px / 2` 整除截断），未证实。探针 `_probe_crosshair_pixels.gd` 卡在
+    一处 `(c as Window)` 为 `Nil` 的赋值上，得先修探针
+12. **编辑期预览** —— 商店 / 蒙德里安小屋这类「代码建起来再烘焙」的建筑，
+    在编辑器里只能看到 `_baked` 结果，看不到生成过程。
+    要做就给生成脚本加 `@tool` + `auto_build`，或写一个专门的 bake 工具按钮
+13. **导出瘦身** —— 给 `exclude_filter` 加 `scripts/_*`（§12.9），
+    顺便复查 `*.txt` / `*.md` 的 `include_filter`（§11.3）
 
 ---
 
@@ -5847,9 +5884,177 @@ cd <仓库目录>
 - [ ] **建 `export_presets.cfg` 时，把 `*.txt` 和 `*.md` 都加进 `include_filter`** ——
       否则导出后 `story/` 里的剧本读不到（静默变成「没有剧情」）、设定表也读不到
       （说话人校验静默失效），见 §9.6
+- [ ] 顺手给 `exclude_filter` 加上 `scripts/_*`：现在用的是
+      `export_filter="all_resources"` + `exclude_filter=""`，**414 个探针脚本会一起打进 pck**。
+      运行时零成本（§12.9 有证据），但白占体积
 
 ## 11.4 关于截图
 
 `_arisu_captures/` 里的截图是在本机渲染的、含专有角色形象，
 **不建议**放进公开仓库的 README（截图是模型形象的派生作品）。
 想放演示图，请先用**你有权分发的素材**重新渲一遍。
+
+---
+
+# 十二、2026-10-19 → 11-03 的变更记录
+
+> 这一节补的是首版 README 写完（2026-10-19）之后新增的东西。
+> 数字全部来自实测或 `MEMORY.md` 的复测记录；口述未复测的会标注。
+
+## 12.1 第二关：蒙德里安大楼
+
+- `scenes/next_level.tscn`：外壳沿用 Blender 里那栋蒙德里安大楼，**室内三层重做**
+  （commit `5427377`）。
+- **三只霸王龙优香** `TrexBossA/B/C`（`scenes/trex_yuuka_boss.tscn`），
+  补了骨骼动画 + **五段攻击**（`e760ae4`）。
+- 楼板开井口 + 招牌蓝调亮（`ed0299d`）；清闪面、坡道接顺、终点加台阶（`938fbc4`）。
+- 东门 4 栋解构小楼与蒙德里安厅室内陈设已撤（`50ee31a`）；
+  解构街区收拢到东门口 **43 × 41 m** 内（`0fc8b09`）。
+
+## 12.2 校园 GGS：进大厅真释放
+
+- 数据：`campus_ggs.bin` **1,475,478,480 B（≈1406 MB）/ 6,144,827 点**。
+- 大厅 AABB（`hide_inside_aabb`）`P(-17,-3,-11) S(33,19,25)`，即 `z > 14` 属室外。
+- **进**：在 AABB 内累计 **0.3 s** → 停光栅器、`quad.queue_free()`、
+  `RenderingServer.call_on_render_thread(ctx.free)` 真释放 RID。
+- **出**：门外累计 **0.25 s** → 重建 bundle，bin **分帧** `pump_load` 上传（不卡黑屏）。
+- 实测（1280 × 720 离屏，`--splat=off` 起跑）：
+
+  ```
+  室内 释放后 rasterizer=<null> quad=<null>  VRAM=190.4 MiB  FPS=165.0
+  出门重建完成 6,144,827 点            VRAM=4975.5 MiB  FPS=67.0
+  ```
+
+- ⚠️ `SplatScene` 自带的 `hide_inside_aabb` **只隐藏节点、不释放显存**；
+  真释放只有上面这条路径（commit `a7ec536`）。
+
+## 12.3 F3 性能浮层
+
+- `scripts/game.gd`，`PERF_KEY := KEY_F3`，默认关闭（commit `140f966`）。
+- 显示：FPS、最近 **120 帧**的 p50 / p99 / max 帧间隔、draw call、图元、显存、
+  物体数、物理耗时、玩家坐标。
+- 自身开销：**197.7 → 194.6 fps（−1.6%）**。
+- ⚠️ **测量陷阱**：`Performance.TIME_PROCESS` 在本工程和真实帧率对不上
+  （浮层报 29 ms，实测 194 fps）。**只信按真实帧间隔量出来的数。**
+- ⚠️ 另两个坑：离屏窗口放在 `-4000,-4000` 会被系统当「遮挡」节流
+  （同机位复跑能得 7 fps 和 145 fps 两个数）；把玩家瞬移进几何体会让物理耗时
+  飙到 100 ms（穿透解算是假象）。
+
+## 12.4 部室「窗 + 储物柜」那一角掉帧
+
+- 根因不是那一角本身，是**门口把整片室外场地框进了视野**。
+- 真凶：609 屋顶 **149 颗 9950X3D**，单颗 12,386 面 × 149 = **1,845,514 面**，
+  每帧全过一遍顶点。
+- 修法（`fb6abf8`）：加 **22 m 可见距离** + **关投影**。同机位 A/B 两轮一致：
+
+  | 版本 | fps | 图元 |
+  |---|---|---|
+  | 修前 | 131.4 | 214.4 万 |
+  | 修后 | **144.1** | **35.5 万** |
+
+  5 m 近处图元数不变（拾取范围 3.2 m 不受影响）。
+- 已排除：部室本体只有 **31 个材质面 / 21,892 面**（一个 MeshInstance，不是 draw call 爆炸）；
+  阴影级联 60 → 30 m 只换回 1.1 帧（噪声内）。
+- 遗留：阴影 pass 仍占该机位约 **46% 的 draw call**（1517 → 关阴影 817）；全关值 +19%
+  （163.7 → 194.8 fps），代价是画面，**未做**。
+
+## 12.5 贴脸补光只照角色
+
+- `FaceFill`（`3b9ffb4`）：Player 下一盏 **0.32 能量 / 2.2 m / 无阴影**的 OmniLight。
+- 问题：它把墙也照亮，于是**墙上有一团跟着人走的光斑**。
+- 修法（`6998d1d`）：玩家 `Arisu` + `Weapon` 子树里所有 `MeshInstance3D` 设为
+  **`layers = 1 | 2`**，`FaceFill.light_cull_mask` 只留**第 2 层**。
+  太阳和屋内灯默认照所有层，所以**角色受光完全不变**，墙（第 1 层）不再被这盏灯照到。
+- 全工程此前**没有任何 `layers` / `cull_mask` 用法**（`addons/` 之外），第 2 层是空着的。
+- **不吃帧**：同机位交替开关，开 171.4 / 关 163.0 fps（关掉那轮反而更慢 ⇒ 噪声），
+  draw call 1540 vs 1539 完全一样。
+- 验证图：`_log/facefill_before.png`（有光斑）／`_log/facefill_after.png`（干净）。
+
+## 12.6 商店、配置单与配音
+
+- 店名 `sign_text := "柴关电脑城"`（`scripts/shop.gd`）；原来的冰箱改成 `PcCase` / `PcCaseGlass`。
+- 两张**可悬停**配置单放大到 **1188 × 720**，底板按「图片 + 配文」收紧，
+  **九行都有独立零件图**、不再共用或空悬停；两张单子底图不同。
+- 配置单弹出时**放开鼠标**，关掉后收回。
+- 配音（`583ab14`）：芹香 / 小桃 / 爱丽丝，文件在 `story/voice/shop/`；
+  爱丽丝前半句改用视频原声「邦邦咔邦」（`caf99b3`）；芹香配音改用傲娇参考（`4a92710`）。
+- 成交同步扣期货 `bank_yuan` 与 HUD（`fa0511a`）。
+
+## 12.7 房间、碰撞与设备展示
+
+- **部室**：27 个盒碰撞、材质改哑光、室内灯不再投影（`7bb5fbb`）；
+  招牌换回**真像素字**（Fusion Pixel 12px 五字子集，`e47aa8c`）。
+- **开发部**：碰撞换成**凹面三角网格**（`08fabba`）；防卡角 + 手持机屏幕抬 1 mm（`3398055`）。
+- **电竞房** `scenes/esports_room.tscn`：东墙 4 个主力位、北墙凯伊 1 桌、
+  南墙 8 卡 9995WX 开放架，世界坐标 `(52, 0.01, 13)`。**布局归用户，不要动。**
+- **画室 609 桌前家具**：`ArtDesk` / `ArtChairA` / `ArtChairB` 三个 `CollisionShape3D`
+  写在 `scenes/game.tscn` 的 `Room609/RoomCollision` 下，由
+  `game.gd::_check_room_furniture()` 校验节点存在（**只在编辑器里看得见、好微调**）。
+  > ⚠️ 这三个盒子的尺寸/位移是**用户在编辑器里手调过的**，覆盖了早先代码算出的值。
+  > 改之前先问，别按代码里的默认值改回去。
+- **壁挂主机**：白色机箱 2.6× 挂南墙，内装 8 × 5090；显示器最终是**双屏独立托板**
+  （2 × 2 四屏版本已被回滚）。
+
+## 12.8 已知未解决
+
+| 问题 | 现状 |
+|---|---|
+| **眉毛多重表情叠加** | 三版图层判据全部误判（把左右眉当成上下两层，删掉一半三角形），**已全部回退**。`FaceFix.simplify_brows()` 保留但**不调用**，等新判据 |
+| **准星右下多像素** | 只查了一半。怀疑 `dot_px` 取奇数导致 Dot 矩形偏半像素，未证实 |
+| `campus_buildings.tscn` | 工作区显示「已删除（−3819 行）」，未提交，删除意图**未确认** |
+| 探针脚本进导出包 | `export_presets.cfg` 是 `export_filter="all_resources"` + `exclude_filter=""`，414 个探针脚本会一起打进 pck；运行时零成本，只是白占体积 |
+
+## 12.9 关于 `scripts/_*.gd` 这 414 个探针脚本
+
+**对游玩没有帧率影响**，证据：
+
+- 全部 414 个（1.93 MB / 53,578 行）**没有一个带 `class_name`**，不会被全局注册。
+- GDScript 是**加载才编译**；它们没被任何 `scenes/*.tscn` 引用，游戏跑起来就永远不加载。
+- 唯一的运行时接触点是 `project.godot` 的 `[autoload]` 里三个：
+
+  | autoload | 脚本 | 不设环境变量时的行为 |
+  |---|---|---|
+  | `CaptureTool` | `_capture.gd` | `_ready()` 第一行读 `ARISU_CAPTURE`，不是 `1` 就 `return` |
+  | `PoseShots` | `_pose_shots.gd` | 同上，看 `ARISU_POSE` |
+  | `PlayShots` | `_play_shots.gd` | 同上，看 `ARISU_PLAY` |
+
+  即 3 个空 Node + 3 次字符串比较，其余什么都不做。
+
+**真实代价**在另外两处，都不影响玩家：
+
+1. **导出包体积**：见 §12.8 最后一行，加个 `exclude_filter="scripts/_*"` 就干净了。
+2. **编辑器扫描**：Godot 要为全部 488 个 `.gd` 维护 `.uid`（共 546 个 `.uid` 文件）
+   和脚本缓存，`--import` 和首次打开会慢一点。
+
+为什么探针是游戏代码的两倍（53,578 行 vs 26,369 行）——因为这个工程的规矩是
+**改任何观感/手感/性能问题，先写出能打印数字的探针**，改完再用探针证明。
+一条探针通常只用一次，但它是「不靠猜」的唯一手段，所以留着。
+
+## 12.10 场景为什么有 34 个
+
+34 个里**真正独立的内容场景只有 20 个**，多出来的是三条重复来源：
+
+1. **「空壳 + 烘焙」配对（4 对 = 8 个文件）**
+
+   | 空壳（只挂脚本，~200 B） | 烘焙产物（几何，由 `_bake_*.gd` 生成） |
+   |---|---|
+   | `shop.tscn` (169 B) | `shop_baked.tscn` (37,821 B) |
+   | `mondrian_house.tscn` (215 B) | `mondrian_house_baked.tscn` (48,290 B) |
+   | `constructivist_hall.tscn` (216 B) | `constructivist_hall_baked.tscn` (22,736 B) |
+   | `mondrian_hall_interior.tscn` (194 B) | `mondrian_hall_interior_baked.tscn` (126,700 B) |
+
+   这是「脚本 `build()` 建几何 → 烤成场景 → 编辑器里可见可调」的产物，不是浪费。
+
+2. **没人引用的 4 个**：`campus_chunks.tscn`（3×3 分块原型，**未接线**）、
+   `pc_5090_rig.tscn`、`constructivist_hall.tscn`、`mondrian_hall_interior.tscn`
+   （后两个是第 1 条里的空壳，实际用的是 `_baked` 版本）。
+
+3. **单件也占一个场景**：`ryzen_9950x3d.tscn` (184 B) 只有一个 CPU 模型，
+   被 `room609_cpus.tscn` 复用。
+
+按体积看，34 个 `.tscn` 合计 **1,301,715 B（1.24 MiB）**，其中最大的 5 个
+合计 **1,009,080 B（0.96 MiB）**，占 **77.5%**：
+`campus_collision_fine` (582,335 B)、`mondrian_hall_interior_baked` (126,700 B)、
+`parkour` (120,901 B)、`esports_room` (116,220 B)、`campus_deconstruct` (62,924 B)。
+全是**烘焙出来的静态几何**，不是逻辑复杂度——所以「场景多」和「工程重」不是一回事，
+真正重的是 `splatdata/`（359 MB）和 `models/`（169 MB）。
