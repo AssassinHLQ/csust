@@ -3,6 +3,8 @@ extends SceneTree
 ##   _tools/run_shot.sh res://scripts/_verify_pc_rig.gd -- --splat=off --story=off
 
 func _initialize() -> void:
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
 
 
@@ -36,8 +38,10 @@ func _run() -> void:
 		print("[rig] 没找到 PC5090Rig")
 		quit(1); return
 	var shape := rig.get_node("Body/Collision") as CollisionShape3D
+	var mon := rig.get_node_or_null("Monitor") as Node3D
 	print("[rig] visible=", rig.visible, " 碰撞关=", shape.disabled,
-		" pos=", rig.global_position.snappedf(0.01))
+		" pos=", rig.global_position.snappedf(0.01),
+		" 显示器=", mon != null)
 
 	var cam := Camera3D.new()
 	cam.fov = 58.0
@@ -45,6 +49,9 @@ func _run() -> void:
 	root.add_child(cam)
 	cam.current = true
 	await _shot(cam, Vector3(48.2, 1.55, 2.55), Vector3(48.2, 1.55, 5.03), "32_pc_wall_case")
+	cam.fov = 48.0
+	await _shot(cam, Vector3(48.2, 1.52, 3.65), Vector3(48.2, 1.45, 5.0), "37_pc_cards_close")
+	cam.fov = 58.0
 
 	var player := game.get_node("Player") as CharacterBody3D
 	player.global_position = Vector3(48.2, 0.8, 3.1)
@@ -72,4 +79,19 @@ func _run() -> void:
 		" 状态牌=", (rig.get_node("Status") as Label3D).visible)
 	await _shot(cam, Vector3(48.2, 1.55, 2.55), Vector3(48.2, 1.55, 5.03), "33_pc_wall_case_on")
 	await _shot(cam, Vector3(47.15, 1.78, 2.95), Vector3(48.2, 1.55, 5.03), "34_pc_wall_case_angle")
+	cam.fov = 70.0
+	await _shot(cam, Vector3(47.0, 1.7, 2.2), Vector3(47.3, 1.3, 5.03), "36_pc_wall_dual")
+
+	player.global_position = Vector3(46.5, 0.8, 3.1)
+	player.velocity = Vector3.ZERO
+	player.set("_yaw", PI)
+	await _wait(20)
+	var start_mz := player.global_position.z
+	Input.action_press("move_forward")
+	for _f in 160:
+		await process_frame
+	Input.action_release("move_forward")
+	await _wait(8)
+	print("[rig] 撞显示器托板：z %.2f → %.2f（前沿约 4.80）" % [
+		start_mz, player.global_position.z])
 	quit(0)

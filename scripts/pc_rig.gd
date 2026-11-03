@@ -32,7 +32,9 @@ func _set_active(on: bool) -> void:
 	visible = on
 	body.collision_layer = 1 if on else 0
 	body.collision_mask = 1 if on else 0
-	shape.disabled = not on
+	for cs in body.get_children():
+		if cs is CollisionShape3D:
+			(cs as CollisionShape3D).disabled = not on
 	hint.visible = false
 	status.visible = _booted if on else false
 	light.light_energy = 1.6 if (on and _booted) else 0.0

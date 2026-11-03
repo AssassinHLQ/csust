@@ -4,8 +4,11 @@ extends SceneTree
 
 const OUT := "res://scenes/pc_wall_case.tscn"
 const SHELL := "res://models/pc_case/pc_case_shell.glb"
+const CARD := "res://models/rtx5090_card/rtx5090_card.glb"
+const MONITOR := "res://models/monitor/monitor.glb"
 const FONT := "res://assets/ui/gamedev_sign_12px.ttf"
 const SCALE := 2.6
+const MON_X := -1.70
 
 
 func _mat(col: Color, metal: float, rough: float) -> StandardMaterial3D:
@@ -114,6 +117,9 @@ func _label(parent: Node3D, nm: String, text: String, pos: Vector3, px: float,
 func _own(n: Node, root_node: Node) -> void:
 	for c in n.get_children():
 		c.owner = root_node
+		# 实例化场景（外壳 / 显卡 / 显示器）只存引用，别把网格复制进 .tscn
+		if not c.scene_file_path.is_empty():
+			continue
 		_own(c, root_node)
 
 
@@ -138,6 +144,7 @@ func _initialize() -> void:
 	var shell := shell_scene.instantiate() as Node3D
 	shell.name = "Shell"
 	shell.position = Vector3(0, 0.6102, 0)
+	shell.rotation.y = PI
 	shell.scale = Vector3(SCALE, SCALE, SCALE)
 	root.add_child(shell)
 	for mi in shell.find_children("*", "MeshInstance3D", true, false):
@@ -151,36 +158,58 @@ func _initialize() -> void:
 	_box(root, "LinerRight", Vector3(0.600, 0.61, 0.0), Vector3(0.02, 1.20, 0.54), liner)
 
 	# 背板 / 8 卡背板
-	_box(root, "Backplane", Vector3(0, 0.60, 0.255), Vector3(1.12, 1.04, 0.02), pcb)
+	_box(root, "Backplane", Vector3(0, 0.60, -0.05), Vector3(1.12, 1.04, 0.02), pcb)
 
-	# 8 张 5090：两列 × 四层
+	# 8 张 5090：跑酷终点同款低模副本，长边 40 cm、风扇朝玻璃
 	var fans := Node3D.new()
 	fans.name = "Fans"
 	root.add_child(fans)
+	var card_scene := load(CARD) as PackedScene
 	for i in 8:
 		var col := i % 2
 		var row := i / 2
-		var p := Vector3(-0.27 + 0.54 * float(col), 0.28 + 0.18 * float(row), 0.10)
-		_box(root, "GPU%d" % i, p, Vector3(0.46, 0.11, 0.28), black)
-		_box(root, "GPU%d_Shroud" % i, p + Vector3(0, 0, -0.138),
-			Vector3(0.44, 0.10, 0.012), dark)
-		_box(root, "GPU%d_Glow" % i, p + Vector3(0, 0.060, -0.144),
-			Vector3(0.40, 0.006, 0.008), cyan if i % 2 == 0 else magenta)
-		_fan(fans, "Fan%d_A" % i, p + Vector3(-0.10, 0, -0.152), silver, black)
-		_fan(fans, "Fan%d_B" % i, p + Vector3(0.10, 0, -0.152), silver, black)
+		var p := Vector3(-0.22 + 0.44 * float(col), 0.24 + 0.21 * float(row), -0.12)
+		var card := card_scene.instantiate() as Node3D
+		card.name = "GPU%d" % i
+		card.position = p
+		card.rotation.y = PI
+		root.add_child(card)
+		_box(root, "GPU%d_Glow" % i, p + Vector3(0, 0.0904, -0.029),
+			Vector3(0.36, 0.006, 0.006), cyan if i % 2 == 0 else magenta)
 
-	# 电源仓
-	_box(root, "PSU", Vector3(0.33, 0.12, 0.03), Vector3(0.34, 0.18, 0.28), dark)
-	_label(root, "PSUText", "1600", Vector3(0.33, 0.12, -0.123), 0.006, cream)
+	# 电源仓（给四层卡让位，压矮）
+	_box(root, "PSU", Vector3(0.33, 0.07, 0.0), Vector3(0.34, 0.12, 0.28), dark)
+	_label(root, "PSUText", "1600", Vector3(0.33, 0.07, -0.143), 0.006, cream)
 
-	# 顶部铭牌（柜内）
-	_box(root, "Plate", Vector3(0, 0.97, 0.19), Vector3(1.08, 0.14, 0.02), black)
-	_box(root, "PlateTrim", Vector3(0, 0.893, 0.176), Vector3(1.08, 0.008, 0.004), cyan)
-	_label(root, "PlateText", "8x5090 工作站", Vector3(0, 0.97, 0.177), 0.0055, cream)
+	# 顶部铭牌（柜内，卡片上方的窄条）
+	_box(root, "Plate", Vector3(0, 1.06, -0.15), Vector3(1.08, 0.14, 0.02), black)
+	_box(root, "PlateTrim", Vector3(0, 0.983, -0.164), Vector3(1.08, 0.008, 0.004), cyan)
+	_label(root, "PlateText", "8x5090 工作站", Vector3(0, 1.06, -0.162), 0.0055, cream)
+
+	# 显示器：门边到机箱之间的空墙，独立托板
+	var mon_scene := load(MONITOR) as PackedScene
+	var mon := mon_scene.instantiate() as Node3D
+	mon.name = "Monitor"
+	mon.position = Vector3(MON_X, 0.0, 0.0)
+	mon.rotation.y = PI
+	root.add_child(mon)
+	_box(root, "MonShelf", Vector3(MON_X, -0.02, 0.085), Vector3(1.02, 0.04, 0.45), black)
+	_box(root, "MonShelfLED", Vector3(MON_X, -0.002, -0.141), Vector3(0.90, 0.006, 0.006), cyan)
+	_box(root, "MonWallPlate", Vector3(MON_X, -0.14, 0.30), Vector3(1.0, 0.10, 0.02), black)
+	for sx in [-1.0, 1.0]:
+		_box(root, "MonBracketV", Vector3(MON_X + sx * 0.40, -0.18, 0.30),
+			Vector3(0.06, 0.30, 0.03), black)
+		_box(root, "MonBracketH", Vector3(MON_X + sx * 0.40, -0.04, 0.10),
+			Vector3(0.06, 0.04, 0.40), black)
+		var mon_strut := _box(root, "MonBracketD", Vector3(MON_X + sx * 0.40, -0.195, 0.12),
+			Vector3(0.04, 0.44, 0.04), black)
+		mon_strut.rotation.x = -0.90
+	_label(root, "MonitorText", "8x5090\n工作站", Vector3(MON_X, 0.2744, -0.115), 0.0042,
+		Color(0.55, 0.90, 1.0, 1.0))
 
 	# 前脸细节：三个黑色硬盘位（机箱正面朝向墙的右侧）
 	for i in 3:
-		_box(root, "Bay%d" % i, Vector3(0.617, 0.38 + 0.15 * float(i), 0.02),
+		_box(root, "Bay%d" % i, Vector3(-0.617, 0.38 + 0.15 * float(i), 0.02),
 			Vector3(0.006, 0.10, 0.30), dark)
 
 	# 玻璃 + 黑框
@@ -228,6 +257,13 @@ func _initialize() -> void:
 	bs.size = Vector3(1.40, 1.28, 0.66)
 	cs.shape = bs
 	body.add_child(cs)
+	var mcs := CollisionShape3D.new()
+	mcs.name = "CollisionMonitor"
+	var mbs := BoxShape3D.new()
+	mbs.size = Vector3(1.02, 1.28, 0.45)
+	mcs.shape = mbs
+	mcs.position = Vector3(MON_X, 0, 0)
+	body.add_child(mcs)
 
 	# 开机灯
 	var light := OmniLight3D.new()
