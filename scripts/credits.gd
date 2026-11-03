@@ -118,7 +118,7 @@ const ENTRIES := [
 		"distributed": true,
 		"source": "用户 2026-11-02 下载的 `游戏电脑机箱主机，白色 i7 RTX3090 内存条风扇散热_爱给网_aigei_com.zip` 中的 `CUSTOM GAMING PC.blend`（94 MB / 1,035,668 面）",
 		"license_file": "",
-		"note": "`tools/_export_pc_case_shell.py` 只取外壳 Cube.007，裁掉朝房间的侧板开窗，统一白漆，0.1 比例导出 2,917 面 / 143 KB GLB；内部 8 张 5090 用 `models/rtx5090_card` 的低模副本、门边显示器用 `models/monitor`；托板、玻璃、支架与灯由 `scripts/_build_pc_wall_case.gd` 程序化生成；放大 2.6× 挂南墙，底离地 0.95 m",
+		"note": "`tools/_export_pc_case_shell.py` 只取外壳 Cube.007，裁掉朝房间的侧板开窗，统一白漆，0.1 比例导出 2,917 面 / 143 KB GLB；内部 8 张 5090 用 `models/rtx5090_card` 的低模副本、门边双显示器用 `models/monitor`；托板、玻璃、支架与灯由 `scripts/_build_pc_wall_case.gd` 程序化生成；放大 2.6× 挂南墙，底离地 0.95 m",
 	},
 	{
 		"group": "角色与 Boss 模型",
@@ -140,7 +140,7 @@ const ENTRIES := [
 		"distributed": true,
 		"source": "用户 2026-11-03 下载的 `29 显示器 屏幕_爱给网_aigei_com/AM261_029.fbx`（30,077 面，含第三方屏摄图）",
 		"license_file": "",
-		"note": "`tools/_export_monitor.py` 删除玻璃面板、重做白/黑/银/自发光材质、以脚底中心为原点导出 28,733 面 / 897 KB GLB；0.897×0.280×0.463 m，挂在机箱门边托板；配置单里的目标其实是 2×27\" 4K 160Hz，这台是现有素材的过渡",
+		"note": "`tools/_export_monitor.py` 删除玻璃面板、重做白/黑/银/自发光材质、以脚底中心为原点导出 28,733 面 / 897 KB GLB；0.897×0.280×0.463 m，门边托板并排 2 台；配置单里的目标其实是 2×27\" 4K 160Hz，这台是现有素材的过渡",
 	},
 	{
 		"group": "角色与 Boss 模型",

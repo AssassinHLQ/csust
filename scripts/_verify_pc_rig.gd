@@ -38,10 +38,11 @@ func _run() -> void:
 		print("[rig] 没找到 PC5090Rig")
 		quit(1); return
 	var shape := rig.get_node("Body/Collision") as CollisionShape3D
-	var mon := rig.get_node_or_null("Monitor") as Node3D
+	var mon := rig.get_node_or_null("Monitor0") as Node3D
+	var mon_b := rig.get_node_or_null("Monitor1") as Node3D
 	print("[rig] visible=", rig.visible, " 碰撞关=", shape.disabled,
 		" pos=", rig.global_position.snappedf(0.01),
-		" 显示器=", mon != null)
+		" 显示器=", 2 if (mon != null and mon_b != null) else 1)
 
 	var cam := Camera3D.new()
 	cam.fov = 58.0

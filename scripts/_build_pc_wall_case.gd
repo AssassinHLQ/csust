@@ -8,7 +8,7 @@ const CARD := "res://models/rtx5090_card/rtx5090_card.glb"
 const MONITOR := "res://models/monitor/monitor.glb"
 const FONT := "res://assets/ui/gamedev_sign_12px.ttf"
 const SCALE := 2.6
-const MON_X := -1.70
+const MON_X := -1.68
 
 
 func _mat(col: Color, metal: float, rough: float) -> StandardMaterial3D:
@@ -186,26 +186,28 @@ func _initialize() -> void:
 	_box(root, "PlateTrim", Vector3(0, 0.983, -0.164), Vector3(1.08, 0.008, 0.004), cyan)
 	_label(root, "PlateText", "8x5090 工作站", Vector3(0, 1.06, -0.162), 0.0055, cream)
 
-	# 显示器：门边到机箱之间的空墙，独立托板
+	# 显示器：门边到机箱之间的空墙，双屏独立托板
 	var mon_scene := load(MONITOR) as PackedScene
-	var mon := mon_scene.instantiate() as Node3D
-	mon.name = "Monitor"
-	mon.position = Vector3(MON_X, 0.0, 0.0)
-	mon.rotation.y = PI
-	root.add_child(mon)
-	_box(root, "MonShelf", Vector3(MON_X, -0.02, 0.085), Vector3(1.02, 0.04, 0.45), black)
-	_box(root, "MonShelfLED", Vector3(MON_X, -0.002, -0.141), Vector3(0.90, 0.006, 0.006), cyan)
-	_box(root, "MonWallPlate", Vector3(MON_X, -0.14, 0.30), Vector3(1.0, 0.10, 0.02), black)
+	for i in 2:
+		var mon := mon_scene.instantiate() as Node3D
+		mon.name = "Monitor%d" % i
+		mon.position = Vector3(MON_X - 0.45 + 0.90 * float(i), 0.0, 0.0)
+		mon.rotation.y = PI
+		root.add_child(mon)
+		_label(root, "MonitorText%d" % i, "8x5090\n工作站",
+			Vector3(mon.position.x, 0.2744, -0.115), 0.0042,
+			Color(0.55, 0.90, 1.0, 1.0))
+	_box(root, "MonShelf", Vector3(MON_X, -0.02, 0.085), Vector3(1.95, 0.04, 0.45), black)
+	_box(root, "MonShelfLED", Vector3(MON_X, -0.002, -0.141), Vector3(1.80, 0.006, 0.006), cyan)
+	_box(root, "MonWallPlate", Vector3(MON_X, -0.14, 0.30), Vector3(1.92, 0.10, 0.02), black)
 	for sx in [-1.0, 1.0]:
-		_box(root, "MonBracketV", Vector3(MON_X + sx * 0.40, -0.18, 0.30),
+		_box(root, "MonBracketV", Vector3(MON_X + sx * 0.80, -0.18, 0.30),
 			Vector3(0.06, 0.30, 0.03), black)
-		_box(root, "MonBracketH", Vector3(MON_X + sx * 0.40, -0.04, 0.10),
+		_box(root, "MonBracketH", Vector3(MON_X + sx * 0.80, -0.04, 0.10),
 			Vector3(0.06, 0.04, 0.40), black)
-		var mon_strut := _box(root, "MonBracketD", Vector3(MON_X + sx * 0.40, -0.195, 0.12),
+		var mon_strut := _box(root, "MonBracketD", Vector3(MON_X + sx * 0.80, -0.195, 0.12),
 			Vector3(0.04, 0.44, 0.04), black)
 		mon_strut.rotation.x = -0.90
-	_label(root, "MonitorText", "8x5090\n工作站", Vector3(MON_X, 0.2744, -0.115), 0.0042,
-		Color(0.55, 0.90, 1.0, 1.0))
 
 	# 前脸细节：三个黑色硬盘位（机箱正面朝向墙的右侧）
 	for i in 3:
@@ -260,7 +262,7 @@ func _initialize() -> void:
 	var mcs := CollisionShape3D.new()
 	mcs.name = "CollisionMonitor"
 	var mbs := BoxShape3D.new()
-	mbs.size = Vector3(1.02, 1.28, 0.45)
+	mbs.size = Vector3(1.95, 1.28, 0.45)
 	mcs.shape = mbs
 	mcs.position = Vector3(MON_X, 0, 0)
 	body.add_child(mcs)

@@ -37,10 +37,11 @@ func _run() -> void:
 			first = false
 		print("  %s pos=%s size=%s" % [card.name, str(card.global_position.snappedf(0.01)),
 			str(box.size.snappedf(0.001))])
-	var mon := rig.get_node_or_null("Monitor") as Node3D
-	if mon == null:
-		print("[wallload] 没找到 Monitor")
-	else:
+	for nm in ["Monitor0", "Monitor1"]:
+		var mon := rig.get_node_or_null(nm) as Node3D
+		if mon == null:
+			print("[wallload] 没找到 ", nm)
+			continue
 		var mb := AABB()
 		var mfirst := true
 		for mi in mon.find_children("*", "MeshInstance3D", true, false):
@@ -50,7 +51,7 @@ func _run() -> void:
 			var b: AABB = m.global_transform * m.mesh.get_aabb()
 			mb = b if mfirst else mb.merge(b)
 			mfirst = false
-		print("[wallload] 显示器 pos=", mon.global_position.snappedf(0.01),
+		print("[wallload] ", nm, " pos=", mon.global_position.snappedf(0.01),
 			" AABB=", str(mb.position.snappedf(0.01)), " size=", str(mb.size.snappedf(0.01)))
 	var body := rig.get_node("Body")
 	var shapes := 0
