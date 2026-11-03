@@ -198,6 +198,30 @@ func _ready() -> void:
 	# 设置（Esc 菜单）：先读一次初值，之后跟着变
 	GameSettings.listen(_on_setting_changed)
 	_apply_settings()
+	_setup_face_fill()
+
+
+## ── 贴脸补光只照角色 ──
+##
+## 2026-11-03 用户指着墙上一团光斑问「这个光是什么」—— 就是 `FaceFill`
+## （`3b9ffb4` 加的贴脸补光）。它本来只想照亮脸，但点光源连墙一起照：
+## 贴着墙站时距离不到 1 m，平方衰减直接过曝，墙上就留一团跟着人走的光斑。
+##
+## 做法：把玩家自己的网格放到 `1 + 专用层`，再把这盏灯的 `light_cull_mask`
+## 只留专用层。**其余灯（太阳、屋里吸顶灯）和相机一律不动** —— 它们默认照所有层，
+## 所以角色受光跟以前完全一样，只是这盏灯照不到墙。
+## 仍然保留第 1 层，是为了万一别处按层剔除时角色不会消失。
+const FACE_FILL_LAYER := 2
+
+
+func _setup_face_fill() -> void:
+	var fill := get_node_or_null("FaceFill") as OmniLight3D
+	if fill == null:
+		return
+	var bit := 1 << (FACE_FILL_LAYER - 1)
+	for n in find_children("*", "MeshInstance3D", true, false):
+		(n as VisualInstance3D).layers = 1 | bit
+	fill.light_cull_mask = bit
 
 
 ## 窗口重新获得焦点时把鼠标收回来。
