@@ -125,6 +125,13 @@ const PERF_WINDOW := 120
 var _perf_dts: Array[float] = []
 var _perf_phys_sum := 0.0
 var _perf_frames := 0
+## 最近一个刷新周期里跑了多少物理帧 —— 「每帧几个物理步」。
+## 这一栏是用来判「物理雪球」的：帧一慢，Godot 每帧最多补
+## `max_physics_steps_per_frame`（默认 8）步，物理成本又推高帧时间。
+## ⚠️ 别用「帧时间 ÷ 步数」当每步成本 —— 步数是跟着帧时间算出来的，
+##    除出来恒等于 1/步频，本喵踩过这个坑。
+var _perf_phys_frames := 0
+var _perf_steps := 0
 
 
 ## 输入自检：把「窗口到底有没有拿到前台焦点」打出来，并尽力抢一次前台。
@@ -247,6 +254,10 @@ func _tick_perf_overlay(delta: float) -> void:
 		_perf_dts.pop_front()
 	_perf_phys_sum += float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 	_perf_frames += 1
+	var pf := Engine.get_physics_frames()
+	if _perf_phys_frames > 0:
+		_perf_steps += pf - _perf_phys_frames
+	_perf_phys_frames = pf
 	_perf_clock += delta
 	if _perf_clock < PERF_REFRESH:
 		return
@@ -259,8 +270,10 @@ func _update_perf_overlay() -> void:
 		return
 	var n := maxi(_perf_frames, 1)
 	var phys := _perf_phys_sum / float(n)
+	var steps := float(_perf_steps) / float(n)
 	_perf_phys_sum = 0.0
 	_perf_frames = 0
+	_perf_steps = 0
 	var dts := _perf_dts.duplicate()
 	dts.sort()
 	var p50 := 0.0
@@ -282,10 +295,11 @@ func _update_perf_overlay() -> void:
 		"draw call %5d      图元 %9d" % [
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))],
-		"显存 %7.0f MiB      物体 %6d      物理 %5.2f ms" % [
+		"显存 %7.0f MiB      物体 %6d" % [
 			float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0,
-			int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
-			phys],
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))],
+		"物理 %6.2f ms      物理步/帧 %4.2f（上限 %d）" % [
+			phys, steps, Engine.max_physics_steps_per_frame],
 		"位置 (%7.2f, %6.2f, %7.2f)" % [pos.x, pos.y, pos.z],
 	])
 
