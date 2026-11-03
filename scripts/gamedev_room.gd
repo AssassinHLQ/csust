@@ -1,3 +1,4 @@
+@tool
 extends Node3D
 ## 游戏开发部活动室：模型改成运行时按路径加载，缺模型时只少这栋房子的网格。
 ##
@@ -27,6 +28,15 @@ const MODEL := "res://models/gamedev_room/gamedev_room.glb"
 
 
 func _ready() -> void:
+	# 编辑器里也要把模型挂上 —— 否则在编辑器里打开本场景只看到 24 个碰撞盒、
+	# 看不到房间长什么样，没法对照着微调碰撞（用户 2026-11-03 提出）。
+	# 挂上去的节点 `owner = null`，**不会被写进 .tscn**。
+	var old := _model.get_node_or_null("RoomMesh")
+	if old != null:
+		# 先摘掉再 queue_free：否则新节点会取到 "_2" 的名字，重复 _ready 时越堆越多
+		_model.remove_child(old)
+		old.queue_free()
+
 	if not ResourceLoader.exists(MODEL):
 		# 按设计允许缺失：只警告，不报错。
 		push_warning("[GameDevRoom] 模型不在（按设计允许），只少了房间网格：%s" % MODEL)
@@ -43,4 +53,6 @@ func _ready() -> void:
 		return
 
 	inst.name = "RoomMesh"
+	# 编辑期挂进来的节点不能有 owner，否则保存场景时会被"烤"进 .tscn
+	inst.owner = null
 	_model.add_child(inst)
