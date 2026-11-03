@@ -37,7 +37,8 @@ func _run() -> void:
 			first = false
 		print("  %s pos=%s size=%s" % [card.name, str(card.global_position.snappedf(0.01)),
 			str(box.size.snappedf(0.001))])
-	for nm in ["Monitor0", "Monitor1"]:
+	for i in 4:
+		var nm := "Monitor%d" % i
 		var mon := rig.get_node_or_null(nm) as Node3D
 		if mon == null:
 			print("[wallload] 没找到 ", nm)
