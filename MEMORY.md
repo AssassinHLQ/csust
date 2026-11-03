@@ -172,6 +172,21 @@ export LOCALAPPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local'
 - 全工程此前**没有任何 `layers` / `cull_mask` 用法**（`addons/` 之外），第 2 层是空着的。
 - 验证图：`_log/facefill_before.png`（灯照所有层，墙上一团光斑）／`_log/facefill_after.png`（干净）。
 
+### 探针出图不要放 res:// 里（已用 `.gdignore` 堵住）
+
+`_log/` 在项目内，写进去的 PNG 会被编辑器当资源导入、生成 `.import`；多个进程同时
+写/删时扫描会撞上半成品，于是刷屏：
+
+```
+ERROR: Can't find file 'res://_log/textures/Aris_Original_Body.png' during file reimport.
+```
+
+2026-11-03 用户拿这批红字当「部室网格在编辑器里不显示」的原因 —— **两者无关**，
+那批文件是瞬时状态，源文件当时其实都在（清点时 29 个 `.import` 无一孤儿）。
+
+现在 `_log/.gdignore` 存在 → Godot 整目录忽略（写文件不受影响，只是不再导入）；
+目录里历史遗留的 29 个 `.import` 已删除。
+
 ### 测量陷阱（下次别再踩）
 
 - `Performance.TIME_PROCESS` 在本工程**和真实帧率对不上**：浮层开着报 29 ms，实测 194 fps。
