@@ -210,6 +210,8 @@ var lean_fix := {}
 var roll_fix := {}
 ## `PoseFix.freeze_eyelids()`：停用眨眼（删掉眼睑骨轨道的报告）
 var blink_fix := {}
+## `AnimSpikeFix.fix()`：消掉孤点关键帧（f25 那一下手臂抽搐）的报告
+var spike_fix := {}
 ## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
 var face_fix := {}
 ## `FaceFix.simplify_brows()`：多层眉毛只留最前面那层的报告
@@ -328,6 +330,13 @@ func _ready() -> void:
 	if int(blink_fix.get("tracks", 0)) > 0:
 		print("[AnimDriver] 停用眨眼：删掉 %d 条眼睑轨道，涉及 %d 个动作" % [
 			int(blink_fix["tracks"]), (blink_fix["clips"] as Array).size()])
+	# 孤点关键帧（用户 2026-11-03：「25-45 这个，抬起来太突兀了，导致射击总是
+	# 莫名其妙抬起来」）。`Normal_Attack_Ing` 的 f25 上两只上臂/前臂一起离群，
+	# 绕路 60~142°，而前后两帧直连只有 12~21° —— 一帧抽搐。判据见 `anim_spike_fix.gd`。
+	spike_fix = AnimSpikeFix.fix(player)
+	if int(spike_fix.get("keys", 0)) > 0:
+		print("[AnimDriver] 消掉孤点关键帧：%d 个 / %s" % [
+			int(spike_fix["keys"]), str(spike_fix["bones"])])
 	# 脸皮 / 眼睛两层共面 → z-fighting（用户报「双眼皮打架」）。把上面那层沿法线推开 0.14 mm。
 	# 只推**不带形态键**的网格（嘴那 10 块必须留着形态键，见 `face_fix.gd` 文件头）。
 	face_fix = FaceFix.separate_face_layers(get_parent())
