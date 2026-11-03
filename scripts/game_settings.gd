@@ -52,6 +52,10 @@ const DEFAULTS := {
 	# 界面上的滑块是**连续**的（1 m 一格，肉眼看就是无极），但生效值**按 100 m 分段**
 	# （100 / 200 / … / 1000），取整只发生在 `render_distance()` 一处。
 	"render_distance": 300.0,
+	# ── 一天有多长（时间系统，2026-11-04）──
+	# 游戏内 1 天 = 现实多少分钟。**0 = 时间不流动**（太阳钉在 8:00）。
+	# `scripts/time_of_day.gd` 每帧读这个值，滑完立刻生效，不用重启。
+	"day_minutes": 20.0,
 	"window_mode": "maximized",
 	# ── 准星（2026-10-22 用户：颜色 / 双色渐变 / 粗细 / 每个部件的透明度 都要能调）──
 	# ⚠️ 三个尺寸单位都是**物理像素**（不是逻辑 px）：HUD 会按 `crosshair_scale()`
@@ -84,6 +88,8 @@ const RANGES := {
 	# 渲染距离：滑块 100~1000 m，步长 1 m（**故意不设成 100** —— 那会变成
 	# 「只能停在 10 个刻度上」，用户要的是「能滑到任意一处，数字跳档」）
 	"render_distance": [RD_MIN, RD_MAX, 1.0],
+	# 一天长度：0（不变）~ 120 分钟，1 分钟一格
+	"day_minutes": [0.0, 120.0, 1.0],
 	# ── 准星（单位：物理像素）──
 	"crosshair_dot_px": [1.0, 15.0, 1.0],
 	"crosshair_thick_px": [1.0, 10.0, 1.0],
@@ -138,6 +144,7 @@ const LABELS := {
 	"ssr": "屏幕空间反射 SSR",
 	"fog": "雾",
 	"render_distance": "渲染距离",
+	"day_minutes": "一天长度 (分钟，0=不变)",
 	"window_mode": "窗口模式",
 	"crosshair_color": "准星颜色",
 	"crosshair_color2": "渐变第二色",
@@ -151,7 +158,8 @@ const LABELS := {
 
 ## 「画面」分组：设置界面在这些键之前插一个小标题
 const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
-	"shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance", "window_mode"]
+	"shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance",
+	"day_minutes", "window_mode"]
 
 ## 「准星」分组：同上，第一个键之前插小标题「准星」。
 ## ⚠️ 顺序就是设置界面里的顺序，DEFAULTS 里也按这个顺序排过一遍 —— 两处别走散。

@@ -146,11 +146,11 @@ const SIGN_VISIBLE_END := 28.0
 
 func _setup_sign_visibility(lb: Label3D) -> void:
 	lb.no_depth_test = false
-	# 1 = BaseMaterial3D 的 ALPHA_CUT_DISCARD。
-	# 这里写数字是因为 `BaseMaterial3D.ALPHA_CUT_DISCARD` 在 GDScript 里取不到
-	# （2026-11-03 实测报 "Cannot find member"）。`scenes/mesh_hut.tscn` 里
-	# 那块像素字牌的 `alpha_cut = 1` 也是同一个值。
-	lb.alpha_cut = 1
+	# alpha_cut 让半透明字也写深度，避免排序把它顶到最前面。
+	# ⚠️ 属性类型是 `Label3D.AlphaCutMode`（枚举）：
+	#    · 不能写字符串 —— `lb.alpha_cut = "discard"` 会 Parse Error（2026-11-04 实测）
+	#    · 也不能用 `BaseMaterial3D.ALPHA_CUT_DISCARD` —— GDScript 里取不到这个成员
+	lb.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 	lb.visibility_range_end = SIGN_VISIBLE_END
 	lb.visibility_range_end_margin = 6.0
 

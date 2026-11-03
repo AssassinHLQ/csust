@@ -58,7 +58,8 @@ const AZIMUTH_EAST := -90.0
 const AZIMUTH_WEST := 90.0
 
 var hours := START_HOUR
-var day_minutes := DEFAULT_DAY_MINUTES
+## 探针用的覆盖值；< 0 表示「跟随设置面板里的 `day_minutes`」。
+var _override_minutes := -1.0
 
 var _sun: DirectionalLight3D
 var _env: Environment
@@ -73,10 +74,19 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if day_minutes > 0.001:
-		hours = fmod(hours + delta * 24.0 / (day_minutes * 60.0), 24.0)
+	var dm := effective_day_minutes()
+	# 0（或负数）= 时间不流动，太阳钉在原地
+	if dm > 0.001:
+		hours = fmod(hours + delta * 24.0 / (dm * 60.0), 24.0)
 	_bind_if_needed()
 	_apply()
+
+
+## 游戏内 1 天 = 现实多少分钟。跟随设置面板的 `day_minutes`（0 = 不走）。
+func effective_day_minutes() -> float:
+	if _override_minutes >= 0.0:
+		return _override_minutes
+	return float(GameSettings.value("day_minutes"))
 
 
 ## 场景切换 / 节点被换掉之后重新找 `Sun` 和 `WorldEnvironment`。
@@ -181,4 +191,4 @@ func set_hours(h: float) -> void:
 
 
 func set_day_minutes(m: float) -> void:
-	day_minutes = maxf(0.1, m)
+	_override_minutes = maxf(0.0, m)
