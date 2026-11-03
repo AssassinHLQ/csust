@@ -59,6 +59,12 @@ export LOCALAPPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local'
 - 大厅 AABB（`hide_inside_aabb`）从场景 `Campus` 的 `SplatScene` 读，当前值 `P(-17,-3,-11) S(33,19,25)`，即 `z > 14` 即属室外。
 - 触发：玩家在 AABB 内累计 **0.3 s** → `_release_campus()` 停光栅器、`quad.queue_free()`、`RenderingServer.call_on_render_thread(ctx.free)` 真释放 RID；出门累计 **0.25 s** → `_make_bundle()` 重建，bin 分帧 `pump_load` 上传。
 - `hide_inside_aabb` 那套旧办法（`SplatScene` 自带）只隐藏节点、**不释放显存**；真释放只有 a7ec536 这条路径。
+- ⚠️ **室内分支必须撤遮罩**：`_overlay`（「校园渲染器加载中...」）唯一那句 `visible = false`
+  在**室外分支**里。`a7ec536` 加了室内释放后，`_process` 在室内直接 return，
+  于是 `_make_bundle()` 不跑、遮罩永不撤、`is_ready()` 永远 false（切场景黑屏还干等 20 s）。
+  `next_level` 的出生点 `(-2.0, 0.55, 5.2)` 正落在 `hide_inside_aabb` 内，**走门进第二场景必黑屏**。
+  已在 `a8de851` 修掉（室内也撤遮罩 + 厅内 `is_ready()` 直接为真）。
+  验证探针：`_probe_scene_switch_ggs.gd`（走 MondrianGate2F 进第二场景，截图 `_log/after_switch.png`）。
 
 **本次复测（2026-11-03，`run_shot.sh ... -- --splat=off`，1280×720 离屏）：**
 
