@@ -233,7 +233,34 @@ SSAO・辉光・SSR・雾 全关 / 最大化`，GPU 是 4060 —— **渲染侧�
   `_probe_physics_levers.gd`、`_probe_inside609.gd`、`_probe_splat_visible.gd`、
   `_probe_room_playercam.gd`、`_probe_facefill.gd`、`_probe_perf_overlay_cost.gd`。
 
-## 11. 下一步
+## 11. 部室的模型加载与碰撞（2026-11-03 改）
+
+**模型是运行时加载的**：`gamedev_room.tscn` 的 `Model` 是个空 `Node3D` + `scripts/gamedev_room.gd`，
+glb 由脚本在 `_ready()` 里挂上去（`36e9bf8` 合规审计改的）。原因：模型授权未核实、被
+`.gitignore` 挡在仓外，写成 `[ext_resource]` 时**缺模型会让整个场景加载失败 → 游戏起不来**。
+
+- ⚠️ 副作用：**在编辑器里看不到屋子的网格**（运行时挂的节点编辑器不显示），
+  只能看到灯、招牌、机箱和碰撞 gizmo。2026-11-03 用户就是拿这个来问「这是碰撞吗」。
+  这不是 bug；**跑游戏**才看得到屋子。
+- 编辑器要看碰撞：菜单「调试 → 可见碰撞形状」（跑中的游戏用 `--debug-collisions`）。
+
+**碰撞已从凹面 trimesh 换成 24 块具名盒子**（用户 2026-11-03：「部室碰撞太多面数了」）：
+
+- 生成器 `scripts/_build_gamedev_collision.gd`（`_tools/run_probe.sh` 跑；**幂等**，重跑会先删掉上次的 `Col_*`；
+  `-- --dry` 只打印）。它读模型 31 个材质面的局部 AABB 来分类：结构墙按整屋 AABB 重排、
+  门框那块板给出门洞范围、扁片/铺地/小件不做碰撞、其余每件一个盒。
+- 结果：墙 4 面（门洞那面拆成 `Col_DoorJambA` / `Col_DoorJambB` / `Col_DoorLintel`）
+  + `Col_Floor` + `Col_Ceiling` + 16 件家具（`Col_teddybear_01`、`Col_monitor_02`…名字可认）。
+  全部挂在 `Model/Collision` 下，编辑器里能拖、能改 `size`。
+- 物理同机位 A/B（240 Hz 物理放大、7 名同伴在屋里）：旧 trimesh **57.5 fps / 17.40 ms**
+  → 盒子 **108.7 fps / 9.20 ms**（约 1.9×）。射线验证：门洞通（12.94 m，中途撞粉熊）、
+  实墙挡（1.67 m 正好是墙面）、地板/天花板/家具都挡。
+- 旧 `assets/collision/gamedev_room_trimesh.res`（788 KB）**留在盘上做回退**，场景已不再引用；
+  `scripts/_bake_gamedev_trimesh.gd` 也还在。
+- 家具用 AABB 会略多吃空间（斜放的沙发/熊）。刻意如此：宁可挡多一点也别穿模；
+  嫌胖就在编辑器里把那一块 `size` 改小。
+
+## 12. 下一步
 
 1. ~~真实窗口复测 a7ec536~~ —— 已完成（离屏 `--splat=off`，数据见 §4）。
 2. ~~部室角落掉帧~~ —— 已定位并修掉 184.5 万面那颗雷（§10）；用户可用 F3 复核，仍低再谈室内降级室外远景。

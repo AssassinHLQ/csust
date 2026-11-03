@@ -1,9 +1,8 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=35 format=3]
 
 [ext_resource type="Script" path="res://scripts/gamedev_room.gd" id="1_script"]
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
 [ext_resource type="PackedScene" path="res://scenes/pc_wall_case.tscn" id="5_pc_rig"]
-[ext_resource type="ConcavePolygonShape3D" path="res://assets/collision/gamedev_room_trimesh.res" id="4_room_shape"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_sign"]
 size = Vector3(4.2, 0.86, 0.06)
@@ -41,6 +40,78 @@ albedo_color = Color(1, 0.97, 0.9, 1)
 emission_enabled = true
 emission = Color(1, 0.95, 0.85, 1)
 emission_energy_multiplier = 1.2
+
+[sub_resource type="BoxShape3D" id="Shape_Col_shelf_03"]
+size = Vector3(0.6977, 3.0408, 1.3347)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_shelf_03_001"]
+size = Vector3(0.6977, 3.0408, 1.3347)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_boxes_01"]
+size = Vector3(1.4785, 1.1193, 9.2878)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_chair_01"]
+size = Vector3(0.7742, 0.5011, 0.7742)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_chair_02_001"]
+size = Vector3(1.3399, 1.1592, 1.2389)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_desk_01"]
+size = Vector3(1.8603, 1.8033, 1.717)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_desk_02"]
+size = Vector3(0.9889, 1.022, 1.7184)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_desk_03"]
+size = Vector3(0.8721, 1.1091, 5.1925)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_locker_01"]
+size = Vector3(2.4033, 2.3383, 0.7587)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_monitor_01"]
+size = Vector3(1.4946, 1.3865, 1.3629)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_monitor_02"]
+size = Vector3(2.8548, 2.2256, 2.0768)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_plantpot_01"]
+size = Vector3(1.2388, 2.0464, 0.835)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_shelf_01"]
+size = Vector3(0.7614, 3.5343, 1.3396)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_shelf_02"]
+size = Vector3(0.6947, 3.3901, 1.3294)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_sofa_01"]
+size = Vector3(2.9836, 1.1186, 1.2448)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_teddybear_01"]
+size = Vector3(2.0925, 1.9986, 1.5507)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_Floor"]
+size = Vector3(11.2813, 0.4, 13.657)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_Ceiling"]
+size = Vector3(11.2813, 0.3, 13.657)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_WallXNeg"]
+size = Vector3(0.3, 7.1308, 13.657)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_WallXPos"]
+size = Vector3(0.3, 7.1308, 13.657)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_WallZPos"]
+size = Vector3(11.2813, 7.1308, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_DoorJambA"]
+size = Vector3(1.0625, 7.1308, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_DoorJambB"]
+size = Vector3(8.0304, 7.1308, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_Col_DoorLintel"]
+size = Vector3(2.1884, 3.9573, 0.3)
 
 [node name="GameDevRoom" type="Node3D"]
 script = ExtResource("1_script")
@@ -117,9 +188,103 @@ texture_filter = 2
 modulate = Color(0.93, 0.96, 1, 1)
 
 [node name="Collision" type="StaticBody3D" parent="Model"]
+[node name="Col_shelf_03" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4111, 1.531, 0.848)
+shape = SubResource("Shape_Col_shelf_03")
 
-[node name="Mesh" type="CollisionShape3D" parent="Model/Collision"]
-shape = ExtResource("4_room_shape")
+[node name="Col_shelf_03_001" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4194, 1.531, -1.8494)
+shape = SubResource("Shape_Col_shelf_03_001")
+
+[node name="Col_boxes_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.8698, 0.5767, 0.5277)
+shape = SubResource("Shape_Col_boxes_01")
+
+[node name="Col_chair_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.2871, 0.2603, -1.8492)
+shape = SubResource("Shape_Col_chair_01")
+
+[node name="Col_chair_02_001" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.4655, 0.6623, 0.7033)
+shape = SubResource("Shape_Col_chair_02_001")
+
+[node name="Col_desk_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4635, 0.9042, 3.4604)
+shape = SubResource("Shape_Col_desk_01")
+
+[node name="Col_desk_02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.9479, 0.5203, -0.0116)
+shape = SubResource("Shape_Col_desk_02")
+
+[node name="Col_desk_03" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.8946, 0.5639, -0.0135)
+shape = SubResource("Shape_Col_desk_03")
+
+[node name="Col_locker_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.6568, 1.1784, 5.6076)
+shape = SubResource("Shape_Col_locker_01")
+
+[node name="Col_monitor_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.2296, 0.7017, 1.2793)
+shape = SubResource("Shape_Col_monitor_01")
+
+[node name="Col_monitor_02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.2567, 1.1219, 4.8793)
+shape = SubResource("Shape_Col_monitor_02")
+
+[node name="Col_plantpot_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4643, 1.0282, -5.269)
+shape = SubResource("Shape_Col_plantpot_01")
+
+[node name="Col_shelf_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.3901, 1.7885, 2.1937)
+shape = SubResource("Shape_Col_shelf_01")
+
+[node name="Col_shelf_02" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.413, 1.7161, -0.5039)
+shape = SubResource("Shape_Col_shelf_02")
+
+[node name="Col_sofa_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3305, 0.5689, -5.0577)
+shape = SubResource("Shape_Col_sofa_01")
+
+[node name="Col_teddybear_01" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5085, 1.0139, 5.218)
+shape = SubResource("Shape_Col_teddybear_01")
+
+[node name="Col_Floor" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1996, -0)
+shape = SubResource("Shape_Col_Floor")
+
+[node name="Col_Ceiling" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.5812, -0)
+shape = SubResource("Shape_Col_Ceiling")
+
+[node name="Col_WallXNeg" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.4907, 3.1658, -0)
+shape = SubResource("Shape_Col_WallXNeg")
+
+[node name="Col_WallXPos" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.4907, 3.1658, -0)
+shape = SubResource("Shape_Col_WallXPos")
+
+[node name="Col_WallZPos" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.1658, 6.6785)
+shape = SubResource("Shape_Col_WallZPos")
+
+[node name="Col_DoorJambA" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.1094, 3.1658, -6.6785)
+shape = SubResource("Shape_Col_DoorJambA")
+
+[node name="Col_DoorJambB" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.6255, 3.1658, -6.6785)
+shape = SubResource("Shape_Col_DoorJambB")
+
+[node name="Col_DoorLintel" type="CollisionShape3D" parent="Model/Collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.4839, 4.7526, -6.6785)
+shape = SubResource("Shape_Col_DoorLintel")
+
+
 
 [node name="PC5090Rig" parent="." instance=ExtResource("5_pc_rig")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.94, 5.03)
