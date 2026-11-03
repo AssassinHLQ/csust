@@ -24,6 +24,12 @@ var _overlay: CanvasLayer
 var _overlay_label: Label
 var _total := 0
 var _active := false
+## 玩家在室内时把 GGS 光栅器停掉并释放 GPU 资源；出门再重建。
+## AABB 从场景里的 Campus SplatScene 读取（next_level.tscn 已量好）。
+var hide_inside_aabb := AABB()
+var _released := false
+var _inside_clock := 0.0
+var _outside_clock := 0.0
 ## 被 scene_flow 的「黑屏预载」认出来的接口（和 GDGS 的 SplatScene 同一套）：
 ## 有 preload_on_gate + force_start() + is_ready()，切场景时就会先把校园点云
 ## 加载完再淡入，而不是进场后卡几秒。实测 610 万点首次上传要 ~5 s。
@@ -63,6 +69,9 @@ func _ready() -> void:
 		_gdgs_sc.set_process(false)
 	var campus := level.get_node_or_null("Campus")
 	if campus != null:
+		var ha = campus.get("hide_inside_aabb")
+		if ha is AABB:
+			hide_inside_aabb = ha
 		campus.set("auto_start", false)
 		campus.set_process(false)
 		# auto_start 是在子节点 _ready 里判的，这里已经晚了：那条「等 8 s 再解码」
@@ -92,6 +101,7 @@ func _ready() -> void:
 	set_process(true)
 
 func _exit_tree() -> void:
+	_release_campus()
 	if _gdgs_sc != null and is_instance_valid(_gdgs_sc):
 		_gdgs_sc.set_process(true)
 
@@ -99,6 +109,8 @@ func _make_bundle() -> bool:
 	cam = get_viewport().get_camera_3d()
 	if cam == null:
 		return false
+	if tex == null:
+		tex = Texture2DRD.new()
 	# 不要 Compositor：GGS 走全屏 quad，Compositor 会把光栅器拖到个位数帧率。
 	if cam.compositor != null:
 		cam.compositor = null
@@ -136,6 +148,28 @@ func is_ready() -> bool:
 	return rasterizer.is_loaded == true
 
 
+## 室内释放：停掉 GGS 调用，把光栅器用过的 RID/缓冲交还给 RenderingDevice。
+## 出门后 _process 会重新 _make_bundle()，代价是一次 bin 重传（约 1.5 s）。
+func _release_campus() -> void:
+	_released = true
+	_active = false
+	if quad != null:
+		quad.queue_free()
+		quad = null
+	if tex != null:
+		tex.texture_rd_rid = RID()
+		tex = null
+	if rasterizer != null:
+		if rasterizer.load_thread != null and rasterizer.load_thread.is_started():
+			rasterizer.should_terminate_thread[0] = true
+			rasterizer.load_thread.wait_to_finish()
+		var ctx = rasterizer.context
+		rasterizer = null
+		if ctx != null:
+			RenderingServer.call_on_render_thread(ctx.free)
+	_ready_done = false
+
+
 func _make_quad() -> void:
 	quad = MeshInstance3D.new()
 	var qm := QuadMesh.new()
@@ -157,6 +191,23 @@ func _make_quad() -> void:
 	quad.visible = false
 
 func _process(_dt: float) -> void:
+	var inside := player != null and hide_inside_aabb.size != Vector3.ZERO \
+			and hide_inside_aabb.has_point(player.global_position)
+	if inside:
+		_outside_clock = 0.0
+		_inside_clock += _dt
+		if quad != null:
+			quad.visible = false
+		_active = false
+		if not _released and _inside_clock >= 0.3:
+			_release_campus()
+		return
+	_inside_clock = 0.0
+	_outside_clock += _dt
+	if _released:
+		if _outside_clock < 0.25:
+			return
+		_released = false
 	if not _ready_done and not _make_bundle():
 		return
 	if cam == null or not is_instance_valid(cam):
