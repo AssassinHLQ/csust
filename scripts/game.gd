@@ -106,6 +106,25 @@ var _hits := 0
 ## 输入自检用：累计收到的真实键盘按下事件数（见 _input）。一直 0 就说明
 ## 按键事件压根没进 Godot，而不是 InputMap 没匹配上。
 var _keys_seen := 0
+## ── F3 性能浮层（默认关闭）──
+##
+## 2026-11 用户报「站到窗+储物柜那一角就非常卡」。远距离探针只能看到平均帧率，
+## 复现不了现场手感，所以给一个就地读数的浮层：按 F3 开关，显示 FPS / 帧耗时 /
+## draw call / 图元 / 主线程与物理耗时 / 显存 / 玩家坐标。
+## 0.2 s 刷一次 —— 每帧改 Label 文本本身就有开销，会污染读数。
+const PERF_KEY := KEY_F3
+const PERF_REFRESH := 0.2
+var _perf_layer: CanvasLayer
+var _perf_label: Label
+var _perf_clock := 0.0
+## 最近 120 帧的真实帧间隔（ms）。p99 比平均帧率有用得多：
+## 「平均 60 fps 但 p99 130 ms」玩起来就是一顿一顿，平均帧率完全看不出来。
+## 注：`Performance.TIME_PROCESS` 在这个工程里和真实帧间隔对不上（浮层开着报
+## 29 ms、实测 194 fps），所以不显示它，只显示量出来的帧间隔。
+const PERF_WINDOW := 120
+var _perf_dts: Array[float] = []
+var _perf_phys_sum := 0.0
+var _perf_frames := 0
 
 
 ## 输入自检：把「窗口到底有没有拿到前台焦点」打出来，并尽力抢一次前台。
@@ -141,7 +160,10 @@ func _watch_input() -> void:
 ## 看这个计数就知道是哪种：一直 0 就是①，在涨就是②。
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and (event as InputEventKey).pressed:
+		var key := event as InputEventKey
 		_keys_seen += 1
+		if not key.echo and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
+			_toggle_perf_overlay()
 
 
 func _report_input() -> void:
@@ -179,6 +201,93 @@ func _player_state() -> String:
 		str((pl as CharacterBody3D).velocity.snappedf(0.01)),
 		str((pl as Node3D).global_position.snappedf(0.01))]
 	return s
+
+
+## ── F3 性能浮层 ──
+func _toggle_perf_overlay() -> void:
+	if _perf_layer == null:
+		_build_perf_overlay()
+	_perf_layer.visible = not _perf_layer.visible
+	_perf_clock = 0.0
+	if _perf_layer.visible:
+		_update_perf_overlay()
+	else:
+		print("[Game] F3 性能浮层：关")
+
+
+func _build_perf_overlay() -> void:
+	_perf_layer = CanvasLayer.new()
+	_perf_layer.name = "PerfOverlay"
+	_perf_layer.layer = 200
+	# 建出来先藏着：`_toggle_perf_overlay()` 会紧接着取反，第一次按 F3 才是「打开」
+	_perf_layer.visible = false
+	add_child(_perf_layer)
+	# 不压血条（左上角 HP 面板占着），放到它下面一格，垫半透明底免得看不清
+	var panel := PanelContainer.new()
+	panel.position = Vector2(16, 132)
+	_perf_layer.add_child(panel)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0.55)
+	sb.set_corner_radius_all(4)
+	sb.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", sb)
+	_perf_label = Label.new()
+	_perf_label.add_theme_font_size_override("font_size", 14)
+	_perf_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_perf_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.92))
+	_perf_label.add_theme_constant_override("outline_size", 4)
+	panel.add_child(_perf_label)
+
+
+func _tick_perf_overlay(delta: float) -> void:
+	if _perf_layer == null or not _perf_layer.visible:
+		return
+	_perf_dts.append(delta * 1000.0)
+	if _perf_dts.size() > PERF_WINDOW:
+		_perf_dts.pop_front()
+	_perf_phys_sum += float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_perf_frames += 1
+	_perf_clock += delta
+	if _perf_clock < PERF_REFRESH:
+		return
+	_perf_clock = 0.0
+	_update_perf_overlay()
+
+
+func _update_perf_overlay() -> void:
+	if _perf_label == null:
+		return
+	var n := maxi(_perf_frames, 1)
+	var phys := _perf_phys_sum / float(n)
+	_perf_phys_sum = 0.0
+	_perf_frames = 0
+	var dts := _perf_dts.duplicate()
+	dts.sort()
+	var p50 := 0.0
+	var p99 := 0.0
+	var mx := 0.0
+	if not dts.is_empty():
+		p50 = dts[dts.size() / 2]
+		p99 = dts[mini(int(float(dts.size()) * 0.99), dts.size() - 1)]
+		mx = dts[dts.size() - 1]
+	var pos := Vector3.ZERO
+	if _player != null:
+		pos = _player.global_position
+	var stat := "最近 %d 帧 p50 %5.1f / p99 %5.1f / max %5.1f ms" % [dts.size(), p50, p99, mx]
+	if dts.is_empty():
+		stat = "正在采样…（0.2 s 出数）"
+	_perf_label.text = "\n".join([
+		"F3 性能浮层 —— 再按一次关闭",
+		"FPS %6.1f    %s" % [Engine.get_frames_per_second(), stat],
+		"draw call %5d      图元 %9d" % [
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))],
+		"显存 %7.0f MiB      物体 %6d      物理 %5.2f ms" % [
+			float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0,
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+			phys],
+		"位置 (%7.2f, %6.2f, %7.2f)" % [pos.x, pos.y, pos.z],
+	])
 
 
 ## 全屏帧率护栏：只有视口面积**远大于**设计分辨率时才缩小 3D 渲染分辨率。
@@ -876,8 +985,9 @@ func _splats_ready() -> bool:
 	return true
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_room_swap()
+	_tick_perf_overlay(delta)
 	if _player and _player.global_position.y < FALL_LIMIT:
 		_player.global_position = _spawn
 		_player.velocity = Vector3.ZERO
