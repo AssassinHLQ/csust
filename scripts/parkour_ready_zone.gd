@@ -114,9 +114,9 @@ func _build_visuals() -> void:
 	title.outline_size = 16
 	title.pixel_size = 0.0040
 	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	title.no_depth_test = true
 	title.modulate = Color(1.0, 0.90, 0.55)
 	title.position = Vector3(0.0, 2.05, -3.2)
+	_setup_sign_visibility(title)
 	add_child(title)
 
 	var sub := Label3D.new()
@@ -126,10 +126,33 @@ func _build_visuals() -> void:
 	sub.outline_size = 10
 	sub.pixel_size = 0.0036
 	sub.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sub.no_depth_test = true
 	sub.modulate = Color(1.0, 0.97, 0.86)
 	sub.position = Vector3(0.0, 1.62, -3.2)
+	_setup_sign_visibility(sub)
 	add_child(sub)
+
+
+## 悬浮牌的可见性设置。用户 2026-11-03：「这个跑酷字幕要设置靠近显示，不然穿墙了」。
+##
+## 原来写的是 `no_depth_test = true` —— 那等于**强制画在所有东西前面**，
+## 站在墙后面也能看见，而且剪影糊在墙上，一眼就是 bug。
+##
+## 三件事：
+##   1. `no_depth_test = false` → 正常做深度测试，墙能挡住它
+##   2. `alpha_cut = DISCARD`   → 半透明字也写深度，避免排序把它顶到最前面
+##   3. `visibility_range_end`  → 站远了直接不显示，只留「走近才看见」的那块牌子
+const SIGN_VISIBLE_END := 28.0
+
+
+func _setup_sign_visibility(lb: Label3D) -> void:
+	lb.no_depth_test = false
+	# 1 = BaseMaterial3D 的 ALPHA_CUT_DISCARD。
+	# 这里写数字是因为 `BaseMaterial3D.ALPHA_CUT_DISCARD` 在 GDScript 里取不到
+	# （2026-11-03 实测报 "Cannot find member"）。`scenes/mesh_hut.tscn` 里
+	# 那块像素字牌的 `alpha_cut = 1` 也是同一个值。
+	lb.alpha_cut = 1
+	lb.visibility_range_end = SIGN_VISIBLE_END
+	lb.visibility_range_end_margin = 6.0
 
 
 func _on_body_entered(body: Node3D) -> void:
