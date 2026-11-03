@@ -143,6 +143,11 @@ func force_start() -> void:
 func is_ready() -> bool:
 	if _gave_up:
 		return true
+	# 玩家在厅里时不需要这块泼溅（大厅是实体网格，见 _process 的室内分支）：
+	# 直接算「就绪」，否则 scene_flow 的切场景黑屏会一直等它，实测干等 20 s。
+	if player != null and hide_inside_aabb.size != Vector3.ZERO \
+			and hide_inside_aabb.has_point(player.global_position):
+		return true
 	if not _ready_done or rasterizer == null:
 		return false
 	return rasterizer.is_loaded == true
@@ -199,6 +204,12 @@ func _process(_dt: float) -> void:
 		if quad != null:
 			quad.visible = false
 		_active = false
+		# ⚠️ 这条分支是 2026-11-03（a7ec536）加「室内释放」时进来的，当时漏了两件事，
+		#    结果**出生点在厅里就是永久黑屏**：遮罩「校园渲染器加载中...」永不撤、
+		#    还因为 is_ready() 一直 false 让切场景的黑屏干等 20 s。
+		#    厅里本来就不需要这块泼溅（大厅是实体网格），遮罩必须照样撤。
+		if _overlay != null and _overlay.visible:
+			_overlay.visible = false
 		if not _released and _inside_clock >= 0.3:
 			_release_campus()
 		return
