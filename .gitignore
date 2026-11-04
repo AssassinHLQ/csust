@@ -88,6 +88,16 @@ __pycache__/
 # RTX 5090 模型：爱给网下载，仅限本地学习使用（不可再分发）
 /models/rtx5090/
 
+# 三星 970 EVO Plus M.2 固态：爱给网下载（作者未署名），仅限本地学习演示，不随仓库分发。
+# 缺这个文件时 `_build_pc_wall_case.gd` 会 push_warning 并跳过机箱里那 2 颗硬盘，
+# 机箱本身照常生成 —— 和 /models/gamedev_room/ 一个套路。见 CREDITS.md。
+/models/ssd_970evo/
+
+# 电竞房素材的中间产物：从 3d66 大杂烩里抽出来的簇、平滑候选模型。
+# 都是临时文件、随时可重生成；3d66 / CGAxis 是商业素材站，绝不能进仓库。
+/models/_wip_hotel/
+/models/_wip_room/
+
 # 游戏开发部部室（Sketchfab 作者：起航扬帆了）—— 下载包无许可文件、原页面 404，
 # 授权未核实，只允许本地学习演示，不随仓库分发。见 credits.gd 与 CREDITS.md
 /models/gamedev_room/
@@ -117,3 +127,6 @@ __pycache__/
 
 # 配音候选（每句 5 个 take，人工挑选用；声音版权同 shop）
 /story/voice/_audition/
+
+# 校园 10×10 分块（离线用 scripts/_split_sog.gd + _export_campus_ggs_bins10.gd 重新生成）
+/splatdata/campus_chunks10/
