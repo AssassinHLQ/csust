@@ -52,9 +52,12 @@ var _bin_path := BIN
 ## 换来常驻显存从 2.9 GiB 降到约 0.3 GiB。
 ##
 ## 清单 `chunks.json` 由离线脚本生成（块名 → 世界中心 / bin 路径 / 字节数），
-## 所以这里不需要知道 10×10 的网格参数，直接按「离玩家最近的 9 块」选窗口。
+## 所以这里不需要知道 10×10 的网格参数，按「玩家所在格的 ±1 邻域」选窗口即可。
 const CHUNKS_JSON := "res://splatdata/campus_chunks10/chunks.json"
 const WINDOW_SIDE := 3
+## 实际使用的窗口边长，`--ggs-window=N` 可以临时改（量「多大才够看」用）。
+## 3×3 ≈ 60×50 m，校园本体 ≈ 200×150 m —— 见 `_probe_campus_window_shot.gd` 的对照图。
+var window_side := WINDOW_SIDE
 const WINDOW_BIN := "user://campus_window.bin"
 ## 多久重新评估一次窗口（秒）。每帧排 97 个块没必要。
 const WINDOW_POLL := 0.5
@@ -63,6 +66,13 @@ var _chunk_list: Array = []
 var _window_names := PackedStringArray()
 var _window_timer := 0.0
 var _use_chunks := false
+## 当前窗口的中心格（滞回用：见 `_pick_window()`）
+var _center_name := ""
+## 滞回余量（米）：新中心格要比现用中心近这么多才换窗口。
+## 格子约 20×17 m，4 m 的余量 = 跨过中线 2 m 才换，站在交界处左右晃不会翻。
+var hyst_m := 4.0
+## `--ggs-bin=<path>`：探针直接指定一个 bin（关掉分块）。常驻方案对比用。
+var _bin_override := ""
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -72,17 +82,30 @@ func _ready() -> void:
 			return
 		if a.begins_with("--ggs-max-w="):
 			max_render_w = maxf(640.0, float(a.substr(12)))
+		if a.begins_with("--ggs-window="):
+			window_side = clampi(int(a.substr(13)), 1, 10)
+		# 探针用：把滞回关掉（0）验证「原来会反复翻」
+		if a.begins_with("--ggs-hyst="):
+			hyst_m = maxf(0.0, float(a.substr(11)))
+		# 探针用：直接吃某个 bin，绕开分块（量「降采样全量」这类方案）
+		if a.begins_with("--ggs-bin="):
+			_bin_override = a.substr(10)
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
 		set_process(false)
 		return
 	# 优先走「10×10 分块 + 3×3 窗口」：有清单就不用全量那份 1406 MB 的 bin 了。
-	_use_chunks = _load_manifest()
+	if _bin_override != "":
+		_use_chunks = false
+		_bin_path = _bin_override
+		print("[campus_ggs] 指定 bin：%s" % _bin_path)
+	else:
+		_use_chunks = _load_manifest()
 	if _use_chunks:
 		print("[campus_ggs] 分块模式：%d 块，窗口 %d×%d" % [
-			_chunk_list.size(), WINDOW_SIDE, WINDOW_SIDE])
-	else:
+			_chunk_list.size(), window_side, window_side])
+	elif _bin_override == "":
 		if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
 			_bin_path = BIN_DEV
 			push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
@@ -318,22 +341,62 @@ func _load_manifest() -> bool:
 	return _chunk_list.size() > 0
 
 
-## 离玩家最近的 WINDOW_SIDE² 块（按 XZ 距离）。返回排好序的块名。
+## 以玩家所在格子为中心取 `window_side`² 块（10×10 网格的 ±1 邻域）。
+##
+## 换掉原来「按 XZ 距离取最近 N 块」的理由（2026-11-05）：
+##  - 最近 N 块拼出来的形状是斜的、玩家总在**边缘**，窗口外一抬眼就是黑；
+##  - 距离序在格子交界处会反复抖动，每抖一次就是一次「重拼 bin + 重传」。
+## 改成「中心格 ±1」后，窗口永远**居中**在玩家周围，而且只有跨过格子中线才换。
+## 再加一道滞回（`hyst_m`）：新格子必须比现用中心近 4 m 以上才换，
+## 站在格子交界处左右晃不会来回翻。
 func _pick_window() -> PackedStringArray:
 	var out := PackedStringArray()
 	if player == null or _chunk_list.is_empty():
 		return out
 	var pp := player.global_position
-	var scored: Array = []
+	var best := ""
+	var best_d := INF
 	for c in _chunk_list:
 		var d: Vector3 = (c["center"] as Vector3) - pp
-		scored.append({"n": String(c["name"]), "d": d.x * d.x + d.z * d.z})
-	scored.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
-	var want := mini(WINDOW_SIDE * WINDOW_SIDE, scored.size())
-	for i in want:
-		out.append(String(scored[i]["n"]))
+		var dd := d.x * d.x + d.z * d.z
+		if dd < best_d:
+			best_d = dd
+			best = String(c["name"])
+	if best.is_empty():
+		return out
+	# 滞回：新中心格要比现用中心**近 4 m 以上**才换窗口。
+	# ⚠️ 必须比「米」，不能比平方距离：格子间距约 20 m，平方距离一动就是上百，
+	#    拿 2 m² 当余量等于没有滞回（第一版就是这么写错的）。
+	if _center_name != "" and best != _center_name:
+		var ce := _chunk_entry(_center_name)
+		if not ce.is_empty():
+			var cd: Vector3 = (ce["center"] as Vector3) - pp
+			var cur_r := sqrt(cd.x * cd.x + cd.z * cd.z)
+			if sqrt(best_d) + hyst_m >= cur_r:
+				best = _center_name
+	_center_name = best
+	var ij := _parse_ij(best)
+	if ij.is_empty():
+		return out
+	var half := window_side / 2
+	var ci := int(ij["i"])
+	var cj := int(ij["j"])
+	for i in range(ci - half, ci + half + 1):
+		for j in range(cj - half, cj + half + 1):
+			var nm := "Chunk_%d_%d" % [i, j]
+			if _chunk_entry(nm).is_empty():
+				continue
+			out.append(nm)
 	out.sort()
 	return out
+
+
+## "Chunk_6_4" → {"i": 6, "j": 4}
+func _parse_ij(nm: String) -> Dictionary:
+	var parts := nm.split("_")
+	if parts.size() != 3:
+		return {}
+	return {"i": int(parts[1]), "j": int(parts[2])}
 
 
 func _chunk_entry(nm: String) -> Dictionary:
