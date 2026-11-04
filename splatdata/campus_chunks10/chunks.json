@@ -1,0 +1,979 @@
+{
+ "root": [
+  0.0,
+  24.48,
+  -155.56
+ ],
+ "chunks": [
+  {
+   "name": "Chunk_0_1",
+   "center": [
+    -77.723,
+    -0.02,
+    -204.866
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_1.bin",
+   "bytes": 1200
+  },
+  {
+   "name": "Chunk_0_2",
+   "center": [
+    -80.946,
+    2.873,
+    -190.918
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_2.bin",
+   "bytes": 54000
+  },
+  {
+   "name": "Chunk_0_3",
+   "center": [
+    -82.776,
+    3.505,
+    -177.145
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_3.bin",
+   "bytes": 3292320
+  },
+  {
+   "name": "Chunk_0_4",
+   "center": [
+    -82.299,
+    3.954,
+    -161.546
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_4.bin",
+   "bytes": 12491520
+  },
+  {
+   "name": "Chunk_0_5",
+   "center": [
+    -82.243,
+    4.536,
+    -147.8
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_5.bin",
+   "bytes": 23019120
+  },
+  {
+   "name": "Chunk_0_6",
+   "center": [
+    -83.156,
+    2.507,
+    -132.756
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_6.bin",
+   "bytes": 17078640
+  },
+  {
+   "name": "Chunk_0_7",
+   "center": [
+    -80.653,
+    2.682,
+    -117.291
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_7.bin",
+   "bytes": 6885120
+  },
+  {
+   "name": "Chunk_0_8",
+   "center": [
+    -80.83,
+    4.362,
+    -104.394
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_8.bin",
+   "bytes": 1028400
+  },
+  {
+   "name": "Chunk_0_9",
+   "center": [
+    -77.227,
+    2.708,
+    -89.39
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_0_9.bin",
+   "bytes": 17520
+  },
+  {
+   "name": "Chunk_1_0",
+   "center": [
+    -54.561,
+    0.012,
+    -220.039
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_0.bin",
+   "bytes": 960
+  },
+  {
+   "name": "Chunk_1_1",
+   "center": [
+    -58.154,
+    -1.413,
+    -209.007
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_1.bin",
+   "bytes": 185040
+  },
+  {
+   "name": "Chunk_1_2",
+   "center": [
+    -63.135,
+    0.866,
+    -192.629
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_2.bin",
+   "bytes": 706320
+  },
+  {
+   "name": "Chunk_1_3",
+   "center": [
+    -64.637,
+    2.598,
+    -176.856
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_3.bin",
+   "bytes": 6636960
+  },
+  {
+   "name": "Chunk_1_4",
+   "center": [
+    -63.973,
+    3.069,
+    -162.514
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_4.bin",
+   "bytes": 24614880
+  },
+  {
+   "name": "Chunk_1_5",
+   "center": [
+    -64.968,
+    2.707,
+    -148.354
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_5.bin",
+   "bytes": 42986400
+  },
+  {
+   "name": "Chunk_1_6",
+   "center": [
+    -64.072,
+    1.864,
+    -131.0
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_6.bin",
+   "bytes": 18284640
+  },
+  {
+   "name": "Chunk_1_7",
+   "center": [
+    -64.469,
+    2.15,
+    -116.856
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_7.bin",
+   "bytes": 21777360
+  },
+  {
+   "name": "Chunk_1_8",
+   "center": [
+    -61.916,
+    3.977,
+    -102.439
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_8.bin",
+   "bytes": 9438240
+  },
+  {
+   "name": "Chunk_1_9",
+   "center": [
+    -58.251,
+    2.081,
+    -89.951
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_1_9.bin",
+   "bytes": 99120
+  },
+  {
+   "name": "Chunk_2_0",
+   "center": [
+    -36.357,
+    -0.958,
+    -229.883
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_0.bin",
+   "bytes": 1381200
+  },
+  {
+   "name": "Chunk_2_1",
+   "center": [
+    -38.741,
+    1.35,
+    -209.853
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_1.bin",
+   "bytes": 3330960
+  },
+  {
+   "name": "Chunk_2_2",
+   "center": [
+    -39.453,
+    2.235,
+    -194.222
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_2.bin",
+   "bytes": 11268720
+  },
+  {
+   "name": "Chunk_2_3",
+   "center": [
+    -41.319,
+    2.666,
+    -179.448
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_3.bin",
+   "bytes": 23618400
+  },
+  {
+   "name": "Chunk_2_4",
+   "center": [
+    -42.55,
+    3.632,
+    -162.977
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_4.bin",
+   "bytes": 38129280
+  },
+  {
+   "name": "Chunk_2_5",
+   "center": [
+    -43.215,
+    3.358,
+    -147.159
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_5.bin",
+   "bytes": 46439040
+  },
+  {
+   "name": "Chunk_2_6",
+   "center": [
+    -43.593,
+    2.585,
+    -131.721
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_6.bin",
+   "bytes": 49430160
+  },
+  {
+   "name": "Chunk_2_7",
+   "center": [
+    -43.191,
+    2.625,
+    -116.949
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_7.bin",
+   "bytes": 31970400
+  },
+  {
+   "name": "Chunk_2_8",
+   "center": [
+    -43.52,
+    1.45,
+    -100.815
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_8.bin",
+   "bytes": 7495440
+  },
+  {
+   "name": "Chunk_2_9",
+   "center": [
+    -46.023,
+    2.029,
+    -89.745
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_2_9.bin",
+   "bytes": 405600
+  },
+  {
+   "name": "Chunk_3_0",
+   "center": [
+    -22.911,
+    -0.188,
+    -227.876
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_0.bin",
+   "bytes": 7986480
+  },
+  {
+   "name": "Chunk_3_1",
+   "center": [
+    -22.373,
+    0.142,
+    -211.59
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_1.bin",
+   "bytes": 22434720
+  },
+  {
+   "name": "Chunk_3_2",
+   "center": [
+    -22.991,
+    0.95,
+    -195.624
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_2.bin",
+   "bytes": 25019280
+  },
+  {
+   "name": "Chunk_3_3",
+   "center": [
+    -22.523,
+    1.527,
+    -178.757
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_3.bin",
+   "bytes": 41145120
+  },
+  {
+   "name": "Chunk_3_4",
+   "center": [
+    -22.656,
+    2.422,
+    -163.641
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_4.bin",
+   "bytes": 52932480
+  },
+  {
+   "name": "Chunk_3_5",
+   "center": [
+    -22.256,
+    2.893,
+    -147.401
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_5.bin",
+   "bytes": 41838960
+  },
+  {
+   "name": "Chunk_3_6",
+   "center": [
+    -22.185,
+    2.895,
+    -131.497
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_6.bin",
+   "bytes": 45292560
+  },
+  {
+   "name": "Chunk_3_7",
+   "center": [
+    -21.196,
+    3.432,
+    -116.222
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_7.bin",
+   "bytes": 42852480
+  },
+  {
+   "name": "Chunk_3_8",
+   "center": [
+    -20.109,
+    2.202,
+    -101.421
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_8.bin",
+   "bytes": 17848560
+  },
+  {
+   "name": "Chunk_3_9",
+   "center": [
+    -20.022,
+    2.559,
+    -87.794
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_3_9.bin",
+   "bytes": 2728560
+  },
+  {
+   "name": "Chunk_4_0",
+   "center": [
+    -2.638,
+    0.066,
+    -225.817
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_0.bin",
+   "bytes": 4063920
+  },
+  {
+   "name": "Chunk_4_1",
+   "center": [
+    -3.042,
+    -0.382,
+    -210.492
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_1.bin",
+   "bytes": 14008800
+  },
+  {
+   "name": "Chunk_4_2",
+   "center": [
+    -3.252,
+    0.604,
+    -195.746
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_2.bin",
+   "bytes": 12105840
+  },
+  {
+   "name": "Chunk_4_3",
+   "center": [
+    -2.694,
+    1.935,
+    -178.405
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_3.bin",
+   "bytes": 31044480
+  },
+  {
+   "name": "Chunk_4_4",
+   "center": [
+    -1.204,
+    2.442,
+    -163.25
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_4.bin",
+   "bytes": 38489040
+  },
+  {
+   "name": "Chunk_4_5",
+   "center": [
+    -0.537,
+    2.855,
+    -147.534
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_5.bin",
+   "bytes": 55167600
+  },
+  {
+   "name": "Chunk_4_6",
+   "center": [
+    0.427,
+    3.277,
+    -130.991
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_6.bin",
+   "bytes": 63104880
+  },
+  {
+   "name": "Chunk_4_7",
+   "center": [
+    0.605,
+    3.009,
+    -117.392
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_7.bin",
+   "bytes": 79190400
+  },
+  {
+   "name": "Chunk_4_8",
+   "center": [
+    -0.228,
+    2.282,
+    -100.958
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_8.bin",
+   "bytes": 29859360
+  },
+  {
+   "name": "Chunk_4_9",
+   "center": [
+    1.358,
+    1.895,
+    -85.342
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_4_9.bin",
+   "bytes": 6817200
+  },
+  {
+   "name": "Chunk_5_0",
+   "center": [
+    14.757,
+    -2.215,
+    -225.963
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_0.bin",
+   "bytes": 1536240
+  },
+  {
+   "name": "Chunk_5_1",
+   "center": [
+    11.85,
+    -0.749,
+    -214.155
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_1.bin",
+   "bytes": 749280
+  },
+  {
+   "name": "Chunk_5_2",
+   "center": [
+    14.352,
+    0.694,
+    -191.59
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_2.bin",
+   "bytes": 1252560
+  },
+  {
+   "name": "Chunk_5_3",
+   "center": [
+    20.456,
+    2.604,
+    -177.062
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_3.bin",
+   "bytes": 20139120
+  },
+  {
+   "name": "Chunk_5_4",
+   "center": [
+    19.549,
+    1.921,
+    -162.947
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_4.bin",
+   "bytes": 29836560
+  },
+  {
+   "name": "Chunk_5_5",
+   "center": [
+    19.059,
+    2.381,
+    -147.546
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_5.bin",
+   "bytes": 49417680
+  },
+  {
+   "name": "Chunk_5_6",
+   "center": [
+    19.394,
+    3.402,
+    -131.915
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_6.bin",
+   "bytes": 71722560
+  },
+  {
+   "name": "Chunk_5_7",
+   "center": [
+    19.387,
+    3.139,
+    -116.151
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_7.bin",
+   "bytes": 60702240
+  },
+  {
+   "name": "Chunk_5_8",
+   "center": [
+    18.005,
+    2.225,
+    -101.318
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_8.bin",
+   "bytes": 30734880
+  },
+  {
+   "name": "Chunk_5_9",
+   "center": [
+    19.655,
+    1.311,
+    -84.703
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_5_9.bin",
+   "bytes": 10687440
+  },
+  {
+   "name": "Chunk_6_0",
+   "center": [
+    33.398,
+    -12.777,
+    -231.836
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_0.bin",
+   "bytes": 1200
+  },
+  {
+   "name": "Chunk_6_2",
+   "center": [
+    41.239,
+    0.943,
+    -191.779
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_2.bin",
+   "bytes": 739440
+  },
+  {
+   "name": "Chunk_6_3",
+   "center": [
+    40.627,
+    1.686,
+    -176.622
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_3.bin",
+   "bytes": 10320960
+  },
+  {
+   "name": "Chunk_6_4",
+   "center": [
+    37.965,
+    0.68,
+    -163.95
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_4.bin",
+   "bytes": 16643040
+  },
+  {
+   "name": "Chunk_6_5",
+   "center": [
+    39.654,
+    2.406,
+    -146.682
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_5.bin",
+   "bytes": 29098320
+  },
+  {
+   "name": "Chunk_6_6",
+   "center": [
+    39.605,
+    2.783,
+    -132.088
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_6.bin",
+   "bytes": 34191600
+  },
+  {
+   "name": "Chunk_6_7",
+   "center": [
+    38.498,
+    2.635,
+    -116.425
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_7.bin",
+   "bytes": 18386640
+  },
+  {
+   "name": "Chunk_6_8",
+   "center": [
+    37.458,
+    3.002,
+    -101.055
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_8.bin",
+   "bytes": 10987200
+  },
+  {
+   "name": "Chunk_6_9",
+   "center": [
+    37.743,
+    1.483,
+    -86.14
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_6_9.bin",
+   "bytes": 4380480
+  },
+  {
+   "name": "Chunk_7_0",
+   "center": [
+    70.572,
+    0.539,
+    -236.377
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_0.bin",
+   "bytes": 720
+  },
+  {
+   "name": "Chunk_7_2",
+   "center": [
+    58.494,
+    1.432,
+    -191.989
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_2.bin",
+   "bytes": 320880
+  },
+  {
+   "name": "Chunk_7_3",
+   "center": [
+    57.422,
+    1.222,
+    -177.898
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_3.bin",
+   "bytes": 4833120
+  },
+  {
+   "name": "Chunk_7_4",
+   "center": [
+    60.903,
+    -0.498,
+    -163.216
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_4.bin",
+   "bytes": 4574880
+  },
+  {
+   "name": "Chunk_7_5",
+   "center": [
+    59.273,
+    2.011,
+    -148.353
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_5.bin",
+   "bytes": 9351360
+  },
+  {
+   "name": "Chunk_7_6",
+   "center": [
+    59.898,
+    2.244,
+    -132.962
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_6.bin",
+   "bytes": 7293840
+  },
+  {
+   "name": "Chunk_7_7",
+   "center": [
+    59.841,
+    1.646,
+    -114.746
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_7.bin",
+   "bytes": 3324960
+  },
+  {
+   "name": "Chunk_7_8",
+   "center": [
+    57.063,
+    1.562,
+    -100.866
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_8.bin",
+   "bytes": 1590960
+  },
+  {
+   "name": "Chunk_7_9",
+   "center": [
+    58.008,
+    2.531,
+    -87.826
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_7_9.bin",
+   "bytes": 457200
+  },
+  {
+   "name": "Chunk_8_0",
+   "center": [
+    80.491,
+    6.323,
+    -227.883
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_0.bin",
+   "bytes": 1440
+  },
+  {
+   "name": "Chunk_8_1",
+   "center": [
+    83.122,
+    1.486,
+    -213.151
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_1.bin",
+   "bytes": 3840
+  },
+  {
+   "name": "Chunk_8_2",
+   "center": [
+    83.896,
+    4.38,
+    -194.569
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_2.bin",
+   "bytes": 162480
+  },
+  {
+   "name": "Chunk_8_3",
+   "center": [
+    77.364,
+    1.715,
+    -177.556
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_3.bin",
+   "bytes": 549120
+  },
+  {
+   "name": "Chunk_8_4",
+   "center": [
+    81.522,
+    3.752,
+    -162.677
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_4.bin",
+   "bytes": 1246800
+  },
+  {
+   "name": "Chunk_8_5",
+   "center": [
+    79.752,
+    3.139,
+    -149.154
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_5.bin",
+   "bytes": 881760
+  },
+  {
+   "name": "Chunk_8_6",
+   "center": [
+    86.186,
+    8.336,
+    -134.019
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_6.bin",
+   "bytes": 578880
+  },
+  {
+   "name": "Chunk_8_7",
+   "center": [
+    82.983,
+    2.42,
+    -114.456
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_7.bin",
+   "bytes": 82800
+  },
+  {
+   "name": "Chunk_8_8",
+   "center": [
+    84.546,
+    1.538,
+    -98.25
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_8.bin",
+   "bytes": 148320
+  },
+  {
+   "name": "Chunk_8_9",
+   "center": [
+    86.554,
+    6.794,
+    -87.805
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_8_9.bin",
+   "bytes": 123360
+  },
+  {
+   "name": "Chunk_9_0",
+   "center": [
+    98.936,
+    3.755,
+    -222.3
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_0.bin",
+   "bytes": 480
+  },
+  {
+   "name": "Chunk_9_1",
+   "center": [
+    115.813,
+    1.654,
+    -206.988
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_1.bin",
+   "bytes": 37680
+  },
+  {
+   "name": "Chunk_9_2",
+   "center": [
+    99.689,
+    2.305,
+    -196.68
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_2.bin",
+   "bytes": 17760
+  },
+  {
+   "name": "Chunk_9_3",
+   "center": [
+    101.251,
+    12.234,
+    -173.799
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_3.bin",
+   "bytes": 208560
+  },
+  {
+   "name": "Chunk_9_4",
+   "center": [
+    110.247,
+    9.893,
+    -164.204
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_4.bin",
+   "bytes": 251520
+  },
+  {
+   "name": "Chunk_9_5",
+   "center": [
+    98.634,
+    10.504,
+    -149.435
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_5.bin",
+   "bytes": 275280
+  },
+  {
+   "name": "Chunk_9_6",
+   "center": [
+    97.736,
+    8.955,
+    -129.691
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_6.bin",
+   "bytes": 248160
+  },
+  {
+   "name": "Chunk_9_7",
+   "center": [
+    106.884,
+    2.706,
+    -115.4
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_7.bin",
+   "bytes": 173520
+  },
+  {
+   "name": "Chunk_9_8",
+   "center": [
+    109.353,
+    6.963,
+    -95.312
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_8.bin",
+   "bytes": 258720
+  },
+  {
+   "name": "Chunk_9_9",
+   "center": [
+    102.203,
+    8.942,
+    -89.254
+   ],
+   "bin": "splatdata/campus_chunks10/Chunk_9_9.bin",
+   "bytes": 234960
+  }
+ ]
+}

@@ -129,4 +129,5 @@ __pycache__/
 /story/voice/_audition/
 
 # 校园 10×10 分块（离线用 scripts/_split_sog.gd + _export_campus_ggs_bins10.gd 重新生成）
-/splatdata/campus_chunks10/
+/splatdata/campus_chunks10/*
+!/splatdata/campus_chunks10/chunks.json

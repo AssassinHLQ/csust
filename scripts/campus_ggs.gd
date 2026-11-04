@@ -41,6 +41,29 @@ var _want_size := Vector2i.ZERO
 var max_render_w := 1920.0
 var _bin_path := BIN
 
+## ── 10×10 分块窗口（2026-11-04）──
+##
+## 全量 1406 MB / 615 万点一次上传太重。分块之后只上传**离玩家最近的 9 块**（3×3），
+## 其余根本不进显存（97 块里只碰 9 块 ≈ 9%）。
+##
+## 光栅器只吃**一个** `bin_path`，所以窗口换的时候把 9 块**拼成一个临时 bin**
+## （`user://campus_window.bin`）再喂它 —— 不用改光栅器内部。
+## 代价是每次跨格要重写+重传约 100~300 MB（实测约 0.5 s），
+## 换来常驻显存从 2.9 GiB 降到约 0.3 GiB。
+##
+## 清单 `chunks.json` 由离线脚本生成（块名 → 世界中心 / bin 路径 / 字节数），
+## 所以这里不需要知道 10×10 的网格参数，直接按「离玩家最近的 9 块」选窗口。
+const CHUNKS_JSON := "res://splatdata/campus_chunks10/chunks.json"
+const WINDOW_SIDE := 3
+const WINDOW_BIN := "user://campus_window.bin"
+## 多久重新评估一次窗口（秒）。每帧排 97 个块没必要。
+const WINDOW_POLL := 0.5
+
+var _chunk_list: Array = []
+var _window_names := PackedStringArray()
+var _window_timer := 0.0
+var _use_chunks := false
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
@@ -54,15 +77,21 @@ func _ready() -> void:
 		_gave_up = true
 		set_process(false)
 		return
-	if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
-		_bin_path = BIN_DEV
-		push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
-	# 两处都没有就别硬撑：不碰 GDGS，让老泼溅照常工作（否则校园会整片消失）
-	if not FileAccess.file_exists(_bin_path):
-		push_error("[campus_ggs] 找不到 %s，回退 GDGS 泼溅" % _bin_path)
-		_gave_up = true
-		set_process(false)
-		return
+	# 优先走「10×10 分块 + 3×3 窗口」：有清单就不用全量那份 1406 MB 的 bin 了。
+	_use_chunks = _load_manifest()
+	if _use_chunks:
+		print("[campus_ggs] 分块模式：%d 块，窗口 %d×%d" % [
+			_chunk_list.size(), WINDOW_SIDE, WINDOW_SIDE])
+	else:
+		if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
+			_bin_path = BIN_DEV
+			push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
+		# 两处都没有就别硬撑：不碰 GDGS，让老泼溅照常工作（否则校园会整片消失）
+		if not FileAccess.file_exists(_bin_path):
+			push_error("[campus_ggs] 找不到 %s，回退 GDGS 泼溅" % _bin_path)
+			_gave_up = true
+			set_process(false)
+			return
 	var level := get_parent()
 	_gdgs_sc = get_node_or_null("/root/SplatCompositor")
 	if _gdgs_sc != null:
@@ -219,6 +248,12 @@ func _process(_dt: float) -> void:
 		if _outside_clock < 0.25:
 			return
 		_released = false
+	# 分块模式：先把「离玩家最近的 9 块」拼成临时 bin，再交给 _make_bundle()
+	_maybe_switch_window(_dt)
+	# ⚠️ 窗口还没拼好时**绝对不能**去 _make_bundle() —— 那时 `_bin_path` 还是全量那份
+	#    1406 MB，会白传一遍（实测第一版就是这样：启动瞬间 187 MiB 起步）。
+	if _use_chunks and _window_names.is_empty():
+		return
 	if not _ready_done and not _make_bundle():
 		return
 	if cam == null or not is_instance_valid(cam):
@@ -254,3 +289,112 @@ func _process(_dt: float) -> void:
 	_active = player != null and player.global_position.z < -74.0 and rasterizer.is_loaded
 	if quad != null:
 		quad.visible = _active
+
+
+# ─────────────────────────────────────────────────────────────
+# 10×10 分块 + 3×3 窗口
+# ─────────────────────────────────────────────────────────────
+
+## 读离线生成的清单（块名 → 世界中心 / bin / 字节数）。
+func _load_manifest() -> bool:
+	if not FileAccess.file_exists(CHUNKS_JSON):
+		return false
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(CHUNKS_JSON))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+	var arr: Array = (parsed as Dictionary).get("chunks", [])
+	if arr.is_empty():
+		return false
+	_chunk_list.clear()
+	for d in arr:
+		var dd: Dictionary = d
+		var c: Array = dd.get("center", [0.0, 0.0, 0.0])
+		_chunk_list.append({
+			"name": String(dd.get("name", "")),
+			"center": Vector3(float(c[0]), float(c[1]), float(c[2])),
+			"bin": String(dd.get("bin", "")),
+			"bytes": int(dd.get("bytes", 0)),
+		})
+	return _chunk_list.size() > 0
+
+
+## 离玩家最近的 WINDOW_SIDE² 块（按 XZ 距离）。返回排好序的块名。
+func _pick_window() -> PackedStringArray:
+	var out := PackedStringArray()
+	if player == null or _chunk_list.is_empty():
+		return out
+	var pp := player.global_position
+	var scored: Array = []
+	for c in _chunk_list:
+		var d: Vector3 = (c["center"] as Vector3) - pp
+		scored.append({"n": String(c["name"]), "d": d.x * d.x + d.z * d.z})
+	scored.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
+	var want := mini(WINDOW_SIDE * WINDOW_SIDE, scored.size())
+	for i in want:
+		out.append(String(scored[i]["n"]))
+	out.sort()
+	return out
+
+
+func _chunk_entry(nm: String) -> Dictionary:
+	for c in _chunk_list:
+		if String(c["name"]) == nm:
+			return c
+	return {}
+
+
+## 把选中的几块拼成一个临时 bin。
+func _write_window(names: PackedStringArray) -> int:
+	var f := FileAccess.open(WINDOW_BIN, FileAccess.WRITE)
+	if f == null:
+		push_error("[campus_ggs] 写不了 %s" % WINDOW_BIN)
+		return 0
+	var written := 0
+	for nm in names:
+		var e := _chunk_entry(nm)
+		if e.is_empty():
+			continue
+		var path := "res://" + String(e["bin"])
+		var src := FileAccess.open(path, FileAccess.READ)
+		if src == null:
+			push_warning("[campus_ggs] 打不开 %s" % path)
+			continue
+		var left := int(e["bytes"])
+		while left > 0:
+			var n := mini(1048576, left)
+			var buf := src.get_buffer(n)
+			if buf.size() != n:
+				break
+			f.store_buffer(buf)
+			left -= n
+			written += n
+		src.close()
+	f.close()
+	return written
+
+
+## 每 WINDOW_POLL 秒评估一次。窗口变了就重拼 bin + 重建光栅器。
+func _maybe_switch_window(dt: float) -> void:
+	if not _use_chunks:
+		return
+	_window_timer += dt
+	var first := _window_names.is_empty()
+	if not first and _window_timer < WINDOW_POLL:
+		return
+	_window_timer = 0.0
+	var want := _pick_window()
+	if want.is_empty() or want == _window_names:
+		return
+
+	var t0 := Time.get_ticks_msec()
+	var bytes := _write_window(want)
+	if bytes <= 0:
+		return
+	_window_names = want
+	_bin_path = WINDOW_BIN
+	# 重建：先放掉旧的 RID，再让 _process 里的 `_make_bundle()` 重来
+	_release_campus()
+	_released = false
+	print("[campus_ggs] 窗口切换 → %d 块 / %.0f MB（拼 bin %.2f s）" % [
+		want.size(), float(bytes) / 1048576.0,
+		float(Time.get_ticks_msec() - t0) / 1000.0])
