@@ -6,9 +6,15 @@ const OUT := "res://scenes/pc_wall_case.tscn"
 const SHELL := "res://models/pc_case/pc_case_shell.glb"
 const CARD := "res://models/rtx5090_card/rtx5090_card.glb"
 const MONITOR := "res://models/monitor/monitor.glb"
+const SSD := "res://models/ssd_970evo/ssd_970evo.glb"
 const FONT := "res://assets/ui/gamedev_sign_12px.ttf"
 const SCALE := 2.6
 const MON_X := -1.68
+## M.2 固态的缩放：跟**显卡比例**对齐，不是跟机箱比例。
+## 真实 5090 长 304 mm，这里做成 0.40 m（×1.32）；M.2 2280 长 80.1 mm，
+## 同样 ×1.32 → 10.5 cm，两者的长度比就还是真机的 1 : 3.8。
+## （机箱外壳是 2.6× 的展示尺，直接按机箱缩放会把硬盘做得比显卡还显眼。）
+const SSD_SCALE := 0.40 / 0.304
 
 
 func _mat(col: Color, metal: float, rough: float) -> StandardMaterial3D:
@@ -181,44 +187,56 @@ func _initialize() -> void:
 	_box(root, "PSU", Vector3(0.33, 0.07, 0.0), Vector3(0.34, 0.12, 0.28), dark)
 	_label(root, "PSUText", "1600", Vector3(0.33, 0.07, -0.143), 0.006, cream)
 
+	# M.2 固态 ×2：贴在背板（主板 PCB）**朝玻璃那一面**、显卡堆下方那片空位。
+	# 位置依据（都是本文件里的实测尺寸）：玻璃在 z=-0.295（观察面朝 -z）、
+	# 背板前表面 z=-0.06、显卡占 y 0.15~0.96，所以 y<0.15 这段背板是空的；
+	# 电源仓在 x≥0.16，也不挡 x=-0.20 这条竖线。
+	var ssd_scene := load(SSD) as PackedScene
+	if ssd_scene != null:
+		for i in 2:
+			var ssd := ssd_scene.instantiate() as Node3D
+			ssd.name = "SSD%d" % i
+			ssd.position = Vector3(-0.20, 0.115 - 0.040 * float(i), -0.0615)
+			# 模型导出时是平躺的（厚度在 Y）；绕 X 转 90° 立起来贴到竖直背板上
+			ssd.rotation.x = PI * 0.5
+			ssd.scale = Vector3.ONE * SSD_SCALE
+			for mi in ssd.find_children("*", "MeshInstance3D", true, false):
+				(mi as MeshInstance3D).cast_shadow = \
+					GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(ssd)
+		_label(root, "SSDText", "970 EVO Plus 2TB ×2", Vector3(-0.20, 0.043, -0.075),
+			0.0055, cream)
+	else:
+		push_warning("[wall] 没有 %s → 跳过 M.2" % SSD)
+
 	# 顶部铭牌（柜内，卡片上方的窄条）
 	_box(root, "Plate", Vector3(0, 1.06, -0.15), Vector3(1.08, 0.14, 0.02), black)
 	_box(root, "PlateTrim", Vector3(0, 0.983, -0.164), Vector3(1.08, 0.008, 0.004), cyan)
 	_label(root, "PlateText", "8x5090 工作站", Vector3(0, 1.06, -0.162), 0.0055, cream)
 
-	# 显示器：门边到机箱之间的空墙，2×2 四屏（屏总高 0.463 m，排距 0.56）
+	# 显示器：门边到机箱之间的空墙，双屏独立托板
 	var mon_scene := load(MONITOR) as PackedScene
-	const MON_ROW := 0.56
-	for row in 2:
-		for col in 2:
-			var i := row * 2 + col
-			var mon := mon_scene.instantiate() as Node3D
-			mon.name = "Monitor%d" % i
-			mon.position = Vector3(MON_X - 0.45 + 0.90 * float(col),
-				MON_ROW * float(row), 0.0)
-			mon.rotation.y = PI
-			root.add_child(mon)
-			# 曲面屏最前沿 z≈-0.116，字必须再往前，否则看到背面反字
-			_label(root, "MonitorText%d" % i, "8x5090\n工作站",
-				Vector3(mon.position.x, mon.position.y + 0.2744, -0.13), 0.0042,
-				Color(0.55, 0.90, 1.0, 1.0))
-	for row in 2:
-		var sy := MON_ROW * float(row) - 0.02
-		_box(root, "MonShelf%d" % row, Vector3(MON_X, sy, 0.085),
-			Vector3(1.95, 0.04, 0.45), black)
-		_box(root, "MonShelfLED%d" % row, Vector3(MON_X, sy + 0.018, -0.141),
-			Vector3(1.80, 0.006, 0.006), cyan)
-		_box(root, "MonWallPlate%d" % row, Vector3(MON_X, sy - 0.12, 0.30),
-			Vector3(1.92, 0.10, 0.02), black)
-		for sx in [-1.0, 1.0]:
-			_box(root, "MonBracketV%d" % row, Vector3(MON_X + sx * 0.80, sy - 0.16, 0.30),
-				Vector3(0.06, 0.30, 0.03), black)
-			_box(root, "MonBracketH%d" % row, Vector3(MON_X + sx * 0.80, sy - 0.02, 0.10),
-				Vector3(0.06, 0.04, 0.40), black)
-			var mon_strut := _box(root, "MonBracketD%d" % row,
-				Vector3(MON_X + sx * 0.80, sy - 0.175, 0.12),
-				Vector3(0.04, 0.44, 0.04), black)
-			mon_strut.rotation.x = -0.90
+	for i in 2:
+		var mon := mon_scene.instantiate() as Node3D
+		mon.name = "Monitor%d" % i
+		mon.position = Vector3(MON_X - 0.45 + 0.90 * float(i), 0.0, 0.0)
+		mon.rotation.y = PI
+		root.add_child(mon)
+		# 曲面屏最前沿 z≈-0.116，字必须再往前，否则看到背面反字
+		_label(root, "MonitorText%d" % i, "8x5090\n工作站",
+			Vector3(mon.position.x, 0.2744, -0.13), 0.0042,
+			Color(0.55, 0.90, 1.0, 1.0))
+	_box(root, "MonShelf", Vector3(MON_X, -0.02, 0.085), Vector3(1.95, 0.04, 0.45), black)
+	_box(root, "MonShelfLED", Vector3(MON_X, -0.002, -0.141), Vector3(1.80, 0.006, 0.006), cyan)
+	_box(root, "MonWallPlate", Vector3(MON_X, -0.14, 0.30), Vector3(1.92, 0.10, 0.02), black)
+	for sx in [-1.0, 1.0]:
+		_box(root, "MonBracketV", Vector3(MON_X + sx * 0.80, -0.18, 0.30),
+			Vector3(0.06, 0.30, 0.03), black)
+		_box(root, "MonBracketH", Vector3(MON_X + sx * 0.80, -0.04, 0.10),
+			Vector3(0.06, 0.04, 0.40), black)
+		var mon_strut := _box(root, "MonBracketD", Vector3(MON_X + sx * 0.80, -0.195, 0.12),
+			Vector3(0.04, 0.44, 0.04), black)
+		mon_strut.rotation.x = -0.90
 
 	# 前脸细节：三个黑色硬盘位（机箱正面朝向墙的右侧）
 	for i in 3:
