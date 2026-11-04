@@ -289,6 +289,11 @@ func _input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.pressed:
 			if mb.button_index == MOUSE_BUTTON_RIGHT:
+				# 用户 2026-11-04：「右键不触发瞄准，而是拾取这些」。
+				# 站在可拾取物（9950X3D）的提示范围内时，右键让给拾取，
+				# **不开镜**；不在范围内时右键还是原来的开镜。
+				if _pickup_prompting():
+					return
 				_set_aiming(true)
 			elif mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 				_fire_held = true
@@ -300,6 +305,19 @@ func _input(event: InputEvent) -> void:
 			_fire_held = false
 			if weapon:
 				weapon.trigger_up()
+
+
+## 现在有没有「可拾取物正在提示」？有的话右键要交出去。
+##
+## 判据走 `ParkourFutures.prompt_owner()`（提示系统只有一个 owner），
+## 再看那个 owner 是不是 CPU —— 别的提示（开终端之类）不该抢右键。
+func _pickup_prompting() -> bool:
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut == null:
+		return false
+	var owner_obj: Object = fut.call("prompt_owner")
+	var n := owner_obj as Node
+	return n != null and n.is_in_group("ryzen9950x3d")
 
 
 ## 兜底：万一某个按键的「松开」事件丢了，用 poll 纠正状态

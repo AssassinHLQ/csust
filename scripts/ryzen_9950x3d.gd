@@ -223,7 +223,7 @@ func _physics_process(_delta: float) -> void:
 		var owner := fut.prompt_owner()
 		if owner == null or owner == self:
 			_prompting = true
-			fut.ask_prompt(self, "按 F 拾取 Ryzen 9 9950X3D（¥4,599 → 银行卡）")
+			fut.ask_prompt(self, "按 F 或右键拾取 Ryzen 9 9950X3D（¥4,599 → 银行卡）")
 		else:
 			_prompting = false
 	elif _prompting:
@@ -253,8 +253,18 @@ func _nearest(player: Node3D) -> Node3D:
 func _input(event: InputEvent) -> void:
 	if Engine.is_editor_hint() or _taken or not _prompting:
 		return
+	# F 键**或鼠标右键**都能捡（用户 2026-11-04：「右键也可以拾取在范围内」）。
+	# 右键这一下不给瞄准：`player.gd::_pickup_prompting()` 会看到提示的 owner
+	# 是 CPU，于是跳过开镜。
+	var pressed := false
 	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo or key.keycode != KEY_F:
+	if key != null:
+		pressed = key.pressed and not key.echo and key.keycode == KEY_F
+	else:
+		var mb := event as InputEventMouseButton
+		if mb != null:
+			pressed = mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT
+	if not pressed:
 		return
 	var fut := _futures()
 	if fut == null or fut.prompt_owner() != self:
