@@ -1,8 +1,7 @@
-[gd_scene load_steps=35 format=3]
+[gd_scene load_steps=34 format=3]
 
 [ext_resource type="Script" path="res://scripts/gamedev_room.gd" id="1_script"]
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="3_sign_font"]
-[ext_resource type="PackedScene" path="res://scenes/pc_wall_case.tscn" id="5_pc_rig"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_sign"]
 size = Vector3(4.2, 0.86, 0.06)
@@ -284,7 +283,5 @@ shape = SubResource("Shape_Col_DoorJambB")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.4839, 4.7526, -6.6785)
 shape = SubResource("Shape_Col_DoorLintel")
 
-
-
-[node name="PC5090Rig" parent="." instance=ExtResource("5_pc_rig")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.94, 5.03)
+# 壁挂 5090 那套（机箱 + 门边双屏）2026-11-04 已搬到电竞房 scenes/esports_room.tscn，
+# 部室这里不再放 —— 用户的安排：部室归开发部，5090 工作站归电竞房。

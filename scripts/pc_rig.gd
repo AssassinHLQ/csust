@@ -1,7 +1,9 @@
 class_name PC5090Rig
 extends Node3D
-## 柴关电脑城买下的八卡 5090 整机：买完后出现在游戏开发部活动室南墙边。
+## 柴关电脑城买下的八卡 5090 整机：买完后出现（2026-11-04 起放在**电竞房北墙**，
+## 之前挂在游戏开发部活动室；部室那边已撤掉）。
 ## 靠近按 F 开机：风扇转、机箱灯亮、状态牌亮起。
+## ⚠️ 买之前 `_set_active(false)` —— 整机隐藏、碰撞也关掉，别让玩家撞到看不见的机箱。
 
 @onready var body: StaticBody3D = $Body
 @onready var shape: CollisionShape3D = $Body/Collision

@@ -13,6 +13,8 @@ const POSTER_5090 := "res://assets/story/config_sheet_5090.png"
 const POSTER_ROOM := "res://assets/story/gamedev_room.jpg"
 ## 贴图不进 .tscn 的 ext_resource，改成运行时按路径 load()。见 optional_texture.gd。
 const OPTIONAL_TEX := preload("res://scripts/optional_texture.gd")
+## 壁挂 8×5090 工作站（机箱 + 门边双屏）。2026-11-04 从部室 gamedev_room 搬来的。
+const PC_RIG := "res://scenes/pc_wall_case.tscn"
 
 
 func _mat(col: Color, metal: float, rough: float) -> StandardMaterial3D:
@@ -428,6 +430,21 @@ func _run() -> void:
 		for dz in [-1.0, 1.0]:
 			_box(root, "CoffeeLeg", Vector3(-6.55 + dx * 0.30, 0.17, 3.3 + dz * 0.20),
 				Vector3(0.04, 0.34, 0.04), metal)
+
+	# ── 壁挂 8×5090 工作站（2026-11-04 从部室搬过来）──
+	# 北墙 x≈3.2 这段是空的：凯伊桌占到 x≈1.1、门口海报在 x=1.8、东墙主桌在 x≈7.2。
+	# 整套（机箱 + 门边双屏托架）宽约 3.36 m、深 0.66 m，背面贴北墙内表面 z=-4.80，
+	# 玻璃朝房间（局部 -z 是前脸，所以绕 Y 转 180°）。
+	# 它自带 body / Collision / CollisionMonitor，不用再给 RoomBody 加盒子。
+	var rig_scene := load(PC_RIG) as PackedScene
+	if rig_scene != null:
+		var rig := rig_scene.instantiate() as Node3D
+		rig.name = "PC5090Rig"
+		rig.position = Vector3(3.22, 0.94, -4.53)
+		rig.rotation.y = PI
+		root.add_child(rig)
+	else:
+		push_warning("[esports] 没有 %s → 跳过 5090 工作站" % PC_RIG)
 
 	# ── 碰撞 ──
 	var body := StaticBody3D.new()
