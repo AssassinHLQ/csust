@@ -1,13 +1,18 @@
 extends SceneTree
-## A/B：609 屋顶 149 颗 9950X3D 的可见距离 **22 m vs 10 m**，量图元 / draw call。
+## 量「CPU 两级 LOD」有没有生效：相机在一颗 CPU 的正前方，从 4 m 拉到 40 m，
+## 每个距离记一次图元数。
 ##
 ##   _tools/run_shot.sh res://scripts/_probe_cpu_distance.gd
 ##
-## 运行时直接改 `visibility_range_end`，不用重新编译，两种距离同一机位交替测。
-## 机位放在离屋顶 15~20 m 的地方 —— 那一段正是 22 m 能画、10 m 画不到的距离带。
+## 预期：
+##   ≤10 m  → 高模 12,386 面/颗
+##   10~22 m → 低模 3,001 面/颗
+##   >22 m  → 整颗不提交
+##
+## ⚠️ 这个探针**不改** visibility_range —— 改了就把脚本设好的分档覆盖掉了，
+##    上一版就是这么量出「图元反而涨到 96 万」的假数据。
 
-const EYE := Vector3(0.0, 8.0, 19.0)
-const LOOK := Vector3(0.0, 4.0, 0.0)
+const DISTS := [6.0, 15.0, 20.0, 24.0, 40.0]
 
 
 func _initialize() -> void:
@@ -20,51 +25,40 @@ func _run() -> void:
 	root.add_child(game)
 	await _wait(40)
 
-	var cpus := game.get_node_or_null("Room609/RoomCpus")
-	if cpus == null:
-		# 名字可能不同，退一步按脚本找
-		for n in game.find_children("*", "Node3D", true, false):
-			if n.get_script() != null and String(n.get_script().resource_path).ends_with("ryzen_9950x3d.gd"):
-				cpus = n
-				break
+	# 找到一颗 CPU 当靶子
+	var cpus: Node = null
+	for n in game.find_children("*", "Node3D", true, false):
+		var s: Script = n.get_script()
+		if s != null and String(s.resource_path).ends_with("ryzen_9950x3d.gd"):
+			cpus = n
+			break
 	if cpus == null:
 		print("!! 找不到 CPU 节点")
 		quit(1)
 		return
 
-	var meshes := cpus.find_children("*", "MeshInstance3D", true, false)
-	print("[cpudist] CPU 网格 %d 个" % meshes.size())
+	var mesh_n := cpus.find_children("*", "MeshInstance3D", true, false).size()
+	print("[cpuLOD] 单颗 CPU 下的网格数 = %d（高模 + 低模 + 光环）" % mesh_n)
+	print("[cpuLOD] 高模 %s" % ("在" if cpus.get("_model") != null else "不在"))
+	print("[cpuLOD] 低模 %s" % ("在" if cpus.get("_model_lod") != null else "不在"))
+
+	var target: Vector3 = (cpus as Node3D).global_position
 
 	var cam := Camera3D.new()
 	cam.fov = 55.0
 	root.add_child(cam)
-	cam.global_position = EYE
-	cam.look_at(LOOK, Vector3.UP)
 	cam.current = true
 	await _wait(4)
 
-	for d in [22.0, 10.0, 22.0, 10.0]:
-		for n in meshes:
-			(n as MeshInstance3D).visibility_range_end = d
-		await _wait(12)
+	for d in DISTS:
+		cam.global_position = target + Vector3(0.0, 1.2, float(d))
+		cam.look_at(target, Vector3.UP)
+		await _wait(14)
 		await RenderingServer.frame_post_draw
-		print("[cpudist] range=%5.1f m  →  图元 %7d   draw call %5d" % [
+		print("[cpuLOD] 距离 %5.1f m  →  图元 %7d   draw call %5d" % [
 			d,
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))])
-
-	# ── LOD 到底管不管用：固定 range=22，扫 lod_bias ──
-	print("[cpudist] LOD 阈值 threshold=%.2f" % root.mesh_lod_threshold)
-	for n in meshes:
-		(n as MeshInstance3D).visibility_range_end = 22.0
-	for bias in [1.0, 4.0, 16.0, 64.0]:
-		for n in meshes:
-			(n as MeshInstance3D).lod_bias = bias
-		await _wait(12)
-		await RenderingServer.frame_post_draw
-		print("[cpudist] lod_bias=%5.1f  →  图元 %7d" % [
-			bias,
-			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])
 
 	quit(0)
 

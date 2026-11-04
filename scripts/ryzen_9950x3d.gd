@@ -27,16 +27,28 @@ const MODEL_SCALE := 3.0
 ## 149 颗散在 609 屋顶上：单颗 12,386 面，合计 184 万面。从部室（约 50 m 外）看过去
 ## 每帧都要过一遍顶点 —— 实测站在部室东侧那个角，帧率 220 → 127（图元 30 万 → 214 万）。
 ## 但拾取半径只有 3.2 m，更远的 CPU 只有几个像素，画了纯属白烧。
-## 10 m 外整颗不提交（引擎侧剔除，不是每帧脚本判断）；小物件也不投影。
+## 22 m 外整颗不提交（引擎侧剔除，不是每帧脚本判断）；小物件也不投影。
 ##
-## 2026-11-04 用户：「单独给 cpu 降低距离，22 m 变成 10 m」。
-## 22 m 时从 609 屋里往窗外看还是一片，白占图元；10 m 只留屋里近处那几颗。
-const VIEW_DISTANCE := 10.0
+## ── 距离分档（2026-11-04 用户：「走出 10 m 回退到 3000 网格面版本」）──
+##   0 ~ 10 m  ：高模 12,386 面（`ryzen_9950x3d.glb`）
+##   10 ~ 22 m ：低模 3,001 面（`ryzen_9950x3d_lod.glb`，`tools/decimate_cpu.py` 减出来的）
+##   22 m 以外 ：整颗不提交
+## 用 `visibility_range_begin/end` 做，是**引擎侧**切换，不进每帧脚本。
+##
+## ⚠️ 为什么不用 Godot 的自动 LOD：`lod_bias` 从 1 扫到 64，图元数一直是
+##    459,287 ~ 460,051（实测，`_probe_cpu_distance.gd`）—— 引擎根本没切低模。
+##    所以这里用**两份网格 + 可见距离**自己分档。
+const MODEL_LOD := "res://models/cpu_9950x3d/ryzen_9950x3d_lod.glb"
+const LOD_DISTANCE := 10.0
+const VIEW_DISTANCE := 22.0
+## 两档之间留一点重叠，避免正好站在 10 m 上时两边都不画
+const LOD_OVERLAP := 0.5
 
 var _built := false
 var _taken := false
 var _prompting := false
 var _model: Node3D
+var _model_lod: Node3D
 
 
 func _ready() -> void:
@@ -53,6 +65,7 @@ func _build() -> void:
 		_model = ps.instantiate() as Node3D
 		_model.scale = Vector3.ONE * MODEL_SCALE
 		add_child(_model)
+		_build_lod()
 	else:
 		push_warning("[9950X3D] 没有 %s → 用程序化占位 CPU" % MODEL)
 		_build_placeholder()
@@ -60,18 +73,67 @@ func _build() -> void:
 	_apply_view_range()
 
 
-## 远处不画、也不投影。放在 `_build()` 末尾，占位模型和光环一视同仁。
+## 10 m 外换这个低模（3,001 面，`tools/decimate_cpu.py` 减出来的）。
+## 缺文件就只是没有低模 —— 高模会一直画到 `VIEW_DISTANCE`，功能不受影响。
+func _build_lod() -> void:
+	var ps := load(MODEL_LOD) as PackedScene
+	if ps == null:
+		push_warning("[9950X3D] 没有低模 %s → 10 m 外仍用高模" % MODEL_LOD)
+		return
+	_model_lod = ps.instantiate() as Node3D
+	_model_lod.name = "LodModel"
+	_model_lod.scale = Vector3.ONE * MODEL_SCALE
+	add_child(_model_lod)
+
+
+## 分档：高模 0~10 m、低模 10~22 m、22 m 外整颗不提交。
+## 放在 `_build()` 末尾，占位模型和光环一视同仁。
 ##
 ## ⚠️ **自动 LOD 对这批模型无效**（2026-11-04 实测，`_probe_cpu_distance.gd`）：
 ##    `ryzen_9950x3d.glb.import` 里确实有 `meshes/generate_lods=true`，
 ##    但把 `lod_bias` 从 1 扫到 4 / 16 / 64，图元数一直是 459,287 ~ 460,051（全是噪声）。
-##    也就是说引擎并没有真的切到低模 LOD —— 和 MEMORY 里「LOD 收益 ≈ 0」的结论一致。
-##    想真减面只能改源模型（12,386 面 → 约 3,000），代码侧没有开关可用。
+##    所以这里不用引擎自动 LOD，改成**两份网格 + 可见距离**自己分档。
 func _apply_view_range() -> void:
+	# 高模：0 ~ LOD_DISTANCE
+	if _model != null:
+		_set_range(_model, 0.0, LOD_DISTANCE, 0.0,
+			LOD_OVERLAP)
+	# 低模：LOD_DISTANCE ~ VIEW_DISTANCE（起点往前压 LOD_OVERLAP，避免 10 m 处闪空）
+	if _model_lod != null:
+		_set_range(_model_lod, LOD_DISTANCE - LOD_OVERLAP, VIEW_DISTANCE, 0.0, 0.0)
+	else:
+		# 没有低模 → 高模直接撑到 VIEW_DISTANCE
+		if _model != null:
+			_set_range(_model, 0.0, VIEW_DISTANCE, 0.0, 0.0)
+	# 光环：跟着整颗的可见距离
 	for n in find_children("*", "MeshInstance3D", true, false):
 		var mi := n as MeshInstance3D
+		if _under(mi, _model) or _under(mi, _model_lod):
+			continue
 		mi.visibility_range_end = VIEW_DISTANCE
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _set_range(root: Node3D, begin: float, end: float,
+		begin_margin: float, end_margin: float) -> void:
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		mi.visibility_range_begin = begin
+		mi.visibility_range_begin_margin = begin_margin
+		mi.visibility_range_end = end
+		mi.visibility_range_end_margin = end_margin
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _under(n: Node, root: Node3D) -> bool:
+	if root == null:
+		return false
+	var p := n.get_parent()
+	while p != null:
+		if p == root:
+			return true
+		p = p.get_parent()
+	return false
 
 
 ## 桌子上的「宝藏」提示：CPU 底下垫一圈很细的金色光环（不挡视线）。
