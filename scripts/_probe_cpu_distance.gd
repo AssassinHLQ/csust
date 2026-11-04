@@ -53,6 +53,19 @@ func _run() -> void:
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))])
 
+	# ── LOD 到底管不管用：固定 range=22，扫 lod_bias ──
+	print("[cpudist] LOD 阈值 threshold=%.2f" % root.mesh_lod_threshold)
+	for n in meshes:
+		(n as MeshInstance3D).visibility_range_end = 22.0
+	for bias in [1.0, 4.0, 16.0, 64.0]:
+		for n in meshes:
+			(n as MeshInstance3D).lod_bias = bias
+		await _wait(12)
+		await RenderingServer.frame_post_draw
+		print("[cpudist] lod_bias=%5.1f  →  图元 %7d" % [
+			bias,
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])
+
 	quit(0)
 
 

@@ -61,6 +61,12 @@ func _build() -> void:
 
 
 ## 远处不画、也不投影。放在 `_build()` 末尾，占位模型和光环一视同仁。
+##
+## ⚠️ **自动 LOD 对这批模型无效**（2026-11-04 实测，`_probe_cpu_distance.gd`）：
+##    `ryzen_9950x3d.glb.import` 里确实有 `meshes/generate_lods=true`，
+##    但把 `lod_bias` 从 1 扫到 4 / 16 / 64，图元数一直是 459,287 ~ 460,051（全是噪声）。
+##    也就是说引擎并没有真的切到低模 LOD —— 和 MEMORY 里「LOD 收益 ≈ 0」的结论一致。
+##    想真减面只能改源模型（12,386 面 → 约 3,000），代码侧没有开关可用。
 func _apply_view_range() -> void:
 	for n in find_children("*", "MeshInstance3D", true, false):
 		var mi := n as MeshInstance3D
