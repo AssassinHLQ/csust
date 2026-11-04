@@ -39,7 +39,8 @@ const MODEL_SCALE := 3.0
 ##    459,287 ~ 460,051（实测，`_probe_cpu_distance.gd`）—— 引擎根本没切低模。
 ##    所以这里用**两份网格 + 可见距离**自己分档。
 const MODEL_LOD := "res://models/cpu_9950x3d/ryzen_9950x3d_lod.glb"
-const LOD_DISTANCE := 10.0
+## 用户 2026-11-04：「10m 缩到 5m」——5 m 外就换 3,001 面的低模。
+const LOD_DISTANCE := 5.0
 const VIEW_DISTANCE := 22.0
 ## 两档之间留一点重叠，避免正好站在 10 m 上时两边都不画
 const LOD_OVERLAP := 0.5
@@ -137,7 +138,21 @@ func _under(n: Node, root: Node3D) -> bool:
 
 
 ## 桌子上的「宝藏」提示：CPU 底下垫一圈很细的金色光环（不挡视线）。
+##
+## ⚠️ 2026-11-04 实测（`_probe_cpu_cost.gd`，机位在 CPU 质心外 18 m）：
+##      全开        图元 828,562   draw call 798
+##      去掉光环    图元 775,186   draw call 659
+##    → **光环一项就占 53,376 图元 / 139 次 draw call**，
+##      而整批 CPU（网格 + 光环）总共才多 470,513 图元 / 142 次 draw call。
+##      也就是说 **draw call 的涨幅 98% 来自光环**（149 个独立的细圆环）。
+##    用户 2026-11-04：「光环去除看看」→ 默认关掉。
+##    想开回来把 `GLOW_ENABLED` 改成 true 即可（其余代码不用动）。
+const GLOW_ENABLED := false
+
+
 func _add_glow() -> void:
+	if not GLOW_ENABLED:
+		return
 	var ring := MeshInstance3D.new()
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.062
