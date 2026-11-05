@@ -104,7 +104,11 @@ def main():
     ap.add_argument("--no-tangents", action="store_true",
                     help="关掉 ensure_tangents（没有法线贴图时省 16 B/顶点）")
     ap.add_argument("--vram-compress", action="store_true",
-                    help="贴图默认改成 VRAM 压缩")
+                    help="贴图走 VRAM 压缩（gltf/embedded_image_handling=2 = Basis Universal）")
+    ap.add_argument("--texture-handling", type=int, default=None,
+                    choices=[0, 1, 2, 3],
+                    help="直接指定 gltf/embedded_image_handling："
+                         "0=丢弃 1=提取到文件(默认) 2=Basis Universal(VRAM压缩) 3=未压缩内嵌")
     ap.add_argument("--no-lods", action="store_true",
                     help="关掉自动生成 LOD（本来默认是开的，别乱关）")
     args = ap.parse_args()
@@ -126,16 +130,14 @@ def main():
         updates["nodes/apply_root_scale"] = "true"
     if args.no_tangents:
         updates["meshes/ensure_tangents"] = "false"
-    if args.vram_compress:
-        # GLTF 的贴图压缩走 `_subresources`，这里改的是**全局默认**：
-        # 关掉「提取到外部」并让内嵌图走 VRAM 压缩。
-        # ⚠️ Godot 4 的 GLTF 导入没有「全局 compress/mode」这一项，
-        #    真正的逐图设置要写在 `_subresources={...}` 里（键是图名）。
-        #    这里先把 embedded_image_handling 设成 2（提取到 .godot/，便于批量改），
-        #    实际压缩在 Godot 的 Texture 导入面板批量设。
-        print("  ⚠️ VRAM 压缩：GLTF 内嵌贴图没有全局开关，")
-        print("     请在 Godot 里选中该 glb → Import → 展开 Images → Compress 设为")
-        print("     VRAM Compressed，或对本工程其它贴图批量改。")
+    if args.texture_handling is not None:
+        updates["gltf/embedded_image_handling"] = str(int(args.texture_handling))
+    elif args.vram_compress:
+        # Godot 4 的 GLTF 贴图处理档位：
+        #   0 = 丢弃 / 1 = 提取到文件（默认，**不压缩**，4 B/px）
+        #   2 = **Basis Universal（VRAM 压缩）** ← 就是这个
+        #   3 = 未压缩内嵌
+        updates["gltf/embedded_image_handling"] = "2"
     if args.no_lods:
         updates["meshes/generate_lods"] = "false"
 
