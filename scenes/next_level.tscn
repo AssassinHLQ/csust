@@ -1,4 +1,4 @@
-[gd_scene load_steps=36 format=3]
+[gd_scene load_steps=38 format=3]
 
 ; 第二个场景：蒙德里安大楼（De Stijl）。
 ; 用户 2026-10-27：「完善第二个场景，做关卡，这次使用构成主义」；
@@ -28,6 +28,8 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_fine.tscn" id="13_campusfine"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
 [ext_resource type="PackedScene" path="res://scenes/trex_yuuka_boss.tscn" id="16_trex"]
+[ext_resource type="PackedScene" path="res://scenes/kei_npc.tscn" id="17_kei"]
+[ext_resource type="Script" path="res://scripts/dialogue_box.gd" id="18_dialog"]
 
 [sub_resource type="PanoramaSkyMaterial" id="SkyMat_level"]
 panorama = ExtResource("11_sky_preview")
@@ -431,3 +433,13 @@ theme_override_font_sizes/font_size = 36
 text = ""
 horizontal_alignment = 1
 vertical_alignment = 1
+
+; ── 2026-11-05：凯伊（整备工）＋ 对话框 ──
+; 用户：「载具形态……花钱找凯伊，现在不是第二场景就爱丽丝一个人吗，把凯伊放进去」。
+; 站位：一层大厅里、出生点 (-2.0, 0.55, 5.2) 东侧 3.2 m，面朝出生点（-X 方向）。
+; 她站桩不动（`kei_npc.gd` 在 `_ready` 里就 `set_standby(true)`）。
+[node name="DialogueBox" type="CanvasLayer" parent="."]
+script = ExtResource("18_dialog")
+
+[node name="Kei" parent="." instance=ExtResource("17_kei")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 1.2, 0.35, 5.2)

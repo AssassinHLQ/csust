@@ -43,7 +43,10 @@ const CREDITS_HEIGHT := 520.0
 ##
 ## 原来它是 HUD 底部的一个 `Label`（`HUD/Hint`），常驻画面、右端还会被右下角的
 ## 弹药面板压住。用户要求收进这里 —— **只在 Esc 设置打开时出现**，平时不占画面。
-const HELP_TEXT := "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近"
+##
+## 2026-11-05 补两条：`F 交互`（凯伊 / 芹香 / 电脑都是 F）与 `G 变形`
+## （阿比·埃舒载具形态，见 `carrier_form.gd`；**没找凯伊改装之前按 G 不会有反应**）。
+const HELP_TEXT := "WASD 移动　Shift 跑动　Ctrl 蹲行　空格 跳跃　右键 瞄准　左键 开火　R 换弹　滚轮 远近　F 交互　G 变形"
 
 var is_open := false
 

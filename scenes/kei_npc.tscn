@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+; 第二场景里的凯伊（整备工）。
+; 她**不是**跟着跑的那七只同伴之一：`kei_npc.gd` 继承 `companion.gd`，
+; 但在 `_ready()` 里立刻 `set_standby(true)`，所以站桩不动，只等玩家按 F 搭话。
+; 模型沿用本地素材 `models/companions/Kei_ext.glb`（凯伊本体，61 骨 / 32 动作）。
+
+[ext_resource type="Script" path="res://scripts/kei_npc.gd" id="1_kei"]
+
+[sub_resource type="CapsuleShape3D" id="Cap_kei"]
+radius = 0.3
+height = 1.5
+
+[node name="KeiNpc" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_kei")
+model_path = "res://models/companions/Kei_ext.glb"
+display_name = "凯伊"
+player_path = NodePath("../Player")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("Cap_kei")
+
+[node name="Rig" type="Node3D" parent="."]

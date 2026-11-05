@@ -425,8 +425,50 @@ imageStore(rasterized_image, ivec2(image_pos), vec4(blended_color + heatmap_colo
 - 换皮肤**还没做**：玩家模型是场景里的 `Arisu/Model`（glb 实例），而 `AnimDriver` 挂在它下面
   （`player.gd` 里 `$Arisu/Model/AnimDriver`），换实例要连驱动一起重建；
   再加上网格根名/动作名不同，得先定「换皮肤时哪些按名字找的地方要跟着改」。
+  **（载具形态没走这条路 —— 见 §16，它是另外加一个节点，不碰 AnimDriver。）**
 
-## 15. 下一步
+## 15. 凯伊（第二场景整备工）+ 载具形态（2026-11-05）
+
+用户：「我要载具的……**花钱找凯伊**，现在不是第二场景就爱丽丝一个人吗，把凯伊放进去」。
+并且提醒「剧情里面好像不是买来的」——查证过，确实不是：
+
+> 机体叫 **阿比·埃舒**（アビ・エシュフ / Abi-Eshuh），原本是**时（Toki）**的；
+> 被击毁后由**凯伊和爱丽丝合力**、借「无名诸神」的力量**重组到爱丽丝身上** —— 这才成了临战形态。
+> 来源：<https://bluearchive.hatenablog.com/entry/2026/02/08/234211>（临战衣装以时让渡的阿比·埃舒为基础、
+> 凯伊与爱丽丝精炼）、RekoWiki「蔚藍檔案學生介紹-千年」。所以游戏里写成
+> **「凯伊动手改装，玩家出材料费」**，不是货架上买一件。
+
+**落地的东西**
+- `scenes/kei_npc.tscn` + `scripts/kei_npc.gd`（**继承 `companion.gd`**）：凯伊站桩在
+  第二场景一层大厅里，出生点 (-2.0, 0.55, 5.2) 东侧 3.2 m，面朝出生点。
+  站桩是在 `_ready()` 里立刻 `set_standby(true)`（早于第一个物理帧），所以她一步都不会跟队；
+  standby 分支里重力照常生效，所以落点是稳的（实测停在 y=0.51 的大厅地面上）。
+- 第二场景原来**没有 `DialogueBox`**，这次给凯伊加了一个（`scripts/dialogue_box.gd`）。
+- `scripts/mech_state.gd`：解锁标记落盘 `user://mech.cfg`，**跨启动保留**
+  （和银行卡「每局清零」故意相反 —— 这是剧情进度）。
+  改装价 `CARRIER_PRICE = 520000`（¥52 万；量级参考：八卡 5090 整机 ¥67 万，一轮跑酷约 67 万）。
+- `scripts/carrier_form.gd` + `player.tscn` 里新增 `Arisu/CarrierForm` 节点：**按 G 变形**。
+  它**不接 `AnimDriver`** —— 载具那套只有 `Idle`/`Walk` 两条动作，接驱动会缺
+  `Normal_Idle`/`Normal_Attack_Ing`/`Move_Ing`；所以自己按移动速度在两条之间交叉淡化。
+  模型不在时（本地素材，不进仓库）按 G 只打 warning，不崩。
+- 设置菜单的按键说明补了 `F 交互` 与 `G 变形`。
+
+**headless 自检**：`scripts/_verify_kei_npc.gd`（不开窗口），全过：
+节点/模型/AnimDriver 就位；站桩 + 落地 + 水平偏移 0.00 m；DialogueBox 在；
+搭话能起；**付款回调扣款 ¥52 万准确、钱不够不扣不解锁**；载具未解锁时变不了、
+解锁后能建出来（`Idle`/`Walk`）并能变回本体；跑完把 `mech.cfg` 与银行卡还原。
+
+**两个踩过的坑**
+1. ⚠️ `kei_npc.gd` 里**不能有和父类同名的成员**（第一版写了 `var _player`，
+   父类 `companion.gd` 已有 → 整份脚本 `Parse Error` 加载失败，
+   表现是「节点在、脚本没挂上、按 F 毫无反应」）。现在叫 `_talk_player`。
+2. ⚠️ 探针里任何一步报错都会让 `_run()` 中断、`quit()` 走不到 → **挂死 10 分钟**。
+   现在 `_verify_kei_npc.gd` 带 90 s 看门狗。
+
+**还没验的（要看画面）**：载具模型的**朝向**（`carrier_form.gd` 的 `facing_yaw_deg`，默认 0）
+与**缩放**（`carrier_scale`，默认 1.0）本喵没在窗口里看过 —— 可能倒着走或大小不对，改这两个数即可。
+
+## 16. 下一步
 
 1. ~~真实窗口复测 a7ec536~~ —— 已完成（离屏 `--splat=off`，数据见 §4）。
 2. ~~部室角落掉帧~~ —— 已定位并修掉 184.5 万面那颗雷（§10）；用户可用 F3 复核，仍低再谈室内降级室外远景。
@@ -437,6 +479,9 @@ imageStore(rasterized_image, ivec2(image_pos), vec4(blended_color + heatmap_colo
    **但画面还没人看过**：重切后的细层是不是终于和粗层/地面网格对齐，需要开一次游戏确认。
 6. ⚠️ **用户明确要求：不要随便弹窗口**（出图探针会抢一下前台，打断他建模）。
    要跑 `_tools/run_shot.sh` 那类探针，先问过用户。
+7. ~~凯伊进第二场景 + 载具形态可购买~~ —— 已做（§16）。
+   **待用户看画面**：载具模型的朝向（`facing_yaw_deg`，默认 0）与缩放（`carrier_scale`），
+   本喵没在窗口里看过，可能是倒着走 / 大小不对；两个都是导出参数，改一个数就行。
 7. 等素材接入开放架。
 8. 电竞房布局等用户。
 9. 待确认：`campus_buildings.tscn` 删除是否有意；`project.godot` 名称与 description 是否一起收尾提交。
