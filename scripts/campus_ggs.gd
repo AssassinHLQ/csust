@@ -53,7 +53,14 @@ var _bin_path := BIN
 ##
 ## 清单 `chunks.json` 由离线脚本生成（块名 → 世界中心 / bin 路径 / 字节数），
 ## 所以这里不需要知道 10×10 的网格参数，按「玩家所在格的 ±1 邻域」选窗口即可。
-const CHUNKS_JSON := "res://splatdata/campus_chunks10/chunks.json"
+## ⚠️ 2026-11-05：默认指向 `campus_chunks10w`（**世界坐标**那套）。
+## 老的 `campus_chunks10` 是第②步从 SOG 导的，尺度只有全量的 1/3、原点也不对
+## （点数/字节数完全相同，所以一直没被发现），细层渲染出来是个「迷你校园」——
+## 这才是 3×3 窗口看起来像浮空地皮的真正原因。重新切法：
+##   python _tools/split_ggs_bin.py campus_ggs.bin splatdata/campus_chunks10w 10 10
+## 回退对照：`--ggs-chunks=res://splatdata/campus_chunks10/chunks.json`
+var chunks_json := "res://splatdata/campus_chunks10w/chunks.json"
+const CHUNKS_JSON_OLD := "res://splatdata/campus_chunks10/chunks.json"
 const WINDOW_SIDE := 3
 ## 实际使用的窗口边长，`--ggs-window=N` 可以临时改（量「多大才够看」用）。
 ## 3×3 ≈ 60×50 m，校园本体 ≈ 200×150 m —— 见 `_probe_campus_window_shot.gd` 的对照图。
@@ -115,6 +122,9 @@ func _ready() -> void:
 			_coarse_path = a.substr(13)
 		if a == "--ggs-no-coarse":
 			_coarse_off = true
+		# 换一套分块清单（回退对照老那套 / 换回旧的 mini 尺度）
+		if a.begins_with("--ggs-chunks="):
+			chunks_json = a.substr(13)
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
@@ -415,9 +425,9 @@ func _process(_dt: float) -> void:
 
 ## 读离线生成的清单（块名 → 世界中心 / bin / 字节数）。
 func _load_manifest() -> bool:
-	if not FileAccess.file_exists(CHUNKS_JSON):
+	if not FileAccess.file_exists(chunks_json):
 		return false
-	var parsed = JSON.parse_string(FileAccess.get_file_as_string(CHUNKS_JSON))
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(chunks_json))
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
 	var arr: Array = (parsed as Dictionary).get("chunks", [])

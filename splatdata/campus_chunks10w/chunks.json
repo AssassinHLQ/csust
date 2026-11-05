@@ -1,0 +1,1609 @@
+{
+ "root": [
+  0.0,
+  0.0,
+  0.0
+ ],
+ "chunks": [
+  {
+   "name": "Chunk_0_0",
+   "center": [
+    -245.297,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "points": 0,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_0.bin",
+   "bytes": 0
+  },
+  {
+   "name": "Chunk_0_1",
+   "center": [
+    -245.297,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -234.1,
+    4.6,
+    -456.0
+   ],
+   "points": 15,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_1.bin",
+   "bytes": 3600
+  },
+  {
+   "name": "Chunk_0_2",
+   "center": [
+    -245.297,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -236.3,
+    12.3,
+    -409.4
+   ],
+   "points": 1122,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_2.bin",
+   "bytes": 269280
+  },
+  {
+   "name": "Chunk_0_3",
+   "center": [
+    -245.297,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -245.1,
+    10.3,
+    -376.9
+   ],
+   "points": 16829,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_3.bin",
+   "bytes": 4038960
+  },
+  {
+   "name": "Chunk_0_4",
+   "center": [
+    -245.297,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -243.5,
+    10.9,
+    -332.8
+   ],
+   "points": 54622,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_4.bin",
+   "bytes": 13109280
+  },
+  {
+   "name": "Chunk_0_5",
+   "center": [
+    -245.297,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -243.4,
+    11.9,
+    -295.5
+   ],
+   "points": 87836,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_5.bin",
+   "bytes": 21080640
+  },
+  {
+   "name": "Chunk_0_6",
+   "center": [
+    -245.297,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -245.7,
+    5.4,
+    -256.1
+   ],
+   "points": 71920,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_6.bin",
+   "bytes": 17260800
+  },
+  {
+   "name": "Chunk_0_7",
+   "center": [
+    -245.297,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -240.6,
+    4.0,
+    -213.1
+   ],
+   "points": 38159,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_7.bin",
+   "bytes": 9158160
+  },
+  {
+   "name": "Chunk_0_8",
+   "center": [
+    -245.297,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -236.4,
+    6.9,
+    -172.8
+   ],
+   "points": 9796,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_8.bin",
+   "bytes": 2351040
+  },
+  {
+   "name": "Chunk_0_9",
+   "center": [
+    -245.297,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -233.2,
+    4.3,
+    -124.1
+   ],
+   "points": 97,
+   "bin": "splatdata/campus_chunks10w/Chunk_0_9.bin",
+   "bytes": 23280
+  },
+  {
+   "name": "Chunk_1_0",
+   "center": [
+    -197.695,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    -177.7,
+    -3.3,
+    -492.5
+   ],
+   "points": 43,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_0.bin",
+   "bytes": 10320
+  },
+  {
+   "name": "Chunk_1_1",
+   "center": [
+    -197.695,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -186.4,
+    -3.1,
+    -459.1
+   ],
+   "points": 471,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_1.bin",
+   "bytes": 113040
+  },
+  {
+   "name": "Chunk_1_2",
+   "center": [
+    -197.695,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -196.8,
+    4.7,
+    -416.7
+   ],
+   "points": 3576,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_2.bin",
+   "bytes": 858240
+  },
+  {
+   "name": "Chunk_1_3",
+   "center": [
+    -197.695,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -201.5,
+    8.0,
+    -373.3
+   ],
+   "points": 23617,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_3.bin",
+   "bytes": 5668080
+  },
+  {
+   "name": "Chunk_1_4",
+   "center": [
+    -197.695,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -196.6,
+    8.2,
+    -336.1
+   ],
+   "points": 68506,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_4.bin",
+   "bytes": 16441440
+  },
+  {
+   "name": "Chunk_1_5",
+   "center": [
+    -197.695,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -197.5,
+    6.8,
+    -295.6
+   ],
+   "points": 130837,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_5.bin",
+   "bytes": 31400880
+  },
+  {
+   "name": "Chunk_1_6",
+   "center": [
+    -197.695,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -198.2,
+    1.7,
+    -252.1
+   ],
+   "points": 44979,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_6.bin",
+   "bytes": 10794960
+  },
+  {
+   "name": "Chunk_1_7",
+   "center": [
+    -197.695,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -196.9,
+    3.3,
+    -210.7
+   ],
+   "points": 67126,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_7.bin",
+   "bytes": 16110240
+  },
+  {
+   "name": "Chunk_1_8",
+   "center": [
+    -197.695,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -192.7,
+    6.5,
+    -169.2
+   ],
+   "points": 38752,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_8.bin",
+   "bytes": 9300480
+  },
+  {
+   "name": "Chunk_1_9",
+   "center": [
+    -197.695,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -206.2,
+    7.2,
+    -138.3
+   ],
+   "points": 996,
+   "bin": "splatdata/campus_chunks10w/Chunk_1_9.bin",
+   "bytes": 239040
+  },
+  {
+   "name": "Chunk_2_0",
+   "center": [
+    -150.093,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    -144.4,
+    0.4,
+    -499.8
+   ],
+   "points": 1879,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_0.bin",
+   "bytes": 450960
+  },
+  {
+   "name": "Chunk_2_1",
+   "center": [
+    -150.093,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -142.7,
+    6.0,
+    -460.5
+   ],
+   "points": 3924,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_1.bin",
+   "bytes": 941760
+  },
+  {
+   "name": "Chunk_2_2",
+   "center": [
+    -150.093,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -141.2,
+    9.2,
+    -417.9
+   ],
+   "points": 18155,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_2.bin",
+   "bytes": 4357200
+  },
+  {
+   "name": "Chunk_2_3",
+   "center": [
+    -150.093,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -145.8,
+    8.1,
+    -378.2
+   ],
+   "points": 43280,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_3.bin",
+   "bytes": 10387200
+  },
+  {
+   "name": "Chunk_2_4",
+   "center": [
+    -150.093,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -149.2,
+    11.4,
+    -335.3
+   ],
+   "points": 98905,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_4.bin",
+   "bytes": 23737200
+  },
+  {
+   "name": "Chunk_2_5",
+   "center": [
+    -150.093,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -150.0,
+    8.4,
+    -295.3
+   ],
+   "points": 114377,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_5.bin",
+   "bytes": 27450480
+  },
+  {
+   "name": "Chunk_2_6",
+   "center": [
+    -150.093,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -145.8,
+    5.4,
+    -252.0
+   ],
+   "points": 118722,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_6.bin",
+   "bytes": 28493280
+  },
+  {
+   "name": "Chunk_2_7",
+   "center": [
+    -150.093,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -146.3,
+    6.1,
+    -211.6
+   ],
+   "points": 101504,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_7.bin",
+   "bytes": 24360960
+  },
+  {
+   "name": "Chunk_2_8",
+   "center": [
+    -150.093,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -150.9,
+    1.1,
+    -169.1
+   ],
+   "points": 35192,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_8.bin",
+   "bytes": 8446080
+  },
+  {
+   "name": "Chunk_2_9",
+   "center": [
+    -150.093,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -154.8,
+    3.3,
+    -134.4
+   ],
+   "points": 11539,
+   "bin": "splatdata/campus_chunks10w/Chunk_2_9.bin",
+   "bytes": 2769360
+  },
+  {
+   "name": "Chunk_3_0",
+   "center": [
+    -102.491,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    -92.4,
+    5.4,
+    -521.0
+   ],
+   "points": 27618,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_0.bin",
+   "bytes": 6628320
+  },
+  {
+   "name": "Chunk_3_1",
+   "center": [
+    -102.491,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -95.0,
+    8.5,
+    -463.0
+   ],
+   "points": 45059,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_1.bin",
+   "bytes": 10814160
+  },
+  {
+   "name": "Chunk_3_2",
+   "center": [
+    -102.491,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -101.2,
+    7.0,
+    -421.9
+   ],
+   "points": 66601,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_2.bin",
+   "bytes": 15984240
+  },
+  {
+   "name": "Chunk_3_3",
+   "center": [
+    -102.491,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -99.8,
+    10.5,
+    -380.2
+   ],
+   "points": 104523,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_3.bin",
+   "bytes": 25085520
+  },
+  {
+   "name": "Chunk_3_4",
+   "center": [
+    -102.491,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -99.8,
+    9.1,
+    -337.2
+   ],
+   "points": 142491,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_4.bin",
+   "bytes": 34197840
+  },
+  {
+   "name": "Chunk_3_5",
+   "center": [
+    -102.491,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -103.4,
+    8.3,
+    -293.8
+   ],
+   "points": 134049,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_5.bin",
+   "bytes": 32171760
+  },
+  {
+   "name": "Chunk_3_6",
+   "center": [
+    -102.491,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -103.9,
+    6.4,
+    -252.0
+   ],
+   "points": 131137,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_6.bin",
+   "bytes": 31472880
+  },
+  {
+   "name": "Chunk_3_7",
+   "center": [
+    -102.491,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -103.4,
+    5.2,
+    -210.3
+   ],
+   "points": 101216,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_7.bin",
+   "bytes": 24291840
+  },
+  {
+   "name": "Chunk_3_8",
+   "center": [
+    -102.491,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -100.7,
+    2.5,
+    -173.2
+   ],
+   "points": 40474,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_8.bin",
+   "bytes": 9713760
+  },
+  {
+   "name": "Chunk_3_9",
+   "center": [
+    -102.491,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -98.4,
+    1.2,
+    -135.9
+   ],
+   "points": 10827,
+   "bin": "splatdata/campus_chunks10w/Chunk_3_9.bin",
+   "bytes": 2598480
+  },
+  {
+   "name": "Chunk_4_0",
+   "center": [
+    -54.889,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    -56.6,
+    3.2,
+    -512.1
+   ],
+   "points": 59207,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_0.bin",
+   "bytes": 14209680
+  },
+  {
+   "name": "Chunk_4_1",
+   "center": [
+    -54.889,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -56.6,
+    2.4,
+    -466.2
+   ],
+   "points": 62079,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_1.bin",
+   "bytes": 14898960
+  },
+  {
+   "name": "Chunk_4_2",
+   "center": [
+    -54.889,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -56.0,
+    5.2,
+    -420.8
+   ],
+   "points": 75654,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_2.bin",
+   "bytes": 18156960
+  },
+  {
+   "name": "Chunk_4_3",
+   "center": [
+    -54.889,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -55.2,
+    4.8,
+    -378.7
+   ],
+   "points": 125163,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_3.bin",
+   "bytes": 30039120
+  },
+  {
+   "name": "Chunk_4_4",
+   "center": [
+    -54.889,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -55.3,
+    7.4,
+    -337.7
+   ],
+   "points": 137348,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_4.bin",
+   "bytes": 32963520
+  },
+  {
+   "name": "Chunk_4_5",
+   "center": [
+    -54.889,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -52.9,
+    8.4,
+    -294.3
+   ],
+   "points": 108586,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_5.bin",
+   "bytes": 26060640
+  },
+  {
+   "name": "Chunk_4_6",
+   "center": [
+    -54.889,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -55.1,
+    7.6,
+    -252.9
+   ],
+   "points": 125857,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_6.bin",
+   "bytes": 30205680
+  },
+  {
+   "name": "Chunk_4_7",
+   "center": [
+    -54.889,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -54.4,
+    9.2,
+    -210.0
+   ],
+   "points": 142456,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_7.bin",
+   "bytes": 34189440
+  },
+  {
+   "name": "Chunk_4_8",
+   "center": [
+    -54.889,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -50.1,
+    5.2,
+    -170.4
+   ],
+   "points": 85108,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_8.bin",
+   "bytes": 20425920
+  },
+  {
+   "name": "Chunk_4_9",
+   "center": [
+    -54.889,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -51.8,
+    3.5,
+    -128.2
+   ],
+   "points": 27927,
+   "bin": "splatdata/campus_chunks10w/Chunk_4_9.bin",
+   "bytes": 6702480
+  },
+  {
+   "name": "Chunk_5_0",
+   "center": [
+    -7.287,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    -10.7,
+    6.2,
+    -510.1
+   ],
+   "points": 29081,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_0.bin",
+   "bytes": 6979440
+  },
+  {
+   "name": "Chunk_5_1",
+   "center": [
+    -7.287,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    -11.2,
+    2.4,
+    -466.3
+   ],
+   "points": 47622,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_1.bin",
+   "bytes": 11429280
+  },
+  {
+   "name": "Chunk_5_2",
+   "center": [
+    -7.287,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    -10.3,
+    5.7,
+    -419.9
+   ],
+   "points": 42267,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_2.bin",
+   "bytes": 10144080
+  },
+  {
+   "name": "Chunk_5_3",
+   "center": [
+    -7.287,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    -9.9,
+    8.6,
+    -379.3
+   ],
+   "points": 103423,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_3.bin",
+   "bytes": 24821520
+  },
+  {
+   "name": "Chunk_5_4",
+   "center": [
+    -7.287,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    -7.7,
+    7.8,
+    -336.9
+   ],
+   "points": 106302,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_4.bin",
+   "bytes": 25512480
+  },
+  {
+   "name": "Chunk_5_5",
+   "center": [
+    -7.287,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    -5.7,
+    8.1,
+    -295.1
+   ],
+   "points": 146678,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_5.bin",
+   "bytes": 35202720
+  },
+  {
+   "name": "Chunk_5_6",
+   "center": [
+    -7.287,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    -5.1,
+    8.7,
+    -253.5
+   ],
+   "points": 150348,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_6.bin",
+   "bytes": 36083520
+  },
+  {
+   "name": "Chunk_5_7",
+   "center": [
+    -7.287,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    -0.6,
+    6.2,
+    -213.2
+   ],
+   "points": 225519,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_7.bin",
+   "bytes": 54124560
+  },
+  {
+   "name": "Chunk_5_8",
+   "center": [
+    -7.287,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    -5.5,
+    6.2,
+    -170.3
+   ],
+   "points": 119904,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_8.bin",
+   "bytes": 28776960
+  },
+  {
+   "name": "Chunk_5_9",
+   "center": [
+    -7.287,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    -3.2,
+    2.2,
+    -124.2
+   ],
+   "points": 42447,
+   "bin": "splatdata/campus_chunks10w/Chunk_5_9.bin",
+   "bytes": 10187280
+  },
+  {
+   "name": "Chunk_6_0",
+   "center": [
+    40.315,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    32.0,
+    -1.5,
+    -516.8
+   ],
+   "points": 14627,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_0.bin",
+   "bytes": 3510480
+  },
+  {
+   "name": "Chunk_6_1",
+   "center": [
+    40.315,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    22.9,
+    2.8,
+    -468.7
+   ],
+   "points": 8580,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_1.bin",
+   "bytes": 2059200
+  },
+  {
+   "name": "Chunk_6_2",
+   "center": [
+    40.315,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    33.2,
+    3.8,
+    -418.8
+   ],
+   "points": 13003,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_2.bin",
+   "bytes": 3120720
+  },
+  {
+   "name": "Chunk_6_3",
+   "center": [
+    40.315,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    40.1,
+    7.1,
+    -379.2
+   ],
+   "points": 70611,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_3.bin",
+   "bytes": 16946640
+  },
+  {
+   "name": "Chunk_6_4",
+   "center": [
+    40.315,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    38.2,
+    9.7,
+    -335.1
+   ],
+   "points": 102341,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_4.bin",
+   "bytes": 24561840
+  },
+  {
+   "name": "Chunk_6_5",
+   "center": [
+    40.315,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    40.2,
+    8.9,
+    -294.4
+   ],
+   "points": 166546,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_5.bin",
+   "bytes": 39971040
+  },
+  {
+   "name": "Chunk_6_6",
+   "center": [
+    40.315,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    40.2,
+    8.0,
+    -250.8
+   ],
+   "points": 202364,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_6.bin",
+   "bytes": 48567360
+  },
+  {
+   "name": "Chunk_6_7",
+   "center": [
+    40.315,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    37.5,
+    8.7,
+    -211.5
+   ],
+   "points": 238935,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_7.bin",
+   "bytes": 57344400
+  },
+  {
+   "name": "Chunk_6_8",
+   "center": [
+    40.315,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    39.7,
+    7.1,
+    -168.1
+   ],
+   "points": 134246,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_8.bin",
+   "bytes": 32219040
+  },
+  {
+   "name": "Chunk_6_9",
+   "center": [
+    40.315,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    39.7,
+    0.9,
+    -121.3
+   ],
+   "points": 70085,
+   "bin": "splatdata/campus_chunks10w/Chunk_6_9.bin",
+   "bytes": 16820400
+  },
+  {
+   "name": "Chunk_7_0",
+   "center": [
+    87.917,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    70.2,
+    -4.7,
+    -538.0
+   ],
+   "points": 1416,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_0.bin",
+   "bytes": 339840
+  },
+  {
+   "name": "Chunk_7_1",
+   "center": [
+    87.917,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    87.5,
+    1.4,
+    -456.2
+   ],
+   "points": 144,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_1.bin",
+   "bytes": 34560
+  },
+  {
+   "name": "Chunk_7_2",
+   "center": [
+    87.917,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    85.6,
+    7.0,
+    -410.5
+   ],
+   "points": 5330,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_2.bin",
+   "bytes": 1279200
+  },
+  {
+   "name": "Chunk_7_3",
+   "center": [
+    87.917,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    87.7,
+    10.2,
+    -374.2
+   ],
+   "points": 59292,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_3.bin",
+   "bytes": 14230080
+  },
+  {
+   "name": "Chunk_7_4",
+   "center": [
+    87.917,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    87.4,
+    4.7,
+    -335.8
+   ],
+   "points": 75044,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_4.bin",
+   "bytes": 18010560
+  },
+  {
+   "name": "Chunk_7_5",
+   "center": [
+    87.917,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    88.1,
+    6.0,
+    -293.7
+   ],
+   "points": 102501,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_5.bin",
+   "bytes": 24600240
+  },
+  {
+   "name": "Chunk_7_6",
+   "center": [
+    87.917,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    85.8,
+    10.5,
+    -253.0
+   ],
+   "points": 173005,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_6.bin",
+   "bytes": 41521200
+  },
+  {
+   "name": "Chunk_7_7",
+   "center": [
+    87.917,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    84.0,
+    8.3,
+    -209.8
+   ],
+   "points": 126309,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_7.bin",
+   "bytes": 30314160
+  },
+  {
+   "name": "Chunk_7_8",
+   "center": [
+    87.917,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    84.3,
+    7.4,
+    -169.5
+   ],
+   "points": 92909,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_8.bin",
+   "bytes": 22298160
+  },
+  {
+   "name": "Chunk_7_9",
+   "center": [
+    87.917,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    86.1,
+    -0.7,
+    -116.7
+   ],
+   "points": 42643,
+   "bin": "splatdata/campus_chunks10w/Chunk_7_9.bin",
+   "bytes": 10234320
+  },
+  {
+   "name": "Chunk_8_0",
+   "center": [
+    135.519,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "points": 0,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_0.bin",
+   "bytes": 0
+  },
+  {
+   "name": "Chunk_8_1",
+   "center": [
+    135.519,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    142.6,
+    1.6,
+    -449.9
+   ],
+   "points": 180,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_1.bin",
+   "bytes": 43200
+  },
+  {
+   "name": "Chunk_8_2",
+   "center": [
+    135.519,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    137.3,
+    7.5,
+    -412.8
+   ],
+   "points": 5980,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_2.bin",
+   "bytes": 1435200
+  },
+  {
+   "name": "Chunk_8_3",
+   "center": [
+    135.519,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    133.1,
+    6.6,
+    -374.4
+   ],
+   "points": 36740,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_3.bin",
+   "bytes": 8817600
+  },
+  {
+   "name": "Chunk_8_4",
+   "center": [
+    135.519,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    127.0,
+    2.1,
+    -338.2
+   ],
+   "points": 34341,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_4.bin",
+   "bytes": 8241840
+  },
+  {
+   "name": "Chunk_8_5",
+   "center": [
+    135.519,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    132.1,
+    8.6,
+    -293.6
+   ],
+   "points": 68889,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_5.bin",
+   "bytes": 16533360
+  },
+  {
+   "name": "Chunk_8_6",
+   "center": [
+    135.519,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    134.0,
+    8.4,
+    -252.9
+   ],
+   "points": 81677,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_6.bin",
+   "bytes": 19602480
+  },
+  {
+   "name": "Chunk_8_7",
+   "center": [
+    135.519,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    129.5,
+    7.5,
+    -213.2
+   ],
+   "points": 51576,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_7.bin",
+   "bytes": 12378240
+  },
+  {
+   "name": "Chunk_8_8",
+   "center": [
+    135.519,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    129.0,
+    6.6,
+    -171.1
+   ],
+   "points": 26865,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_8.bin",
+   "bytes": 6447600
+  },
+  {
+   "name": "Chunk_8_9",
+   "center": [
+    135.519,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    130.4,
+    1.8,
+    -119.4
+   ],
+   "points": 16836,
+   "bin": "splatdata/campus_chunks10w/Chunk_8_9.bin",
+   "bytes": 4040640
+  },
+  {
+   "name": "Chunk_9_0",
+   "center": [
+    183.121,
+    0.0,
+    -507.634
+   ],
+   "mean": [
+    246.5,
+    14.6,
+    -517.4
+   ],
+   "points": 22,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_0.bin",
+   "bytes": 5280
+  },
+  {
+   "name": "Chunk_9_1",
+   "center": [
+    183.121,
+    0.0,
+    -465.132
+   ],
+   "mean": [
+    279.0,
+    13.3,
+    -459.2
+   ],
+   "points": 417,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_1.bin",
+   "bytes": 100080
+  },
+  {
+   "name": "Chunk_9_2",
+   "center": [
+    183.121,
+    0.0,
+    -422.63
+   ],
+   "mean": [
+    194.6,
+    10.6,
+    -416.0
+   ],
+   "points": 3771,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_2.bin",
+   "bytes": 905040
+  },
+  {
+   "name": "Chunk_9_3",
+   "center": [
+    183.121,
+    0.0,
+    -380.128
+   ],
+   "mean": [
+    189.6,
+    7.6,
+    -379.0
+   ],
+   "points": 22992,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_3.bin",
+   "bytes": 5518080
+  },
+  {
+   "name": "Chunk_9_4",
+   "center": [
+    183.121,
+    0.0,
+    -337.626
+   ],
+   "mean": [
+    205.2,
+    5.0,
+    -335.6
+   ],
+   "points": 22547,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_4.bin",
+   "bytes": 5411280
+  },
+  {
+   "name": "Chunk_9_5",
+   "center": [
+    183.121,
+    0.0,
+    -295.124
+   ],
+   "mean": [
+    189.7,
+    8.4,
+    -297.4
+   ],
+   "points": 37298,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_5.bin",
+   "bytes": 8951520
+  },
+  {
+   "name": "Chunk_9_6",
+   "center": [
+    183.121,
+    0.0,
+    -252.622
+   ],
+   "mean": [
+    192.8,
+    9.4,
+    -254.0
+   ],
+   "points": 32269,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_6.bin",
+   "bytes": 7744560
+  },
+  {
+   "name": "Chunk_9_7",
+   "center": [
+    183.121,
+    0.0,
+    -210.119
+   ],
+   "mean": [
+    195.0,
+    5.5,
+    -209.2
+   ],
+   "points": 12323,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_7.bin",
+   "bytes": 2957520
+  },
+  {
+   "name": "Chunk_9_8",
+   "center": [
+    183.121,
+    0.0,
+    -167.617
+   ],
+   "mean": [
+    185.9,
+    4.5,
+    -172.6
+   ],
+   "points": 9752,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_8.bin",
+   "bytes": 2340480
+  },
+  {
+   "name": "Chunk_9_9",
+   "center": [
+    183.121,
+    0.0,
+    -125.115
+   ],
+   "mean": [
+    225.5,
+    10.1,
+    -125.8
+   ],
+   "points": 6674,
+   "bin": "splatdata/campus_chunks10w/Chunk_9_9.bin",
+   "bytes": 1601760
+  }
+ ]
+}
