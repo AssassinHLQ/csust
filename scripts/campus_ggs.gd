@@ -234,6 +234,21 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_join_window_write()
+	# ⚠️ 退出时 `queue_free()` 要等到这一帧末尾才真正释放，而 `_release_campus()`
+	#    会立刻把纹理 RID 还掉 —— 中间那一瞬 quad 还活着、材质还指着已释放的纹理，
+	#    渲染管线重建 uniform set 时就会报
+	#    `Texture (binding: N, index 0) is not a valid texture`。
+	#    所以退出路径**显式、同步**地把 quad 连同材质参数一起拆掉：
+	#    先把材质里的纹理参数置空（`Texture2DRD` 此时 RID 还有效，只是解绑），
+	#    再 `free()` 掉 quad，最后才让 `_release_campus()` 去还纹理。
+	if quad != null:
+		if _quad_mat != null:
+			_quad_mat.set_shader_parameter("render_texture", null)
+			_quad_mat.set_shader_parameter("coarse_texture", null)
+		remove_child(quad)
+		quad.free()
+		quad = null
+		_quad_mat = null
 	_release_campus()
 	if _gdgs_sc != null and is_instance_valid(_gdgs_sc):
 		_gdgs_sc.set_process(true)
@@ -256,6 +271,10 @@ func _make_bundle() -> bool:
 		return false
 	if tex == null:
 		tex = Texture2DRD.new()
+		# `_release_campus()` 会把 tex 丢掉，重建之后必须让 quad 的材质重新指过来，
+		# 否则 quad 还握着旧的 Texture2DRD（那张的 RID 已经被光栅器还掉了）。
+		if _quad_mat != null:
+			_quad_mat.set_shader_parameter("render_texture", tex)
 	# 不要 Compositor：GGS 走全屏 quad，Compositor 会把光栅器拖到个位数帧率。
 	if cam.compositor != null:
 		cam.compositor = null
@@ -279,6 +298,11 @@ func _make_bundle() -> bool:
 		var cply = PlyFileScript.new()
 		cply.size = _coarse_total
 		var vs2: Vector2i = get_viewport().get_size()
+		# `_release_campus()` 会把 coarse_tex 丢掉（见那里的说明），这里补回来。
+		if coarse_tex == null:
+			coarse_tex = Texture2DRD.new()
+			if _quad_mat != null:
+				_quad_mat.set_shader_parameter("coarse_texture", coarse_tex)
 		coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
 		coarse_rasterizer.bin_path = _coarse_path
 		coarse_rasterizer.model_scale[0] = 1.0
@@ -330,7 +354,11 @@ func _release_campus(keep_coarse := false) -> void:
 			quad.queue_free()
 			quad = null
 		if tex != null:
-			tex.texture_rd_rid = RID()
+			# ⚠️ 2026-11-06 修：这里**不能**再 `tex.texture_rd_rid = RID()`。
+			#    给 `texture_rd_rid` 赋值是**拥有权转移**（会释放原来持有的 RID），
+			#    而那个 RID 是细层光栅器建的 —— 下面 `ctx.free()` 会再释放一次，
+			#    于是 `ERROR: Attempted to free invalid ID`。丢引用即可，
+			#    纹理由光栅器自己还（`cleanup_gpu()` 已经先还纹理再放 context）。
 			tex = null
 	if rasterizer != null:
 		if rasterizer.load_thread != null and rasterizer.load_thread.is_started():
@@ -343,12 +371,18 @@ func _release_campus(keep_coarse := false) -> void:
 	_ready_done = false
 	if keep_coarse:
 		# 细层没了但粗层还在：_make_bundle() 要能只重建细层，所以这里不动 coarse_*。
-		# 但细层那张纹理的 RID 马上要被释放，而 quad 的 `render_texture` 槽位还指着它 ——
-		# 悬空绑定会在换窗口那一帧报 "Uniforms supplied for set"。
-		# 指到**粗层那张合法纹理**上：`fine_ready` 已经是 0（不采样它），只是不让绑定空着。
-		if tex != null and coarse_rasterizer != null \
-				and coarse_rasterizer.render_texture != null:
-			tex.texture_rd_rid = coarse_rasterizer.render_texture.texture_rd_rid
+		#
+		# ⚠️ 2026-11-06 修：这一段原来会报
+		#    `ERROR: Attempted to free invalid ID`（每次换窗口一次，栈顶就是这行）。
+		#    错在**给 `Texture2DRD.texture_rd_rid` 赋值是「拥有权转移」，不是改指针**：
+		#    它会把原来持有的那个 RID **释放掉**。于是变成：
+		#      ① `tex.texture_rd_rid = 粗层 RID`   → 释放细层那个 RID
+		#      ② `RenderingServer.call_on_render_thread(ctx.free)`（上面几行）
+		#                                          → 把同一批 RID 再释放一遍
+		#    同一个 RID 被释放两次。而且这跟「悬空绑定」是两码事 ——
+		#    **细层纹理本来就该由光栅器自己还**（`cleanup_gpu()` 里
+		#    `render_texture.texture_rd_rid = RID()` 会还），这里根本不该碰 `tex`。
+		#    quad 也不会采到悬空纹理：`fine_ready` 已经是 0，着色器整个跳过这次采样。
 		return
 	if coarse_rasterizer != null:
 		if coarse_rasterizer.load_thread != null and coarse_rasterizer.load_thread.is_started():
@@ -360,7 +394,9 @@ func _release_campus(keep_coarse := false) -> void:
 		if cctx != null:
 			RenderingServer.call_on_render_thread(cctx.free)
 	if coarse_tex != null:
-		coarse_tex.texture_rd_rid = RID()
+		# ⚠️ 同上：赋值 `texture_rd_rid` 会释放原来持有的 RID，而粗层纹理的 RID 已经
+		#    被上面的 `cctx.free()` 释放过了 ⇒ 双重释放。丢引用就够。
+		coarse_tex = null
 
 
 func _make_quad() -> void:
@@ -452,10 +488,10 @@ func _process(_dt: float) -> void:
 			RenderingServer.call_on_render_thread(coarse_rasterizer.rasterize)
 		else:
 			RenderingServer.call_on_render_thread(coarse_rasterizer.pump_load)
-		if coarse_rasterizer.render_texture != null \
+		if coarse_rasterizer.render_texture != null and coarse_tex != null \
 				and coarse_tex.texture_rd_rid != coarse_rasterizer.render_texture.texture_rd_rid:
 			coarse_tex.texture_rd_rid = coarse_rasterizer.render_texture.texture_rd_rid
-	if quad == null && tex.texture_rd_rid.is_valid() \
+	if quad == null and tex != null and tex.texture_rd_rid.is_valid() \
 			and panorama != null and panorama.get_rid().is_valid():
 		_make_quad()
 	if _overlay != null and _overlay.visible:

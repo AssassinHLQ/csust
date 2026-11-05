@@ -1,0 +1,49 @@
+修掉「每次换窗口报一次 free invalid ID」：Texture2DRD.texture_rd_rid 是拥有权不是指针
+
+用户让「查」这条从本轮优化之前就存在的报错。查下来是同一个错误模式在四处各有一份，
+根源都是对 `Texture2DRD.texture_rd_rid` 的误解：
+
+> 给它赋值是**拥有权转移**，会把原来持有的那个 RID 释放掉，不是单纯改指针。
+
+所以「先释放纹理、再摘引用」就变成双重释放。四处：
+
+1. `campus_ggs.gd::_release_campus`（**本轮优化新引入的**）：
+   `tex.texture_rd_rid = 粗层 RID` 先释放了细层那个 RID，紧接着 `ctx.free()`
+   把同一批 RID 再释放一遍。
+2. `campus_ggs.gd::_release_campus`（老的）：`tex.texture_rd_rid = RID()` 同理会与
+   `ctx.free()` 撞车。
+3. `gaussian_splatting_rasterizer.gd::cleanup_gpu`（老的）：顺序反了 ——
+   先 `context.free()` 再用 `render_texture.texture_rd_rid = RID()` 释放同一个 RID。
+4. `gaussian_splatting_rasterizer.gd` 的 `texture_size` setter（老的，原注释
+   `# FIXME: idk why I have to do this`）：每次改尺寸都 `render_texture = Texture2DRD.new()`，
+   把调用方（`campus_ggs.gd` 的 `tex`）持有的对象换掉，调用方随即把 `texture_rd_rid`
+   指过来，又释放一个已经被还掉的 RID。
+
+改法：
+
+- `_release_campus()` 两个分支都不再碰 `tex` / `coarse_tex` 的 RID，只丢弃引用
+  （纹理由光栅器自己还）。quad 不会采到悬空纹理：`fine_ready = 0` 时着色器整个跳过采样。
+- `cleanup_gpu()` 改成**先还纹理、再释放 context**。
+- `texture_size` setter 不再新建 `Texture2DRD`（只是换纹理，对象可以复用）。
+- `init_gpu()` 与 setter 里赋值前先 `if texture_rd_rid.is_valid(): = RID()` 兜底。
+- `_exit_tree()` 显式同步拆 quad：先 `set_shader_parameter(..., null)` 再 `free()`，
+  否则 `queue_free()` 要等帧末、纹理已经还掉了，中间那一瞬会报
+  `Texture (binding: 2, index 0) is not a valid texture` + `Parameter "us" is null`。
+
+顺带补了两处 `null` 守卫（`coarse_tex` / `tex` 现在可能为 null，`_process` 和
+`_make_quad()` 之前会直接解引用），以及粗层重建时重新创建并重新绑定 `coarse_tex`。
+
+验收（`_tools/run_shot.sh res://scripts/_probe_switch_hitch.gd`，连跑两次）：
+
+    invalid ID            : 0    （原来每次换窗口 1 条）
+    not a valid texture   : 0
+    Parameter "us" is null: 0
+    SCRIPT / Parse Error  : 0
+
+副作用：换窗口最坏帧也跟着降了，**48~169 ms**（原 117~560 ms）——
+大概率是「不再每帧重建 Texture2DRD + 不再触发无效 uniform set」少了两处 GPU 隐式重建；
+阶段 B 的上传已降到 71.6 ms。
+
+另外复验了静止帧复用的逐像素校验仍然通过（噪声底 119153 字节 / 复用帧差 0 字节）。
+
+详见 MEMORY.md §17 六。

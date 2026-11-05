@@ -682,7 +682,48 @@ PASS：复用帧 vs 重算帧 = 0 字节不同（最大通道差 0）
   **完全不采它**；释放细层时把 quad 的 `render_texture` 槽位临时指到粗层那张合法纹理上
   （否则悬空绑定会报 `Uniforms supplied for set`）。
 
-### 四、效果与残留
+### 五、效果与残留
+
+这个报错**在本轮优化之前就有**，每次换窗口出现一次。查下来是同一个错误模式，
+在四处各有一份，全都是对 `Texture2DRD.texture_rd_rid` 的误解：
+
+> **`texture_rd_rid` 是「拥有权」，不是指针。给它赋值会把原来持有的那个 RID 释放掉。**
+
+于是「先释放纹理、再摘引用」就变成双重释放。四处：
+
+| 位置 | 原写法 | 问题 |
+|---|---|---|
+| `campus_ggs.gd::_release_campus`（**本轮新引入**） | `tex.texture_rd_rid = 粗层 RID` | 赋值先释放细层 RID，紧接着 `ctx.free()` 再释放一遍 |
+| `campus_ggs.gd::_release_campus`（老） | `tex.texture_rd_rid = RID()` | 同上，与 `ctx.free()` 撞 |
+| `gaussian_splatting_rasterizer.gd::cleanup_gpu`（老） | `context.free()` 后再 `render_texture.texture_rd_rid = RID()` | 顺序反了 |
+| `gaussian_splatting_rasterizer.gd` 的 `texture_size` setter（老，原注释 `# FIXME: idk why I have to do this`） | 每次改尺寸都 `render_texture = Texture2DRD.new()` | 把调用方持有的对象换掉，调用方再把 `texture_rd_rid` 指过来 → 又释放一个已还的 RID |
+
+**改法**
+
+1. `_release_campus()` 两个分支都**不再碰 `tex` / `coarse_tex` 的 RID**，只丢弃引用
+   （纹理由光栅器 `cleanup_gpu()` 还）。quad 不会采到悬空纹理 —— `fine_ready = 0`
+   时着色器整个跳过采样。
+2. `cleanup_gpu()` **先还纹理再 `context.free()`**。
+3. `texture_size` setter **不再新建 `Texture2DRD`**：只是换了一张纹理，对象可以复用。
+4. `init_gpu()` 与 setter 里赋值前**先 `if texture_rd_rid.is_valid(): = RID()` 兜底**。
+5. `_exit_tree()` 里**显式同步**拆 quad（先 `set_shader_parameter(..., null)`，
+   再 `free()`），否则 `queue_free()` 要等帧末、而纹理已经还掉了，中间那一瞬
+   会报 `Texture (binding: 2, index 0) is not a valid texture` + `Parameter "us" is null`。
+
+**结果**（`_probe_switch_hitch.gd`，连跑两次）：
+
+```
+invalid ID        : 0      （原来每次换窗口 1 条）
+not a valid texture: 0
+Parameter "us" is null: 0
+SCRIPT / Parse Error : 0
+```
+
+副作用：换窗口最坏帧也跟着降了 —— **48~169 ms**（原 117~560 ms）。
+原因大概率是「不再每帧重建 `Texture2DRD` + 不再触发无效 uniform set」，
+少了两处 GPU 侧的隐式重建。阶段 B 的上传已经降到 **71.6 ms**。
+
+
 
 **换窗口最坏一帧：199~842 ms → 117~158 ms**（同一探针、同一条路径）。
 
@@ -692,14 +733,52 @@ PASS：复用帧 vs 重算帧 = 0 字节不同（最大通道差 0）
    落在同一帧。要再往下压只剩一条路：**换窗口时不要重建光栅器** ——
    把缓冲按「最大窗口」一次性分配、窗口 bin 补零到固定点数、切窗口只换 bin 重传。
    代价是常驻显存变高（~700 MB）、投影每帧多跑一点。
-2. 每次释放 GGS 资源都会报一次 `ERROR: Attempted to free invalid ID: ...`
-   —— **是本轮之前就有的**（第一次跑基线就在报），同一个 RID 号，暂时没查。
-3. **逐像素校验还没通过**：`_verify_idle_skip.gd` 要求「复用关着连抓两帧必须逐字节相同」
-   作为基准，但**世界冻不干净**（停掉 3419 个节点的 `_process`、暂停动画、
-   停粒子、藏 UI、杀 Tween 之后仍有 11.6 万字节不同，最大通道差 103）。
-   所以现在的状态是「复用的逻辑推理是精确等价的，但**还没有像素级证据**」。
+2. ~~每次释放 GGS 资源都会报一次 `ERROR: Attempted to free invalid ID: ...`~~
+   —— **2026-11-06 已查清并修掉，见 §17 六**。
+3. ~~**逐像素校验还没通过**~~ —— 已通过（判据换成噪声底，见上面「验收的坑」）。
 
-### 五、这一轮的验收入口
+### 六、`Attempted to free invalid ID` 的真凶（2026-11-06）
+
+这个报错**在本轮优化之前就有**，每次换窗口出现一次。查下来是同一个错误模式，
+在四处各有一份，全都是对 `Texture2DRD.texture_rd_rid` 的误解：
+
+> **`texture_rd_rid` 是「拥有权」，不是指针。给它赋值会把原来持有的那个 RID 释放掉。**
+
+于是「先释放纹理、再摘引用」就变成双重释放。四处：
+
+| 位置 | 原写法 | 问题 |
+|---|---|---|
+| `campus_ggs.gd::_release_campus`（**本轮新引入**） | `tex.texture_rd_rid = 粗层 RID` | 赋值先释放细层 RID，紧接着 `ctx.free()` 再释放一遍 |
+| `campus_ggs.gd::_release_campus`（老） | `tex.texture_rd_rid = RID()` | 同上，与 `ctx.free()` 撞 |
+| `gaussian_splatting_rasterizer.gd::cleanup_gpu`（老） | `context.free()` 后再 `render_texture.texture_rd_rid = RID()` | 顺序反了 |
+| `gaussian_splatting_rasterizer.gd` 的 `texture_size` setter（老，原注释 `# FIXME: idk why I have to do this`） | 每次改尺寸都 `render_texture = Texture2DRD.new()` | 把调用方持有的对象换掉，调用方再把 `texture_rd_rid` 指过来 → 又释放一个已还的 RID |
+
+**改法**
+
+1. `_release_campus()` 两个分支都**不再碰 `tex` / `coarse_tex` 的 RID**，只丢弃引用
+   （纹理由光栅器 `cleanup_gpu()` 还）。quad 不会采到悬空纹理 —— `fine_ready = 0`
+   时着色器整个跳过采样。
+2. `cleanup_gpu()` **先还纹理再 `context.free()`**。
+3. `texture_size` setter **不再新建 `Texture2DRD`**：只是换了一张纹理，对象可以复用。
+4. `init_gpu()` 与 setter 里赋值前**先 `if texture_rd_rid.is_valid(): = RID()` 兜底**。
+5. `_exit_tree()` 里**显式同步**拆 quad（先 `set_shader_parameter(..., null)`，
+   再 `free()`），否则 `queue_free()` 要等帧末、而纹理已经还掉了，中间那一瞬
+   会报 `Texture (binding: 2, index 0) is not a valid texture` + `Parameter "us" is null`。
+
+**结果**（`_probe_switch_hitch.gd`，连跑两次）：
+
+```
+invalid ID           : 0      （原来每次换窗口 1 条）
+not a valid texture  : 0
+Parameter "us" is null: 0
+SCRIPT / Parse Error : 0
+```
+
+副作用：换窗口最坏帧也跟着降了 —— **48~169 ms**（原 117~560 ms）。
+原因大概率是「不再每帧重建 `Texture2DRD` + 不再触发无效 uniform set」，
+少了两处 GPU 侧的隐式重建。阶段 B 的上传已经降到 **71.6 ms**。
+
+### 七、这一轮的验收入口
 
 | 脚本 | 作用 |
 |---|---|

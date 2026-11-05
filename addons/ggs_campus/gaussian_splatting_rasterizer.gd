@@ -31,7 +31,14 @@ var texture_size : Vector2i :
 		tile_dims = (texture_size + Vector2i.ONE*(TILE_SIZE - 1)) / TILE_SIZE
 		if not descriptors.has('render_texture') or not context: return
 		# Rebuild gsplat_boundaries and gsplat_render pielines (since those depend on texture size)
-		render_texture = Texture2DRD.new() # FIXME: idk why I have to do this
+		# ⚠️ 2026-11-06 修：这里原来会 `render_texture = Texture2DRD.new()`
+		#    （原注释写着 "FIXME: idk why I have to do this"）—— **不能这么做**。
+		#    ① 每变一次尺寸就丢掉调用方（`campus_ggs.gd` 的 `tex`）持有的那个对象，
+		#       调用方随即把自己的 `texture_rd_rid` 指过来，那一下会去释放一个
+		#       已经被 `context.free()` 还掉的 RID ⇒ `ERROR: Attempted to free invalid ID`。
+		#    ② 这里本来就只是「换了一张纹理」，**对象可以复用**：把新 RID 交给它即可。
+		#    `campus_ggs.gd` 每帧会比对 `tex.texture_rd_rid` 与
+		#    `render_texture.texture_rd_rid`，不同就同步，所以 quad 也不会指着旧纹理。
 		context.deletion_queue.free_rid(context.device, descriptors['tile_bounds'].rid)
 		context.deletion_queue.free_rid(context.device, descriptors['render_texture'].rid)
 		
@@ -47,6 +54,9 @@ var texture_size : Vector2i :
 		
 		pipelines['gsplat_boundaries'] = context.create_pipeline([], [boundaries_set], shaders['boundaries'])
 		pipelines['gsplat_render'] = context.create_pipeline([tile_dims.x, tile_dims.y, 1], [render_set], shaders['render'])
+		# 同 `init_gpu()` 里的说明：换纹理前先摘掉旧 RID，避免释放无效 RID。
+		if render_texture.texture_rd_rid.is_valid():
+			render_texture.texture_rd_rid = RID()
 		render_texture.texture_rd_rid = descriptors['render_texture'].rid
 
 var load_thread = Thread.new()
@@ -145,6 +155,12 @@ func init_gpu() -> void:
 	var boundaries_set = context.create_descriptor_set([descriptors['histogram'], descriptors['sort_keys'], descriptors['tile_bounds']], shaders['boundaries'], 0)
 	var render_set = context.create_descriptor_set([descriptors['culled_splats'], descriptors['sort_values'], descriptors['tile_bounds'], descriptors['tile_splat_pos'], descriptors['render_texture']], shaders['render'], 0)
 	
+	# ⚠️ 2026-11-06：这里是把**同一个 Texture2DRD 对象**从「没有纹理」带到「有纹理」。
+	#    如果它上面还挂着上一次（已被 `context.free()` 还掉的）RID，这次赋值就会去
+	#    释放一个无效 RID ⇒ `Attempted to free invalid ID`（栈顶就是这一行）。
+	#    先显式摘掉旧 RID 兜底 —— 任何没走 `cleanup_gpu()` 就重建的路径都不会再踩。
+	if render_texture.texture_rd_rid.is_valid():
+		render_texture.texture_rd_rid = RID()
 	render_texture.texture_rd_rid = descriptors['render_texture'].rid
 	
 	# --- COMPUTE PIPELINE CREATION ---
@@ -295,8 +311,13 @@ func cleanup_gpu():
 		_bin_file = null
 	if load_thread.is_started():
 		load_thread.wait_to_finish()
-	if context: context.free()
+	# ⚠️ 2026-11-06 修正顺序：**先把 Texture2DRD 的拥有权还掉，再释放 context**。
+	#    原来反着来 —— `context.free()` 先把纹理 RID 释放了，随后
+	#    `render_texture.texture_rd_rid = RID()` 又去释放同一个 RID，于是报
+	#    `ERROR: Attempted to free invalid ID`。给 `texture_rd_rid` 赋值是
+	#    **拥有权转移**（会释放原来持有的那个 RID），不是单纯改指针。
 	if render_texture: render_texture.texture_rd_rid = RID()
+	if context: context.free()
 
 func rasterize() -> void:
 	if not context: init_gpu()
