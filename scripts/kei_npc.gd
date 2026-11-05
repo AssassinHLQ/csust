@@ -16,37 +16,65 @@ extends Companion
 ##    「找不到玩家节点」的警告，而且 `_physics_process` 直接 return、连重力都不走。
 ##
 ## ── 剧情（为什么不是「商店卖皮肤」）──
-## 临战形态的机体叫**阿比·埃舒**，原本是**时（Toki）**的；被击毁后由
-## **凯伊和爱丽丝合力、借无名诸神的力量重组到爱丽丝身上**。
-## 所以这里写成「凯伊动手改装、玩家出材料费」，不是货架上买一件。
+## 临战形态的机体叫**阿比·埃舒**（用户写作「阿比舒」），原本是**时（Toki）**的；
+## 被击毁后由**凯伊和爱丽丝合力、借无名诸神的力量重组到爱丽丝身上**。
 ## 参考：<https://bluearchive.hatenablog.com/entry/2026/02/08/234211>（临战衣装以时让渡的
 ## 阿比·埃舒为基础、由凯伊与爱丽丝精炼）、RekoWiki「蔚藍檔案學生介紹-千年」
 ## （装甲是阿比·舒被击毁后由 Kei 和爱丽丝合作施展無名諸神的力量重组到身上）。
+##
+## 具体这场戏是**用户 2026-11-05 亲手写的**：
+##   爱丽丝：我想要这个
+##   凯伊：9178 万
+##   爱丽丝：凯伊～便宜点～球球了 （づ￣3￣）づ╭♥～
+##   凯伊：好...好吧
+##   → 扣除银行卡**所有**钱，爱丽丝获得修复完好的阿比舒机甲。
+## 台词逐字照抄，只把 `❤`(U+2764) 换成 `♥`(U+2665)：`assets/ui/font.ttf`
+## 有 36558 个字形却**恰好没有 U+2764**，直接写会渲染成空白（本喵实测过 cmap）。
+## 另外在刷卡前本喵加了一道「成交？/ 再想想」的确认 —— 不然按一下 F 就把卡刷光，
+## 玩家连发生了什么都不清楚；台词本身没动。
 
 const BankCard := preload("res://scripts/bank_card.gd")
 const MechState := preload("res://scripts/mech_state.gd")
 
 const SPEAKER := "凯伊"
+## 玩家（主角）在对话框上的署名。项目里 `shop_clerk.gd` 用的就是「爱丽丝」。
+const PLAYER_SPEAKER := "爱丽丝"
 ## 能搭话的水平距离（米）与高度差上限：和芹香那边同一套判据
 const TALK_RADIUS := 3.4
 const TALK_DY_MAX := 2.2
 
-## 首次见面：把来历交代清楚（也把「不是买的」写进台词）
-const LINES_FIRST := [
-	"……你来了。",
-	"我把「阿比·埃舒」的残骸从废墟里拖回来了。骨架认得出——那是时（Toki）那台。",
-	"被拆得很碎，核心却还在。只靠我一个人，装不回你身上。",
-	"要一起动手：材料钱你出，焊我来。",
+## 凯伊的**报价**（元）。用户 2026-11-05 给的剧情里是「9178 万」。
+## ⚠️ 这个数**只用来念**，不参与任何余额比较 —— 用户的原话是
+##    「然后是扣除银行卡所有钱」，所以成交价永远是「你卡上现有的全部」。
+##    （`mech_state.gd` 里还留了一份 `QUOTE_YUAN`，只为别让报价散落两处。）
+const QUOTE_TEXT := "9178万"
+
+## ── 开场：用户 2026-11-05 亲手写的剧情 ──
+## 台词逐字照抄（只有一处改动：`❤`(U+2764) 换成 `♥`(U+2665) ——
+## `assets/ui/font.ttf` 有 36558 个字形，**恰好没有 U+2764**，
+## 直接写会渲染成空白；`♥` 在字体里。详见文件头）。
+const SCENE_HEAD := [
+	{"who": PLAYER_SPEAKER, "text": "我想要这个"},
+	{"who": SPEAKER, "text": "%s。" % QUOTE_TEXT},
+	{"who": PLAYER_SPEAKER, "text": "凯伊～便宜点～球球了 （づ￣3￣）づ╭♥～"},
+	{"who": SPEAKER, "text": "好...好吧"},
 ]
-## 钱不够
-const LINES_POOR := [
-	"钱不够。材料费 %s，你卡上只有 %s。",
-	"去挣。我不催你，残骸也不会自己跑掉。",
+## 刷卡机那句旁白（提醒玩家「全额」这件事，别让他在不知情的情况下被刷光）
+const LINE_SWIPE := "（凯伊把刷卡机推了过来。金额栏是空的，只贴了一张纸条：「全额」。）"
+## 成交之后
+const LINES_DONE_DEAL := [
+	"修好了。它现在认得你。",
+	"按下 G —— 让它站到你身上。",
 ]
-## 已经改装完
+## 已经改装完时说的话
 const LINES_DONE := [
-	"阿比·埃舒已经在你身上了。",
+	"阿比·舒已经修好了，就在你身上。",
 	"别问我是怎么让它听话的——变形你自己按 G。",
+]
+## 卡上一分钱都没有（不能白送：材料总得有个价）
+const LINES_BROKE := [
+	"……你卡上一分钱都没有。",
+	"去挣。我不催你，残骸也不会自己跑掉。",
 ]
 
 
@@ -158,60 +186,62 @@ func _talk(d: DialogueBox) -> void:
 		return
 
 	var bal := BankCard.balance()
-	var price := MechState.CARRIER_PRICE
-	var afford := bal >= price
-
 	var steps: Array = []
-	for line in LINES_FIRST:
-		steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
-	if not afford:
-		for line in LINES_POOR:
-			steps.append({"kind": "say", "who": SPEAKER,
-				"text": String(line) % [BankCard.format_yuan(price), BankCard.format_yuan(bal)]})
+	for line in SCENE_HEAD:
+		var st: Dictionary = (line as Dictionary).duplicate()
+		st["kind"] = "say"
+		steps.append(st)
 
-	var pay_opt := {
-		"text": "开工（%s）" % BankCard.format_yuan(price),
-		"then": [
-			{"kind": "custom", "name": "mech_pay",
-				"data": {"amount": price, "label": "阿比·埃舒改装"}},
-		],
-	}
-	if not afford:
-		pay_opt["disabled"] = true
-		pay_opt["disabled_hint"] = "还差 %s（卡上 %s）" % [
-			BankCard.format_yuan(price - bal), BankCard.format_yuan(bal)]
+	if bal <= 0:
+		for line in LINES_BROKE:
+			steps.append({"kind": "say", "who": SPEAKER, "text": String(line)})
+		d.play_steps(steps, "kei_npc_broke")
+		print("[Kei] 卡上 %s，不成交" % BankCard.format_yuan(bal))
+		return
+
+	# 成交前的最后一道确认：用户要的是「扣光卡上的钱」，得让他自己按下去
+	steps.append({"kind": "narrate", "text": LINE_SWIPE})
 	steps.append({"kind": "choice", "options": [
-		pay_opt,
-		{"text": "我再想想", "then": [
+		{"text": "成交！（把卡刷光）", "then": [
+			{"kind": "custom", "name": "mech_pay_all",
+				"data": {"amount": bal, "label": "阿比·舒（修复完好的机甲）"}},
+			{"kind": "narrate", "text": "银行卡 -%s，余额 %s。" % [
+				BankCard.format_yuan(bal), BankCard.format_yuan(0)]},
+			{"kind": "say", "who": SPEAKER, "text": LINES_DONE_DEAL[0]},
+			{"kind": "say", "who": SPEAKER, "text": LINES_DONE_DEAL[1]},
+		]},
+		{"text": "等等，我再想想", "then": [
 			{"kind": "say", "who": SPEAKER, "text": "……行。残骸我先收着。"},
 		]},
 	]})
 	d.play_steps(steps, "kei_npc")
-	print("[Kei] 开口：材料费 %s，卡上 %s%s" % [
-		BankCard.format_yuan(price), BankCard.format_yuan(bal),
-		"" if afford else "（不够，选项禁用）"])
+	print("[Kei] 报价 %s，成交价 = 卡上全部 %s" % [QUOTE_TEXT, BankCard.format_yuan(bal)])
 
 
-## 播放器发来的业务回调：扣改装费 + 解锁载具形态
+## 播放器发来的业务回调：**把卡上的钱全部扣掉** + 解锁载具形态
 func _on_dialogue_custom(step_name: String, data: Dictionary) -> void:
-	if step_name != "mech_pay":
+	if step_name != "mech_pay_all":
 		return
-	var amount := int(data.get("amount", MechState.CARRIER_PRICE))
-	var label := String(data.get("label", "阿比·埃舒改装"))
-	# ⚠️ 和芹香那边一样：能走期货那套就走它（它会同步 `bank_yuan` 缓存和 HUD），
-	#    第二场景里没有期货节点，`get_first_node_in_group` 返回 null → 直接扣卡。
+	var label := String(data.get("label", "阿比·舒（修复完好的机甲）"))
+	var bal := BankCard.balance()
+	if bal <= 0:
+		push_warning("[Kei] 卡上没有钱，不成交")
+		return
+	# ⚠️ 和芹香那边同一套：能走期货就走它（它会同步 bank_yuan 缓存与 HUD），
+	#    第二场景里没有期货节点 → 直接清零银行卡。
 	var fut := get_tree().get_first_node_in_group("futures")
 	var paid := false
 	if fut != null and fut.has_method("spend_bank"):
-		paid = bool(fut.call("spend_bank", amount, label))
+		paid = bool(fut.call("spend_bank", bal, label))
 	else:
-		paid = BankCard.spend(amount)
+		BankCard.set_balance(0)
+		paid = BankCard.balance() == 0
 	if paid:
 		MechState.unlock_carrier()
-		print("[Kei] 改装完成：扣款 %s，卡上剩 %s" % [
-			BankCard.format_yuan(amount), BankCard.format_yuan(BankCard.balance())])
+		print("[Kei] 成交：%s，刷掉 %s，卡上剩 %s" % [
+			label, BankCard.format_yuan(bal), BankCard.format_yuan(BankCard.balance())])
 	else:
-		push_warning("[Kei] 扣款失败：卡上不够 %s" % BankCard.format_yuan(amount))
+		push_warning("[Kei] 扣款失败（卡上 %s）" % BankCard.format_yuan(bal))
 
 
 func _on_dialogue_finished() -> void:

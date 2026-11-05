@@ -446,7 +446,20 @@ imageStore(rasterized_image, ivec2(image_pos), vec4(blended_color + heatmap_colo
 - 第二场景原来**没有 `DialogueBox`**，这次给凯伊加了一个（`scripts/dialogue_box.gd`）。
 - `scripts/mech_state.gd`：解锁标记落盘 `user://mech.cfg`，**跨启动保留**
   （和银行卡「每局清零」故意相反 —— 这是剧情进度）。
-  改装价 `CARRIER_PRICE = 520000`（¥52 万；量级参考：八卡 5090 整机 ¥67 万，一轮跑酷约 67 万）。
+- **这场戏是用户 2026-11-05 亲手写的，台词逐字照抄**：
+  > 爱丽丝：我想要这个
+  > 凯伊：9178万
+  > 爱丽丝：凯伊～便宜点～球球了 （づ￣3￣）づ╭♥～
+  > 凯伊：好...好吧
+  > → 扣除银行卡**所有**钱，爱丽丝获得修复完好的阿比舒机甲。
+
+  ⚠️ 所以**没有固定价**：`mech_state.gd` 的 `QUOTE_YUAN = 91780000` 与
+  `kei_npc.gd` 的 `QUOTE_TEXT = "9178万"` **只用来念**，成交价永远是「卡上现有的全部」
+  （`BankCard.set_balance(0)`）。卡上 0 元时**不成交**（凯伊吐槽一句），不能白送。
+  ⚠️ 刷卡前本喵加了一道「成交！（把卡刷光）／等等，我再想想」的确认 ——
+  不然按一下 F 就把卡刷光，玩家连发生了什么都不清楚；**台词一句没改**。
+  ⚠️ 颜文字里的 `❤`(U+2764) 换成了 `♥`(U+2665)：`assets/ui/font.ttf` 有 36558 个字形
+  却**恰好没有 U+2764**（cmap 实测），直接写会渲染成空白。其余字符（`（づ￣3￣）づ╭～`）都在。
 - `scripts/carrier_form.gd` + `player.tscn` 里新增 `Arisu/CarrierForm` 节点：**按 G 变形**。
   它**不接 `AnimDriver`** —— 载具那套只有 `Idle`/`Walk` 两条动作，接驱动会缺
   `Normal_Idle`/`Normal_Attack_Ing`/`Move_Ing`；所以自己按移动速度在两条之间交叉淡化。

@@ -103,36 +103,46 @@ func _run() -> void:
 		d.finish()
 		await _wait(3)
 
-	# ── 5. 付款回调：扣钱 + 解锁 ──
-	var price := MechState.CARRIER_PRICE
+	# ── 5. 付款回调：**把卡刷光** + 解锁 ──
 	MechState.set_carrier_for_test(false)
-	BankCard.set_balance(price + 12345)
+	BankCard.set_balance(917800 + 12345)          # 故意不是整数，验证「全部」而不是某个价
 	var before := BankCard.balance()
-	kei.call("_on_dialogue_custom", "mech_pay", {"amount": price, "label": "自检"})
+	kei.call("_on_dialogue_custom", "mech_pay_all", {})
 	await _wait(2)
 	var after := BankCard.balance()
 	var unlocked := MechState.carrier_unlocked()
-	print("[kei] 付款回调：卡 %s → %s（差 %s，应为 %s）｜解锁=%s" % [
-		BankCard.format_yuan(before), BankCard.format_yuan(after),
-		BankCard.format_yuan(before - after), BankCard.format_yuan(price), str(unlocked)])
-	if before - after != price:
-		print("[kei] !! 扣款金额不对")
+	print("[kei] 成交：卡 %s → %s（应清零）｜解锁=%s" % [
+		BankCard.format_yuan(before), BankCard.format_yuan(after), str(unlocked)])
+	if after != 0:
+		print("[kei] !! 没有把卡刷光（剩 %s）" % BankCard.format_yuan(after))
 		fails += 1
 	if not unlocked:
 		print("[kei] !! 没有解锁载具形态")
 		fails += 1
 
-	# ── 钱不够时不该扣成负数 ──
+	# ── 卡上没钱时不该白送 ──
 	MechState.set_carrier_for_test(false)
-	BankCard.set_balance(1000)
-	kei.call("_on_dialogue_custom", "mech_pay", {"amount": price, "label": "自检-钱不够"})
+	BankCard.set_balance(0)
+	kei.call("_on_dialogue_custom", "mech_pay_all", {})
 	await _wait(2)
-	var poor := BankCard.balance()
-	var poor_unlocked := MechState.carrier_unlocked()
-	print("[kei] 钱不够：卡 %s（应还是 1000）｜解锁=%s（应为 false）" % [
-		BankCard.format_yuan(poor), str(poor_unlocked)])
-	if poor != 1000 or poor_unlocked:
-		print("[kei] !! 钱不够却扣款/解锁了")
+	var broke_unlocked := MechState.carrier_unlocked()
+	print("[kei] 卡上 0 元：解锁=%s（应为 false）" % str(broke_unlocked))
+	if broke_unlocked:
+		print("[kei] !! 没钱却把机甲送出去了")
+		fails += 1
+
+	# ── 开场台词：确认用户写的那四句都在，且 ❤ 已换成字体里有的 ♥ ──
+	var head: Array = kei.get("SCENE_HEAD")
+	var koujou := false
+	var heart_ok := true
+	for l in head:
+		var t := String((l as Dictionary)["text"])
+		if t.contains("球球了"):
+			koujou = true
+			heart_ok = t.contains("♥") and not t.contains("❤")
+	print("[kei] 台词：%d 句｜球球了=%s｜♥ 已替换=%s" % [head.size(), str(koujou), str(heart_ok)])
+	if not koujou or not heart_ok:
+		print("[kei] !! 开场台词不对（或 ❤ 没换掉，会渲染成空白）")
 		fails += 1
 
 	# ── 6. 载具形态（按 G 变形）：解锁前不该能变，解锁后要能建出来 ──

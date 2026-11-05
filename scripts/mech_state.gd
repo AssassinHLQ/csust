@@ -16,9 +16,13 @@ extends RefCounted
 const PATH := "user://mech.cfg"
 const SECTION := "mech"
 
-## 凯伊开价（元）。量级参考：柴关电脑城那台八卡 5090 整机是 ¥670,000，
-## 一轮跑酷能挣 67 万上下 —— 所以这个价「得认真跑一趟，但一次够」。
-const CARRIER_PRICE := 520000
+## 凯伊的**报价**（元）：用户 2026-11-05 的剧情里念的是「9178 万」。
+##
+## ⚠️ 这只是**台词里的数字**，没有参与任何余额判断 —— 用户定的成交方式原话是
+##    「然后是扣除银行卡所有钱」：实际扣款 = 你卡上现有的全部。
+##    所以这里保留它只为「别让报价散落在两个文件里」，真正的收费逻辑在
+##    `kei_npc.gd::_on_dialogue_custom`。
+const QUOTE_YUAN := 91780000
 
 static var _loaded := false
 static var _carrier := false
