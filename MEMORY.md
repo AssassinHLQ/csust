@@ -860,7 +860,112 @@ SCRIPT / Parse Error : 0
 | `_probe_room609_bounds.gd` | headless 量出画室609 的世界包围盒（定边界用） |
 | CLI | 设置项本身；探针会自动写回 false 清理 |
 
-## 19. 下一步
+## 19. 高面数场景优化手册 + 爱给网那套电竞酒店（2026-11-06）
+
+用户：「你学习一下 godot 的优化，我这里有一个很多面数的电竞酒店」，随后给了
+`C:\Users\WY157\Downloads\现代网咖_电竞酒店套房_宿舍上下铺_爱给网_aigei_com.zip`（333 MB）。
+
+**完整手册写在 `优化手册-高面数场景.md`**（工程根目录），下面是结论摘要。
+
+### 一、素材现状：**.max 是硬阻塞**
+
+那个压缩包里 **113 个条目，只有一个工程文件**：
+
+```
+817,763,092 字節  06/h06_m210903.max      ← 3ds Max 工程
+                + 111 张贴图（57.7 MB）
+```
+
+**没有 FBX / OBJ / GLB / DAE**。而：
+- Godot **不支持** `.max`
+- Blender **也不支持** `.max`（没有原生导入器）
+- 本机**没装 3ds Max**（`C:\Program Files\Autodesk` 与 `D:\SOFTWARE` 下都没有）
+
+⇒ **必须在有 3ds Max 的机器上导出 FBX**（导出时选厘米/米要看清楚，
+   建筑可视化的单位错一位数会让整个房间缩放成 100 倍或 1%）。
+贴图已经先提取到 `C:\Users\WY157\Desktop\GODOT\_aigei_esports`（111 张 / 57.7 MB），
+FBX 一到就能直接跑管线。
+
+### 二、量出来的三件事（都改了工程里的探针）
+
+**① 现有电竞房：三角数不重，draw call 重**
+
+`_probe_mesh_budget.gd`（headless，直接 `ClassDB` 问引擎 + 遍历场景）：
+
+```
+网格节点 385 | 总顶点 309,962 | 总三角 332,440
+表面（≈ draw call 下限）499 | 唯一 Mesh 339 | **唯一材质 24**
+→ 按材质合并的上限：draw call 499 → ≤24（少 20 倍）
+```
+
+**② 86% 的三角是重复实例**
+
+`_probe_mesh_dupes.gd`：385 节点里只有 339 个唯一 Mesh，重复的 7 组里
+最大的两坨是 **×7 把椅子（19,304 三角/份，浪费 115,824）** 和
+**×16 张 5090 显卡（6,854 三角/份，浪费 102,810）**。
+
+⚠️ 别被这个数字骗了：**共享 Mesh 资源本来就只占一份显存**，
+省的是 draw call 和主线程提交，不是显存。
+
+**③ 贴图才是显存大头**
+
+那套贴图 108 张可读尺寸，**105.8 M 像素**：
+
+| | 显存 |
+|---|---|
+| 全分辨率 RGBA8（不含 mip） | **403.5 MB** |
+| 带 mipmap（×1.33） | **537.8 MB** |
+| 缩到 2048 上限（实测跑过 dry-run） | 237.9 MB |
+| 再叠 VRAM 压缩 BC1 | **约 40 MB** |
+
+单张 `JS026.jpg` 就是 **8014×3069**（一张 98 MB 显存）。
+
+### 三、引擎能力：不信文档，直接问 `ClassDB`（Godot 4.7.1）
+
+```
+GeometryInstance3D  ✓ visibility_range_begin / _begin_margin / _end / _end_margin
+                    ✓ visibility_range_fade_mode (DISABLED=0 / SELF=1 / DEPENDENCIES=2)
+                    ✓ lod_bias (默认 1.0)   ✓ ignore_occlusion_culling (默认 false)
+OccluderInstance3D  ✓ bake_simplification_distance (默认 0.1)
+渲染全局            rendering/mesh_lod/lod_change/threshold_pixels = 1.0
+                    **rendering/occlusion_culling/use_occlusion_culling = false**  ← 本工程是关的
+```
+
+`project.godot` 的 `[rendering]` 段只设了软阴影质量和清屏色，**确实没开遮挡剔除**。
+室内场景（电竞房/画室/小屋）最吃这一条：在房间里看柜子时，门外那片校园不该被提交。
+
+### 四、两个新工具（都实测跑通过）
+
+| 脚本 | 干什么 |
+|---|---|
+| `_tools/opt_archviz.py` | Blender 5.2：FBX/OBJ/GLB 进 → **按材质合并** + 删小件 + 可选减面 → GLB 出 |
+| `_tools/opt_archviz_textures.py` | Pillow：按上限缩贴图，报「省多少显存」，`--dry-run` 只报账 |
+
+**实测验证**（拿工程里现成的 `models/_wip_hotel/hotel_782061.glb`，1,787,204 三角）：
+
+```
+导入后   物件 66 | 三角 1,787,204 | 表面 67 | 材质 7
+按材质合并后 物件  7 | 三角 1,787,204 | 表面  8 | 材质 7
+表面数 67 → 8（11.9%）    三角数 100.0%（几何一个字节没动）
+导出 hotel_opt.glb（60.5 MB）  ✓ 端到端跑通
+```
+
+⚠️ 已知噪音：Blender 启动时报一堆 `BlenderGIS-2210` / `arp_debug_mode` 的
+`AttributeError` —— 那是**用户装的第三方插件**和 Blender 5.2 不兼容，与本脚本无关。
+
+### 五、落地顺序（按性价比）
+
+1. `--report` 体检（知道瓶颈在面数、draw call 还是显存）
+2. **按材质合并** —— 不改观感，draw call 砍一个数量级
+3. **贴图缩尺寸 + VRAM 压缩** —— 显存砍到 1/5~1/10
+4. **开遮挡剔除** —— 室内白捡
+5. 重复物件上 MultiMesh（同款 ≥10 个才值得）
+6. 还卡再减面 / 删小件 / LOD
+7. **最后**才动后处理（唯一真会降观感的）
+
+⚠️ 每一步之后都要重量一次。改完不量等于不知道有没有用。
+
+## 20. 下一步
 
 1. ~~真实窗口复测 a7ec536~~ —— 已完成（离屏 `--splat=off`，数据见 §4）。
 2. ~~部室角落掉帧~~ —— 已定位并修掉 184.5 万面那颗雷（§10）；用户可用 F3 复核，仍低再谈室内降级室外远景。

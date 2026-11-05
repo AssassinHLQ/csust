@@ -1,0 +1,55 @@
+高面数场景优化手册 + archviz 模型/贴图优化工具（爱给网电竞酒店素材）
+
+用户：「你学习一下 godot 的优化，我这里有一个很多面数的电竞酒店」，随后给了
+现代网咖_电竞酒店套房_宿舍上下铺 那个 333 MB 的压缩包。
+
+一、先说阻塞：那个包里只有一个 .max
+
+  113 个条目里唯一的工程文件是 06/h06_m210903.max（817 MB）+ 111 张贴图。
+  没有 FBX / OBJ / GLB / DAE。Godot 不支持 .max，Blender 也不支持，
+  本机没装 3ds Max ⇒ 必须在有 Max 的机器上导出 FBX。
+
+  贴图已经先提取到 C:\Users\WY157\Desktop\GODOT\_aigei_esports（111 张 / 57.7 MB），
+  FBX 一到就能直接跑管线。
+
+二、量出来的三件事（新增两个探针）
+
+  ① 现有电竞房：三角数不重，draw call 重
+     _probe_mesh_budget.gd（headless，ClassDB 问引擎 + 遍历场景）：
+       385 网格节点 / 309,962 顶点 / 332,440 三角
+       表面（≈draw call 下限）499 / 唯一 Mesh 339 / 唯一材质 24
+       → 按材质合并的上限：499 → ≤24，少 20 倍
+
+  ② 86% 的三角是重复实例
+     _probe_mesh_dupes.gd：×7 把椅子（19,304 三角/份）、×16 张 5090 显卡（6,854/份）…
+     提醒：共享 Mesh 本来就只占一份显存，省的是 draw call 与主线程提交，不是显存。
+
+  ③ 贴图才是显存大头
+     那套 108 张可读尺寸 = 105.8 M 像素
+       全分辨率 RGBA8 403.5 MB / 带 mip 537.8 MB
+       缩到 2048 上限 → 237.9 MB；再叠 VRAM 压缩 BC1 → 约 40 MB
+     单张 JS026.jpg 就是 8014×3069（一张 98 MB 显存）。
+
+三、引擎能力（不信文档，直接 ClassDB 查 4.7.1）
+
+  visibility_range_begin/_margin/end/_margin、visibility_range_fade_mode、
+  lod_bias、ignore_occlusion_culling、OccluderInstance3D.bake_simplification_distance
+  全部存在。但 rendering/occlusion_culling/use_occlusion_culling = false ——
+  本工程 project.godot 的 [rendering] 段根本没设过它，室内场景白丢一刀。
+
+四、两个新工具（端到端实测跑通）
+
+  _tools/opt_archviz.py            Blender 5.2：FBX/OBJ/GLB 进 → 按材质合并
+                                   + 删小件 + 可选减面 → GLB 出
+  _tools/opt_archviz_textures.py   Pillow：按上限缩贴图，报省多少显存，支持 --dry-run
+
+  验证（拿 models/_wip_hotel/hotel_782061.glb，1,787,204 三角）：
+    导入后   物件 66 | 表面 67 | 材质 7
+    合并后   物件  7 | 表面  8 | 材质 7
+    表面 67 → 8（11.9%），三角 100.0%（几何未动），导出 60.5 MB GLB ✓
+
+五、手册
+
+  完整版写在工程根目录 优化手册-高面数场景.md：
+  先分清「卡」的三种成因 → 按材质合并 → 贴图两刀 → 遮挡剔除 → MultiMesh
+  → 减面 → 最后才动后处理。每一步都带实测数字和复测入口。
