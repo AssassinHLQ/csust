@@ -398,7 +398,35 @@ imageStore(rasterized_image, ivec2(image_pos), vec4(blended_color + heatmap_colo
 同点数下更保结构。已试：体素 1.0 → 93.7 万点 / 214 MB（压到 15.2%）、1.5 → 42.9 万点 / 98 MB。
 现在默认仍是 stride 4 的 `campus_ggs_q4.bin`（154 万点 / 352 MB），换不换等用户看画面定。
 
-## 14. 下一步
+## 14. 爱丽丝的 5 套模型（2026-11-05 收进工程）
+
+来源 `C:\Users\WY157\Downloads\BlueArchiveModels-main\BlueArchiveModels-main`。
+`models/*.glb` 已被 `.gitignore` 挡住（BA 派生模型不进仓库），本地可用。
+
+| key | 文件 | 网格根 | 骨 | 动作 | 说明 |
+|---|---|---|---|---|---|
+| normal | `models/Arisu.glb` | `Aris_Original_Halo2` | 170 | 25 | 现在就是玩家模型（`scenes/main.tscn` 的 `Arisu/Model`） |
+| maid | `models/Arisu_Maid.glb` | `CH0200_Halo2` | 184 | 32 | 女仆装 + 拖把；2 个骨架 |
+| battle | `models/Arisu_Battle.glb` | `CH0334_Halo2` | 191 | 35 | 临战机甲（机甲头饰 + 深色紧身衣） |
+| battle_scenario | `models/Arisu_Battle_Scenario.glb` | `CH0334_Halo` | 137 | 11 | 机甲·剧情形态，扛大炮（`CH0334_Weapon02`） |
+| battle_carrier | `models/Arisu_Battle_Carrier.glb` | `CH0334_Halo` | 191 | **2** | 机甲·载具形态（飞行背包 + 机械腿）；**只有 Idle/Walk** |
+
+- **5 套骨架同族**：关键骨 `Bip001 L/R Hand`、`Bip001 Head`、`Bip001 eye_L/R`、`Pelvis`、`Spine` **全在**，
+  所以「挂武器 / 看朝向 / 光环抛光 / 面部修复」这些按名字找的代码理论上都能复用。
+- 差异：网格根名（`Aris_Original_*` / `CH0200_*` / `CH0334_*`）和动作名。
+  normal / maid / battle / battle_scenario 都有 `Normal_Idle`、`Normal_Attack_Ing`、`Move_Ing`、`Cafe_*`；
+  **carrier 只有 `Idle`/`Walk`**，当玩家皮肤会缺待机与攻击。
+- 预览图（后台 Blender 渲染，不开窗口）：`_log/arisu_prev/*.png`，脚本 `_tools/preview_glb.py`。
+  ⚠️ 那些 glb 里混着导出残留的 `Cube` / `Icosphere`（2×2×2），会撑爆包围盒 —— 脚本里已过滤。
+- 清点探针（headless）：`scripts/_verify_arisu_skins.gd`。
+- ⚠️ 新拷进来的 glb **必须先跑一次导入**，否则 `ResourceLoader.exists()` 是 false：
+  `_tools/run_probe.sh` 不会导入，要用
+  `Godot_..._console.exe --path . --headless --import`（headless，不开窗口）。
+- 换皮肤**还没做**：玩家模型是场景里的 `Arisu/Model`（glb 实例），而 `AnimDriver` 挂在它下面
+  （`player.gd` 里 `$Arisu/Model/AnimDriver`），换实例要连驱动一起重建；
+  再加上网格根名/动作名不同，得先定「换皮肤时哪些按名字找的地方要跟着改」。
+
+## 15. 下一步
 
 1. ~~真实窗口复测 a7ec536~~ —— 已完成（离屏 `--splat=off`，数据见 §4）。
 2. ~~部室角落掉帧~~ —— 已定位并修掉 184.5 万面那颗雷（§10）；用户可用 F3 复核，仍低再谈室内降级室外远景。
