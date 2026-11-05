@@ -133,8 +133,21 @@ void main() {
     }
     vec3 heatmap_color = mix(vec3(0,0,1), vec3(1,0.2,0.2), float(num_splats) * 5e-4) * (1.0 - t) * heatmap_factor;
     if (pixel_in_bounds) {
-        float final_alpha = 1.0 - t;
-	    imageStore(rasterized_image, ivec2(pixel), vec4(blended_color + heatmap_color, final_alpha));
+        // ── 覆盖率「提实」（用户 2026-11-05：「为什么这么透明这高斯」）──
+        // 扫描出来的 α 在**斜面 / 稀疏处**常常只有 0.3~0.7，而合成是 alpha-over
+        // （`gaussian_composite.glsl`：splat*α + 场景*(1-α)）→ 背后的粉色天空和 3D 物体
+        // 透出来 30%~70%，看起来就是「透明 / 鬼影」。
+        // 这里做一次 γ 提升：α' = 1-(1-α)^COVERAGE_LIFT
+        //   0.3→0.51、0.5→0.75、0.7→0.91、1→1（不会过曝，也不会把 α=0 的地方变出来）
+        // ⚠️ `blended_color` 是按**原始** α 预乘的，所以必须先反预乘、再按新 α 重新预乘，
+        //    否则颜色会被除以更大的 α，整片变暗。
+        // 想回到原来的观感：把 COVERAGE_LIFT 改回 1.0 即可。
+        const float COVERAGE_LIFT = 2.0;
+        float cover = 1.0 - t;
+        float lifted = 1.0 - pow(1.0 - cover, COVERAGE_LIFT);
+        vec3 straight = blended_color / max(cover, 1e-4);
+        imageStore(rasterized_image, ivec2(pixel),
+            vec4(straight * lifted + heatmap_color, lifted));
         imageStore(rasterized_depth, ivec2(pixel), vec4(first_hit_depth, 0.0, 0.0, 0.0));
     }
 
