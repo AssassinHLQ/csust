@@ -74,6 +74,26 @@ var hyst_m := 4.0
 ## `--ggs-bin=<path>`：探针直接指定一个 bin（关掉分块）。常驻方案对比用。
 var _bin_override := ""
 
+## ── 粗层常驻 + 细层叠加（2026-11-05）──
+##
+## 分块窗口只有 60×50 m，窗外一片黑（验收见 MEMORY §13）。改成两层：
+##   · **粗层**：全校园按每 4 点留 1 抽稀（154 万点 / 352 MB），**一直常驻**，
+##     负责远景与天空以下的所有东西 —— 换窗口时它不动，所以画面永远不会空；
+##   · **细层**：3×3 分块窗口（43~118 万点），换窗口只重传这一层。
+## 两层各一个光栅器、各一张纹理，最后由 `main_sky.gdshader` 按优先级合成：
+##     天空 → 粗层 → 细层（细层 alpha 高的地方盖掉粗层）
+## 粗层 bin 由 `_tools/decimate_ggs_bin.py` 生成，不进仓库（`*.bin` 已 gitignore）。
+const COARSE_BIN := "res://campus_ggs_q4.bin"
+const COARSE_BIN_DEV := "C:/Users/WY157/Desktop/GODOT/_arisu_learn/_log/campus_q4.bin"
+
+var coarse_tex := Texture2DRD.new()
+var coarse_rasterizer
+var _coarse_path := ""
+var _coarse_done := false
+var _coarse_total := 0
+## `--ggs-no-coarse`：关掉粗层做对照（量它到底值不值那份显存/帧率）
+var _coarse_off := false
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
@@ -90,12 +110,18 @@ func _ready() -> void:
 		# 探针用：直接吃某个 bin，绕开分块（量「降采样全量」这类方案）
 		if a.begins_with("--ggs-bin="):
 			_bin_override = a.substr(10)
+		# 粗层 bin（空串 = 关掉粗层，退回单层分块）
+		if a.begins_with("--ggs-coarse="):
+			_coarse_path = a.substr(13)
+		if a == "--ggs-no-coarse":
+			_coarse_off = true
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
 		set_process(false)
 		return
-	# 优先走「10×10 分块 + 3×3 窗口」：有清单就不用全量那份 1406 MB 的 bin 了。
+	# 粗层：只有在分块模式下才有意义（单层全量本身就是「粗层」了）。
+	# `--ggs-coarse=` 显式给了空串就关掉，方便对照。
 	if _bin_override != "":
 		_use_chunks = false
 		_bin_path = _bin_override
@@ -105,6 +131,21 @@ func _ready() -> void:
 	if _use_chunks:
 		print("[campus_ggs] 分块模式：%d 块，窗口 %d×%d" % [
 			_chunk_list.size(), window_side, window_side])
+		if _coarse_path == "" and not _coarse_off:
+			if FileAccess.file_exists(COARSE_BIN):
+				_coarse_path = COARSE_BIN
+			elif FileAccess.file_exists(COARSE_BIN_DEV):
+				_coarse_path = COARSE_BIN_DEV
+		if _coarse_path != "" and FileAccess.file_exists(_coarse_path):
+			var cf := FileAccess.open(_coarse_path, FileAccess.READ)
+			if cf != null:
+				_coarse_total = int(cf.get_length() / 240)
+				cf.close()
+			print("[campus_ggs] 粗层常驻：%s（%d 点 / %.0f MB）" % [
+				_coarse_path, _coarse_total, float(_coarse_total) * 240.0 / 1048576.0])
+		else:
+			_coarse_path = ""
+			push_warning("[campus_ggs] 没有粗层 bin，退回单层分块（窗外会空）")
 	elif _bin_override == "":
 		if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
 			_bin_path = BIN_DEV
@@ -179,6 +220,20 @@ func _make_bundle() -> bool:
 	rasterizer.bin_path = _bin_path
 	rasterizer.model_scale[0] = 1.0
 
+	# 粗层：和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换。
+	# 注意它必须是**独立的一份**（独立 bin_path / 独立纹理），否则换窗口时会被一起丢掉。
+	if _coarse_path != "" and coarse_rasterizer == null and _coarse_total > 0:
+		var cply = PlyFileScript.new()
+		cply.size = _coarse_total
+		var vs2: Vector2i = get_viewport().get_size()
+		coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
+		coarse_rasterizer.bin_path = _coarse_path
+		coarse_rasterizer.model_scale[0] = 1.0
+		var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
+		coarse_rasterizer.render_scale = [sc2]
+		coarse_rasterizer.texture_size = vs2
+		_coarse_done = true
+
 	_ready_done = true
 	return true
 
@@ -207,15 +262,22 @@ func is_ready() -> bool:
 
 ## 室内释放：停掉 GGS 调用，把光栅器用过的 RID/缓冲交还给 RenderingDevice。
 ## 出门后 _process 会重新 _make_bundle()，代价是一次 bin 重传（约 1.5 s）。
-func _release_campus() -> void:
+##
+## `keep_coarse=true` 只丢**细层**（换分块窗口时用）：粗层是全校园的底，
+## 换窗口时它必须留在显存里 —— 否则每次跨格都要重传 352 MB，
+## 而且那 0.5 s 里画面就只剩天空，等于白做了两层。
+func _release_campus(keep_coarse := false) -> void:
 	_released = true
 	_active = false
-	if quad != null:
-		quad.queue_free()
-		quad = null
-	if tex != null:
-		tex.texture_rd_rid = RID()
-		tex = null
+	if not keep_coarse:
+		# 换窗口时**不动 quad / tex**：quad 继续画着，粗层那张纹理还在，
+		# 新细层传好之前玩家看到的就是粗层 —— 不会黑一下（实测从空 4 帧降到 0 帧）。
+		if quad != null:
+			quad.queue_free()
+			quad = null
+		if tex != null:
+			tex.texture_rd_rid = RID()
+			tex = null
 	if rasterizer != null:
 		if rasterizer.load_thread != null and rasterizer.load_thread.is_started():
 			rasterizer.should_terminate_thread[0] = true
@@ -225,6 +287,20 @@ func _release_campus() -> void:
 		if ctx != null:
 			RenderingServer.call_on_render_thread(ctx.free)
 	_ready_done = false
+	if keep_coarse:
+		# 细层没了但粗层还在：_make_bundle() 要能只重建细层，所以这里不动 coarse_*。
+		return
+	if coarse_rasterizer != null:
+		if coarse_rasterizer.load_thread != null and coarse_rasterizer.load_thread.is_started():
+			coarse_rasterizer.should_terminate_thread[0] = true
+			coarse_rasterizer.load_thread.wait_to_finish()
+		var cctx = coarse_rasterizer.context
+		coarse_rasterizer = null
+		_coarse_done = false
+		if cctx != null:
+			RenderingServer.call_on_render_thread(cctx.free)
+	if coarse_tex != null:
+		coarse_tex.texture_rd_rid = RID()
 
 
 func _make_quad() -> void:
@@ -240,11 +316,13 @@ func _make_quad() -> void:
 	sh.code = FileAccess.get_file_as_string("res://addons/ggs_campus/shaders/main_sky.gdshader")
 	sm.shader = sh
 	sm.set_shader_parameter("render_texture", tex)
+	sm.set_shader_parameter("coarse_texture", coarse_tex)
 	sm.set_shader_parameter("panorama", panorama)
 	quad.material_override = sm
 	add_child(quad)
 	quad.visible = false
-	print("[campus_ggs] %d 点，quad + 天空已就绪" % _total)
+	print("[campus_ggs] %d 点，quad + 天空已就绪%s" % [
+		_total, "（粗层 %d 点）" % _coarse_total if coarse_rasterizer != null else ""])
 	quad.visible = false
 
 func _process(_dt: float) -> void:
@@ -292,6 +370,9 @@ func _process(_dt: float) -> void:
 		var sc := minf(1.0, max_render_w / maxf(float(vs.x), 1.0))
 		rasterizer.render_scale = [sc]
 		rasterizer.texture_size = vs
+		if coarse_rasterizer != null:
+			coarse_rasterizer.render_scale = [sc]
+			coarse_rasterizer.texture_size = vs
 	rasterizer.update_camera_matrices()
 	if rasterizer.is_loaded:
 		RenderingServer.call_on_render_thread(rasterizer.rasterize)
@@ -302,14 +383,28 @@ func _process(_dt: float) -> void:
 	#    校园整片不画，还会每帧刷 "Uniforms supplied for set (3)"。
 	if rasterizer.render_texture != null 			and tex.texture_rd_rid != rasterizer.render_texture.texture_rd_rid:
 		tex.texture_rd_rid = rasterizer.render_texture.texture_rd_rid
-	if quad == null and tex.texture_rd_rid.is_valid() 			and panorama != null and panorama.get_rid().is_valid():
+	# 粗层：同一套相机/尺寸，独立纹理。它**不随窗口换**，所以画面永远有底。
+	if coarse_rasterizer != null:
+		coarse_rasterizer.update_camera_matrices()
+		if coarse_rasterizer.is_loaded:
+			RenderingServer.call_on_render_thread(coarse_rasterizer.rasterize)
+		else:
+			RenderingServer.call_on_render_thread(coarse_rasterizer.pump_load)
+		if coarse_rasterizer.render_texture != null \
+				and coarse_tex.texture_rd_rid != coarse_rasterizer.render_texture.texture_rd_rid:
+			coarse_tex.texture_rd_rid = coarse_rasterizer.render_texture.texture_rd_rid
+	if quad == null && tex.texture_rd_rid.is_valid() \
+			and panorama != null and panorama.get_rid().is_valid():
 		_make_quad()
 	if _overlay != null and _overlay.visible:
 		var loaded := int(rasterizer.num_splats_loaded[0])
 		_overlay_label.text = "校园渲染器加载中... %d%%" % (0 if _total == 0 else int(100.0 * loaded / _total))
 		if rasterizer.is_loaded:
 			_overlay.visible = false
-	_active = player != null and player.global_position.z < -74.0 and rasterizer.is_loaded
+	# 任一层就绪就能画：换窗口时细层在重传，粗层顶着，不能把 quad 藏起来（那就是黑一下）。
+	var any_loaded: bool = (rasterizer != null and rasterizer.is_loaded) \
+		or (coarse_rasterizer != null and coarse_rasterizer.is_loaded)
+	_active = player != null and player.global_position.z < -74.0 and any_loaded
 	if quad != null:
 		quad.visible = _active
 
@@ -455,8 +550,10 @@ func _maybe_switch_window(dt: float) -> void:
 		return
 	_window_names = want
 	_bin_path = WINDOW_BIN
-	# 重建：先放掉旧的 RID，再让 _process 里的 `_make_bundle()` 重来
-	_release_campus()
+	# 重建细层：先放掉旧的 RID，再让 _process 里的 `_make_bundle()` 重来。
+	# ⚠️ 必须 keep_coarse —— 粗层是全校园的底，换窗口时它留在显存里，
+	#    这样细层重传的这段时间画面由粗层顶着，不会空。
+	_release_campus(true)
 	_released = false
 	print("[campus_ggs] 窗口切换 → %d 块 / %.0f MB（拼 bin %.2f s）" % [
 		want.size(), float(bytes) / 1048576.0,

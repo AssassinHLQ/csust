@@ -155,15 +155,43 @@ func _run() -> void:
 		await _wait(10)
 		await _shot(String(spot["n"]))
 
+		# 第一个机位顺便把两层拆开各拍一张（判断「粗层到底有没有东西」）
+		if spot["n"] == "east_along":
+			var sm := (ggs.get("quad") as MeshInstance3D)
+			if sm != null:
+				var mat := sm.material_override as ShaderMaterial
+				if mat != null:
+					mat.set_shader_parameter("debug_layer", 1)
+					await _wait(3)
+					await _shot("layer_coarse")
+					mat.set_shader_parameter("debug_layer", 2)
+					await _wait(3)
+					await _shot("layer_fine")
+					mat.set_shader_parameter("debug_layer", 0)
+					await _wait(3)
+					var cr = ggs.get("coarse_rasterizer")
+					print("[shot] 粗层：rasterizer=%s loaded=%s 点=%s" % [
+						str(cr != null),
+						("-" if cr == null else str(cr.get("is_loaded"))),
+						("-" if cr == null else str((cr.get("num_splats_loaded") as Array)[0]))])
+
 		var r2 = ggs.get("rasterizer")
 		var npts := 0
 		if r2 != null:
 			npts = int((r2.get("num_splats_loaded") as Array)[0])
+		# 帧率：两份光栅器是**双份 compute**，必须量（MEMORY 里记过「两套渲染器打架」）
+		var fps := 0.0
+		var t0 := Time.get_ticks_usec()
+		for _i in 90:
+			await process_frame
+		var dt := float(Time.get_ticks_usec() - t0) / 1e6
+		if dt > 0.0:
+			fps = 90.0 / dt
 		var q := ggs.get("quad") as MeshInstance3D
-		print("[shot] %-12s 窗口 %d 块 | 点 %d | VRAM %.0f MiB | quad=%s" % [
+		print("[shot] %-12s 窗口 %d 块 | 点 %d | VRAM %.0f MiB | quad=%s | %.0f fps" % [
 			String(spot["n"]), (ggs.get("_window_names") as PackedStringArray).size(),
 			npts, Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
-			("-" if q == null else str(q.visible))])
+			("-" if q == null else str(q.visible)), fps])
 		print("[cost] %-12s 切换 %6.0f ms / %d 帧 | 最坏一帧 %5.1f ms | 画面空 %d 帧" % [
 			String(spot["n"]), switch_ms, frames, worst_ms, blank_frames])
 

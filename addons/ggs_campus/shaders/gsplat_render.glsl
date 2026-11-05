@@ -98,7 +98,15 @@ void main() {
         barrier();
     }
     vec3 heatmap_color = mix(vec3(0,0,1), vec3(1,0.2,0.2), num_splats*5e-4) * (1.0 - t) * heatmap_factor;
-	imageStore(rasterized_image, ivec2(image_pos), vec4(blended_color + heatmap_color, 1.0));
+    // ⚠️ 2026-11-05 改：原来这里写死 `vec4(..., 1.0)`，于是**每个被写到的像素 alpha 都是 1**，
+    //    包括 16×16 块里那些没被任何高斯覆盖的空地。后果：
+    //      · `main_sky.gdshader` 的 mix(天空, 校园, alpha) 永远等于「校园」，全景天空从不出现；
+    //      · 「粗层常驻 + 细层叠加」合成不起来 —— 细层的黑底把粗层整片盖掉。
+    //    `blended_color` 是按 alpha 预乘的，所以这里先反预乘回直色，再写真实覆盖率 (1-t)。
+    //    清屏是 `Color(0,0,0,0)`（gaussian_splatting_rasterizer.gd），规则一致。
+    float coverage = clamp(1.0 - t, 0.0, 1.0);
+    vec3 straight_color = blended_color / max(coverage, 1e-4);
+	imageStore(rasterized_image, ivec2(image_pos), vec4(straight_color, coverage) + vec4(heatmap_color, 0.0));
 
     // Used for when the user selects a tile to move the cursor to. This is not as accurate as checking
     // for the closest splat in the cursor position, but it is much faster.
