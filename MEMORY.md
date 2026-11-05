@@ -793,7 +793,74 @@ SCRIPT / Parse Error : 0
 | `_tools/_run_hitch.sh` | 冒烟 + 换窗口分段计时 |
 | CLI | `--gdgs-idle-skip=off`、`--gdgs-skip-sort`、`--gdgs-relight-eps=0`、`--ggs-idle-skip=off` |
 
-## 18. 下一步
+## 18. 出画室609 就释放泼溅显存（2026-11-06）
+
+用户原话：「好卡啊,能不能不动高斯泼溅情况下,降低显存,只在609内部开,出去直接释放显存,
+设置可以开关这个选项,默认关闭,如果打开就是显存很友好,但是每次进入609要加载」。
+
+**完全不动观感** —— 这个功能只决定「泼溅在不在」，不改任何渲染参数。
+
+### 一、机制
+
+`GameSettings` 新键 `"splat_unload_outside"`，**默认 false**（= 以前的行为：常驻不还）。
+设置界面在「画面」分组最后，标签「出画室609 就释放泼溅显存（进 609 需重新加载）」。
+
+打开后，`splat_scene.gd::_update_room_exit_unload()` 每帧判玩家在不在房间的水平范围内：
+- **在范围外满 `unload_delay = 1.5 s`** → `_unload_for_vram()`：把 `splat_node`
+  `queue_free()`。`GaussianSplatNode._exit_tree()` → `unregister_splat_node()` →
+  注册表发现「一个泼溅节点都不剩」→ 返回 `request_cleanup` →
+  `GaussianGpuStateCache.cleanup_all()` 把整份 1.28 GB 缓冲还掉。
+- **回范围内满 `reload_delay = 0.4 s`** → `_reload_after_unload()`：后台重解码。
+
+⚠️ **`visible = false` 不还显存** —— 必须真的释放节点。这是这个功能能成立的全部前提。
+
+### 二、实测（`_verify_splat_unload.gd`，离屏真窗口，1280×720 / 0.5 缩放）
+
+```
+① 设置默认值 = false              ✓
+② 开关关着、走到室外 3 s：节点仍在  ✓（行为未改变）
+③ 打开后走出范围：
+     节点已释放 = true            ✓
+     显存 2271 MiB → 938 MiB      ✓（Δ −1333 MiB）
+④ 回到范围：自动重载 = true，用时 2.9 s   ✓（显存回到 2271 MiB）
+⑤ 关掉开关后仍有点云 = true        ✓
+结论：全部通过
+```
+
+**省 1.33 GB**，代价是每次进 609 等 **2.9 s**（缓存命中）。这正是用户要的取舍。
+
+### 三、踩到的四个坑（都很隐蔽，值得记）
+
+1. **回调签名必须吃 `(key, v)` 两个参数。**
+   `GameSettings._emit()` 调的是 `cb.call(key, v)`。本喵第一版写 `_on_settings_changed()`，
+   被引擎判 `Invalid call ... Expected 0 argument(s)`，**静默失效** —— 设置改了、
+   `unload_outside_room` 一直是 false，看起来像「功能没写对」。
+2. **房间边界不能用 `content_world_aabb()`。** 那是 `crop` 之后的**内容**盒，
+   实测只有 9.3 × 7.9 m；点云整体是 23.9 × 8.3 × 27.2 m。用内容盒判内外，
+   玩家站在房间角落就被判「在外面」→ 原地反复释放/重载。
+3. **边界变换要用 `_local_basis()` + `_resolve_offset()`，不是 `global_transform`。**
+   缩放由 `_local_basis()` 自己带（`world_scale = 4.25`），`splat_scene.gd` 节点本身
+   没有缩放；用 `global_transform` 等于只乘一次，算出来偏小。本喵第一版得到
+   x −5.1~5.2 / z −4.5~4.7（真实的 1/4.25 倍）。正确结果是
+   **x −18.0~16.4 / z −14.6~22.5**（含 2 m 余量）。
+4. **探针里挪玩家会掉进虚空。** 直接改 `global_position` 到 40 m 外，玩家 y 一路
+   −0.8 → −4.5 → −9，然后 `_die_and_respawn()` 把它送回存档点 `(-15, 0, 4)`
+   —— 那是房间**里面**，于是「出房间」永远不成立。验收里必须
+   `set_physics_process(false)`。
+
+另外两个小坑：`Rect2` **没有** `snappedf()`（写了会让整份脚本解析失败、
+所有字段变 null）；探针等「网络延迟秒数」必须按 `Time.get_ticks_msec()` 计，
+数帧不可靠（一帧才 0.1 ms，200 帧 = 0.02 秒，永远等不到 1.5 s）。
+
+### 四、验收入口
+
+| 脚本 | 作用 |
+|---|---|
+| `_verify_splat_unload.gd` | 五步验收（默认值 / 关着不释放 / 释放且显存下降 / 自动重载 / 关闭可恢复） |
+| `_probe_room609_bounds.gd` | headless 量出画室609 的世界包围盒（定边界用） |
+| CLI | 设置项本身；探针会自动写回 false 清理 |
+
+## 19. 下一步
 
 1. ~~真实窗口复测 a7ec536~~ —— 已完成（离屏 `--splat=off`，数据见 §4）。
 2. ~~部室角落掉帧~~ —— 已定位并修掉 184.5 万面那颗雷（§10）；用户可用 F3 复核，仍低再谈室内降级室外远景。

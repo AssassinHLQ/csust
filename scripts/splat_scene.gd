@@ -107,6 +107,31 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var box_door_center := 0.0
 @export var auto_start := true
 
+## ── 出房间就释放 GPU 显存（2026-11-06）──
+##
+## 用户原话：「只在609内部开，出去直接释放显存，设置可以开关这个选项，默认关闭，
+##           如果打开就是显存很友好，但是每次进入609要加载」。
+##
+## 由设置项 `splat_unload_outside` 控制（默认 false = 现在的行为：常驻不还）。
+##
+## 判据用**水平范围（XZ）+ 高自由度**，不用 `content_world_aabb` 的 y：
+## 那个盒是 8.29 m 高（含屋顶与地板下方），拿它判 y 会让「站在楼下/屋顶上」都算室内。
+## 水平范围取点云包围盒的 XZ，再外扩 `unload_pad` 米留余量。
+##
+## ⚠️ 这里必须**真的把节点释放掉**：`visible = false` 不还显存。
+##    只有让 `GaussianSplatNode._exit_tree()` 走到
+##    `unregister_splat_node()`，注册表才会在「一个泼溅节点都不剩」时返回
+##    `request_cleanup`，`GaussianGpuStateCache.cleanup_all()` 才会把那一整套
+##    1.28 GB 缓冲还掉（splats 665 + culled 177 + sort_keys/values 各 221 MB）。
+@export var unload_outside_room := false
+## 水平外扩余量（米）：站在门口来回晃不该反复触发「释放 → 重载」。
+@export var unload_pad := 2.0
+## 走出范围多久之后才真的释放（秒）。给「跑出去马上又跑回来」留一点余地 ——
+## 重解码要 2.3 s（缓存命中），来回蹭一下就掉一次画面太亏。
+@export var unload_delay := 1.5
+## 盒内之后多久才重载（秒）。同理，反方向给一点余量。
+@export var reload_delay := 0.4
+
 @export_group("Collapse")
 ## 动态 3DGS「坍缩」：所有高斯同时等比变小，并向锚点收敛，最终在一点上塌掉。
 ##
@@ -215,6 +240,14 @@ var _thread: Thread = null
 var _mutex := Mutex.new()
 var _result: Dictionary = {}
 var _start_ms := 0
+## ── 出房间释放（见 `unload_outside_room`）──
+## 缓存的水平范围（点云释放之后 `content_world_aabb()` 就没了，所以必须存下来）
+var _room_xz := Rect2()
+## 玩家在范围内的累计秒数 / 在范围外的累计秒数（去抖用）
+var _inside_clock := 0.0
+var _outside_clock := 0.0
+## 被「出房间释放」卸掉过（用来区分「从没加载」和「加载过又被释放」）
+var _unloaded_by_room_exit := false
 
 
 func _ready() -> void:
@@ -232,6 +265,9 @@ func _ready() -> void:
 	#    目前没有任何地方在暂停时启动它们（只有 `_probe_collapse.gd` 用，而它不暂停），
 	#    真要用了再单独拆一个「只跑 join」的开关。
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 「出房间就释放泼溅显存」的设置：读一次 + 登记监听（面板改完立刻生效）
+	unload_outside_room = bool(GameSettings.value("splat_unload_outside"))
+	GameSettings.listen(_on_settings_changed)
 	# 命令行覆盖：
 	#   godot ... -- --splat-cache=off    不走展开缓存
 	#   godot ... -- --splat=off          完全不加载泼溅
@@ -325,6 +361,169 @@ func _process(delta: float) -> void:
 	_advance_collapse(delta)
 	_advance_dynamic(delta)
 	_update_inside_hide()
+	_update_room_exit_unload(delta)
+
+
+## 读设置：「出房间就释放泼溅显存」。设置面板改完立刻生效，不用重启。
+func _apply_unload_setting() -> void:
+	var want := bool(GameSettings.value("splat_unload_outside"))
+	if want == unload_outside_room:
+		return
+	unload_outside_room = want
+	if not want:
+		# 关掉时如果正被卸着，立刻装回来；否则就继续常驻。
+		_inside_clock = 0.0
+		_outside_clock = 0.0
+		if _unloaded_by_room_exit and splat_node == null and not loading:
+			_reload_after_unload()
+	elif splat_node != null:
+		_remember_room_xz()
+
+
+## 记住「房间」的水平范围，供 `_update_room_exit_unload()` 判内外用。
+##
+## ⚠️ 必须用 `splat_aabb`（**点云整体**的源空间盒），**不能**用
+##    `content_world_aabb()` —— 后者是 `crop` 之后的**内容**盒。
+##    实测画室609：点云整体 23.9 × 8.3 × 27.2 m，裁剪后的内容盒只有 9.3 × 7.9 m。
+##    拿内容盒当房间边界，玩家站在房间角落就会被判成「在外面」。
+## ⚠️ 变换要用 `_local_basis()` + `_resolve_offset()` —— 也就是
+##    `apply_transform()` 给 `splat_node.transform` 设的那一套，
+##    **不是** `global_transform`（本节点的缩放由 `_local_basis` 自己带，
+##    再用 `global_transform` 会乘两遍，算出来只有实际的一半）。
+##    实测乘两遍得到 x −5.1~5.2 / z −4.5~4.7，正好是真实的 1/4.25 倍。
+func _remember_room_xz() -> void:
+	var a: AABB = splat_aabb
+	if a.size == Vector3.ZERO:
+		return
+	var basis := _local_basis()
+	var offset := _resolve_offset()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for i in 8:
+		var corner := a.position + Vector3(
+			a.size.x * float(i & 1),
+			a.size.y * float((i >> 1) & 1),
+			a.size.z * float((i >> 2) & 1))
+		var w := basis * corner + offset
+		lo = lo.min(w)
+		hi = hi.max(w)
+	_room_xz = Rect2(lo.x - unload_pad, lo.z - unload_pad,
+		(hi.x - lo.x) + unload_pad * 2.0, (hi.z - lo.z) + unload_pad * 2.0)
+	print("[SplatScene] 房间水平范围（含 %.1f m 余量）：x %.1f~%.1f，z %.1f~%.1f" % [
+		unload_pad,
+		_room_xz.position.x, _room_xz.position.x + _room_xz.size.x,
+		_room_xz.position.y, _room_xz.position.y + _room_xz.size.y])
+
+
+## 节点离开场景树：反注册设置监听（否则静态 `_listeners` 会越积越多，
+## 换场景之后还拿着已经 free 的对象）。
+func _exit_tree() -> void:
+	GameSettings.unlisten(_on_settings_changed)
+
+
+## ⚠️ 必须接受参数：`GameSettings._emit()` 广播时调的是 `cb.call(key, v)`，
+##    零参回调会被判 `Invalid call ... Expected 0 argument(s)` 而**静默失效**
+##    （本喵第一版就是这么错的：设置改了、`unload_outside_room` 一直是 false）。
+func _on_settings_changed(_key: String = "", _value: Variant = null) -> void:
+	_apply_unload_setting()
+
+
+## 被「出房间释放」卸掉之后重新装回来。
+func _reload_after_unload() -> void:
+	if splat_node != null or loading:
+		return
+	_inside_clock = 0.0
+	_outside_clock = 0.0
+	_unloaded_by_room_exit = false
+	# 重解码之后 `_finish()` 会再跑一遍「建节点 + 建碰撞」。碰撞对象若已存在，
+	# 会叠出第二份 StaticBody3D —— 先清掉上次建的，避免重复。
+	_clear_built_collision()
+	print("[SplatScene] %s：回到范围，重新解码（缓存命中约 2.3 s）" % display_name)
+	start()
+
+
+## 删掉上一次 `_finish()` 建出来的碰撞体（重载时用）。
+##
+## ⚠️ 只有 `SplatScene` 自己持有的那份需要清：`_build_box_collision()` 建的
+##    `RoomCollision`（盒墙）。`_build_collision()` 建的 `SplatCollision` 是挂在
+##    `splat_node` 下面的，跟着泼溅节点一起没了，不用管。
+## ⚠️ 这两份碰撞都**不依赖泼溅数据**，所以「出房间释放」的路径里**不要**删它们 ——
+##    玩家还得能站在房间里。只有重载时才需要清，免得叠出第二份盒墙。
+func _clear_built_collision() -> void:
+	var n := get_node_or_null("RoomCollision")
+	if n != null:
+		remove_child(n)
+		n.queue_free()
+
+
+func _player_node() -> Node3D:
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	if p != null:
+		return p
+	var scene := get_tree().current_scene
+	if scene != null:
+		return scene.get_node_or_null("Player") as Node3D
+	return null
+
+
+## 出房间 → 真的释放泼溅节点（连带 GPU 缓冲）；回房间 → 后台重解码。
+func _update_room_exit_unload(delta: float) -> void:
+	if not unload_outside_room:
+		if _unloaded_by_room_exit and splat_node == null and not loading:
+			# 刚在设置里关掉，但人已经在房间外：照样装回来，别让人看不到画面。
+			_reload_after_unload()
+		return
+	if _room_xz.size == Vector2.ZERO:
+		if splat_node != null:
+			_remember_room_xz()
+		return
+	var p := _player_node()
+	if p == null:
+		return
+	var pos := p.global_position
+	var inside := _room_xz.has_point(Vector2(pos.x, pos.z))
+	if inside:
+		_outside_clock = 0.0
+		if splat_node != null:
+			_inside_clock = 0.0
+			return
+		# 缺泼溅（从没载过 / 刚被卸掉）：等满 reload_delay 再装
+		_inside_clock += delta
+		if _inside_clock >= reload_delay and not loading:
+			if _unloaded_by_room_exit:
+				_reload_after_unload()
+			else:
+				start()
+		return
+	_inside_clock = 0.0
+	if splat_node == null:
+		return
+	_outside_clock += delta
+	if _outside_clock >= unload_delay:
+		_unload_for_vram()
+
+
+## 释放泼溅节点，把 1.28 GB 左右的 GPU 缓冲还给驱动。
+func _unload_for_vram() -> void:
+	if splat_node == null:
+		return
+	# 有加载在跑就等它完 —— 中途放掉会留下半上传的缓冲。
+	# ⚠️ 不要把 `_outside_clock` 清零：清了之后下次进来又会等满 `unload_delay`，
+	#    而这里可能因为 loading 而提前返回，导致「一直等不到释放」。
+	if loading or _thread != null:
+		return
+	_outside_clock = 0.0
+	_remember_room_xz()
+	# 碰撞是照点云建的，但**要留着**：卸的只是显示，玩家还能站在房间里。
+	# （`build_collision` 用 GLB、`build_box_collision` 用盒子，两者都不依赖
+	#   泼溅节点的存在，所以这里什么都不用做。）
+	var n := splat_node
+	splat_node = null
+	_unloaded_by_room_exit = true
+	# ⚠️ `queue_free()` 而不是 `free()`：`_exit_tree()` 会登记给 GDGS 注销，
+	#    注册表在「一个不剩」时会请 GPU 状态缓存整体清理。
+	n.queue_free()
+	print("[SplatScene] %s：离开范围，释放泼溅显存（下次进入要重新解码）" % display_name)
 
 
 func _update_inside_hide() -> void:
@@ -654,6 +853,9 @@ func _finish(result: Dictionary) -> void:
 	splat_node.name = "Splat"
 	splat_node.set("gaussian", res)
 	add_child(splat_node)
+	# 「出房间释放」要靠这个水平范围判断内外；点云一放掉 `content_world_aabb()`
+	# 就没了，所以必须在这里（加载完成时）就记住。
+	_remember_room_xz()
 	print("[SplatScene] 主线程建节点（GDGS 合并点数据）%d ms" % (Time.get_ticks_msec() - t_node))
 	apply_transform()
 	if collapse_enabled and collapse_auto_play:

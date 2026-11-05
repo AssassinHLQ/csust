@@ -57,6 +57,19 @@ const DEFAULTS := {
 	# `scripts/time_of_day.gd` 每帧读这个值，滑完立刻生效，不用重启。
 	"day_minutes": 20.0,
 	"window_mode": "maximized",
+	# ── 泼溅显存：进出画室609 时卸载/重载整份点云（2026-11-06）──
+	# 用户原话：「只在609内部开，出去直接释放显存，设置可以开关这个选项，
+	#           默认关闭，如果打开就是显存很友好，但是每次进入609要加载」。
+	#
+	# 关（默认，= 现在的行为）：泼溅一旦载入就**常驻**，出门只是 `visible = false`，
+	#   那 1.28 GB GPU 缓冲一直占着。好处是回画室609 立刻就有画面。
+	# 开：走出画室609 的范围就**真的把节点释放掉**（GDGS 注册表会跟着
+	#   `cleanup_all()` 还掉全部 GPU 缓冲），回到范围内再后台重解码。
+	#   省下 ≈1.3 GB 显存；代价是每次进 609 要等解码（缓存命中 **2.3 s**，
+	#   冷启动更久），且那段时间画面里看不到泼溅。
+	# ⚠️ 这是**唯一的**「泼溅相关」设置，且**不改变任何渲染参数** ——
+	#    它的效果只是「有没有」，不是「好不好看」。
+	"splat_unload_outside": false,
 	# ── 准星（2026-10-22 用户：颜色 / 双色渐变 / 粗细 / 每个部件的透明度 都要能调）──
 	# ⚠️ 三个尺寸单位都是**物理像素**（不是逻辑 px）：HUD 会按 `crosshair_scale()`
 	#    换算成逻辑坐标再摆，见 `hud.gd::_layout_crosshair` 那两大段注释。
@@ -146,6 +159,7 @@ const LABELS := {
 	"render_distance": "渲染距离",
 	"day_minutes": "一天长度 (分钟，0=不变)",
 	"window_mode": "窗口模式",
+	"splat_unload_outside": "出画室609 就释放泼溅显存（进 609 需重新加载）",
 	"crosshair_color": "准星颜色",
 	"crosshair_color2": "渐变第二色",
 	"crosshair_gradient": "双色渐变",
@@ -159,7 +173,7 @@ const LABELS := {
 ## 「画面」分组：设置界面在这些键之前插一个小标题
 const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
 	"shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance",
-	"day_minutes", "window_mode"]
+	"day_minutes", "window_mode", "splat_unload_outside"]
 
 ## 「准星」分组：同上，第一个键之前插小标题「准星」。
 ## ⚠️ 顺序就是设置界面里的顺序，DEFAULTS 里也按这个顺序排过一遍 —— 两处别走散。

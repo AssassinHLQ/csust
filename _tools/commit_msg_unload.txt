@@ -1,0 +1,48 @@
+加设置项「出画室609 就释放泼溅显存」（默认关，打开省 1.33 GB，代价是进 609 等 2.9 s）
+
+用户原话：「好卡啊，能不能不动高斯泼溅情况下，降低显存，只在609内部开，出去直接释放显存，
+设置可以开关这个选项，默认关闭，如果打开就是显存很友好，但是每次进入609要加载」。
+
+这个功能只决定「泼溅在不在」，**不改任何渲染参数**，观感一个像素都不动。
+
+做法
+
+`GameSettings` 新增 `splat_unload_outside`（默认 false = 以前的行为：常驻不还）。
+`settings_menu` 里落在「画面」分组最后一行。
+
+`scripts/splat_scene.gd` 新增 `_update_room_exit_unload()`：每帧判玩家在不在房间的
+水平范围内 ——
+  · 出范围满 `unload_delay = 1.5 s` → `_unload_for_vram()` 把 `splat_node` queue_free；
+    `GaussianSplatNode._exit_tree()` → `unregister_splat_node()` → 注册表发现
+    「一个泼溅节点都不剩」→ `request_cleanup` → `GaussianGpuStateCache.cleanup_all()`
+    把整份 1.28 GB 缓冲还掉。
+  · 回范围内满 `reload_delay = 0.4 s` → 后台重解码。
+
+⚠️ 关键是必须**真的释放节点**：`visible = false` 不还显存。
+
+实测（`_verify_splat_unload.gd`，离屏真窗口 1280×720 / 0.5 缩放）
+
+  ① 默认值 = false                                    ✓
+  ② 开关关着走到室外 3 s，节点仍在（行为未改变）        ✓
+  ③ 打开后走出范围：节点已释放                         ✓
+       显存 2271 MiB → 938 MiB（Δ −1333 MiB）         ✓
+  ④ 回到范围自动重载 = true，用时 2.9 s                ✓
+  ⑤ 关掉开关后仍有点云                                 ✓
+  结论：全部通过
+
+踩到的坑（都记进 MEMORY §18）
+
+1. `GameSettings._emit()` 调 `cb.call(key, v)` —— 回调必须吃两个参数，零参会被判
+   `Invalid call` 且**静默失效**（设置改了但 `unload_outside_room` 一直 false）。
+2. 房间边界不能用 `content_world_aabb()`：那是 crop 后的**内容**盒（9.3×7.9 m），
+   点云整体才是 23.9×8.3×27.2 m。用内容盒判内外，站在房间角落就被当成在外面。
+3. 边界变换要用 `_local_basis() + _resolve_offset()`，不是 `global_transform`：
+   缩放由 `_local_basis()` 带（world_scale 4.25），本节点本身没有缩放，
+   用 `global_transform` 只乘一次，算出来偏小。正确结果是 x −18.0~16.4 / z −14.6~22.5。
+4. 探针里直接改 `global_position` 到 40 m 外，玩家会掉进虚空（y −0.8→−4.5→−9），
+   被 `_die_and_respawn()` 送回存档点 (-15,0,4) —— 那是房间**里面**，于是永远出不了范围。
+   验收里必须 `set_physics_process(false)`。
+5. `Rect2` 没有 `snappedf()`；写了会让整份脚本解析失败、字段全变 null。
+6. 等「秒」必须按 `Time.get_ticks_msec()` 计，数帧不可靠（一帧 0.1 ms）。
+
+新增 `_probe_room609_bounds.gd`（headless 量包围盒）与 `_verify_splat_unload.gd`（五步验收）。
