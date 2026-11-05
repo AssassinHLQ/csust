@@ -1,0 +1,54 @@
+电竞酒店素材跑通：890 万面 → 341 万面，显存 −65%，draw call −93%
+
+用户从原来那个只有 .max 的包里导出了 Untitled.fbx（238 MB），本喵把它跑完并量化。
+
+一、流水线实测（每一档都量过）
+
+  阶段                    三角        顶点        显存(模型自己)  draw call  GLB
+  原始(只按材质合并)      8,888,803   5,564,195   +787 MiB      89        293 MB
+  ＋自适应减面            3,413,264   2,709,373   +407 MiB      89        130.6 MB
+  ＋贴图缩到 1024         3,413,264   2,709,373   +272 MiB      89        122.4 MB
+
+  合计：三角 −62%、显存 −65%、draw call 1349 → 89（−93%）。
+  观感（同机位同光照逐像素比对）：减面版 vs 原版 95.43% 像素完全相同、
+  平均绝对差 0.179；最终版 vs 原版 84.70% 相同、差>32 的只有 0.279%。
+
+二、五个坑
+
+  1. FBX 单位是厘米、Godot 当米 ⇒ 模型变成 7.8 公里（7813×4121×7683 m）。
+     正确做法不是代码里 scale=0.01，而是导入设置 nodes/root_scale=0.01。
+  2. meshes/ensure_tangents=true 白烧 41 MB（270 万顶点 × 16 B）。没法线贴图就关。
+  3. 贴图必须在 Blender 导出前缩：GLB 内嵌贴图，导出后很难在 Godot 批量改。
+     ⚠️ Blender 的 image.scale() 只改内存，必须 img.pack() 才落进 GLB。
+  4. 减面顺序必须「先减面、再合并」——合并后成材质大杂烩，没法按物件决定力度。
+  5. 自适应减面档位：21 个物件占 42.1% 三角；地毯 Circle019/021 各 47.8 万面
+     砍到 6%、毯子 odeyalo 各 12.3 万砍到 20%；低于 8000 面的一点不碰。
+
+三、一个「以为是 bug」其实不是
+
+  首版渲染左侧木饰面板呈扇形破碎，本喵怀疑是减面搞坏的。做了「只合并不减面」
+  的对照组之后：两张图 95.43% 像素完全相同 ⇒ 扇形是原模型本身造型（竖木格栅）。
+  教训：怀疑优化破坏观感时，先做对照组再下结论。
+  （但它暴露另一个真问题：那个木格栅在 Godot 里看着像坏的，需美术确认。）
+
+四、新工具
+
+  _tools/opt_archviz.py            FBX→删小件+自适应减面+按材质合并+缩贴图→GLB
+  _tools/inspect_archviz.py        三角分布分桶/最重物件/材质用量/贴图像素负担
+  _tools/patch_glb_import.py       改 .glb.import：root_scale 修单位、关切线
+  _tools/opt_archviz_textures.py   外部贴图批量缩尺寸（支持 --dry-run）
+  scripts/_probe_mesh_budget.gd    ClassDB 盘点引擎能力 + 场景网格预算
+  scripts/_probe_mesh_dupes.gd     重复网格盘点（MultiMesh 机会）
+  scripts/_probe_model_cost.gd     任意模型在 Godot 里的真实成本
+  scripts/_probe_model_preview.gd  3/4 透视出图（验证缩放后观感）
+  scripts/_probe_topdown.gd        正交俯视出图（和缩放无关地看布局）
+
+  models/_wip_esports_hotel/ 已加入 .gitignore（爱给网商业素材，与 3d66 同类，
+  绝不进仓库）。
+
+五、还没做
+
+  · VRAM 压缩没做（贴图仍是 4 B/px，改 BC1/BC3/BC7 能到约 25 MB）
+  · 模型没放进场景（还是 WIP，摆位/朝向要人看）
+  · 遮挡剔除仍关着，这个体量最适合上遮挡体
+  · 模型里没有墙和地板（可能 Max 里分层导出，或原工程就没做）

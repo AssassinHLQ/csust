@@ -61,7 +61,17 @@ def parse_args():
                     choices=["none", "material", "all"],
                     help="合并策略（默认 material）")
     ap.add_argument("--decimate", type=float, default=0.0,
-                    help="减面比例 0~1，0=不减（默认 0）")
+                    help="统一减面比例 0~1，0=不减（默认 0）")
+    ap.add_argument("--decimate-adaptive", action="store_true",
+                    help="自适应减面：按每个物件自己的三角数决定减多狠（装饰大件砍很、"
+                         "墙地板不动）。比 --decimate 合理得多。")
+    ap.add_argument("--decimate-safety", type=float, default=1.0,
+                    help="自适应减面的力度系数：<1 更狠，>1 更保守（默认 1.0）")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="同 --merge=none（方便记忆）")
+    ap.add_argument("--texture-cap", type=int, default=0,
+                    help="导出前把贴图最大边缩到这个像素数（0=不动；建议 1024~2048）。"
+                         "GLB 是内嵌贴图的，导出之后就没法在 Godot 里批量改了。")
     ap.add_argument("--min-size", type=float, default=0.0,
                     help="删掉最大边小于这个值的物件（米），0=不删")
     ap.add_argument("--report", action="store_true", help="只体检，不导出")
@@ -226,6 +236,114 @@ def apply_decimate(ratio):
         100.0 * (1.0 - total_after / max(total_before, 1))))
 
 
+# 自适应减面：按物件**自己的**三角数决定减多狠。
+#
+# 为什么需要（爱给网那套电竞酒店实测，2026-11-06）：
+#   8,888,803 三角里，**21 个物件占了 42.1%**（374 万），而 630 个 <1000 面的小件
+#   加起来才 6.2%。最重的几个是：
+#       Circle019 / Circle021     各 478,834 三角   ← 圆形地毯
+#       JS2973/3034/3095/3156     各 142,648 三角   ← 四把同款
+#       odeyalo048/049            各 123,300 三角   ← 毯子（俄文 одеяло）
+#   地毯/毛毯做到 47 万面，是扫描/布料模拟直接倒出来的，玩家俯视根本看不出差别。
+#   而对**墙、地板、大台面**乱减面会露馅（轮廓和接缝会崩）。
+#
+#   所以按档位来：越重的减越狠，轻的原样保留。
+ADAPTIVE_TIERS = [
+    (200000, 0.06),   # ≥20 万面：装饰性大件（地毯/毯子），砍到 6%
+    (50000, 0.20),    # 5~20 万：砍到 20%
+    (20000, 0.40),    # 2~5 万：砍到 40%
+    (8000, 0.65),     # 0.8~2 万：砍到 65%
+]
+ADAPTIVE_FLOOR = 8000   # 低于这个面数的物件**一点不动**
+
+
+def apply_decimate_adaptive(extra_safety=1.0):
+    """按 ADAPTIVE_TIERS 逐物件减面。`extra_safety` < 1 会整体更狠。"""
+    total_before = 0
+    total_after = 0
+    touched = 0
+    for o in mesh_objects():
+        before = tri_count(o)
+        if before <= ADAPTIVE_FLOOR:
+            continue
+        ratio = 1.0
+        for threshold, r in ADAPTIVE_TIERS:
+            if before >= threshold:
+                ratio = r
+                break
+        ratio = max(0.02, min(1.0, ratio * extra_safety))
+        if ratio >= 1.0:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        m = o.modifiers.new(name="decimate", type="DECIMATE")
+        m.ratio = ratio
+        m.use_collapse_triangulate = True
+        try:
+            bpy.ops.object.modifier_apply(modifier=m.name)
+        except RuntimeError as e:
+            print("[archviz]   减面失败 %s：%s" % (o.name, e))
+            o.modifiers.remove(m)
+            continue
+        after = tri_count(o)
+        total_before += before
+        total_after += after
+        touched += 1
+        if before >= 100000:
+            print("[archviz]   %-34s %9d → %9d（%.0f%%）"
+                  % (o.name[:34], before, after, 100.0 * ratio))
+    pct = 100.0 * (1.0 - total_after / max(total_before, 1))
+    print("[archviz] 自适应减面：动了 %d 个物件，%d → %d 三角（省 %.0f%%）"
+          % (touched, total_before, total_after, pct))
+
+
+def shrink_textures(cap, low_cap=1024):
+    """导出前把 Blender 里的贴图**真的缩小**（改像素，不只是改引用）。
+    
+    为什么要在这里做：GLB 把贴图**内嵌**，所以导出之后就没法在 Godot 里
+    批量改了（`.import` 的 `_subresources` 键名很难手写对）。
+    在 Blender 里缩完再导出，GLB 体积和进 Godot 之后的显存一起小。
+    
+    实测（爱给网那套）：32.4 M 像素 → 缩到 cap=1024 后约 12 M，显存 124 MB → 46 MB。
+    """
+    if cap <= 0:
+        return
+    imgs = [i for i in bpy.data.images if i.size[0] > 0 and i.source == "FILE"]
+    before_px = 0
+    after_px = 0
+    touched = 0
+    for img in imgs:
+        w, h = img.size[0], img.size[1]
+        before_px += w * h
+        low = img.name.lower()
+        c = low_cap if any(k in low for k in
+                           ("bump", "normal", "rough", "metal", "ao", "mask", "spec", "gloss")) else cap
+        if max(w, h) <= c:
+            after_px += w * h
+            continue
+        s = c / float(max(w, h))
+        nw = max(1, int(round(w * s)))
+        nh = max(1, int(round(h * s)))
+        try:
+            img.scale(nw, nh)
+            # 缩完必须真的落盘，否则导出时 GLB 里还是原图
+            if img.packed_file is not None:
+                img.pack()
+            touched += 1
+            after_px += nw * nh
+            if w * h > 4_000_000:
+                print("[archviz]   贴图 %-28s %dx%d → %dx%d"
+                      % (img.name[:28], w, h, nw, nh))
+        except Exception as e:  # noqa: BLE001
+            print("[archviz]   缩图失败 %s：%s" % (img.name, e))
+            after_px += w * h
+    print("[archviz] 贴图缩到 %d 上限：动了 %d 张，%.1f M 像素 → %.1f M"
+          % (cap, touched, before_px / 1e6, after_px / 1e6))
+    print("[archviz]   RGBA8 显存 %.0f MB → %.0f MB（含 mip）"
+          % (before_px * 4 * 1.333 / 1048576.0, after_px * 4 * 1.333 / 1048576.0))
+
+
 def export_glb(path):
     d = os.path.dirname(os.path.abspath(path))
     if d:
@@ -260,9 +378,20 @@ def main():
 
     base = report("导入后")
 
+    # ⚠️ 顺序很重要：**先减面、再合并**。
+    #    合并之后每个物件变成一个「材质大杂烩」，就没法按单个物件的面数
+    #    决定减多狠了（地毯该砍 94%、墙一点都不该动）。见 ADAPTIVE_TIERS 的说明。
     drop_tiny(a.min_size)
-    merge_by(a.merge, a.keep_animated)
-    apply_decimate(a.decimate)
+    if a.decimate_adaptive:
+        apply_decimate_adaptive(a.decimate_safety)
+    elif a.decimate > 0.0:
+        apply_decimate(a.decimate)
+
+    merge_mode = "none" if a.no_merge else a.merge
+    merge_by(merge_mode, a.keep_animated)
+
+    if a.texture_cap > 0:
+        shrink_textures(a.texture_cap)
 
     final = report("优化后")
 

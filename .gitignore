@@ -95,6 +95,9 @@ __pycache__/
 
 # 电竞房素材的中间产物：从 3d66 大杂烩里抽出来的簇、平滑候选模型。
 # 都是临时文件、随时可重生成；3d66 / CGAxis 是商业素材站，绝不能进仓库。
+# 爱给网「现代网咖·电竞酒店套房·宿舍上下铺」——商业素材站（aigei.com），
+# 与 3d66 / CGAxis 同类，**绝不能进仓库**。优化管线见 _tools/opt_archviz.py。
+/models/_wip_esports_hotel/
 /models/_wip_hotel/
 /models/_wip_room/
 
