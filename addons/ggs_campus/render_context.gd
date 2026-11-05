@@ -10,9 +10,15 @@ class DeletionQueue:
 	
 	func flush(device : RenderingDevice) -> void:
 		# We work backwards in order of allocation when freeing resources
+		var t0 := Time.get_ticks_usec()
 		for i in range(queue.size() - 1, -1, -1):
 			if not queue[i].is_valid(): continue
 			device.free_rid(queue[i])
+		# 2026-11-05：换窗口时这一下要放掉约 500 MB 的缓冲，实测可能几百毫秒 ——
+		# 打印出来是为了把「换窗口卡顿」拆成「分配 / 释放 / 上传」三段。
+		if queue.size() > 8:
+			print("[ggs] 释放 %d 个 RID 用了 %.1f ms" % [
+				queue.size(), float(Time.get_ticks_usec() - t0) / 1000.0])
 		queue.clear()
 	
 	func free_rid(device : RenderingDevice, rid : RID) -> void:
@@ -68,8 +74,11 @@ func load_shader(path : String) -> RID:
 		shader_cache[path] = deletion_queue.push(device.shader_create_from_spirv(shader_spirv))
 	return shader_cache[path]
 
-func create_storage_buffer(size : int, data : PackedByteArray=[], usage:=0) -> Descriptor:
-	if size > len(data):
+## `zero_fill=false` 时**不填零**：直接把空数据交给 `storage_buffer_create`，
+## 走「未初始化」分配。大缓冲（几百 MB）填零要几百毫秒，而它们在用之前都会被
+## 整份覆盖（见 `gaussian_splatting_rasterizer.init_gpu` 的说明）。
+func create_storage_buffer(size : int, data : PackedByteArray=[], usage:=0, zero_fill:=true) -> Descriptor:
+	if zero_fill and size > len(data):
 		var padding := PackedByteArray(); padding.resize(size - len(data))
 		data += padding
 	return Descriptor.new(deletion_queue.push(device.storage_buffer_create(max(size, len(data)), data, usage)), RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER)

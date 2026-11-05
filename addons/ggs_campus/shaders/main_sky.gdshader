@@ -10,6 +10,11 @@ uniform sampler2D panorama : source_color, filter_linear;
 uniform vec3 fallback_sky = vec3(0.62, 0.48, 0.55);
 // 调试：0 = 两层合成（正常），1 = 只看粗层，2 = 只看细层
 uniform int debug_layer = 0;
+// 细层**没就绪**时（正在分帧上传 / 刚被释放、新纹理还没建）置 0：
+// 这时完全不采样 `render_texture`，只画「天空 → 粗层」。
+// 换窗口时细层的 RID 会被释放、新纹理也会先清成透明，不挡这一下就会采到
+// 已释放的纹理或未初始化的像素（表现为闪一下黑/雪花）。
+uniform float fine_ready = 1.0;
 
 vec3 srgb_to_linear(vec3 x) {
 	vec3 higher = pow((x + 0.055) / 1.055, vec3(2.4));
@@ -22,7 +27,10 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 fine = texture(render_texture, SCREEN_UV);
+	vec4 fine = vec4(0.0);
+	if (fine_ready > 0.5) {
+		fine = texture(render_texture, SCREEN_UV);
+	}
 	vec4 coarse = texture(coarse_texture, SCREEN_UV);
 
 	vec4 v = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);

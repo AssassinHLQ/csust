@@ -56,9 +56,14 @@ func load_shader(path: String) -> RID:
 		shader_cache[path] = deletion_queue.push(device.shader_create_from_spirv(shader_spirv))
 	return shader_cache[path]
 
-func create_storage_buffer(size: int, data: PackedByteArray = PackedByteArray(), usage: int = 0) -> Descriptor:
+## `zero_fill=false` 时**不填零**，走「未初始化」分配。
+## 大缓冲填零要几百毫秒（实测 GGS 那边 644 MB → 733 ms），而下面这些缓冲在用之前
+## 都会被整份覆盖：`splats`（上传时全写）、`culled_splats`（投影只写发出的条目）、
+## `sort_keys` / `sort_values`（基数排序只读/写 `[0, element_count)`，
+## `element_count` 每帧由 CPU 清 0）。见 `gaussian_gpu_state_cache.gd::rebuild_gpu_state()`。
+func create_storage_buffer(size: int, data: PackedByteArray = PackedByteArray(), usage: int = 0, zero_fill: bool = true) -> Descriptor:
 	var buffer_data := data
-	if size > buffer_data.size():
+	if zero_fill and size > buffer_data.size():
 		var padding := PackedByteArray()
 		padding.resize(size - buffer_data.size())
 		buffer_data += padding

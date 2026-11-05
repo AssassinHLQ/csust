@@ -64,6 +64,29 @@ var _bin_loading := false
 var num_splats_loaded : Array[int] = [0]
 var basis_override = Basis.IDENTITY
 
+## ── 静止帧复用（2026-11-05，用户反馈「好卡」）──
+##
+## 相机和视口都没变的那一帧，投影 + 基数排序 + raster 的输出和上一帧**逐像素相同**
+## （`gsplat_render.glsl` 对本块每个像素都 `imageStore`），所以整条 compute 链可以直接
+## 不跑，把上一帧的纹理继续交给 `main_sky.gdshader` 合成。判据精确等价，不是近似。
+##
+## `campus_ggs.gd` 每帧的顺序是 `update_camera_matrices()` → `rasterize()`，
+## 前者把「相机到底动了没有」记在 `_camera_changed` 里给后者用。
+## 关掉对照：`-- --ggs-idle-skip=off`
+var idle_skip := true
+var _camera_changed := true
+var _rendered_once := false
+var _last_size := Vector2i.ZERO
+## 入场动画结束的**引擎时刻**（毫秒）。`gsplat_projection.glsl` 算的是
+## `splat_time = time - splat.time`，`ease_out_cubic(clamp(...,0,1))` 在 1 s 后恒为 1、
+## `time_factor_late` 还多减 0.35 ⇒ **max(splat.time) + 1.35 s 之后时间不再影响画面**。
+## 这个 max 在上传过程中顺手抽样读出来（见 `_pump_bin`），不是拍一个固定秒数 ——
+## 拍短了会把入场动画冻在半透明状态，那是看得出来的 bug。
+const INTRO_ANIM_SECONDS := 1.35
+const INTRO_MARGIN_MS := 400
+var intro_end_ms := 0
+var _splat_time_max := 0.0
+
 func _init(point_cloud, output_texture_size : Vector2i, render_texture : Texture2DRD, camera : Camera3D) -> void:
 	self.point_cloud = point_cloud
 	self.texture_size = output_texture_size
@@ -71,6 +94,7 @@ func _init(point_cloud, output_texture_size : Vector2i, render_texture : Texture
 	self.camera = camera
 
 func init_gpu() -> void:
+	var _t_alloc := Time.get_ticks_usec()
 	assert(render_texture, 'An output Texture2DRD must be set!')
 	# --- DEVICE/SHADER CREATION ---
 	# We have to use `RenderingServer.get_rendering_device()` as Texture2DRD can only be used
@@ -88,16 +112,31 @@ func init_gpu() -> void:
 	var num_partitions = (num_sort_elements_max + PARTITION_SIZE - 1) / PARTITION_SIZE
 	var block_dims : PackedInt32Array; block_dims.resize(2*3); block_dims.fill(1)
 	
-	descriptors['splats'] = context.create_storage_buffer(point_cloud.size * 60*4)
+	# ── 大缓冲**不填零**（2026-11-05）──
+	# 实测：`init_gpu` 分配 644 MB 要 **733 ms**、205 MB 要 364 ms —— 这就是「换窗口
+	# 卡顿」的真正来源（不是上传，上传只要 1~6 帧、最坏单块 26 ms）。
+	# 钱几乎全花在 `create_storage_buffer` 的**填零**上：它给每个缓冲都准备一份
+	# 等长的零 `PackedByteArray` 再交给 `storage_buffer_create`，几百 MB 的
+	# malloc+清零+上传纯属白做。下面四个缓冲在用之前都会被整份覆盖：
+	#   · `splats`         ← `_pump_bin()` 把 bin 全部写进去
+	#   · `culled_splats`  ← 投影着色器只写「发出的那些」条目
+	#   · `sort_keys`      ← 投影着色器写；基数排序只读 `[0, element_count)`
+	#   · `sort_values`    ← downsweep 只写 `[0, element_count)`
+	# （`element_count` 取自 histogram 的首个 uint，每帧由 CPU 清 0。）
+	descriptors['splats'] = context.create_storage_buffer(point_cloud.size * 60*4, [], 0, false)
 	descriptors['uniforms'] = context.create_uniform_buffer(8*4)
-	descriptors['culled_splats'] = context.create_storage_buffer(point_cloud.size * 12*4)
+	descriptors['culled_splats'] = context.create_storage_buffer(point_cloud.size * 12*4, [], 0, false)
 	descriptors['grid_dimensions'] = context.create_storage_buffer(2*3*4, block_dims.to_byte_array(), RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)
 	descriptors['histogram'] = context.create_storage_buffer(4 + (1 + 4*RADIX + num_partitions*RADIX)*4)
-	descriptors['sort_keys'] = context.create_storage_buffer(num_sort_elements_max*4*2)
-	descriptors['sort_values'] = context.create_storage_buffer(num_sort_elements_max*4*2)
+	descriptors['sort_keys'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
+	descriptors['sort_values'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
 	descriptors['tile_bounds'] = context.create_storage_buffer(tile_dims.x*tile_dims.y * 2*4)
 	descriptors['tile_splat_pos'] = context.create_storage_buffer(4*4)
 	descriptors['render_texture'] = context.create_texture(texture_size, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+	# 新纹理在数据到位之前是**未初始化**的。上传改成分帧预算之后，「细层还没传完」
+	# 会持续很多帧，所以这里必须先清成透明 —— 否则合成时细层会用垃圾像素盖掉粗层
+	# （`main_sky.gdshader` 是按 alpha 把细层混在粗层上面的）。
+	context.device.texture_clear(descriptors['render_texture'].rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
 	
 	var projection_set = context.create_descriptor_set([descriptors['splats'], descriptors['culled_splats'], descriptors['histogram'], descriptors['sort_keys'], descriptors['sort_values'], descriptors['grid_dimensions'], descriptors['uniforms']], projection_shader, 0)
 	var radix_sort_upsweep_set = context.create_descriptor_set([descriptors['histogram'], descriptors['sort_keys']], radix_sort_upsweep_shader, 0)
@@ -109,6 +148,9 @@ func init_gpu() -> void:
 	render_texture.texture_rd_rid = descriptors['render_texture'].rid
 	
 	# --- COMPUTE PIPELINE CREATION ---
+	# 2026-11-05：把「分配缓冲」和「编译/建管线」分开计时 —— 实测换窗口卡顿的大头
+	# 是分配（填零），见上面「大缓冲不填零」那段说明。
+	var _t_buffers := Time.get_ticks_usec()
 	pipelines['gsplat_projection'] = context.create_pipeline([ceili(point_cloud.size/256.0), 1, 1], [projection_set], projection_shader)
 	pipelines['radix_sort_upsweep'] = context.create_pipeline([], [radix_sort_upsweep_set], radix_sort_upsweep_shader)
 	pipelines['radix_sort_spine'] = context.create_pipeline([RADIX, 1, 1], [radix_sort_spine_set], radix_sort_spine_shader)
@@ -120,6 +162,13 @@ func init_gpu() -> void:
 	# 这里在调用线程（Compositor/render thread）同步上传。加载会卡一下，先验证渲染。
 	should_terminate_thread[0] = false
 	num_splats_loaded[0] = 0
+	# 2026-11-05：把「分配缓冲 + 编译着色器」这一段单独计时 ——
+	# 换窗口的卡顿主要嫌疑就是它（每换一次要重建约 450 MB 的缓冲和 6 个着色器）。
+	var mb := float(point_cloud.size) * 448.0 / 1048576.0
+	print("[ggs] init_gpu：缓冲 %.0f MB 用 %.1f ms，管线用 %.1f ms，合计 %.1f ms" % [
+		mb, float(_t_buffers - _t_alloc) / 1000.0,
+		float(Time.get_ticks_usec() - _t_buffers) / 1000.0,
+		float(Time.get_ticks_usec() - _t_alloc) / 1000.0])
 	if bin_path != "":
 		_begin_bin_load(point_cloud.size)
 		is_loaded = false
@@ -138,7 +187,14 @@ func _begin_bin_load(count : int) -> void:
 	_bin_uploaded = 0
 	_bin_loading = true
 	num_splats_loaded[0] = 0
-	print("[ggs] bin 开始分帧上传：%.0f MB" % (float(_bin_total) / 1048576.0))
+	_upload_chunk = 1 * 1024 * 1024
+	_upload_worst_ms = 0.0
+	_upload_frames = 0
+	_upload_started_ms = Time.get_ticks_msec()
+	_splat_time_max = 0.0
+	intro_end_ms = 0
+	print("[ggs] bin 开始分帧上传：%.0f MB（每帧预算 %.1f ms）" % [
+		float(_bin_total) / 1048576.0, upload_budget_ms])
 
 ## 每帧最多上传 PER_FRAME；返回 true 表示还在加载。
 func pump_load() -> void:
@@ -146,26 +202,69 @@ func pump_load() -> void:
 	if _bin_loading:
 		_pump_bin(context.device, descriptors['splats'].rid)
 
+## ── 分帧上传预算（2026-11-05）──
+##
+## 原来固定「每帧最多 64 MB」。一次换窗口要吐 100~280 MB，实测**单帧最坏 550 ms**
+## —— 那一下就是用户说的「好卡」。现在改成**按时间给预算 + 自适应块大小**：
+## 每帧只花大约 `upload_budget_ms` 毫秒上传，传不完下一帧接着传。
+## 细层没传完时画面由粗层顶着（`init_gpu` 里已把新纹理清成透明），
+## 所以「慢一点传完」远好过「一帧卡死」。
+var upload_budget_ms := 4.0
+## 起始块**故意取小**：实测「每帧的第一块」总是偏慢（驱动首次分配/预热，
+## 4 MB 的第一块要 25~29 ms，而稳态吞吐是 1~2 MB/ms）。先给一小块量出真实吞吐，
+## 控制器再按 `upload_budget_ms` 往上涨。
+var _upload_chunk := 1 * 1024 * 1024
+const UPLOAD_CHUNK_MIN := 256 * 1024
+const UPLOAD_CHUNK_MAX := 64 * 1024 * 1024
+## 实测统计：每次加载完打一行（判断预算还值不值得再调）
+var _upload_worst_ms := 0.0
+var _upload_frames := 0
+var _upload_started_ms := 0
+
 func _pump_bin(device, buffer) -> bool:
 	if not _bin_loading or _bin_file == null:
 		return false
-	const PER_FRAME := 64 * 1024 * 1024
-	var budget := PER_FRAME
-	while budget > 0 and _bin_uploaded < _bin_total:
-		var n := mini(64 * 1024 * 1024, _bin_total - _bin_uploaded)
+	_upload_frames += 1
+	while _bin_uploaded < _bin_total:
+		var n := mini(_upload_chunk, _bin_total - _bin_uploaded)
 		var data := _bin_file.get_buffer(n)
 		if data.is_empty():
 			break
+		var t0 := Time.get_ticks_usec()
 		device.buffer_update(buffer, _bin_uploaded, data.size(), data)
+		var dt_ms := float(Time.get_ticks_usec() - t0) / 1000.0
+		_upload_worst_ms = maxf(_upload_worst_ms, dt_ms)
+		# 顺手抽样读 `time` 字段（每条 240 字节，第 3 个 float 在偏移 12），
+		# 用来算「入场动画什么时候结束」。抽样 61 条取 1 条就够。
+		# ⚠️ 只收 `t <= now`：数据里有些记录的时间字段是天文数字（实测会把
+		#    `int()` 撑溢出，打出来是 `-9223372036854776 s`）。那些点在着色器里
+		#    clamp 到 0，恒不可见、也永远不随时间变，不该把门卡到几百年后。
+		var now_s := Time.get_ticks_msec() * 1e-3
+		var off := 12
+		while off + 4 <= data.size():
+			var t := data.decode_float(off)
+			if is_finite(t) and t <= now_s and t > _splat_time_max:
+				_splat_time_max = t
+			off += 240 * 61
 		_bin_uploaded += data.size()
-		budget -= data.size()
 		num_splats_loaded[0] = _bin_uploaded / 240
+		# 自适应：按这一块的实测吞吐，把块大小收到「一块 ≈ 一帧预算」附近。
+		# 头几块会有点抖（第一次的驱动分配总是偏慢），很快就稳下来。
+		var per_ms := float(data.size()) / maxf(dt_ms, 0.05)
+		_upload_chunk = clampi(int(per_ms * upload_budget_ms), UPLOAD_CHUNK_MIN, UPLOAD_CHUNK_MAX)
+		if _bin_uploaded < _bin_total and dt_ms >= upload_budget_ms:
+			return true
 	if _bin_uploaded >= _bin_total:
 		_bin_file.close()
 		_bin_file = null
 		_bin_loading = false
 		is_loaded = true
-		print("[ggs] bin 上传完成：%d 点" % num_splats_loaded[0])
+		intro_end_ms = int((_splat_time_max + INTRO_ANIM_SECONDS) * 1000.0) + INTRO_MARGIN_MS
+		var secs := maxf(float(Time.get_ticks_msec() - _upload_started_ms) / 1000.0, 1e-3)
+		print("[ggs] bin 上传完成：%d 点 / %.0f MB，%d 帧，最坏单块 %.1f ms，平均 %.0f MB/s，入场动画到 %.1f s" % [
+			num_splats_loaded[0], float(_bin_total) / 1048576.0, _upload_frames,
+			_upload_worst_ms, float(_bin_total) / 1048576.0 / secs,
+			float(intro_end_ms) / 1000.0])
 		return false
 	return true
 
@@ -204,6 +303,10 @@ func rasterize() -> void:
 	if _bin_loading:
 		if _pump_bin(context.device, descriptors['splats'].rid):
 			return
+		# 刚上传完这一帧必须真算一次：数据变了
+		_camera_changed = true
+	if _can_reuse_last_frame():
+		return
 	
 	var camera_pos = basis_override * camera.global_position
 	context.device.buffer_update(descriptors['uniforms'].rid, 0, 8*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3]))
@@ -249,6 +352,20 @@ func rasterize() -> void:
 	context.compute_list_end()
 	context.device.capture_timestamp('Render')
 
+	_rendered_once = true
+	_last_size = texture_size
+
+
+## 这一帧的输入和「上一次真正算过的那一帧」完全一样 ⇒ 输出逐像素相同 ⇒ 直接复用。
+func _can_reuse_last_frame() -> bool:
+	if not idle_skip or not _rendered_once or _camera_changed:
+		return false
+	if Time.get_ticks_msec() < intro_end_ms:
+		return false
+	if _last_size != texture_size:
+		return false
+	return true
+
 func get_splat_position(screen_position : Vector2i) -> Vector3:
 	var tile : Vector2i = screen_position * render_scale[0] / TILE_SIZE
 	var tile_id = tile.y*tile_dims.x + tile.x
@@ -281,5 +398,7 @@ func update_camera_matrices() -> bool:
 			proj.y[0], proj.y[1], proj.y[2], 0.0,
 			proj.z[0], proj.z[1], proj.z[2],-1.0,
 			proj.w[0], proj.w[1], proj.w[2], 0.0 ])
+		_camera_changed = true
 		return true
+	_camera_changed = false
 	return false

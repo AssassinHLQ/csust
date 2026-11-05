@@ -43,6 +43,10 @@ enabled=PackedStringArray("res://addons/gdgs/plugin.cfg")
 [gdgs]
 
 rendering/backend="Compute"
+; 静止帧复用：相机 / 视口 / 入场动画都没变的那一帧，直接把上一帧的泼溅纹理交回去
+; （精确等价，依据见 addons/gdgs/runtime/render/compute/gaussian_renderer.gd 顶部）。
+; 关掉做对照：godot ... -- --gdgs-idle-skip=off
+rendering/idle_skip=true
 
 [input]
 

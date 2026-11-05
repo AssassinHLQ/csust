@@ -48,8 +48,28 @@ var _lights: Array = []
 var _frames_since_scan := RESCAN_INTERVAL_FRAMES
 var _warned_overflow := false
 
+## ── 光照变化的判定容差（2026-11-05）──
+##
+## 为什么需要：`TimeOfDay` 默认 `day_minutes = 20`（现实 20 分钟 = 游戏内一天），
+## 太阳**每一帧都在动**，于是 `_pack()` 出来的浮点每帧都差一点点。
+## 逐字节比较 ⇒ 每帧都判「变了」⇒ 每帧上传 relight ⇒
+## `gaussian_renderer.gd` 的「静止帧复用」永远进不去（实测就是这么被吃掉的：
+## 相机一动不动，画室609 仍然每帧烧 8 ms）。
+##
+## 改成**带容差的比较**：只有变化超过一个容差步才认「变了」。
+## 1e-3 对应：光向 ≈ 0.057°、颜色/能量 ≈ 0.1%、位置 1 mm。
+## 太阳角速度 0.3°/s，所以大约每 0.19 s 过一次 —— 泼溅的光照按这个节奏更新，
+## 3D 物体仍然是每帧。两者最多差 0.06° 的光向，肉眼分辨不出来。
+## 想回到「逐字节精确比较」：`-- --gdgs-relight-eps=0`
+var relight_epsilon := 1e-3
+
 
 func _init() -> void:
+	relight_epsilon = maxf(0.0, float(ProjectSettings.get_setting(
+		"gdgs/rendering/relight_epsilon", 1e-3)))
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--gdgs-relight-eps="):
+			relight_epsilon = maxf(0.0, float(a.substr(19)))
 	_reset_arrays()
 
 
@@ -80,8 +100,10 @@ func update(context: Node) -> bool:
 		_pack(light, count, next_vectors, next_colors, next_params, next_spots)
 		count += 1
 
-	if (count == light_count and next_vectors == vectors and next_colors == colors
-			and next_params == params and next_spots == spot_directions):
+	if (count == light_count and _near_vectors(next_vectors, vectors)
+			and _near_colors(next_colors, colors)
+			and _near_colors(next_params, params)
+			and _near_vectors(next_spots, spot_directions)):
 		return false
 	light_count = count
 	vectors = next_vectors
@@ -137,6 +159,40 @@ func to_packed_floats() -> PackedFloat32Array:
 		out[base + 13] = spot.y
 		out[base + 14] = spot.z
 	return out
+
+
+## 带容差的相等判定（见 `relight_epsilon` 的说明）。`relight_epsilon == 0` 时
+## 退化成逐字节精确比较。
+func _near_vectors(a: PackedVector3Array, b: PackedVector3Array) -> bool:
+	if relight_epsilon <= 0.0:
+		return a == b
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if absf(a[i].x - b[i].x) > relight_epsilon:
+			return false
+		if absf(a[i].y - b[i].y) > relight_epsilon:
+			return false
+		if absf(a[i].z - b[i].z) > relight_epsilon:
+			return false
+	return true
+
+
+func _near_colors(a: PackedColorArray, b: PackedColorArray) -> bool:
+	if relight_epsilon <= 0.0:
+		return a == b
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if absf(a[i].r - b[i].r) > relight_epsilon:
+			return false
+		if absf(a[i].g - b[i].g) > relight_epsilon:
+			return false
+		if absf(a[i].b - b[i].b) > relight_epsilon:
+			return false
+		if absf(a[i].a - b[i].a) > relight_epsilon:
+			return false
+	return true
 
 
 func _pack(

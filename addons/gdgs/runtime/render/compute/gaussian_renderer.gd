@@ -6,6 +6,35 @@ const RenderingDeviceContext := preload("res://addons/gdgs/runtime/render/comput
 const RADIX := 256
 const MAX_SORT_ELEMENTS_PER_SPLAT := 10
 
+## ── 静止帧复用（2026-11-05，用户反馈「好卡」）──
+##
+## 实测（2800×1171、0.5 缩放、RTX 4060 Laptop）：画室609 把每帧从 5.06 ms 推到
+## 13.05 ms —— **泼溅一个人吃掉 8 ms / 占 61%**。而用户静止看画面时（读对话、
+## 站定观察）这些钱是白花的：相机一个字都没动，重算投影 + 基数排序 + raster
+## 得到的图和上一帧**逐像素相同**。
+##
+## 为什么可以「直接交回上一帧的纹理」而不是只跳一部分：
+##   · `gsplat_render.glsl` 对 tile 内**每个像素**都 `imageStore`（颜色 + 深度），
+##     所以 render_texture 是**全量重写**的，不存在「上一帧残留」；
+##   · 唯一的非相机输入是 `uniforms.w = time`，而它只喂给
+##     `gsplat_projection.glsl` 的入场动画（`time - splat.time` → ease_out_cubic
+##     在 1.35 s 之后恒为 1）。等它落定就不再影响结果。
+##
+## 所以判据是**精确等价**，不是「近似」：
+##   相机视图矩阵 / 投影 / 世界坐标 / 视口尺寸 / depth_capture_alpha 全等
+##   且这一帧没有任何数据上传（splat / instance / relight）且入场动画已落定。
+##
+## ⚠️ 「入场动画已落定」的时刻由**数据里 `time` 字段的 max** 决定
+##    （`gaussian_gpu_state_cache.gd::_intro_end_ms()`），不是拍一个固定秒数：
+##    拍短了会把动画冻在半透明状态，那是看得出来的 bug。
+## 关掉对照：`-- --gdgs-idle-skip=off`
+var _idle_skip := true
+var _idle_skip_read := false
+## ⚠️ **只用于测量**：跳过 4 遍基数排序，把「排序」这一段从整帧里摘出来量。
+## 画面是错的（`sort_values` 还是上一帧的排列，和新的 `culled_splats` 对不上），
+## 所以它只能用来读时间，不能拿来出图。开法：`-- --gdgs-skip-sort`
+var _skip_sort_debug := false
+
 func render_for_compositor(
 	state_cache: GaussianGpuStateCache,
 	scene_registry: GaussianSceneRegistry,
@@ -15,6 +44,7 @@ func render_for_compositor(
 	camera_world_position: Vector3,
 	depth_capture_alpha: float = 0.5
 ) -> Dictionary:
+	_read_idle_skip_setting()
 	state_cache.flush_pending_cleanup()
 
 	if not scene_registry.has_gpu_data():
@@ -36,26 +66,75 @@ func render_for_compositor(
 	if state.context == null:
 		return {}
 
+	var uploaded := false
 	if state.needs_splat_upload:
 		state_cache.upload_splats(state, scene_registry.get_point_data_byte(), scene_registry.get_splat_instance_ids_byte())
 		state_cache.upload_splat_lighting(state, scene_registry.get_splat_lighting_byte())
+		uploaded = true
 	if state.needs_instance_upload:
 		state_cache.upload_instance_transforms(state, scene_registry.get_instance_transforms_byte())
+		uploaded = true
 	if state.needs_relight_upload:
 		state_cache.upload_relight(
 			state, scene_registry.get_light_rig_byte(), scene_registry.get_instance_relight_byte()
 		)
+		uploaded = true
 
 	if state.camera_push_constants.is_empty():
 		return {}
 
+	if _can_reuse_last_frame(state, safe_size, uploaded):
+		return _result(state)
+
 	_rasterize_state(state, point_count, scene_registry.get_light_count())
+
+	state.rendered_once = true
+	if state.first_render_ms == 0:
+		state.first_render_ms = Time.get_ticks_msec()
+	state.last_view = state.camera_view
+	state.last_projection = state.camera_projection
+	state.last_world_position = state.camera_world_position
+	state.last_depth_alpha = state.depth_capture_alpha
+	state.last_texture_size = safe_size
+	return _result(state)
+
+
+## 这一帧的输入和「上一次真正算过的那一帧」完全一样 ⇒ 输出逐像素相同 ⇒ 直接复用。
+func _can_reuse_last_frame(state, size: Vector2i, uploaded: bool) -> bool:
+	if not _idle_skip or not state.rendered_once or uploaded:
+		return false
+	if Time.get_ticks_msec() < state.intro_end_ms:
+		return false
+	if state.last_texture_size != size:
+		return false
+	if state.last_view != state.camera_view or state.last_projection != state.camera_projection:
+		return false
+	if state.last_world_position != state.camera_world_position:
+		return false
+	if not is_equal_approx(state.last_depth_alpha, state.depth_capture_alpha):
+		return false
+	return true
+
+
+func _result(state) -> Dictionary:
 	if state.descriptors.has("render_texture") and state.descriptors.has("depth_texture"):
 		return {
 			"color_alpha_texture": state.descriptors["render_texture"].rid,
 			"depth_texture": state.descriptors["depth_texture"].rid
 		}
 	return {}
+
+
+func _read_idle_skip_setting() -> void:
+	if _idle_skip_read:
+		return
+	_idle_skip_read = true
+	_idle_skip = bool(ProjectSettings.get_setting("gdgs/rendering/idle_skip", true))
+	for a in OS.get_cmdline_user_args():
+		if a == "--gdgs-idle-skip=off" or a == "--no-gdgs-idle-skip":
+			_idle_skip = false
+		elif a == "--gdgs-skip-sort":
+			_skip_sort_debug = true
 
 func _rasterize_state(state, point_count: int, light_count: int) -> void:
 	if state.context == null:
@@ -81,18 +160,19 @@ func _rasterize_state(state, point_count: int, light_count: int) -> void:
 	state.pipelines["gsplat_projection"].call(state.context, compute_list, state.camera_push_constants)
 	state.context.compute_list_end()
 
-	compute_list = state.context.compute_list_begin()
-	for radix_shift_pass in range(4):
-		var sort_push_constant := RenderingDeviceContext.create_push_constant([
-			radix_shift_pass,
-			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (radix_shift_pass % 2),
-			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (1 - (radix_shift_pass % 2)),
-			0
-		])
-		state.pipelines["radix_sort_upsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
-		state.pipelines["radix_sort_spine"].call(state.context, compute_list, sort_push_constant)
-		state.pipelines["radix_sort_downsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
-	state.context.compute_list_end()
+	if not _skip_sort_debug:
+		compute_list = state.context.compute_list_begin()
+		for radix_shift_pass in range(4):
+			var sort_push_constant := RenderingDeviceContext.create_push_constant([
+				radix_shift_pass,
+				point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (radix_shift_pass % 2),
+				point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (1 - (radix_shift_pass % 2)),
+				0
+			])
+			state.pipelines["radix_sort_upsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
+			state.pipelines["radix_sort_spine"].call(state.context, compute_list, sort_push_constant)
+			state.pipelines["radix_sort_downsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
+		state.context.compute_list_end()
 
 	compute_list = state.context.compute_list_begin()
 	state.pipelines["gsplat_boundaries"].call(state.context, compute_list, PackedByteArray(), [], state.descriptors["grid_dimensions"].rid, 3 * 4)

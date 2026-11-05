@@ -17,6 +17,8 @@ var cam: Camera3D
 var player: Node3D
 var quad: MeshInstance3D
 var tex := Texture2DRD.new()
+var _quad_mat: ShaderMaterial = null
+var _fine_ready := -1.0
 var panorama: Texture2D
 var _ready_done := false
 var _gdgs_sc: Node
@@ -47,8 +49,10 @@ var _bin_path := BIN
 ## 其余根本不进显存（97 块里只碰 9 块 ≈ 9%）。
 ##
 ## 光栅器只吃**一个** `bin_path`，所以窗口换的时候把 9 块**拼成一个临时 bin**
-## （`user://campus_window.bin`）再喂它 —— 不用改光栅器内部。
-## 代价是每次跨格要重写+重传约 100~300 MB（实测约 0.5 s），
+## （双缓冲 `user://campus_window_a.bin` / `_b.bin`，后台线程写）再喂它 ——
+## 不用改光栅器内部。
+## 代价是每次跨格要重写+重传约 100~280 MB。原来这一步在主线程同步做，
+## 实测最坏一帧 322~1258 ms；2026-11-05 改成后台线程 + 双缓冲，主线程不阻塞。
 ## 换来常驻显存从 2.9 GiB 降到约 0.3 GiB。
 ##
 ## 清单 `chunks.json` 由离线脚本生成（块名 → 世界中心 / bin 路径 / 字节数），
@@ -65,7 +69,10 @@ const WINDOW_SIDE := 3
 ## 实际使用的窗口边长，`--ggs-window=N` 可以临时改（量「多大才够看」用）。
 ## 3×3 ≈ 60×50 m，校园本体 ≈ 200×150 m —— 见 `_probe_campus_window_shot.gd` 的对照图。
 var window_side := WINDOW_SIDE
-const WINDOW_BIN := "user://campus_window.bin"
+## 双缓冲：换窗口时在**后台线程**把新窗口写进另一个文件，当前这份继续渲染。
+## 单文件做不到 —— 写的时候会把正在读的那份覆盖掉，画面会闪一下破烂数据。
+const WINDOW_BIN_A := "user://campus_window_a.bin"
+const WINDOW_BIN_B := "user://campus_window_b.bin"
 ## 多久重新评估一次窗口（秒）。每帧排 97 个块没必要。
 const WINDOW_POLL := 0.5
 
@@ -80,6 +87,22 @@ var _center_name := ""
 var hyst_m := 4.0
 ## `--ggs-bin=<path>`：探针直接指定一个 bin（关掉分块）。常驻方案对比用。
 var _bin_override := ""
+
+## ── 后台拼 bin（2026-11-05）──
+##
+## 原来 `_maybe_switch_window()` 在**主线程**同步拷 100~280 MB，实测最坏一帧
+## 322~1258 ms（用户感受就是「好卡」）。现在改成：
+##   · 主线程只把「块 → 路径/字节数」解析成 job 列表（微秒级）；
+##   · `Thread` 在后台把 job 拷进**另一个** slot 文件，当前窗口照常渲染；
+##   · 写完了下一次 poll 才切 `_bin_path` 并重建细层 —— 主线程一次都不阻塞。
+var _write_thread: Thread = null
+var _write_mutex := Mutex.new()
+var _write_done := false
+var _write_failed := false
+var _write_bytes := 0
+var _write_path := WINDOW_BIN_A
+var _pending_window := PackedStringArray()
+var _window_slot := 0
 
 ## ── 粗层常驻 + 细层叠加（2026-11-05）──
 ##
@@ -100,6 +123,9 @@ var _coarse_done := false
 var _coarse_total := 0
 ## `--ggs-no-coarse`：关掉粗层做对照（量它到底值不值那份显存/帧率）
 var _coarse_off := false
+## 静止帧复用（见 `gaussian_splatting_rasterizer.gd` 顶部）：相机没动的那一帧
+## 整条 compute 链直接不跑。`--ggs-idle-skip=off` 可关掉做对照。
+var _idle_skip := true
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -125,6 +151,9 @@ func _ready() -> void:
 		# 换一套分块清单（回退对照老那套 / 换回旧的 mini 尺度）
 		if a.begins_with("--ggs-chunks="):
 			chunks_json = a.substr(13)
+		# 关掉「静止帧复用」做对照（量它到底省了多少）
+		if a == "--ggs-idle-skip=off" or a == "--no-ggs-idle-skip":
+			_idle_skip = false
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
@@ -204,9 +233,22 @@ func _ready() -> void:
 	set_process(true)
 
 func _exit_tree() -> void:
+	_join_window_write()
 	_release_campus()
 	if _gdgs_sc != null and is_instance_valid(_gdgs_sc):
 		_gdgs_sc.set_process(true)
+
+
+## 退出 / 释放时把后台写线程收干净，否则换场景会漏一个线程。
+func _join_window_write() -> void:
+	if _write_thread == null:
+		return
+	_write_thread.wait_to_finish()
+	_write_thread = null
+	_write_mutex.lock()
+	_write_done = false
+	_write_mutex.unlock()
+	_pending_window = PackedStringArray()
 
 func _make_bundle() -> bool:
 	cam = get_viewport().get_camera_3d()
@@ -229,6 +271,7 @@ func _make_bundle() -> bool:
 	rasterizer = Rasterizer.new(ply, get_viewport().get_size(), tex, cam)
 	rasterizer.bin_path = _bin_path
 	rasterizer.model_scale[0] = 1.0
+	rasterizer.idle_skip = _idle_skip
 
 	# 粗层：和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换。
 	# 注意它必须是**独立的一份**（独立 bin_path / 独立纹理），否则换窗口时会被一起丢掉。
@@ -239,6 +282,7 @@ func _make_bundle() -> bool:
 		coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
 		coarse_rasterizer.bin_path = _coarse_path
 		coarse_rasterizer.model_scale[0] = 1.0
+		coarse_rasterizer.idle_skip = _idle_skip
 		var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
 		coarse_rasterizer.render_scale = [sc2]
 		coarse_rasterizer.texture_size = vs2
@@ -299,6 +343,12 @@ func _release_campus(keep_coarse := false) -> void:
 	_ready_done = false
 	if keep_coarse:
 		# 细层没了但粗层还在：_make_bundle() 要能只重建细层，所以这里不动 coarse_*。
+		# 但细层那张纹理的 RID 马上要被释放，而 quad 的 `render_texture` 槽位还指着它 ——
+		# 悬空绑定会在换窗口那一帧报 "Uniforms supplied for set"。
+		# 指到**粗层那张合法纹理**上：`fine_ready` 已经是 0（不采样它），只是不让绑定空着。
+		if tex != null and coarse_rasterizer != null \
+				and coarse_rasterizer.render_texture != null:
+			tex.texture_rd_rid = coarse_rasterizer.render_texture.texture_rd_rid
 		return
 	if coarse_rasterizer != null:
 		if coarse_rasterizer.load_thread != null and coarse_rasterizer.load_thread.is_started():
@@ -328,7 +378,9 @@ func _make_quad() -> void:
 	sm.set_shader_parameter("render_texture", tex)
 	sm.set_shader_parameter("coarse_texture", coarse_tex)
 	sm.set_shader_parameter("panorama", panorama)
+	sm.set_shader_parameter("fine_ready", 0.0)
 	quad.material_override = sm
+	_quad_mat = sm
 	add_child(quad)
 	quad.visible = false
 	print("[campus_ggs] %d 点，quad + 天空已就绪%s" % [
@@ -412,8 +464,16 @@ func _process(_dt: float) -> void:
 		if rasterizer.is_loaded:
 			_overlay.visible = false
 	# 任一层就绪就能画：换窗口时细层在重传，粗层顶着，不能把 quad 藏起来（那就是黑一下）。
-	var any_loaded: bool = (rasterizer != null and rasterizer.is_loaded) \
+	var fine_ok: bool = rasterizer != null and rasterizer.is_loaded
+	var any_loaded: bool = fine_ok \
 		or (coarse_rasterizer != null and coarse_rasterizer.is_loaded)
+	# 细层没就绪就**完全不采**它（`main_sky.gdshader` 的 `fine_ready`）：
+	# 分帧上传之后「细层没传完」会持续很多帧，不挡这一下就会采到未初始化的纹理。
+	if _quad_mat != null:
+		var want_fine := 1.0 if fine_ok else 0.0
+		if want_fine != _fine_ready:
+			_fine_ready = want_fine
+			_quad_mat.set_shader_parameter("fine_ready", want_fine)
 	_active = player != null and player.global_position.z < -74.0 and any_loaded
 	if quad != null:
 		quad.visible = _active
@@ -511,11 +571,13 @@ func _chunk_entry(nm: String) -> Dictionary:
 	return {}
 
 
-## 把选中的几块拼成一个临时 bin。
+## 主线程**同步**把选中的几块拼成一个 bin。
+## ⚠️ 现在只给探针用（`_probe_switch_hitch.gd` 拿它量「同步拷要多久」），
+##    正式路径走 `_start_window_write()` + 后台线程，不再阻塞主线程。
 func _write_window(names: PackedStringArray) -> int:
-	var f := FileAccess.open(WINDOW_BIN, FileAccess.WRITE)
+	var f := FileAccess.open(WINDOW_BIN_A, FileAccess.WRITE)
 	if f == null:
-		push_error("[campus_ggs] 写不了 %s" % WINDOW_BIN)
+		push_error("[campus_ggs] 写不了 %s" % WINDOW_BIN_A)
 		return 0
 	var written := 0
 	for nm in names:
@@ -541,9 +603,100 @@ func _write_window(names: PackedStringArray) -> int:
 	return written
 
 
-## 每 WINDOW_POLL 秒评估一次。窗口变了就重拼 bin + 重建光栅器。
+## 后台线程：把 job 列表里的分块按字节拷进目标 bin。
+## ⚠️ 这里**只做文件 I/O**：`_chunk_list` / `_chunk_entry()` 这些主线程数据结构一概不碰
+##    （跨线程读不安全），路径与字节数都在主线程先解析好塞进 job。
+## ⚠️ 也不在这里 `push_warning`：那会从 worker 线程写主线程的日志，会炸。
+func _write_worker(jobs: Array, path: String) -> void:
+	var written := 0
+	var failed := false
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		failed = true
+	else:
+		for j in jobs:
+			var src := FileAccess.open(String(j["path"]), FileAccess.READ)
+			if src == null:
+				failed = true
+				continue
+			var left := int(j["bytes"])
+			while left > 0:
+				var n := mini(4 * 1024 * 1024, left)
+				var buf := src.get_buffer(n)
+				if buf.size() != n:
+					failed = true
+					break
+				f.store_buffer(buf)
+				left -= n
+				written += n
+			src.close()
+		f.close()
+	_write_mutex.lock()
+	_write_bytes = written
+	_write_failed = failed
+	_write_done = true
+	_write_mutex.unlock()
+
+
+## 主线程：把窗口解析成 job 列表并起线程。返回 false = 这一轮放弃（下一 poll 再试）。
+func _start_window_write(names: PackedStringArray) -> bool:
+	var jobs: Array = []
+	for nm in names:
+		var e := _chunk_entry(nm)
+		if e.is_empty():
+			continue
+		jobs.append({"path": "res://" + String(e["bin"]), "bytes": int(e["bytes"])})
+	if jobs.is_empty():
+		return false
+	_write_path = WINDOW_BIN_B if _window_slot == 0 else WINDOW_BIN_A
+	_write_mutex.lock()
+	_write_bytes = 0
+	_write_failed = false
+	_write_done = false
+	_write_mutex.unlock()
+	_pending_window = names
+	_write_thread = Thread.new()
+	_write_thread.start(_write_worker.bind(jobs, _write_path))
+	return true
+
+
+## 后台写完了吗？写完了就切 `_bin_path` 并让下一帧重建细层。
+func _poll_window_write() -> void:
+	if _write_thread == null:
+		return
+	if not _write_done:
+		return
+	_write_thread.wait_to_finish()
+	_write_thread = null
+	var names := _pending_window
+	_write_mutex.lock()
+	var bytes := _write_bytes
+	var failed := _write_failed
+	_write_mutex.unlock()
+	_pending_window = PackedStringArray()
+	if failed or names.is_empty() or bytes <= 0:
+		push_warning("[campus_ggs] 后台拼 bin 失败，这一轮窗口不换")
+		return
+	_window_names = names
+	_bin_path = _write_path
+	_window_slot = 1 - _window_slot
+	# 重建细层：先放掉旧的 RID，再让 _process 里的 `_make_bundle()` 重来。
+	# ⚠️ 必须 keep_coarse —— 粗层是全校园的底，换窗口时它留在显存里，
+	#    这样细层重传的这段时间画面由粗层顶着，不会空。
+	_release_campus(true)
+	_released = false
+	print("[campus_ggs] 窗口切换 → %d 块 / %.0f MB（后台拼好，主线程没停）" % [
+		names.size(), float(bytes) / 1048576.0])
+
+
+## 每 WINDOW_POLL 秒评估一次。窗口变了就**在后台**重拼 bin，拼好再重建细层。
 func _maybe_switch_window(dt: float) -> void:
 	if not _use_chunks:
+		return
+	# 上一次的后台写还没落地：这一帧什么都不做，也**不重新选窗口**
+	# （重新选会推进 `_center_name`，白翻一次）。
+	if _write_thread != null:
+		_poll_window_write()
 		return
 	_window_timer += dt
 	var first := _window_names.is_empty()
@@ -553,18 +706,4 @@ func _maybe_switch_window(dt: float) -> void:
 	var want := _pick_window()
 	if want.is_empty() or want == _window_names:
 		return
-
-	var t0 := Time.get_ticks_msec()
-	var bytes := _write_window(want)
-	if bytes <= 0:
-		return
-	_window_names = want
-	_bin_path = WINDOW_BIN
-	# 重建细层：先放掉旧的 RID，再让 _process 里的 `_make_bundle()` 重来。
-	# ⚠️ 必须 keep_coarse —— 粗层是全校园的底，换窗口时它留在显存里，
-	#    这样细层重传的这段时间画面由粗层顶着，不会空。
-	_release_campus(true)
-	_released = false
-	print("[campus_ggs] 窗口切换 → %d 块 / %.0f MB（拼 bin %.2f s）" % [
-		want.size(), float(bytes) / 1048576.0,
-		float(Time.get_ticks_msec() - t0) / 1000.0])
+	_start_window_write(want)
