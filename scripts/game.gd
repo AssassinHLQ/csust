@@ -411,6 +411,14 @@ func _apply_render() -> void:
 		(n as Camera3D).far = maxf(rd, 1.0)
 	if _rd != null:
 		_rd.refresh()
+	# ⑧ 全局 LOD 阈值（`Viewport.mesh_lod_threshold`，单位：像素）。
+	#    物体在屏幕上的投影高度小于这个值 → 切到下一级 LOD。
+	#    ↑ 调大 = 更早切低模 = 省性能 / 远处更糊；↓ 调小 = 更晚切 = 画质好 / 更耗。
+	#    落地逻辑统一在 `GameSettings.apply_lod_threshold()`（校园场景也从那里走）。
+	#    ⚠️ 只对 `meshes/generate_lods=true` 的模型有效：全项目 39 个 glb 里 38 个开着，
+	#       只有 `Arisu.glb` 关着（那个模型不受本滑块影响）。
+	var lod_px := GameSettings.apply_lod_threshold()
+	print("[Game] LOD 阈值 %.1f px（投影高度小于它切低模；越大越省性能）" % lod_px)
 	# 打一行：GPU 占用直接跟这些数走，排查「怎么突然很烫」时先看它
 	print("[Game] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  阴影 %s  渲染距离 %d m  "
 		% [target, _auto_scale,

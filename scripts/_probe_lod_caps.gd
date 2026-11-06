@@ -1,54 +1,41 @@
 extends SceneTree
-## 只读探针：查这台 Godot 4.7.1 **本体**到底带了哪些 LOD 能力（不查文档，问引擎）。
-##   godot --headless --path . --script res://scripts/_probe_lod_caps.gd
+## 查「全局 LOD 距离」这条路在 4.7 里有哪些可用接口。
+##
+## ⚠️ `Viewport` 是抽象类，不能 `Viewport.new()`（第一次就这么写，解析报错）。
+##    改用 `root`（SceneTree.root 就是根 Window，本身是 Viewport）。
+##
+## 用法：_tools/run_probe.sh res://scripts/_probe_lod_caps.gd
 
 func _initialize() -> void:
-	_run.call_deferred()
+	print("[lod] ── 根 Viewport 上跟 LOD 有关的属性 ──")
+	var found := 0
+	for p in root.get_property_list():
+		var nm := String(p.get("name", ""))
+		if nm.contains("lod"):
+			found += 1
+			print("[lod]   Viewport.%s  type=%d  hint=%s" % [
+				nm, int(p.get("type", 0)), str(p.get("hint_string", ""))])
+	if found == 0:
+		print("[lod]   （没有）")
+	print("[lod]   当前 mesh_lod_threshold = %s" % str(root.mesh_lod_threshold))
 
-func _run() -> void:
-	# ① 项目设置里所有带 lod 的项 + 默认值
-	var keys := PackedStringArray()
-	for k in ProjectSettings.get_property_list():
-		var name := String(k.get("name", ""))
-		if name.to_lower().contains("lod"):
-			keys.append(name)
-	keys.sort()
-	print("[lod] ProjectSettings 里含 lod 的项 %d 个：" % keys.size())
-	for k in keys:
-		print("[lod]   %-52s = %s" % [k, str(ProjectSettings.get_setting(k))])
+	print("[lod] ── ProjectSettings 里的 mesh_lod 项 ──")
+	for p in ProjectSettings.get_property_list():
+		var nm := String(p.get("name", ""))
+		if nm.contains("mesh_lod"):
+			print("[lod]   %s = %s（默认 %s）" % [
+				nm, str(ProjectSettings.get_setting(nm)),
+				str(ProjectSettings.property_get_revert(nm))])
 
-	# ② 关键属性/方法存不存在
-	var checks := [
-		["Viewport", "mesh_lod_threshold", "prop"],
-		["GeometryInstance3D", "lod_bias", "prop"],
-		["GeometryInstance3D", "visibility_range_begin", "prop"],
-		["GeometryInstance3D", "visibility_range_end", "prop"],
-		["GeometryInstance3D", "visibility_range_fade_mode", "prop"],
-		["ImporterMesh", "generate_lods", "method"],
-		["ImporterMesh", "get_mesh", "method"],
-		["Mesh", "get_lod_count", "method"],
-		["MeshInstance3D", "get_lod_bias", "method"],
-	]
-	for c in checks:
-		var cls := String(c[0])
-		var what := String(c[1])
-		var ok := false
-		if String(c[2]) == "prop":
-			for p in ClassDB.class_get_property_list(cls):
-				if String(p.get("name", "")) == what:
-					ok = true
-					break
-		else:
-			ok = ClassDB.class_has_method(cls, what)
-		print("[lod] %-24s %-26s %s" % [cls, what, "有" if ok else "没有"])
+	print("[lod] ── GeometryInstance3D ──")
+	var mi := MeshInstance3D.new()
+	print("[lod]   lod_bias 默认 = %s" % str(mi.lod_bias))
+	print("[lod]   visibility_range_end 默认 = %s" % str(mi.visibility_range_end))
+	mi.free()
 
-	# ③ 现在这棵具体的树里，有多少网格能吃到 LOD
-	print("[lod] Mesh 类可用方法里含 lod 的：%s"
-		% str(ClassDB.class_get_method_list("Mesh").filter(
-			func(m: Dictionary) -> bool: return String(m.get("name", "")).contains("lod")
-		).map(func(m: Dictionary) -> String: return String(m.get("name")))))
-	print("[lod] ArrayMesh 里含 lod 的方法：%s"
-		% str(ClassDB.class_get_method_list("ArrayMesh").filter(
-			func(m: Dictionary) -> bool: return String(m.get("name", "")).contains("lod")
-		).map(func(m: Dictionary) -> String: return String(m.get("name")))))
-	quit(0)
+	print("[lod] ── 运行时改不动？试一下赋值能否立刻回读 ──")
+	var before := root.mesh_lod_threshold
+	root.mesh_lod_threshold = 2.5
+	print("[lod]   设 2.5 后回读 = %s（原 %s）" % [str(root.mesh_lod_threshold), str(before)])
+	root.mesh_lod_threshold = before
+	quit()

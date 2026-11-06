@@ -66,6 +66,9 @@ func _ready() -> void:
 	_build()
 	_root.visible = false
 	GameSettings.listen(_on_setting_changed)
+	# 全局 LOD 阈值要**开局就落地**：`_on_setting_changed` 只在改动时触发，
+	# 不改的话校园场景里永远是引擎默认 1.0。放在这里是因为本菜单两个场景都有。
+	GameSettings.apply_lod_threshold()
 	print("[SettingsMenu] 皮肤 = %s（%s）" % [_skin["label"], _skin["dir"]])
 
 
@@ -631,6 +634,9 @@ func _build_credits() -> void:
 ##    普通 setter 会再发一次 value_changed → set_value → changed → 回到这里，
 ##    变成回环（值相同所以不会死循环，但会白写盘好几次）。
 func _on_setting_changed(key: String, _value: Variant) -> void:
+	# 全局 LOD 阈值不是本菜单某一行的控件状态，而是引擎参数，改动后立刻落地
+	if key == "lod_threshold_px":
+		GameSettings.apply_lod_threshold()
 	if not _rows.has(key):
 		return
 	var row: Dictionary = _rows[key]

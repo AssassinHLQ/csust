@@ -52,6 +52,18 @@ const DEFAULTS := {
 	# 界面上的滑块是**连续**的（1 m 一格，肉眼看就是无极），但生效值**按 100 m 分段**
 	# （100 / 200 / … / 1000），取整只发生在 `render_distance()` 一处。
 	"render_distance": 300.0,
+	# ── 全局 LOD 距离（2026-11-06）──
+	# 用户：「由于会加入大量资产，现在设置需要可以主动调节 lod 全局距离」。
+	#
+	# 走 `Viewport.mesh_lod_threshold`（实测 4.7 有这个属性、运行时能改并立即回读），
+	# 单位是**像素**：物体在屏幕上投影高度小于这个值就切到下一级 LOD。
+	#   ↑ 调大 = 更早切低模 = 省性能、远处糊
+	#   ↓ 调小 = 更晚切低模 = 画质好、耗性能
+	# 引擎默认 1.0（`rendering/mesh_lod/lod_change/threshold_pixels`）。
+	#
+	# ⚠️ 只对有 LOD 的模型有效。全项目 39 个 glb 里 38 个是 `meshes/generate_lods=true`，
+	#    只有 `Arisu.glb` 关着 —— 那个模型不受这个滑块影响。
+	"lod_threshold_px": 1.0,
 	# ── 一天有多长（时间系统，2026-11-04）──
 	# 游戏内 1 天 = 现实多少分钟。**0 = 时间不流动**（太阳钉在 8:00）。
 	# `scripts/time_of_day.gd` 每帧读这个值，滑完立刻生效，不用重启。
@@ -101,6 +113,10 @@ const RANGES := {
 	# 渲染距离：滑块 100~1000 m，步长 1 m（**故意不设成 100** —— 那会变成
 	# 「只能停在 10 个刻度上」，用户要的是「能滑到任意一处，数字跳档」）
 	"render_distance": [RD_MIN, RD_MAX, 1.0],
+	# 全局 LOD 阈值（像素高度）。1 = 引擎默认。
+	# 0 会让所有 LOD 立刻切到最低级（等于关掉 LOD），所以下限给 0.1；
+	# 上限 8 —— 再大就什么都变糊了。
+	"lod_threshold_px": [0.1, 8.0, 0.1],
 	# 一天长度：0（不变）~ 120 分钟，1 分钟一格
 	"day_minutes": [0.0, 120.0, 1.0],
 	# ── 准星（单位：物理像素）──
@@ -157,6 +173,7 @@ const LABELS := {
 	"ssr": "屏幕空间反射 SSR",
 	"fog": "雾",
 	"render_distance": "渲染距离",
+	"lod_threshold_px": "LOD 切换阈值 (px，越大越省性能)",
 	"day_minutes": "一天长度 (分钟，0=不变)",
 	"window_mode": "窗口模式",
 	"splat_unload_outside": "出画室609 就释放泼溅显存（进 609 需重新加载）",
@@ -173,7 +190,7 @@ const LABELS := {
 ## 「画面」分组：设置界面在这些键之前插一个小标题
 const RENDER_KEYS := ["resolution_scale", "fps_limit", "vsync", "aa_mode",
 	"shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance",
-	"day_minutes", "window_mode", "splat_unload_outside"]
+	"lod_threshold_px", "day_minutes", "window_mode", "splat_unload_outside"]
 
 ## 「准星」分组：同上，第一个键之前插小标题「准星」。
 ## ⚠️ 顺序就是设置界面里的顺序，DEFAULTS 里也按这个顺序排过一遍 —— 两处别走散。
@@ -296,6 +313,12 @@ static func value_text(key: String, v: Variant) -> String:
 			# 显示的是**生效值**（分段后的），不是滑块的连续位置 —— 否则用户会看到
 			# 「437 m」却感觉不到任何变化（100 m 一档，437 和 400 是同一个东西）。
 			return "%d m" % int(round(snappedf(clampf(float(v), RD_MIN, RD_MAX), RD_STEP)))
+		"lod_threshold_px":
+			# 1.0 是引擎默认，标出来；其余直接给数值，好对照
+			var t := float(v)
+			if is_equal_approx(t, 1.0):
+				return "%.1f px（默认）" % t
+			return "%.1f px" % t
 		"crosshair_dot_px", "crosshair_thick_px", "crosshair_arm_px":
 			return "%d px" % int(round(float(v)))
 		"crosshair_dot_alpha", "crosshair_arm_alpha":
@@ -314,6 +337,23 @@ static func value_text(key: String, v: Variant) -> String:
 ## HUD/日志、界面右侧的数字，四者必须同一个数，否则会出现「写着 400、实际 437」。
 static func render_distance() -> float:
 	return snappedf(clampf(float(value("render_distance")), RD_MIN, RD_MAX), RD_STEP)
+
+
+## 把「全局 LOD 阈值」应用到当前视口（`Viewport.mesh_lod_threshold`）。
+##
+## 为什么放在 GameSettings 里：`settings_menu.gd` 在 `game.tscn` 和 `next_level.tscn`
+## **两个场景里都有**，从它那里统一落地就能一次覆盖全部场景；
+## 而 `next_level.gd` 根本不碰任何画面设置（原来那些画面滑块在校园里其实没生效）。
+##
+## 语义：物体在屏幕上的投影高度小于这个像素值 → 切下一级 LOD。
+## 返回实际写入的值（钳到 0.1~8.0，和 `RANGES` 一致）。
+static func apply_lod_threshold() -> float:
+	var px := clampf(float(value("lod_threshold_px")), 0.1, 8.0)
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null and tree.root != null:
+		if not is_equal_approx(tree.root.mesh_lod_threshold, px):
+			tree.root.mesh_lod_threshold = px
+	return px
 
 
 static func label(key: String) -> String:
