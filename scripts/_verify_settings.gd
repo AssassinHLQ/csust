@@ -175,10 +175,19 @@ func _run() -> void:
 	await _wait(2)
 	var all_default := true
 	for key in GameSettings.DEFAULTS.keys():
-		if GameSettings.value(key) != GameSettings.DEFAULTS[key]:
+		var cur: Variant = GameSettings.value(key)
+		var want: Variant = GameSettings.DEFAULTS[key]
+		# ⚠️ 浮点**不能**用 `!=` 比：`set_value()` 里的 `snappedf()` 会引入 1 ulp 误差
+		#    —— 实测 `crosshair_dot_alpha` 被存成 0.9500000000000001，打印出来和默认值
+		#    一模一样却判不等，于是这条断言**永远假红**（2026-11-06 查出来的）。
+		var same: bool
+		if cur is float and want is float:
+			same = is_equal_approx(float(cur), float(want))
+		else:
+			same = cur == want
+		if not same:
 			all_default = false
-			print("      %s = %s（期望 %s）" % [
-				key, str(GameSettings.value(key)), str(GameSettings.DEFAULTS[key])])
+			print("      %s = %s（期望 %s）" % [key, str(cur), str(want)])
 	_check(all_default, "所有项回到默认值")
 	_check(absf(player.mouse_sensitivity
 			- float(GameSettings.DEFAULTS["mouse_sensitivity"])) < 0.0001,

@@ -1235,3 +1235,134 @@ include_filter="campus_ggs_q4.bin,splatdata/campus_chunks10w/*,splatdata/room609
 2. 打包体积还想再降只能动数据：`campus_chunks10w` 614 万点 × 240 B/点 = 1.4 GB，
    降采样（有 `_tools/decimate_ggs_bin.py` / `voxel_thin_ggs_bin.py`）或换压缩格式。**用户要求不降采样，暂不动。**
 3. 校园 10×10 的观感（细层与粗层/地面网格是否对齐）仍未在窗口里看过。
+
+## §23 画面设置补到校园场景、全项目三角面排行榜、布料模拟的判断（2026-11-06）
+
+### 一、为什么校园场景原来不吃画面设置
+
+用户：「next_level.gd（校园场景）完全不碰任何画面设置 是为什么,需要同步画面设置」。
+
+实测确实如此：`scripts/next_level.gd` 里 `GameSettings` / `render_` / `shadow` / `msaa` /
+`lod` / `_apply` **一个都不匹配**。而 `scenes/next_level.tscn` **是有 `SettingsMenu` 的**
+—— 于是在校园里打开设置、拖「3D 渲染缩放 / 帧率上限 / 垂直同步 / 抗锯齿 / 阴影质量 /
+SSAO / 辉光 / SSR / 雾 / 渲染距离 / 窗口模式」，界面数字会变、也会落盘，**画面完全不动**。
+
+为什么漏：那段逻辑当初埋在 `game.gd::_apply_render()` 里，因为它顺手要摸主场景的
+`_auto_scale`、代码里 `RenderDistance.new()` 建出来的节点、每盏灯的 `shadow_enabled`
+原始值。新场景没有这些，就没人去搬。
+
+**其实已经两边都生效的**（各自系统自己 `listen`，不是这组的）：`player.gd`（灵敏度 / FOV）、
+`hud.gd`（准星）、`splat_scene.gd`（泼溅显存）、`boss_attacker.gd`、`companion_gun.gd`。
+**只有「画面」这一组漏了。**
+
+### 二、修法：落地逻辑抽成 `scripts/render_env.gd`
+
+`class_name RenderEnv extends RefCounted`，全静态：
+
+| 函数 | 作用 |
+|---|---|
+| `auto_scale_for(vp_size) -> float` | 纯函数，窗口极大时算自动分辨率上限（面积比 < 0.16） |
+| `apply(node, auto_scale) -> Dictionary` | ① 3D 缩放 ② 帧率/垂直同步 ③ AA ④ 阴影 ⑤ SSAO/辉光/SSR/雾 ⑥ 窗口模式 ⑦ 渲染距离 → `Camera3D.far` + `RenderDistance.refresh()` ⑧ LOD 阈值；返回实际生效的 `{scale, auto, fps, rd, lod}` |
+
+两个场景各留一层薄壳（`_fit_render_scale` / `_apply_render` / `_on_setting_changed`），调的
+是同一个 `RenderEnv.apply()`。`game.gd` 里那 5 个私有函数（`_fps_limit` / `_apply_aa` /
+`_apply_shadows` / `_apply_window_mode` / `_restore_window_rect`）和 3 个实例变量
+（`_shadow_authored` / `_last_window_mode` / `_applying_window`）**整体删掉**、改为静态。
+`game.gd` 的 `DESIGN_VIEWPORT` / `RENDER_SCALE_AREA_RATIO_MIN` 两个常量留着只为对照，
+注释里标明「改这里不生效」。
+
+⚠️ `_shadow_authored` 改静态后必须处理「换场景」：`instance_id` 会被回收复用，把上一关的
+「这盏灯原本不投影」套到新场景的灯上是真 bug。所以 `apply()` 记 `_active_root_id`，一变就清表。
+
+⚠️ `next_level.tscn` **没有** `RenderDistance` 节点，`RenderEnv` 用 `get_node_or_null()` 取，
+取不到就只剩远裁剪面那一层保险。
+
+### 三、校园的远裁剪面：默认 300 m 是安全的（量过）
+
+97 个块的中心范围 x −83~116、z −236~−85，`root` 在 (0, 24.48, −155.56) → 校园半径约
+**150~180 m**。`player.tscn` 原本写死 `far = 500.0`，默认渲染距离 300 m 覆盖得住。
+但**滑块拖到 100 m 会真的切掉远处的楼** —— 那是这个旋钮本该有的语义。
+
+### 四、验收
+
+```
+_verify_next_level_render.gd（必须 --no-ggs-campus，否则要吃 1.4 GB 校园 GGS）
+  薄壳三方法 / WorldEnvironment / 1 台 Camera3D / 9 盏 Light3D
+  scaling 0.75、max_fps（设 144 → 步长 10 → 140）
+  MSAA 4×、TAA 且 MSAA 被关；阴影「关」全灭、「高」恢复原本状态
+  SSAO/辉光/SSR/雾 四开关；全部 Camera3D.far = 200；mesh_lod_threshold = 2.0
+  → 结果：PASS
+_verify_scene1_render.gd（--splat=off）
+  → 结果：PASS（主场景重构后没坏，RenderDistance 节点还认得出）
+```
+
+`_verify_settings.gd`（大套件）另有两红，**都是本来就有的**：
+
+- `关闭后鼠标重新被捕获` —— `--headless` 没有真窗口，`Input.mouse_mode` 永远进不了
+  `MOUSE_MODE_CAPTURED`。**环境性，不是 bug。**
+- `所有项回到默认值` —— 断言写错，不是产品错：`set_value()` 的 `snappedf()` 把
+  `crosshair_dot_alpha` 存成 `0.9500000000000001`，`!=` 一比就假红（打印出来是
+  「0.95（期望 0.95）」，看着一模一样）。已改成浮点走 `is_equal_approx()`。
+
+### 五、全项目三角面排行榜（实测）
+
+工具 `_tools/tri_rank.py`：纯 Python 读 GLB 的 JSON 块 + accessor count，**绕开 `.godot/`
+导入缓存**，不重导入、不改工程，只数 `mode == 4`（TRIANGLES）的图元。
+**33 个 glb、合计 6,525,931 三角面。**
+
+| # | 三角面 | 文件 | 备注 |
+|---:|---:|---|---|
+| 1 | 3,413,264 | `models/_wip_esports_hotel/esports_hotel_final.glb` | 电竞酒店，122 MB / 68 mesh / 83 材质 / 24 贴图；**没有任何场景引用** |
+| 2 | 1,787,204 | `models/_wip_hotel/hotel_782061.glb` | 爱给网原包，58 MB；**没有任何场景引用** |
+| 3 | 499,760 | `models/school.collision.glb` | 纯碰撞（0 材质 0 贴图） |
+| 4 | 310,236 | `models/boss/trex_yuuka_rigged.glb` | 霸王龙优香 |
+| 5 | 113,222 | `models/npc/sora/sora.glb` | |
+| 6 | 54,917 | `models/npc/sensei.glb` | 程序化掰了 514 个手臂顶点 |
+| 7 | 28,733 | `models/monitor/monitor.glb` | |
+| 8 | 26,571 | `models/Arisu_Battle.glb` | |
+| 9 | 26,251 | `models/Arisu_Battle_Carrier.glb` | |
+| 10 | 21,892 | `models/gamedev_room/gamedev_room.glb` | 与 `_wip_room/gamedev_room_smooth.glb` **面数一模一样**（重复资产） |
+
+角色全在 1~2 万面（11 位同伴 + 芹香 + 老师 共 22 个文件、合计约 20 万面），
+**百万级只有那两个酒店**。所以「9950X3D 是百万的」是记混了：`ryzen_9950x3d.glb` 只有
+**12,386** 面，它的 LOD 版 3,001 面。
+
+**新发现（重要）**：`models/_wip_*` 三个模型**有 `.import` 文件**，而导出预设是
+`export_filter="all_resources"` → **它们真的被打进包里了**。实测导入产物：
+
+| 模型 | 文件数 | 体积 |
+|---|---:|---:|
+| `esports_hotel_final` | 150（.scn + 24 张贴图转 .ctex） | **500.4 MB** |
+| `hotel_782061` | 4 | 58.3 MB |
+| `gamedev_room_smooth` | 54 | 3.8 MB |
+
+→ 合计 **≈562 MB 是「还没有任何场景在用」的死重**。
+验证方式：`--headless --export-release "Windows Desktop" --verbose` 的 `savepack` 日志逐条打印
+`保存文件：res://.godot/imported/esports_hotel_final.glb-….scn`。
+（`_tools/_pck_list.py` 对 4.7 的 PCK v4 解析不出来，`files=0`，**别拿它下结论**。）
+是「先把电竞酒店接进场景」还是「先把它排除出导出」—— **要用户拍板，本喵没动。**
+
+### 六、布料模拟：Godot 4.7 到底能做什么（实测）
+
+`_probe_cloth_caps.gd`（查 ClassDB，不凭记忆）：
+
+- `ClassDB.class_exists("Cloth")` → **false**。Godot 3 的 `Cloth` 节点在 4.x **已删除**。
+- `SoftBody3D` 存在，继承链 `SoftBody3D <- MeshInstance3D <- GeometryInstance3D <- …`。
+  可用旋钮：`total_mass` / `linear_stiffness` / `damping_coefficient` /
+  `pressure_coefficient` / `shrinking_factor` / `drag_coefficient` /
+  `simulation_precision`、`set_point_pinned()` / `is_point_pinned()`、碰撞层/掩码、
+  `parent_collision_ignore`。
+  **没有**：自碰撞、布料专用参数（摩擦/弯曲/撕裂）、按顶点分区给不同刚度。
+- `SkeletonModifier3D`、`PhysicalBoneSimulator3D` 都在 → 「骨架链当窗帘」这条路可行。
+
+`_probe_cloth_caps_perf.gd`（2×2 m 布、沿 z 钉一边、重力下垂）：
+12×12（196 点）/ 24×24（676 点）/ 48×48（2500 点）三档，扣掉空场景基线后约
+**+0.07 ~ 0.12 ms / 物理帧**，且**不随顶点数单调增长**（在噪声底噪里）——
+说明这个规模下软体本身不是瓶颈；三档都真的垂了约 **0.10 m**（分别钉住 14/26/50 点）。
+
+⚠️ 三个坑：
+1. 计时必须 `Engine.max_fps = 0` + `physics_ticks_per_second = 600`，否则
+   `await physics_frame` 一轮固定 16.67 ms，什么差别都测不出来（第一版三档全 16.6 ms）。
+2. `get_point_transform()` 返回 **Vector3**（点位置），不是 `Transform3D`。
+3. `PlaneMesh` 是**水平**面（顶点 y 全 0）。按「y 最大的那一排」钉边 = **全钉死**
+   （第一版出现「钉住 196 / 196」、布一动不动）。要沿 **z** 轴找边。

@@ -119,7 +119,75 @@ func _setup_sky() -> void:
 		% [key, tex.get_width(), tex.get_height()])
 
 
+## ── 画面设置（2026-11-06 补上的）────────────────────────────────────────────
+## 用户：「next_level.gd（校园场景）完全不碰任何画面设置 是为什么,需要同步画面设置」。
+##
+## 确实是这样：`game.gd` 有一整套 `_apply_render()`，而这里**一个画面关键词都没有**。
+## 后果是设置界面（本场景也有 `SettingsMenu`）里的「3D 渲染缩放 / 帧率上限 /
+## 垂直同步 / 抗锯齿 / 阴影质量 / SSAO / 辉光 / SSR / 雾 / 渲染距离 / 窗口模式」
+## 在校园里**全部失效** —— 界面照样改数字、照样落盘，就是画面不动。
+##
+## 现在真正的落地逻辑只有一份：`scripts/render_env.gd::RenderEnv.apply()`。
+## 两个场景各留一层薄壳（下面这三个函数），调的是同一个函数，
+## 所以再加新旋钮不会再出现「只加给一个场景」。
+##
+## ⚠️ 校园的远处全靠摄像机 `far` 兜着：97 个块的中心范围 x −83~116、z −236~−85，
+##    校园半径约 150~180 m，默认渲染距离 300 m 覆盖得住（`player.tscn` 原本写死
+##    `far = 500.0`）。**滑块拖到 100 m 就会真的切掉远处的楼** —— 那是这个旋钮
+##    本该有的语义。
+##
+## ⚠️ 本场景**没有** `RenderDistance` 节点（主场景是代码里 `RenderDistance.new()` 建的），
+##    `RenderEnv` 用 `get_node_or_null()` 取，取不到就跳过剔除那一层，只剩远裁剪面。
+var _auto_scale := 1.0
+
+
+## 窗口尺寸变了：重算「自动分辨率上限」，再落地一次。
+## ⚠️ 必须 `call_deferred()`：`window_set_mode()` 会**同步**再触发 `size_changed`，
+##    直接调就是无限递归（主场景踩过，5000+ 条错误 + 窗口疯狂重建）。
+func _fit_render_scale() -> void:
+	var vp := get_viewport()
+	var size := Vector2(vp.size)
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	_auto_scale = RenderEnv.auto_scale_for(size)
+	print("[ConstructivistLevel] 渲染尺寸 %s → 自动上限 %.3f" % [str(size), _auto_scale])
+	_apply_render.call_deferred()
+
+
+## 画面旋钮 → 实际渲染参数。逻辑全在 `RenderEnv.apply()`，这里只打日志。
+func _apply_render() -> void:
+	var r := RenderEnv.apply(self, _auto_scale)
+	if r.is_empty():
+		return
+	print("[ConstructivistLevel] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  "
+		% [float(r["scale"]), _auto_scale,
+			"垂直同步" if bool(GameSettings.value("vsync")) else "不开垂直同步",
+			"不限帧" if int(r["fps"]) <= 0 else "%d fps" % int(r["fps"]),
+			GameSettings.value_text("aa_mode", GameSettings.value("aa_mode"))]
+		+ "阴影 %s  渲染距离 %d m  LOD %.1f px  SSAO %s  辉光 %s  SSR %s  雾 %s"
+		% [GameSettings.value_text("shadow_quality", GameSettings.value("shadow_quality")),
+			int(r["rd"]), float(r["lod"]),
+			"开" if bool(GameSettings.value("ssao")) else "关",
+			"开" if bool(GameSettings.value("glow")) else "关",
+			"开" if bool(GameSettings.value("ssr")) else "关",
+			"开" if bool(GameSettings.value("fog")) else "关"])
+
+
+## 设置变了：画面相关的键统统走 `_apply_render`（其余设置由各自的系统自己 listen）。
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key in GameSettings.RENDER_KEYS:
+		_apply_render()
+
+
 func _ready() -> void:
+	# 画面设置：先接上视口尺寸信号与设置监听，再走一次落地（和主场景同一套，
+	# 真正的逻辑在 `scripts/render_env.gd`）。
+	var vp := get_viewport()
+	if not vp.size_changed.is_connected(_fit_render_scale):
+		vp.size_changed.connect(_fit_render_scale)
+	GameSettings.listen(_on_setting_changed)
+	_fit_render_scale()
+
 	var entry := SceneFlow.consume_entry()
 	var gate := SceneFlow.find_gate(self, String(entry.get("gate", "")))
 	var point: Vector3 = ($SpawnPoint as Node3D).global_position
