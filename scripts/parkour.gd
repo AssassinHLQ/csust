@@ -125,6 +125,24 @@ var _resume_pending := false
 const LABEL_NEAR_END := 6.0
 const LABEL_NEAR_MARGIN := 2.0
 
+## 画室 609 的房间盒子（实测值，来自游戏日志）：
+##   `[Game] 609 门内外切换：… 房间矩形 (10.71, 8.3, 20.64)，中心 (-0.5, 1.5, 3.54)`
+##
+## 为什么要它：`_probe_label_distance.gd` 量出来，跑酷起点那几个招牌离画室盒子只有
+## **5.6 / 7.1 / 9.1 m**（`跑酷 · 12 段 →`、`第 1 段 · 起点`、`跑酷准备区`、
+## `同伴在此待命`、`稳定基金…`），而跑酷整体包围盒的东缘 x=-6.0、
+## 画室西墙 x=-5.86 —— **两者只隔 0.1 m**。所以光靠距离门控永远挡不住：
+## 玩家站在房间里，那几个牌子就在「最附近」。
+## 加上这条区域门控后，**人在画室里 → 全部招牌隐藏**，出了门才启用。
+const ROOM_CENTER := Vector3(-0.5, 1.5, 3.54)
+const ROOM_HALF := Vector3(5.36, 4.15, 10.32)
+## 出了房间再多走一点才启用（避免站在门口时字突然糊一脸）
+const ROOM_EXIT_MARGIN := 1.5
+
+## 所有受门控的招牌（`_gate_world_labels()` 收集，`_update_label_visibility()` 开关）
+var _label_nodes: Array[Label3D] = []
+var _labels_on := true
+
 
 func _ready() -> void:
 	_build_route()
@@ -148,6 +166,7 @@ func _ready() -> void:
 ## 为什么放在 `_ready()` 末尾一次性扫：`parkour.tscn` 里有 64 个招牌，
 ## 逐个改 `.tscn` 容易漏、以后新加也会忘；扫一遍子树是唯一不漏的做法。
 func _gate_world_labels() -> void:
+	_label_nodes.clear()
 	var n := 0
 	for node in find_children("*", "Label3D", true, false):
 		var lab := node as Label3D
@@ -156,6 +175,10 @@ func _gate_world_labels() -> void:
 		lab.no_depth_test = false
 		lab.visibility_range_end = LABEL_NEAR_END
 		lab.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		# 立刻对齐当前开关状态：`_update_label_visibility()` 有「状态没变就早退」
+		# 的优化，新收集进来的牌子不会被它扫到（踩过一次：4 个动态牌一直亮着）。
+		lab.visible = _labels_on
+		_label_nodes.append(lab)
 		n += 1
 	for node in find_children("*", "Sprite3D", true, false):
 		var spr := node as Sprite3D
@@ -165,8 +188,39 @@ func _gate_world_labels() -> void:
 		spr.visibility_range_end = LABEL_NEAR_END
 		spr.visibility_range_end_margin = LABEL_NEAR_MARGIN
 		n += 1
-	print("[Parkour] 世界招牌 %d 个：限制在 %.0f m 内显示（余量 %.0f m），已关掉穿墙"
+	print("[Parkour] 世界招牌 %d 个：%.0f m 内显示（余量 %.0f），人在画室内全部隐藏"
 		% [n, LABEL_NEAR_END, LABEL_NEAR_MARGIN])
+	_update_label_visibility()
+
+
+## 玩家在画室 609 盒子里 → 招牌全关；出了房间（再多 1.5 m）→ 全开。
+## 每帧只做一次 AABB 判断，只有状态翻转时才真的去写 `visible`。
+func _update_label_visibility() -> void:
+	if _label_nodes.is_empty():
+		return
+	if _player == null:
+		_player = get_tree().get_first_node_in_group("player") as Player
+	if _player == null:
+		# `_ready()` 阶段玩家还没进场景。玩家本来就出生在画室里，
+		# 所以「先隐藏」才是安全默认 —— 否则开局会闪一下大字。
+		if _labels_on:
+			_labels_on = false
+			for lab in _label_nodes:
+				if is_instance_valid(lab):
+					lab.visible = false
+		return
+	var p := _player.global_position
+	var d := Vector3(
+		maxf(absf(p.x - ROOM_CENTER.x) - ROOM_HALF.x, 0.0),
+		maxf(absf(p.y - ROOM_CENTER.y) - ROOM_HALF.y, 0.0),
+		maxf(absf(p.z - ROOM_CENTER.z) - ROOM_HALF.z, 0.0))
+	var want := d.length() > ROOM_EXIT_MARGIN
+	if want == _labels_on:
+		return
+	_labels_on = want
+	for lab in _label_nodes:
+		if is_instance_valid(lab):
+			lab.visible = want
 
 
 ## 最后平台的掩体屋顶上放一块 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……
@@ -455,6 +509,8 @@ func _save_best() -> void:
 
 func _physics_process(_delta: float) -> void:
 	_portal_cooldown = maxf(0.0, _portal_cooldown - _delta)
+	# 招牌开关放在 `enabled` 判断**之前**：即使跑酷没启用，画室里也不该飘着大字
+	_update_label_visibility()
 	if not enabled:
 		return
 	if _player == null:
