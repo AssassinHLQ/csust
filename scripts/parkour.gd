@@ -50,6 +50,22 @@ const AVENGER_DROP := 200000
 const PORTAL_DEST := "Island/Props/Shed"
 ## 传送门送到的地方：屋里那台结算台会自动把资产 + 保证金转进这张卡
 const BankCard := preload("res://scripts/bank_card.gd")
+## 可骑乘火箭的控制器。用 `preload` 而不是全局类名 —— 探针在 `--script` 下
+## 解析不到 `class_name`（`RenderEnv` 那次栽过），这样最稳。
+const RocketRideScript := preload("res://scripts/rocket_ride.gd")
+
+## 去程：传送门相对跑道口的偏移。原代码就是往 +Z 挪 4.5 m ——
+## 离开跑道（z 2.5~5.5），又还在主平台上。
+const PORTAL_OFFSET := Vector3(0.0, 0.0, 4.5)
+## 去程火箭的**落点**（相对结算屋）。错开 5 m / 3 m，别把 21 m 高的箭体插进屋里。
+## 实测结算屋只是一面 4×2.3×0.2 的墙板（z = −15.1），人出舱点在它前 2.2 m。
+const ISLAND_LAND_OFFSET := Vector3(5.0, 0.0, 3.0)
+## 回程火箭的**停放点**（相对岛上传送台）。台面是 3×3、z −6~−3，
+## 往 −Z 挪 3 m 正好落在台子外侧，不压台面。
+const RETURN_PARK_OFFSET := Vector3(0.0, 0.0, -3.0)
+## 回程火箭的**落点**（相对跑道口）。和去程火箭的停放点错开 4 m，
+## 免得两枚 21 m 的火箭叠在同一个格子里。
+const HOME_LAND_OFFSET := Vector3(4.0, 0.0, 4.5)
 
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
@@ -675,11 +691,22 @@ func _on_return_pad_entered(body: Node3D) -> void:
 		_player = get_tree().get_first_node_in_group("player") as Player
 	if _player == null or body != _player:
 		return
-	_player.global_position = return_target
-	_player.velocity = Vector3.ZERO
-	reset_run()
+	if _riding:
+		# 正飞着呢：落地动画途中又踩一下触发盒，不许重复起飞
+		return
+	var rocket := _ensure_return_rocket()
+	if rocket == null:
+		# 兜底：火箭造不出来就退回原来的瞬移（没有回头路 = 死局，见上面那段注释）
+		_player.global_position = return_target
+		_player.velocity = Vector3.ZERO
+		reset_run()
+		Sfx.play("ui_toggle")
+		print("[Parkour] 传送台（火箭不可用，退回瞬移）→ 主平台 %s" % str(return_target))
+		return
+	_return_rocket = rocket
 	Sfx.play("ui_toggle")
-	print("[Parkour] 传送台 → 送回主平台 %s，检查点/计时清空" % str(return_target))
+	print("[Parkour] 传送台 → 坐火箭回主平台（人出舱 %s）" % str(return_target))
+	_start_ride(rocket, return_target, _player, "回程", true)
 
 
 ## 一个节点的世界包围盒：节点**自己**是网格就用它（跑道标记没有碰撞，只有网格），
@@ -798,6 +825,14 @@ func _spawn_settlement() -> void:
 var _trap_done := false
 ## 通关后立的传送门（见 _spawn_finish_portal）
 var _finish_portal: Node3D
+## 去程那枚火箭（和传送门一起生成，停在跑道口当载具兼地标）
+var _finish_rocket: Node3D
+## 回程那枚火箭（**懒生成**：第一次踩岛上传送台才造。省得没走到岛上的人白扛 116k 面）
+var _return_rocket: Node3D
+## 正在飞。防止降落动画途中又踩一次触发盒，重复起飞
+var _riding := false
+## 这次骑乘结束后要不要 `reset_run()`（回程要清检查点/计时，去程不要）
+var _ride_reset_after := false
 ## 上一次提示过的存档站（只在往前推进时弹一次，别每帧刷）
 var _saved_station := 0
 ## 结束平台（岛）的存档：用户 2026-11「结束平台也要算一个存档，不然别人复活到了
@@ -950,7 +985,7 @@ func _spawn_finish_portal() -> void:
 	door.name = "FinishPortal"
 	add_child(door)
 	# 跑道口往 +Z 挪 4.5 m：离开跑道（z 2.5~5.5），又还在主平台上
-	door.global_position = launch.global_position + Vector3(0.0, 0.0, 4.5)
+	door.global_position = launch.global_position + PORTAL_OFFSET
 
 	var frame := StandardMaterial3D.new()
 	frame.albedo_color = Color(0.05, 0.05, 0.06)
@@ -989,7 +1024,7 @@ func _spawn_finish_portal() -> void:
 	door.add_child(panel)
 
 	var label := Label3D.new()
-	label.text = "终点 · 结算屋"
+	label.text = "坐火箭 · 去结算屋"
 	label.font_size = 64
 	label.pixel_size = 0.008
 	label.modulate = Color(0.75, 0.92, 1.0, 1.0)
@@ -1010,24 +1045,90 @@ func _spawn_finish_portal() -> void:
 	door.add_child(area)
 
 	_finish_portal = door
-	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s）" % [
+	# 火箭和门立在同一格：用户 2026-11-06「SpaceX 火箭加入跑酷尽头那个传送门」
+	if not is_instance_valid(_finish_rocket):
+		_finish_rocket = _spawn_ride_rocket(door.global_position)
+	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s），火箭就位" % [
 		str(door.global_position.snappedf(0.1)), PORTAL_DEST])
 
 
 func _on_finish_portal_body(body: Node3D) -> void:
 	if body == null or not body.is_in_group("player"):
 		return
-	if _portal_cooldown > 0.0:
+	if _portal_cooldown > 0.0 or _riding:
 		return
 	var shed := get_node_or_null(PORTAL_DEST) as Node3D
 	if shed == null:
 		return
+	if not is_instance_valid(_finish_rocket):
+		_finish_rocket = _spawn_ride_rocket(
+			(get_node_or_null("Launch") as Node3D).global_position + PORTAL_OFFSET)
+		if _finish_rocket == null:
+			# 兜底：火箭造不出来就退回原来的瞬移，别把人困在门口
+			_portal_cooldown = 2.0
+			body.global_position = shed.global_position + Vector3(0.0, 0.1, 0.6)
+			if body is CharacterBody3D:
+				(body as CharacterBody3D).velocity = Vector3.ZERO
+			Sfx.play("ui_open", -2.0)
+			print("[Parkour] 传送门（火箭不可用，退回瞬移）→ 结算屋")
+			return
 	_portal_cooldown = 2.0
-	body.global_position = shed.global_position + Vector3(0.0, 0.1, 0.6)
-	if body is CharacterBody3D:
-		(body as CharacterBody3D).velocity = Vector3.ZERO
-	Sfx.play("ui_open", -2.0)
-	print("[Parkour] 传送门 → 结算屋（%s）" % str(shed.global_position.snappedf(0.1)))
+	_start_ride(_finish_rocket, shed.global_position + Vector3(0.0, 0.1, 0.6), body, "去程", false)
+
+
+## 岛上那枚回程火箭 —— 懒生成，造不出来返回 null（调用方退回瞬移）
+func _ensure_return_rocket() -> Node3D:
+	if is_instance_valid(_return_rocket):
+		return _return_rocket
+	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
+	if pad == null:
+		return null
+	return _spawn_ride_rocket(pad.global_position + RETURN_PARK_OFFSET)
+
+
+## 造一枚火箭停在 `at`：当载具兼地标
+func _spawn_ride_rocket(at: Vector3) -> Node3D:
+	var r := RocketRideScript.new()
+	r.name = "RideRocket"
+	add_child(r)
+	r.call("park_at", at)
+	return r
+
+
+## 火箭落点：去程落在结算屋旁，回程落回跑道口旁
+func _rocket_land_for(rocket: Node3D) -> Vector3:
+	if rocket == _finish_rocket:
+		var shed := get_node_or_null(PORTAL_DEST) as Node3D
+		if shed != null:
+			return shed.global_position + ISLAND_LAND_OFFSET
+	elif rocket == _return_rocket:
+		var launch := get_node_or_null("Launch") as Node3D
+		if launch != null:
+			return launch.global_position + HOME_LAND_OFFSET
+	return rocket.global_position
+
+
+## 起飞。`exit_point` 是**人**的最终落点，和火箭落点可以不同（见上面的 OFFSET 注释）。
+func _start_ride(rocket: Node3D, exit_point: Vector3, body: Node3D, tag: String, reset_after: bool) -> void:
+	if _riding or rocket == null:
+		return
+	_riding = true
+	_ride_reset_after = reset_after
+	var land := _rocket_land_for(rocket)
+	if rocket.has_signal("ride_finished") and not rocket.is_connected("ride_finished", _on_ride_finished):
+		rocket.connect("ride_finished", _on_ride_finished)
+	print("[Parkour] %s：坐火箭 %s → %s（人出舱 %s）" % [
+		tag, str(rocket.global_position.snappedf(0.1)),
+		str(land.snappedf(0.1)), str(exit_point.snappedf(0.1))])
+	rocket.call("begin", rocket.global_position, land, exit_point, body)
+
+
+func _on_ride_finished() -> void:
+	_riding = false
+	if _ride_reset_after:
+		_ride_reset_after = false
+		reset_run()
+	print("[Parkour] 火箭落地，人已就位")
 
 
 func _on_avenger_died(_by_damage: float) -> void:

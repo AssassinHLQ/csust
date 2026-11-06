@@ -166,6 +166,26 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/rocket_falcon9",
+		"title": "SpaceX Falcon 9（跑酷去程 / 回程的载具，两枚）",
+		"author": "**Forest Katsch**（Sketchfab，`ForestKatsch`）",
+		"license": "**CC BY-NC 4.0** —— 必须署名、**不可商用**；本工程为个人非商业同人，符合 NC 条款",
+		"distributed": false,
+		"source": "https://sketchfab.com/3d-models/spacex-falcon-9-block-45-12285ccc02de4d5c91b00632f0722c92",
+		"license_file": "",
+		"note": "⚠️ 带 **NC（非商用）** 条款：一旦要商业发布，这套必须换掉或取得另行授权。"
+			+ "下载当时的许可凭证存工作区 `_模型授权存档/12285ccc02de4d5c91b00632f0722c92_授权凭证.txt`"
+			+ "（不在仓库内 —— 和 DDR4 内存条同口径，`license_file` 留空）。"
+			+ "下载包只有 `source/f9-block-5.blend`（8.7 MB）+ 11 张 PNG，没有 glTF；"
+			+ "本工程的 GLB 由 `_tools/_blender_export_f9_v4.py` 转出：剔掉 47 个特效占位（火焰/排气/体积）、"
+			+ "把作者的自定义节点组材质**重建为标准 Principled BSDF**（glTF 导出器只认这个，否则贴图全丢）、"
+			+ "贴图 4096 降到 1024（12.4 MB → 0.86 MB，显存约 1.3 GB → 36 MB）、"
+			+ "缩放到真实 70 m 高、原点挪到箭体底面中心。最终 116,575 面 / 3 材质 / 4.81 MB。"
+			+ "**改动已按 CC BY 4.0 惯例声明**（NC 条款同样要求标明改动）。"
+			+ "缺文件时 `rocket_ride.gd` 用程序化占位火箭顶上。",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/mondrian",
 		"title": "蒙德里安大楼外壳（第二关）",
 		"author": "使用者提供（来源未注明）",

@@ -105,6 +105,12 @@ __pycache__/
 # 授权未核实，只允许本地学习演示，不随仓库分发。见 credits.gd 与 CREDITS.md
 /models/gamedev_room/
 
+# SpaceX Falcon 9（Sketchfab 作者：Forest Katsch，CC BY-NC 4.0）—— 带 NC（禁商用）条款，
+# 按「第三方素材一律不进仓库」的既有口径排除。缺这个文件时 `rocket_ride.gd` 会
+# 自动换成**程序化占位火箭**，跑酷的去程/回程照常能飞完 —— 和 gamedev_room /
+# pc_wall_case 一个套路。要恢复真模型：见 CREDITS.md 里那条的还原步骤。
+/models/rocket_falcon9/
+
 # 校园分块（离线切成 3×3，用 scripts/_split_sog.gd 重新生成）
 /splatdata/campus_chunks/
 

@@ -2481,16 +2481,29 @@ func _test_negative() -> void:
 		"计时器：站跑道 %s → 离开后 %s（%.2f s）→ 撞岛停表 %s，最好成绩 %.2f s（存 user://）"
 		% [str(started), str(running), t_mid, str(_pk.finished), _pk.best_seconds()])
 
-	# ⑤ 岛上的传送台 → 回平台 + 复位
+	# ⑤ 岛上的传送台 → 坐火箭回平台 + 复位
 	var pad := _pk.get_node_or_null("Island/Props/ReturnPad") as Node3D
 	_check(pad != null, "岛上有传送台节点（Island/Props/ReturnPad）")
 	if pad != null:
 		_p.global_position = pad.global_position + Vector3(0, 0.10, 0)
 		_p.velocity = Vector3.ZERO
-		await _wait_ms(500)
+		# ⚠️ 2026-11-06 起这台传送台改成**坐火箭**（`scripts/rocket_ride.gd`），
+		#    全程约 5.35 s。以前「等 500 ms 就断言已到站」必然假红，改成轮询 `_riding`。
+		#    用 `physics_frame` 而不是 `_wait_ms()`：进程帧在 headless 下不等物理时间。
+		var g := 0
+		while not bool(_pk.get("_riding")) and g < 60:
+			g += 1
+			await physics_frame
+		var rode := bool(_pk.get("_riding"))
+		var ticks := 0
+		while bool(_pk.get("_riding")) and ticks < 900:
+			ticks += 1
+			await physics_frame
+		_check(rode and ticks > 0,
+			"踏上传送台 → 火箭起飞（飞了 %d 物理帧 ≈ %.2f s）" % [ticks, float(ticks) / 60.0])
 		_check(_p.global_position.distance_to(_pk.return_target) < 0.30 and _pk.checkpoint == -1
 			and not _pk.timer_running,
-			"踏上传送台 → 回到主平台 %s，检查点/计时清空（y = %.2f）"
+			"踏上传送台 → 坐火箭回主平台 %s，检查点/计时清空（y = %.2f）"
 			% [str(_pk.return_target), _p.global_position.y])
 
 

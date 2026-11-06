@@ -47,13 +47,27 @@ func _run() -> void:
 		str(portal.global_position.snappedf(0.1)) if portal != null else "-",
 		str(launch.global_position.snappedf(0.1)) if launch != null else "-"])
 
-	# ③ 踩上去 → 送到结算屋
+	# ③ 踩上去 → **坐火箭**送到结算屋
+	#    2026-11-06 起传送不再是瞬移（见 `scripts/rocket_ride.gd`）：飞行全程约
+	#    1.10 + 2.60 + 1.30 + 0.35 ≈ 5.35 s，所以不能像以前那样 20 帧就断言到站。
+	#    这里改用 `physics_frame` 轮询 `_riding`（进程帧在 headless 下跑得飞快，
+	#    按进程帧数等会等不到物理时间）。
 	if portal != null:
 		player.global_position = portal.global_position + Vector3(0.0, 1.0, 0.0)
 		player.velocity = Vector3.ZERO
-		for _i in 20:
-			await process_frame
+		var guard := 0
+		# 先等它真的起飞（触发盒 → begin() 有 1~2 帧延迟）
+		while not bool(lvl.get("_riding")) and guard < 60:
+			guard += 1
+			await physics_frame
+		var rode := bool(lvl.get("_riding"))
+		var ticks := 0
+		while bool(lvl.get("_riding")) and ticks < 900:
+			ticks += 1
+			await physics_frame
 		var d: float = player.global_position.distance_to(shed.global_position) if shed != null else -1.0
+		print("[eco] 火箭起飞=%s，飞了 %d 物理帧（%.2f s）" % [
+			str(rode), ticks, float(ticks) / 60.0])
 		print("[eco] 踩门后玩家到结算屋距离 = %.2f m（期望 < 2）" % d)
 
 	BankCard.set_balance(0)

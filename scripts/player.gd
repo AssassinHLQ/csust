@@ -254,6 +254,12 @@ func _may_capture() -> bool:
 
 
 func _input(event: InputEvent) -> void:
+	# 火箭骑乘期间一律不收输入：视角由 `set_ride_yaw()` 接管，位置由火箭写入。
+	# 连 Esc 也一并屏蔽 —— 飞行最多约 5 s，中途放开鼠标只会让镜头乱掉；
+	# 万一逻辑卡死，`rocket_ride.gd` 里有 `watchdog_extra` 超时兜底会强制收尾。
+	if _ride_active:
+		return
+
 	# --- 鼠标移动：转视角 ---
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
@@ -363,7 +369,56 @@ var _was_on_floor := true       ## 上一帧的 `is_on_floor()`
 var _blocked_last_frame := false
 
 
+# ── 火箭骑乘锁（`scripts/rocket_ride.gd` 调用）────────────────────────────
+#
+# 为什么不用 `set_physics_process(false)`：那样 `_apply_camera()` 也一起停摆，
+# 镜头会僵住，重新打开时弹簧臂还要长跳一帧。这里保留物理循环，只跳过
+# 「输入 + `move_and_slide()`」两段，相机照常平滑跟随。
+#
+# 和 `look_at_node()` 的区别：那是「盯着某个物件看一秒」，人还能跑能跳；
+# 这里是「人整个不归自己管了」，位置由火箭每帧直接写入 `global_position`。
+## 是否被火箭锁住（锁着时不吃输入、不落重力、不做 move_and_slide）
+var _ride_active := false
+## 骑乘期间相机想朝向的 yaw（由火箭按飞行方向给，弧度，约定同 `_apply_camera()`）
+var _ride_yaw := 0.0
+
+
+## 火箭起飞 / 落地收尾时调用：锁住或放开玩家。
+func set_ride_lock(on: bool) -> void:
+	_ride_active = on
+	velocity = Vector3.ZERO
+	_aim_held = false
+	_fire_held = false
+	if on:
+		_ride_yaw = _yaw
+		if anim != null and anim.has_method("set_locomotion"):
+			anim.set_locomotion(0.0, true, 0.0)
+
+
+## 骑乘期间让镜头转到某个朝向（弧度）。火箭拿水平飞行方向算出来喂进来。
+func set_ride_yaw(yaw: float) -> void:
+	_ride_yaw = yaw
+
+
+## 现在是不是被火箭锁着（自检用）
+func is_riding() -> bool:
+	return _ride_active
+
+
 func _physics_process(delta: float) -> void:
+	if _ride_active:
+		# 人挂在火箭上：不落重力、不吃输入、不做 move_and_slide。
+		# 位置由 `rocket_ride.gd::_carry_player()` 每帧写入，这里只管相机。
+		velocity = Vector3.ZERO
+		_yaw = lerp_angle(_yaw, _ride_yaw, clampf(4.0 * delta, 0.0, 1.0))
+		# 略微低头，看着前方的航向（-0.05 rad ≈ -2.9°）
+		_pitch = lerpf(_pitch, -0.05, clampf(3.0 * delta, 0.0, 1.0))
+		rig.rotation.y = _yaw
+		_apply_camera(delta)
+		if anim != null and anim.has_method("set_locomotion"):
+			anim.set_locomotion(0.0, true, 0.0)
+		return
+
 	_poll_mouse_buttons()
 	# 鼠标被释放（按了 Esc）时，右键按住也要能开镜
 	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE and _aim_held and not aiming:
