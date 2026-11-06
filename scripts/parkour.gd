@@ -110,6 +110,22 @@ var _player: Player
 var _resume_pending := false
 
 
+## 世界招牌的**可见距离**（米）。用户 2026-11-06：「把这些穿墙大字去掉，
+## 我之前说了只有站在最附近才可以显示」。
+##
+## 原来 `parkour.tscn` 里 64 个 Label3D 全是默认值 = 不限距离 + 正常深度测试。
+## 但画室 609 的泼溅是走 Compositor 画的，**不写引擎深度缓冲**，于是这些招牌
+## 隔着泼溅墙也照画不误，整张地图飘着大字。
+## 现在统一压到 `LABEL_NEAR_END` 米内，靠近了才看得见。
+##
+## ⚠️ 为什么不用深度测试解决就够了：泼溅（画室609）是走 Compositor 单独画的，
+##    **不写引擎的深度缓冲**，所以实体墙能挡住招牌、泼溅墙挡不住。画室正好挨着
+##    跑酷起点（截图里那一堆字就是它们），所以半径必须收紧到「最附近」。
+##    要改可见范围只动这一对常量即可。
+const LABEL_NEAR_END := 6.0
+const LABEL_NEAR_MARGIN := 2.0
+
+
 func _ready() -> void:
 	_build_route()
 	if not run_finished.is_connected(_on_run_finished):
@@ -120,6 +136,37 @@ func _ready() -> void:
 	_spawn_bank_sign()
 	_spawn_settlement()
 	_ensure_roof_solid()
+	# 立即扫一遍（覆盖 .tscn 里摆好的招牌），再延迟扫一遍 —— 子场景
+	# `parkour_futures.gd` 会在运行时动态生成「第 N 段」规则牌，第一遍扫不到。
+	_gate_world_labels()
+	_gate_world_labels.call_deferred()
+
+
+## 把本场景里所有世界空间文字（Label3D / Sprite3D）**压成近距离显示**，
+## 并显式关掉 `no_depth_test`（让实体墙能挡住它们）。
+##
+## 为什么放在 `_ready()` 末尾一次性扫：`parkour.tscn` 里有 64 个招牌，
+## 逐个改 `.tscn` 容易漏、以后新加也会忘；扫一遍子树是唯一不漏的做法。
+func _gate_world_labels() -> void:
+	var n := 0
+	for node in find_children("*", "Label3D", true, false):
+		var lab := node as Label3D
+		if lab == null:
+			continue
+		lab.no_depth_test = false
+		lab.visibility_range_end = LABEL_NEAR_END
+		lab.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		n += 1
+	for node in find_children("*", "Sprite3D", true, false):
+		var spr := node as Sprite3D
+		if spr == null:
+			continue
+		spr.no_depth_test = false
+		spr.visibility_range_end = LABEL_NEAR_END
+		spr.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		n += 1
+	print("[Parkour] 世界招牌 %d 个：限制在 %.0f m 内显示（余量 %.0f m），已关掉穿墙"
+		% [n, LABEL_NEAR_END, LABEL_NEAR_MARGIN])
 
 
 ## 最后平台的掩体屋顶上放一块 RTX 5090（用户 2026-10-20：「房子上面放一个 5090……

@@ -419,7 +419,13 @@ func _build_rule_signs() -> void:
 		lab.outline_size = 12
 		lab.pixel_size = 0.010
 		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		lab.no_depth_test = true
+		# ⚠️ 原来是 `true` —— 那等于**强制画在所有东西前面**，隔着泼溅墙也能看见，
+		#    整张地图飘着「第 N 段」大字。用户 2026-11-06：「把这些穿墙大字去掉，
+		#    只有站在最附近才可以显示」。改成正常深度测试 + 近距离门控
+		#    （数值与 `parkour.gd` 的 LABEL_NEAR_END / LABEL_NEAR_MARGIN 保持一致）。
+		lab.no_depth_test = false
+		lab.visibility_range_end = 6.0
+		lab.visibility_range_end_margin = 2.0
 		lab.modulate = Color(1.0, 0.92, 0.55)
 		lab.position = Vector3(b.position.x + b.size.x * 0.5,
 			_pk.top_at(i) + 3.2, b.position.z + b.size.z * 0.5 + 2.0)
