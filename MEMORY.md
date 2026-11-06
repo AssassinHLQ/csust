@@ -1135,3 +1135,103 @@ odeyalo048/049/050/051     各 123,300 三角  ← 毯子（俄文 одеяло�
 10. 等素材接入开放架。
 11. 电竞房布局等用户。
 12. 待确认：`campus_buildings.tscn` 删除是否有意；`project.godot` 名称与 description 是否一起收尾提交。
+
+---
+
+## §22 导出打包：修好 `include_filter`、清 1.77 GB 死数据、以及一次「假 bug」的教训（2026-11-06）
+
+### 一、原导出配置是坏的：非资源文件根本不会进包
+
+```
+export_filter  = "all_resources"
+include_filter = "campus_ggs.bin"      ← 原来只有这一个
+```
+
+`all_resources` **只导出有 `.import` 的资源**。而实测：
+
+| 文件 | 有 `.import` | 原来会进包 |
+|---|---|---|
+| `room609.sogdata` / `school_playable.sogdata` | 无 | **否** |
+| `splatdata/campus_chunks10w/*.bin`（100 个） | 无 | **否** |
+| `campus_chunks10w/chunks.json` | 无 | **否** |
+| `campus_ggs_q4.bin`（粗层） | 无 | **否** |
+| `campus_ggs.bin` | 无 | 是（靠 include_filter 单独带） |
+
+后果：打出来的包**画室 609 的泼溅完全没有**、分块数据不在 → `_load_manifest()` 失败 →
+退回单层全量 `campus_ggs.bin` → 正好是那个 6918 MiB 显存的配置。
+`build/` 目录当时不存在，**从没导出过**，所以一直没暴露（编辑器读磁盘原文，不受 include_filter 影响）。
+
+### 二、修法与实测结果
+
+改“Filters to export non-resource files/folders”一行：
+
+```
+include_filter="campus_ggs_q4.bin,splatdata/campus_chunks10w/*,splatdata/room609.sogdata,splatdata/school_playable.sogdata"
+```
+
+- `*` 在 `String::matchn` 里**可以跨 `/`**，所以 `splatdata/campus_chunks10w/*` 能匹配该目录下所有 bin + json。
+- 全量 `campus_ggs.bin`（1.4 GB）**不再进包**，只在磁盘上留作重切母本。
+
+实测（`--headless --export-release 'Windows Desktop'`）：
+
+| 产物 | 大小 |
+|---|---|
+| `arisu.exe` | 104.3 MB |
+| `arisu.pck` | **2,267.6 MB** |
+| 合计 | 2,372 MB |
+| 导出耗时 | 24~33 s |
+
+包内泼溅 = 细层 100 块 1,406.5 + 粗层 351.6 + room609 38.8 + school_playable 86.6 ≈ **1,883 MB**。
+用引擎自己的 savepack 日志逐条核对过（`_log/export_full.log`）：
+`Chunk_0_0.bin` … `Chunk_9_9.bin` 100 块全在、`chunks.json`/粗层/两个 sogdata 都在、`campus_ggs.bin` 不在。
+
+### 三、清掉的死数据：1.77 GB（未降采样）
+
+| 删除项 | 体积 | 理由 |
+|---|---|---|
+| `splatdata/campus_chunks/`（9 个 sogdata） | 105.1 MB | 3×3 老原型，`_split_sog.gd` 可重建 |
+| `splatdata/campus_chunks10/Chunk_*.bin`（97 个） | 1,406.4 MB | 尺度错的那代，已被世界坐标版取代 |
+| `splatdata/campus_chunks10/chunk_*.sogdata`（97 个） | 304.7 MB | 同一条 SOG 流程的中间产物 |
+| `scenes/campus_chunks.tscn` / `campus_chunks10.tscn` | — | 死场景，无任何实例化，且引用已删文件 |
+
+保留 `campus_chunks10/chunks.json`（16 KB，`_verify_chunks_manifest.gd` 的对照基准）。
+泼溅相关体积 **5,234 MB → 3,418 MB（−34.7%）**。
+⚠️ `.glsl` 不是非资源文件：`all_resources` 通过 `res://.godot/imported/*.glsl-<hash>.res` 正常带上（13 个 import + 13 个 res），**不需要**加进 include_filter。
+
+### 四、⚠️ 一次“假崩溃”：别在被限制的测试环境里判定游戏坏了
+
+现象：导出包一开泼溅就 `0xC0000005`（8/8 崩，fault offset 每次不同，15.6~27 s），
+`--splat=off` 0 崩，编辑器正常。看起来像严重的导出 bug。
+
+**真相：本喵的测试环境把子进程对 `%APPDATA%` 的写入挡住了**，导致 `user://` 不可写；
+`user://` 不可写时游戏在解码期段错误。把 `APPDATA` 指到工作区内（`user://` 可写）后：
+
+```
+[SplatScene] 完成：2769855 点，耗时 25.9 s（缓存 false）   ← 跑 40 秒稳定
+[SplatScene] 完成：2769855 点，耗时 2.7 s（缓存 true）     ← 第二次命中磁盘缓存
+```
+
+**发布包完全正常。** 排查中依次排除（都有实测支撑）：
+同伴模型 / 缺 `.glsl` / Compute 后端（`--gdgs-backend=raster` 同样崩）/ 工作线程读 pck /
+脚本字节码（`script_export_mode=0` 同样崩）/ 项目名中文（换 ASCII 目录同样失败）/
+`user://` 前缀解析（绝对路径同样失败）/ `_write_cache` 空指针（有判空）。
+判定方法：同一台机器上**编辑器能写 AppData、导出的 exe 不能** —— 这才是分水岭。
+
+**留下的真问题（未修）**：`user://` 不可写时游戏应当降级（比如只警告、不缓存），
+而不是段错误。磁盘满、AppData 被重定向/被安全软件锁定的玩家会踩到。
+`SogRuntime._write_cache` / `_read_cache` 都有判空，崩点不在这两处，具体位置还没定位。
+
+### 五、新增工具与探针
+
+| 文件 | 用途 |
+|---|---|
+| `_tools/_pck_list.py` | 解析 `.pck` 列文件表（Godot 4.7 的 pck 是 version 4，本脚本的表头布局没对齐，目前只作参考） |
+| `scripts/_probe_sog_decode.gd` | 只解码 `.sogdata`（主线程、可分阶段打印）：`textures → center → decode → pack`，实测 room609 = 277 万点 / 24~28 s |
+| `scripts/_probe_threaded_decode.gd` | 同上的**后台线程**版，用于验证线程化解码是否安全（编辑器实测正常，20.8 s） |
+
+### 六、下一步
+
+1. `user://` 不可写时的**降级处理**（上面第四节）。
+2. 打包体积还想再降只能动数据：`campus_chunks10w` 614 万点 × 240 B/点 = 1.4 GB，
+   降采样（有 `_tools/decimate_ggs_bin.py` / `voxel_thin_ggs_bin.py`）或换压缩格式。**用户要求不降采样，暂不动。**
+3. 校园 10×10 的观感（细层与粗层/地面网格是否对齐）仍未在窗口里看过。
