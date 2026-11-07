@@ -1017,10 +1017,18 @@ func _setup_render_distance() -> void:
 
 ## ── 东侧三块（地块 / 部室 / 电竞房）等成交才现身 ──
 ##
-## 用户 2026-11-07：「游戏开发部电竞房不要一开始就出来，要等在芹香那儿买完才出来」。
-## `game.tscn` 里这三块都写着 `visible = false`，本函数在 `_ready` 里看一眼：
-##   · 已经成交（自检 / 探针会直接写 `ShopClerk._bought = true`）→ 当场打开，随后的切簇会带上它们；
-##   · 还没成交 → 只开一个 0.5 s 的心跳（`_process`），成交那一刻再打开。
+## 用户 2026-11-07：「游戏开发部电竞房不要一开始就出来，要等在芹香那儿买完才出来」；
+## 成交后补一句：「播放电竞房从天而降落地炸出大量灰尘动画视角要广一点，包括游戏开发部，
+## 摄像机旋转环绕体现电竞房的震撼」。
+##
+## 所以这里分两步：
+##   · 地块 `LotEast` 与部室 `GameDevRoom` —— 直接翻 `visible`（用户没要求它们也演）；
+##   · 电竞房 `EsportsRoom` —— **连同整件事的演出交给 `scripts/esports_drop.gd`**：
+##     那栋房子从天而降、砸地起灰、镜头绕一圈，演完把相机交还玩家。
+##
+## `game.tscn` 里三块都写着 `visible = false`，本函数在 `_ready` 里看一眼：
+##   · 已经成交（自检 / 探针会直接写 `ShopClerk._bought = true`）→ 当场开演；
+##   · 还没成交 → 只开一个心跳（`_process`），成交那一刻再开演。
 func _setup_east_rooms() -> void:
 	_east_rooms_done = false
 	set_process(true)
@@ -1029,9 +1037,14 @@ func _setup_east_rooms() -> void:
 
 
 ## 把东侧三块露出来。**幂等**：已经打开过的节点不再动。
-## 打开后要重切一遍渲染簇 —— 它们藏着的这段时间，`RenderDistance` 的簇表里没有它们
-## （`_subtree_aabb()` 只认 `is_visible_in_tree()` 的网格）；重建会顺手把藏过的那几个
-## 簇放回原样再重新收集，不会留下「永远被压下去」的节点。
+##
+## ⚠️ 必须**先打开再切簇**：`RenderDistance` 只收 `is_visible_in_tree()` 的网格
+## （`render_distance.gd::_subtree_aabb`），藏着的时候它们根本不进簇表。
+## 所以顺序固定为「翻 visible → `_rd.rebuild()` → 才把电竞房交给演出脚本」，
+## 否则演出里那栋房子不会被远处裁掉，远处也看不到它，两边都对不上。
+##
+## 演出的「落地高度」用的是**它自己在场景里的 y**（`game.tscn` 里是 0.01），
+## 演出脚本记下来、结束时原样放回。
 func _reveal_east_rooms() -> void:
 	_east_rooms_done = true
 	set_process(false)
@@ -1044,6 +1057,32 @@ func _reveal_east_rooms() -> void:
 	if _rd != null:
 		_rd.rebuild()
 	print("[Game] 已成交 → 东侧开发部三块现身：%s" % ", ".join(EAST_ROOMS))
+	_play_esports_drop()
+
+
+## 电竞房「天降」演出。挂了 `esports_drop.gd` 的节点放在镜头前；
+## 没挂脚本 / 场景里没有它，就静默跳过（别让房子演到一半停在天上）。
+##
+## ⚠️ 用 `load()` 而不是 `preload`：`esports_drop.gd` 里引用了 `Mesh.ARRAY_VERTEX` 之类的
+## 枚举常量，写成 `preload` 会变成**编译期依赖** —— 它一旦有个笔误，整个 `game.gd`
+## （也就是整个游戏）都起不来。`load()` 是运行期，最坏也只是这一场演出不播。
+func _play_esports_drop() -> void:
+	var room := get_node_or_null("EsportsRoom") as Node3D
+	if room == null:
+		return
+	var scr := load("res://scripts/esports_drop.gd") as GDScript
+	if scr == null:
+		push_warning("[Game] 找不到 scripts/esports_drop.gd，电竞房不演，直接现身")
+		return
+	var drop := scr.new() as Node3D
+	if drop == null:
+		push_warning("[Game] esports_drop.gd 建不出节点，电竞房不演")
+		return
+	drop.name = "EsportsDrop"
+	add_child(drop)
+	# 世界水平中心 = 房间当前的世界位置（原地垂直落下），长边半深 8.42 m
+	drop.play(room, Vector3(room.global_position.x, 0.0, room.global_position.z), 8.42)
+	print("[Game] 电竞房演出开始（任意键跳过）")
 
 
 ## 小屋桌子上的电脑（用户 2026-10-22：「桌子上放个显示器……按 F 使用，再按 F 退出」）。
