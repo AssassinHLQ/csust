@@ -59,8 +59,11 @@ const VERT_ACCEL := 26.0
 ## 飞行中的水平加速度 / 摩擦（比地面低一档：空中要更飘）
 const FLY_ACCEL := 14.0
 const FLY_FRICTION := 6.0
-## 悬停时每秒下沉多少（速度单位）—— 不是真的掉高度，是给一点「重力感」
-const HOVER_SINK := 0.45
+## 悬停时每秒往下掉多少（速度单位）。**不是 0**：0 会让悬停像挂在钉子上的贴图，
+## 给一点点「重力感」，玩家才觉得机甲的推进器在**托着**它。
+## ⚠️ 这个值原来写 0.45，实测 0.5 秒就往下掉 0.78 m（太飘，根本不算「停住」）——
+##    0.12 的体感是「0.5 秒掉 6 cm」，肉眼只看到轻微呼吸。
+const HOVER_SINK := 0.12
 ## 跳跃 / 起落用的缓冲（和 `player.gd` 的 `JUMP_BUFFER_MS` 同一套思路）
 const JUMP_BUFFER_MS := 180.0
 ## 按空格长按多久算「持续上升」（毫秒）
@@ -68,11 +71,17 @@ const HOLD_RISE_MS := 140.0
 ## 离地 / 离地前几十毫秒内按空格仍然算数（土狼时间）
 const COYOTE_MS := 110.0
 
+## 悬停高度保持：往回补高度的刚度（1/秒）。越大越「黏」，越小越飘。
+const HOLD_STIFFNESS := 3.0
+
 # ── 特效数值 ───────────────────────────────────────────────────────────────
-## 蓝色火焰的三层颜色（从芯到边），越外越淡越蓝
-const FLAME_CORE := Color(0.72, 0.92, 1.00, 0.95)
-const FLAME_MID := Color(0.22, 0.58, 1.00, 0.60)
-const FLAME_OUTER := Color(0.08, 0.22, 0.85, 0.22)
+## 蓝色火焰的三层颜色（从芯到边），越外越淡越蓝。
+## ⚠️ 原来外层写了 `alpha = 0.22`，配上加色混合后整体偏紫、发灰 ——
+##    加色混合下 alpha 的降低 = 亮度降低，不是「更透明」，所以外层要**更蓝更亮**才好看。
+##    现在外层是「深蓝一点但亮度不低」，靠 `emission_energy_multiplier` 区分层次。
+const FLAME_CORE := Color(0.85, 0.96, 1.00, 0.95)
+const FLAME_MID := Color(0.35, 0.68, 1.00, 0.75)
+const FLAME_OUTER := Color(0.10, 0.32, 0.95, 0.45)
 ## 喷气粒子颜色
 const JET_PARTICLE := Color(0.35, 0.72, 1.00, 0.75)
 ## 火焰在局部 +Y 方向的基准长度（米）—— 之后按推力伸缩
@@ -82,8 +91,14 @@ const FLAME_LEN := 0.85
 ## 起飞 / 上升键。`Space` 与 `Q` 都能用（用户报过「空格偶尔没反应」，见 `player.gd`
 ## 的 `JUMP_BUFFER_MS` 那段：跑酷落脚板上 `is_on_floor()` 会逐帧抖动）。
 @export var rise_key: Key = KEY_Q
-## 载具模型相对本体的额外偏航（度）。看到倒着走就改 180。
-@export var facing_yaw_deg := 0.0
+## 载具模型相对本体的额外偏航（度）。
+##
+## ⚠️ **实测值 = 180**（`_probe_carrier_shot.gd` 的 `5_ground_front.png` 定出来的）：
+##    相机摆在角色 **+Z 正前方** 时，看到的是**光环 + 背包**（背面）——
+##    说明载具 glb 自己的「脸」朝 **−Z**，而本工程约定「脸朝 +Z」（见 `player.gd` 里
+##    `model_root.rotation.y = 0 → 脸朝世界 +Z` 那段铁证）。所以这里要再转 180°。
+##    不转的话，游戏里人看着在倒着走 / 背对移动方向。
+@export var facing_yaw_deg := 180.0
 ## 载具模型整体缩放（先用 1.0，看着不对再调）
 @export var carrier_scale := 1.0
 
@@ -102,7 +117,13 @@ var _vert_want := 0.0
 ## 上一帧的 `_player.is_on_floor()`（落地判定用，见 `_land()`）
 var _was_on_floor := true
 var _rise_pressed_at := -99999.0
+## 上一帧上升键是不是按着（用来自己判「刚按下」的边沿，见 `_physics_process()`）
+var _rise_held := false
+## 这一次「按下」有没有已经被起飞消费掉（松开前不再起飞第二次）
+var _jump_consumed := false
 var _air_since := -99999.0
+## 悬停时要保持的高度（`_hold_y` 起点用 −9000 表示「还没飞过」）
+var _hold_y := -9000.0
 ## 推进器推力 0~1（特效强度、火焰长度都跟它走）
 var _thrust := 0.0
 ## 全身前倾角（弧度），飞行时按水平速度插值
@@ -134,11 +155,28 @@ var boost_dot_count := 0
 
 
 func _ready() -> void:
-	_player = get_parent().get_parent() as CharacterBody3D   # Arisu → Player
+	# ⚠️ 节点层级是 `Player / Arisu / CarrierForm`（见 `scenes/player.tscn`），
+	#    所以只要**往上走 1 层**就是 `Player`。
+	#    原来写 `get_parent().get_parent()` 是错的：那会取到 `Player` 的父节点
+	#    （整个场景根），于是 `_player` 永远为 null、`_ready` 里的 `set_form` 一飞就空引用。
+	#    这个坑是 `_probe_carrier_fly.gd` 抓出来的（起飞后 vy 一直是 0）。
+	_player = get_parent() as CharacterBody3D
+	if _player == null:
+		_player = _find_player_up(self)
 	_model = get_node_or_null("../Model")
 	set_process(false)
 	# 载具形态下由本脚本接管垂直运动；平时不接管（`player.gd` 照常）。
 	set_physics_process(true)
+
+
+## 兜底：往上找第一个 `CharacterBody3D`（场景结构被改动时也不至于直接崩）。
+func _find_player_up(n: Node) -> CharacterBody3D:
+	var cur := n.get_parent()
+	while cur != null:
+		if cur is CharacterBody3D:
+			return cur as CharacterBody3D
+		cur = cur.get_parent()
+	return null
 
 
 ## 变形能不能用（解锁了 + 模型在）
@@ -183,8 +221,13 @@ func set_form(on: bool) -> bool:
 		# 这里只把「飞行接管」的标志清掉，不动位置。
 		_airborne = false
 		_vert_want = 0.0
+		_hold_y = -9000.0
 		_thrust = 0.0
 		_lean = 0.0
+		# 变回本体：**务必交还垂直方向**，否则 `player.gd` 的重力一直是关的，
+		# 人会像灯神一样永远浮在原地。
+		if _player != null and _player.has_method("set_flight_lock"):
+			_player.call("set_flight_lock", false)
 		_restore_bones()
 	print("[Carrier] 变形 → %s" % ("阿比·埃舒（载具）" if on else "爱丽丝本体"))
 	return _on
@@ -338,22 +381,28 @@ func _build_boost_fx() -> void:
 		holder.name = "BoostFX_%d" % bi
 		_carrier.add_child(holder)
 
-		# 三层锥体：同轴、从内到外依次更细更长
+		# 三层锥体：同轴、从内到外依次更细更长。
+		# 网格已归一化（底半径 1、长度 1、底心在原点），所以：
+		#   scale.x / scale.z = 底半径（米）
+		#   scale.y           = 长度（米）
+		# ⚠️ 不要再在 `rotation` 上动刀：网格本身就是「尖朝 −Y」，
+		#    推进器挂在腿上、朝下喷，正好对上。上一版在这里又绕 X 转了 PI，
+		#    结果喷口朝上、从背后看是一张扁掉的蓝扇子（见探针出图 3_side）。
 		var layers: Array[MeshInstance3D] = []
 		var specs := [
-			{"mat": mat_outer, "scale": 1.00, "len": 1.00, "r": 1.00},
-			{"mat": mat_mid, "scale": 0.72, "len": 0.82, "r": 0.72},
-			{"mat": mat_core, "scale": 0.42, "len": 0.62, "r": 0.42},
+			{"mat": mat_outer, "r": 0.20, "len": 1.00},
+			{"mat": mat_mid, "r": 0.14, "len": 0.82},
+			{"mat": mat_core, "r": 0.08, "len": 0.62},
 		]
 		for sp in specs:
 			var mi := MeshInstance3D.new()
 			mi.mesh = cone_mesh
 			mi.material_override = sp["mat"]
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			# 锥体在网格里是「尖朝 −Y、底在原点」，绕 X 翻 180° 让尖朝 +Y（喷口向下）
-			mi.rotation.x = PI
-			mi.scale = Vector3(sp["r"], sp["len"], sp["r"]) * float(sp["scale"])
 			mi.layers = 1
+			mi.set_meta("base_radius", float(sp["r"]))
+			mi.set_meta("base_len", float(sp["len"]))
+			mi.scale = Vector3(sp["r"], sp["len"], sp["r"])
 			holder.add_child(mi)
 			layers.append(mi)
 
@@ -368,8 +417,10 @@ func _build_boost_fx() -> void:
 
 		# 喷气粒子
 		var gp := GPUParticles3D.new()
-		gp.amount = 48
-		gp.lifetime = 0.55
+		# amount 72 + lifetime 0.34：够密、又不会拖成一条长尾巴。
+		# 原来 48 / 0.55 配上 0.26 的大方块，出图上是「一条方块瀑布」（见探针出图）。
+		gp.amount = 72
+		gp.lifetime = 0.34
 		gp.local_coords = false
 		gp.emitting = false
 		gp.visibility_aabb = AABB(Vector3(-3, -6, -3), Vector3(6, 8, 6))
@@ -377,15 +428,22 @@ func _build_boost_fx() -> void:
 		gp.material_override = particle_mat
 		var pm := ParticleProcessMaterial.new()
 		pm.direction = Vector3(0.0, -1.0, 0.0)
-		pm.spread = 14.0
-		pm.initial_velocity_min = 3.0
-		pm.initial_velocity_max = 7.0
-		pm.gravity = Vector3(0.0, -2.5, 0.0)
-		pm.scale_min = 0.35
-		pm.scale_max = 0.95
-		pm.color = JET_PARTICLE
-		pm.damping_min = 2.0
-		pm.damping_max = 5.0
+		pm.spread = 10.0
+		pm.initial_velocity_min = 1.6
+		pm.initial_velocity_max = 4.2
+		pm.gravity = Vector3(0.0, -4.0, 0.0)
+		pm.scale_min = 0.55
+		pm.scale_max = 1.25
+		pm.color = Color(0.28, 0.55, 1.00, 0.34)
+		pm.damping_min = 3.0
+		pm.damping_max = 6.0
+		# 从喷口往下逐渐缩小 + 淡出（不然尾巴断得很硬）
+		var curve := Curve.new()
+		curve.add_point(Vector2(0.0, 1.0))
+		curve.add_point(Vector2(1.0, 0.05))
+		var curve_tex := CurveTexture.new()
+		curve_tex.curve = curve
+		pm.scale_curve = curve_tex
 		gp.process_material = pm
 		holder.add_child(gp)
 
@@ -399,20 +457,42 @@ func _build_boost_fx() -> void:
 	boost_dot_count = _boost_fx.size()
 
 
-## 一个「尖朝 −Y、底在原点、长度 1 m」的锥体（火焰基准形状）。
-## 单位化后用 `scale.y` 拉长 —— 长度完全由推力控制。
+## 一个「底在原点、尖朝 **−Y**、长度 1 m、底半径 1」的火焰锥。
+##
+## ⚠️ 三条都是踩出来的（`_probe_carrier_shot.gd` 出图对照）：
+##   ① **底半径设 1.0、高度设 1.0**，让网格本身是「单位尺寸」——
+##      缩放全靠 `MeshInstance3D.scale`，这样 `scale.y` 就严格等于「长度（米）」，
+##      不会再出现「锥体被压成一块扁蓝扇面」。
+##   ② 网格原点就放在**底心**（不靠 `Transform3D` 平移），
+##      `add_child` 后直接挂到骨上，位置就是喷口。
+##   ③ 尖朝 −Y：Godot 的 `CylinderMesh` 本来就 `top_radius`→+Y、`bottom_radius`→−Y，
+##      所以要「向上喷」就再转 180°；但推进器是**朝下**喷的，本来就该是 −Y，
+##      **不需要转**。上一版绕 X 转了 PI，等于让它朝上喷 —— 这就是那块「向上的一张蓝扇」。
 func _make_flame_mesh() -> ArrayMesh:
+	# CylinderMesh 自身坐标：**中心在原点**，`top_radius` 在 +Y 半边，`bottom_radius` 在 −Y 半边。
+	# 我们要的火焰：**底（粗）在原点，尖朝 −Y，长度 1、底半径 1**。
+	#
+	# 于是：让「bottom_radius（粗）」成为 +Y 那一端 → 设 bottom_radius 为大、top_radius 为 0，
+	# 再把整块绕 X 翻 180°（粗端从 −Y 转到 +Y），最后下移 0.5
+	# 让「粗端的截面」正好落在原点 —— 此时尖在 y = −1。
+	#
+	# 换一个等价、更好读的写法：直接构造「尖朝 −Y」的 Basis，再把原点抬到底面。
 	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.001
-	cyl.bottom_radius = 0.16
+	cyl.top_radius = 0.0          # 尖
+	cyl.bottom_radius = 1.0       # 粗端，半径 1 ⇒ 直径 2
 	cyl.height = 1.0
-	cyl.radial_segments = 12
-	cyl.rings = 1
-	cyl.cap_bottom = false
+	cyl.radial_segments = 16
+	cyl.rings = 3
+	cyl.cap_bottom = false        # 底面不封口：加色混合下封口会显示成一个亮圆盘
 	cyl.cap_top = false
+
 	var st := SurfaceTool.new()
-	st.append_from(cyl, 0, Transform3D(Basis(), Vector3(0.0, -0.5, 0.0)))
-	# 上面那句把柱体中心挪到 −0.5 ⇒ 底面（半径最大那头）正好落在原点、尖朝 −Y
+	# 绕 X 转 180°：尖从 +Y 翻到 −Y，粗端从 −Y 翻到 +Y。
+	var flip := Basis(Vector3.RIGHT, PI)
+	# 翻转后中心仍在原点，所以粗端截面在 y = +0.5。下移 0.5 ⇒ 粗端截面落在 y = 0（原点），
+	# 尖落在 y = −1。缩放到「底半径 FLAME_RADIUS、长度 L」就靠 `MeshInstance3D.scale`。
+	var xf := Transform3D(flip, Vector3(0.0, -0.5, 0.0))
+	st.append_from(cyl, 0, xf)
 	return st.commit()
 
 
@@ -433,8 +513,11 @@ func _make_flame_mat(c: Color) -> StandardMaterial3D:
 
 
 func _make_particle_mesh() -> QuadMesh:
+	# ⚠️ 0.26 太大、而且 `billboard_keep_scale` 一开就变成「一片片带透视的方块」，
+	#    出图上像故障贴图而不是喷气（见 `_probe_carrier_shot.gd` 的 2_hover/3_side）。
+	#    0.09 是肉眼看起来「颗粒」的大小；靠数量（amount 72）而不是靠尺寸堆出体积感。
 	var q := QuadMesh.new()
-	q.size = Vector2(0.26, 0.26)
+	q.size = Vector2(0.09, 0.09)
 	return q
 
 
@@ -444,9 +527,11 @@ func _make_particle_mat() -> StandardMaterial3D:
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.billboard_keep_scale = true
+	# ⚠️ 关掉 `keep_scale`：开着的话相机的远近会放大方块，远处变成一大片白斑。
+	m.billboard_keep_scale = false
 	m.vertex_color_use_as_albedo = true
-	m.albedo_color = JET_PARTICLE
+	# 偏蓝、透明度低一点：粒子的职责是「雾」，真正的「焰」由三层锥体负责
+	m.albedo_color = Color(0.28, 0.55, 1.00, 0.34)
 	m.disable_receive_shadows = true
 	return m
 
@@ -454,8 +539,16 @@ func _make_particle_mat() -> StandardMaterial3D:
 # ── 主循环 ─────────────────────────────────────────────────────────────────
 
 func _physics_process(delta: float) -> void:
+	_tick_flight(delta)
+	_was_on_floor = _player.is_on_floor() if _player != null else true
+
+
+## 飞行主逻辑。**单独拆出来是为了能被探针直接调用** ——
+## `_physics_process()` 里的 `_was_on_floor = ...` 求值在调用 `_tick_flight()` 之前，
+## 探针自己调 `_physics_process()` 时拿不到上一趟的真实值（`_was_on_floor` 永远是
+## 上一帧的假值），会测出假结果。所以测试走这个函数。
+func _tick_flight(delta: float) -> void:
 	if not _on or _player == null:
-		_was_on_floor = _player.is_on_floor() if _player != null else true
 		return
 
 	var on_floor := _player.is_on_floor()
@@ -471,6 +564,7 @@ func _physics_process(delta: float) -> void:
 	var rise_now := Input.is_physical_key_pressed(rise_key) or Input.is_action_pressed("jump")
 	if rise_now and not _rise_held:
 		_rise_pressed_at = now_ms
+		_jump_consumed = false          # 新的一次按下：允许再次起飞
 	_rise_held = rise_now
 	var hold_ms := now_ms - _rise_pressed_at
 	if not on_floor and _was_on_floor:
@@ -478,16 +572,31 @@ func _physics_process(delta: float) -> void:
 	var grounded_grace := on_floor or (now_ms - _air_since) <= COYOTE_MS
 
 	# 起飞：在地面（或刚离地）按了一下上升键
-	if not _airborne and grounded_grace and hold_ms <= JUMP_BUFFER_MS:
+	#
+	# ⚠️ **不要把 `_rise_pressed_at` 清掉**（原来写的是 `= -99999.0`）：
+	#    它同时被下面「按住够久 = 持续上升」用着。清掉之后按住空格一路飞，
+	#    `hold_ms` 每帧都从 0 重算、永远到不了 `HOLD_RISE_MS` ——
+	#    表现就是「起飞了但爬不上去」，只有那一下 `LIFT_KICK` 的初速。
+	#    这个坑是 `_probe_carrier_fly.gd` 打逐帧 `vert` 打出来的（一直是 +0.0）。
+	#    起飞只需要保证「这一次按下已经消费掉」，用 `_jump_consumed` 单独记。
+	if not _airborne and grounded_grace and hold_ms <= JUMP_BUFFER_MS and not _jump_consumed:
 		_take_off()
-		_rise_pressed_at = -99999.0
-		hold_ms = 0.0
+		_jump_consumed = true
 
 	# ── 垂直意图 ──
+	#
+	# 按住多久才算「持续上升」：`hold_ms` 用的是**墙钟**（`Time.get_ticks_msec()`），
+	# 不是帧数 —— 这一条决定了「点一下就起飞然后停住」和「按住一路飞上去」的区别。
+	#
+	# ⚠️ 这里**不判 `rise_now` 的边沿**，只看「现在按着 + hold 够久」：
+	#    边沿判定（`_rise_held`）只为 `_rise_pressed_at` 服务，两者职责分开。
+	#    混在一起写过一版，表现是「按住上升键完全不响应」——`_rise_held` 被
+	#    起飞那一帧清掉了，后面 `hold_ms` 永远从 0 重新算。
+	var rise_val := Input.get_action_raw_strength("jump")
+	var key_held := Input.is_physical_key_pressed(rise_key)
+	var holding := rise_now or key_held
 	if _airborne:
-		if Input.is_physical_key_pressed(rise_key) and hold_ms >= HOLD_RISE_MS:
-			_vert_want = 1.0
-		elif Input.is_action_pressed("jump") and hold_ms >= HOLD_RISE_MS:
+		if holding and hold_ms >= HOLD_RISE_MS:
 			_vert_want = 1.0
 		elif Input.is_action_pressed("crouch"):
 			_vert_want = -1.0
@@ -497,12 +606,24 @@ func _physics_process(delta: float) -> void:
 	else:
 		_vert_want = 0.0
 
+	# ── 悬停高度保持：把「按住上升键一路升上去」的峰值高度记下来，
+	#    松开键后**缓慢向那个高度回弹**（阻尼弹簧，不振荡）。
+	#    没有这一段的话，一松开上升键就开始匀速下沉，玩家会觉得「扶不住」。
+	if _airborne and _vert_want > 0.5:
+		_hold_y = _player.global_position.y
+	elif _airborne and _vert_want == 0.0 and _hold_y > -9000.0:
+		var dy := _hold_y - _player.global_position.y
+		# 只在「掉下去」时往回补，且力度随落差增大但封顶 —— 不要把人往上顶出画面
+		if dy > 0.02:
+			var v := _player.velocity
+			v.y = move_toward(v.y, clampf(dy * HOLD_STIFFNESS, 0.0, 2.2), VERT_ACCEL * delta)
+			_player.set("velocity", v)
+
 	# ── 朝向（变形后仍由 `player.gd` 管移动方向；这里只在需要时对齐模型）──
 	_sync_face()
 
 	# ── 特效 ──
 	_run_effects(delta)
-	_was_on_floor = on_floor
 
 
 ## 起飞：给一下上推 + 进入飞行态
@@ -511,13 +632,15 @@ func _take_off() -> void:
 		return
 	_airborne = true
 	_air_since = float(Time.get_ticks_msec())
+	_hold_y = _player.global_position.y
 	var v := _player.velocity
 	v.y = maxf(v.y, LIFT_KICK)
 	_player.set("velocity", v)
-	if _player.has_method("set_ride_lock"):
-		# 不在 `set_ride_lock(true)` 那条路上：那是火箭强制接管位置的锁，
-		# 这里只是**接管垂直方向**，水平仍然让 `player.gd` 跑（所以不调它）。
-		pass
+	# 接管垂直方向：`player.gd` 那边停止施加重力与跳跃（见那里的 `_flight_lock`）。
+	# ⚠️ 不调 `set_ride_lock(true)`：那是火箭「连位置都不归自己管」的锁，
+	#    会把水平输入一起吃掉；机甲飞行只交垂直方向。
+	if _player.has_method("set_flight_lock"):
+		_player.call("set_flight_lock", true)
 	print("[Carrier] 起飞")
 	Sfx.play("ui_toggle", -3.0)
 
@@ -557,6 +680,11 @@ func _land() -> void:
 		return
 	_airborne = false
 	_vert_want = 0.0
+	_hold_y = -9000.0
+	_jump_consumed = true          # 落地这一下不算「新按下」，得松开再按才起飞
+	# 交还垂直方向：`player.gd` 重新施加重力与跳跃
+	if _player != null and _player.has_method("set_flight_lock"):
+		_player.call("set_flight_lock", false)
 	print("[Carrier] 落地")
 	Sfx.play("ui_toggle", -6.0)
 
@@ -569,15 +697,25 @@ func _apply_afterburner(_delta: float) -> void:
 		return
 
 
-## 朝向：载具的模型根是 `Arisu` 的子节点，本体的 `model_root.rotation.y`
-## 由 `player.gd` 每帧写。载具是 `Arisu/CarrierForm` 下的独立节点，
-## 所以只要把「载具本体的 yaw」设成和 `Arisu` 一致就行（多一次 `facing_yaw_deg`）。
+## 朝向：载具是 `Player/Arisu/CarrierForm` 下的独立节点，**不在 `Arisu` 的模型子树里**，
+## 所以要自己把朝向同步成 `Arisu` 的朝向。
+##
+## ⚠️ 取 **`_model`（就是 `../Model`）的 `rotation.y`**，不是 `_player.rotation.y`：
+##    `player.gd` 每帧写的是 `model_root`（= `Arisu` 节点）的 `rotation.y`（见
+##    `player.gd::_physics_process()` 里 `model_root.rotation.y = _lerp_angle_smooth(...)`），
+##    而 `Player` 本体自己的 `rotation.y` **一直是 0**（它从不写自己的朝向）。
+##    本喵第一版取的就是 `_player.rotation.y`，出图一看机甲整个侧躺着 —— 那是 0°，
+##    而模型的「脸朝 +Z」约定要求 `Arisu` 上那个 yaw。
+##
+## 再叠加 `facing_yaw_deg`：这是给「载具模型的脸和本体模型不一致」留的旋钮。
+## ⚠️ `Arisu` 节点本身带着一个 **−180°（绕 Y）的基变换**（`player.tscn` 里
+##    `transform = Transform3D(-1,0,-8.7e-8, 0,1,0, 8.7e-8,0,-1, ...)`，是给
+##    `Arisu_ext.glb` 校正用的）。载具 glb 是**另一份素材**，它自己可能已经是正的 ——
+##    所以这里**只取 yaw 标量**、不继承那个 -1 的基，靠 `facing_yaw_deg` 单独校准。
 func _sync_face() -> void:
-	if _carrier == null:
+	if _carrier == null or _model == null:
 		return
-	var yaw := _player.rotation.y if _player != null else 0.0
-	# `Arisu` 节点自己的朝向才是「脸朝哪」——`player.gd` 写的是 `model_root`（就是 `Arisu`）
-	_carrier.rotation.y = yaw + deg_to_rad(facing_yaw_deg)
+	_carrier.rotation.y = _model.rotation.y + deg_to_rad(facing_yaw_deg)
 
 
 ## 每帧：推力 → 火焰长度 / 亮度 / 粒子 / 骨姿态
@@ -650,17 +788,22 @@ func _run_effects(delta: float) -> void:
 			holder.global_transform = bone_xf
 		var layers: Array = fx["layers"]
 		var t := clampf(_thrust, 0.0, 1.2)
-		var LENS: Array[float] = [1.00, 0.82, 0.62]
-		var ALPHA_MUL: Array[float] = [1.0, 0.85, 0.7]
+		# 上升时整束焰柱再长 35%（喷得猛），但**半径不变**，只拉长度
+		var len_mul := 1.0 + (0.35 if _vert_want > 0.5 else 0.0)
 		for li in layers.size():
 			var mi := layers[li] as MeshInstance3D
-			var lens: float = LENS[li]
-			var lens_scale: float = lens * lerpf(0.25, 1.0, t) * flick
-			mi.scale.y = FLAME_LEN * lens_scale * (1.0 + (0.35 if _vert_want > 0.5 else 0.0))
+			var br: float = float(mi.get_meta("base_radius", 0.15))
+			var bl: float = float(mi.get_meta("base_len", 0.8))
+			# 推力小时「短而钝」，推力大时「长而尖」：半径也跟着略收，不然低速像根柱子
+			var growth := lerpf(0.30, 1.0, t) * flick
+			mi.scale = Vector3(br * lerpf(0.75, 1.0, t), FLAME_LEN * bl * growth * len_mul,
+				br * lerpf(0.75, 1.0, t))
 			mi.visible = t > 0.03
 			var m := mi.material_override as StandardMaterial3D
 			if m != null:
 				m.emission_energy_multiplier = lerpf(0.4, 6.0, t)
+				# 注意：加色混合下改 alpha 就是改亮度（不是改透明度），
+				# 所以这里用「亮度」的语义去写，别当成透明度理解。
 				m.albedo_color.a = clampf(0.25 + 0.75 * t, 0.0, 1.0) * [1.0, 0.85, 0.7][li]
 		var light := fx["light"] as OmniLight3D
 		light.light_energy = lerpf(0.0, 2.6, t) * flick

@@ -409,6 +409,28 @@ func is_riding() -> bool:
 	return _ride_active
 
 
+# ── 载具飞行接管（`scripts/carrier_form.gd` 调用）──────────────────────────
+#
+# 和上面的 `_ride_active` **不是一回事**：
+#   · `_ride_active`（火箭）：连位置都由外部写，人整个不归自己管；
+#   · `_flight_lock`（机甲飞行）：**只交出垂直方向**，水平输入 / 加速 / 刹车 /
+#     上台阶 / 卡角自救全都还在，所以飞起来仍能贴墙、仍能在平台上落脚。
+#
+# 只关掉「重力 + 跳跃」这两段（见 `_physics_process()` 里那一段），
+# 垂直速度完全由 `carrier_form.gd::_apply_flight()` 每帧平滑控制。
+var _flight_lock := false
+
+
+## 载具起落时调用：true = 由机甲接管垂直运动。
+func set_flight_lock(on: bool) -> void:
+	_flight_lock = on
+
+
+## 现在垂直方向是不是被机甲接管（自检用）
+func is_flight_locked() -> bool:
+	return _flight_lock
+
+
 func _physics_process(delta: float) -> void:
 	if _ride_active:
 		# 人挂在火箭上：不落重力、不吃移动输入、不做 move_and_slide。
@@ -430,19 +452,28 @@ func _physics_process(delta: float) -> void:
 		_set_aiming(true)
 
 	# --- 重力与跳跃（带缓冲 / 土狼时间，见上面那段注释）---
-	var now_ms := float(Time.get_ticks_msec())
-	if Input.is_action_just_pressed("jump"):
-		_jump_at = now_ms
-	if not is_on_floor():
-		if _was_on_floor:
-			_air_since = now_ms
-		velocity.y -= GRAVITY * delta
-	_was_on_floor = is_on_floor()
-	if now_ms - _jump_at <= JUMP_BUFFER_MS \
-			and (is_on_floor() or now_ms - _air_since <= JUMP_COYOTE_MS):
-		velocity.y = JUMP_VELOCITY
-		_jump_at = -99999.0
-		_air_since = -99999.0
+	#
+	# ⚠️ 载具飞行形态（`scripts/carrier_form.gd`）期间**整段跳过**：
+	#    那段每帧也在写 `velocity.y`（`_apply_flight()` 用 `move_toward` 平滑逼近
+	#    上升/悬停/下降的目标速度）。两边都写的话，这里每帧再减一次
+	#    `GRAVITY * delta`、而且按住空格还会把 `velocity.y` 直接砸成 `JUMP_VELOCITY`，
+	#    飞行就变成「一摁空格往上弹一下、松手立刻往下掉」——
+	#    这正是本喵第一版探针量出来的现象（vy 从 3.9 掉到 −0.12）。
+	#    开关由 `carrier_form.gd` 通过 `set_flight_lock()` 置位。
+	if not _flight_lock:
+		var now_ms := float(Time.get_ticks_msec())
+		if Input.is_action_just_pressed("jump"):
+			_jump_at = now_ms
+		if not is_on_floor():
+			if _was_on_floor:
+				_air_since = now_ms
+			velocity.y -= GRAVITY * delta
+		_was_on_floor = is_on_floor()
+		if now_ms - _jump_at <= JUMP_BUFFER_MS \
+				and (is_on_floor() or now_ms - _air_since <= JUMP_COYOTE_MS):
+			velocity.y = JUMP_VELOCITY
+			_jump_at = -99999.0
+			_air_since = -99999.0
 
 	# --- 期望移动方向（相对相机）---
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
