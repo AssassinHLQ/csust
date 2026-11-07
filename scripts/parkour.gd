@@ -1030,7 +1030,9 @@ func _spawn_finish_portal() -> void:
 	label.modulate = Color(0.75, 0.92, 1.0, 1.0)
 	label.outline_modulate = Color(0.05, 0.05, 0.08, 1.0)
 	label.outline_size = 18
-	label.position = Vector3(0.0, 3.05, 0.0)
+	# 往 +X 让开 2.4 m：火箭直径 1.51 m 正好卡在门框正中，招牌压在箭体上会糊成一团
+	# （出图 `_arisu_captures/_rocket/4_engines.png` 里能看到）。
+	label.position = Vector3(2.4, 3.05, 0.0)
 	door.add_child(label)
 
 	var area := Area3D.new()

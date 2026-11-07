@@ -55,8 +55,22 @@ func _run() -> void:
 	_check(not probe.is_placeholder(), "用的是真 GLB，不是程序化占位")
 	_check(is_equal_approx(probe.height(), 70.0 * probe.rocket_scale),
 		"缩放生效：rocket_scale=%.2f → 箭高 %.1f m" % [probe.rocket_scale, probe.height()])
-	var model := probe.get_node_or_null("Model") as Node3D
-	_check(model != null, "Model 子节点存在")
+
+	# ⚠️ 这条是**补洞**用的，不是重复：`height()` 只是 `70 × scale` 的算术值。
+	#    曾经 `park_at()` 里 `_model.basis = Basis.IDENTITY` 把 scale 冲成 1.0，
+	#    火箭实际是 70 m 高，而 `height()` 照样报 21.0 —— 上面那条断言完全看不出来。
+	#    必须量**世界包围盒**才抓得到。`_pivot` 那层就是为此加的。
+	probe.call("park_at", Vector3.ZERO)
+	await physics_frame
+	var wbox := _world_aabb(probe)
+	_check(absf(wbox.size.y - probe.height()) < 1.0,
+		"实际世界高度 %.1f m ≈ height() %.1f m（缩放没被 basis 冲掉）" % [
+			wbox.size.y, probe.height()])
+	# 模型挂在 `Pivot` 下面（旋转层与缩放层分开，见 rocket_ride.gd 里 `var _pivot`）
+	var model := probe.get_node_or_null("Pivot/Model") as Node3D
+	if model == null:
+		model = probe.get_node_or_null("Model") as Node3D
+	_check(model != null, "Model 子节点存在（Pivot/Model）")
 	if model != null:
 		var mi := model.find_children("*", "MeshInstance3D", true, false)
 		_check(mi.size() > 0, "模型里有 MeshInstance3D（%d 个）" % mi.size())
@@ -196,3 +210,22 @@ func _summary() -> void:
 	if _lvl != null and is_instance_valid(_lvl):
 		_lvl.queue_free()
 	quit(0 if _fail == 0 else 1)
+
+
+## 节点下所有可见网格的世界包围盒（量真实尺寸用，别信算术值）
+func _world_aabb(node: Node) -> AABB:
+	var out := AABB()
+	var first := true
+	var stack: Array[Node] = [node]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is VisualInstance3D and (n as VisualInstance3D).is_visible_in_tree():
+			var vi := n as VisualInstance3D
+			var b := vi.get_aabb()
+			if b.size.length() > 0.0001:
+				var wb := vi.global_transform * b
+				out = wb if first else out.merge(wb)
+				first = false
+		for c in n.get_children():
+			stack.append(c)
+	return out

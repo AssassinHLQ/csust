@@ -51,6 +51,14 @@ const GLB_HEIGHT := 70.0
 @export var watchdog_extra := 6.0
 
 var _model: Node3D
+## 旋转层：**只**承载飞行前倾，不碰缩放。
+##
+## ⚠️ 为什么非要这么一层（踩过）：`Node3D.basis` 的 setter 写的是「旋转+缩放」整体，
+##    `_model.basis = Basis(axis, tilt)` 会把 `_model.scale` 的 0.30 一起冲成 1.0 ——
+##    火箭瞬间从 21 m 变回 70 m，而出图取景怎么调都装不下。
+##    `height()` 算的是 70×0.30 仍然正确，所以光看日志发现不了，必须量世界包围盒。
+##    分成 _pivot(旋转) → _model(缩放) 两层之后，两者物理上不可能互相覆盖。
+var _pivot: Node3D
 var _player: Node3D
 var _from := Vector3.ZERO          ## 火箭起点（也是它的 home）
 var _to := Vector3.ZERO            ## 火箭落点
@@ -80,7 +88,11 @@ func _build() -> void:
 		push_warning("[Rocket] 缺 %s —— 用程序化占位火箭顶上" % GLB_PATH)
 	_model.name = "Model"
 	_model.scale = Vector3.ONE * rocket_scale
-	add_child(_model)
+	# 旋转层与缩放层分开（原因见 `var _pivot` 上面那段）
+	_pivot = Node3D.new()
+	_pivot.name = "Pivot"
+	add_child(_pivot)
+	_pivot.add_child(_model)
 	print("[Rocket] 模型 = %s，缩放 %.2f，高 %.1f m" % [
 		"占位" if _placeholder else "Falcon9.glb", rocket_scale, height()])
 
@@ -105,7 +117,8 @@ func park_at(p: Vector3) -> void:
 	_from = p
 	global_position = p
 	_dir = Vector3.FORWARD
-	_model.basis = Basis.IDENTITY
+	if _pivot != null:
+		_pivot.basis = Basis.IDENTITY
 	set_physics_process(false)
 
 
@@ -130,7 +143,8 @@ func begin(rocket_from: Vector3, rocket_to: Vector3, player_exit: Vector3, playe
 	_elapsed = 0.0
 	_active = true
 	global_position = _from
-	_model.basis = Basis.IDENTITY
+	if _pivot != null:
+		_pivot.basis = Basis.IDENTITY
 	_carry_player()
 	if _player.has_method("set_ride_lock"):
 		_player.call("set_ride_lock", true)
@@ -188,15 +202,16 @@ func _physics_process(delta: float) -> void:
 
 	global_position = pos
 
-	# 前倾：绕「上 × 飞行方向」这根水平轴转，箭尖朝飞行方向倒
+	# 前倾：绕「上 × 飞行方向」这根水平轴转，箭尖朝飞行方向倒。
+	# ⚠️ 写 `_pivot.basis` 而**不是** `_model.basis` —— 后者会把缩放冲掉（见 `var _pivot`）。
 	if tilt > 0.0001 and _dir.length_squared() > 0.0001:
 		var axis := Vector3.UP.cross(_dir)
 		if axis.length_squared() > 0.0001:
-			_model.basis = Basis(axis.normalized(), tilt)
+			_pivot.basis = Basis(axis.normalized(), tilt)
 		else:
-			_model.basis = Basis.IDENTITY
+			_pivot.basis = Basis.IDENTITY
 	else:
-		_model.basis = Basis.IDENTITY
+		_pivot.basis = Basis.IDENTITY
 
 	_carry_player()
 
@@ -209,7 +224,9 @@ func _carry_player() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
 	var seat := Vector3(0.0, height() * seat_ratio, 0.0)
-	_player.global_position = global_position + _model.basis * seat
+	# 用 `_pivot` 的旋转（纯旋转、无缩放）算座位偏移
+	var rot := _pivot.basis if _pivot != null else Basis.IDENTITY
+	_player.global_position = global_position + rot * seat
 
 
 ## 落地收尾：停稳 → 0.35 s 把人挪到出舱点 → 解锁输入 → 火箭回 home
@@ -240,7 +257,8 @@ func _finish() -> void:
 
 	# 火箭回停放点：它是个摆渡车，不是一次性消耗品
 	global_position = _from
-	_model.basis = Basis.IDENTITY
+	if _pivot != null:
+		_pivot.basis = Basis.IDENTITY
 	print("[Rocket] 落地完成，人 → %s，火箭回 %s" % [
 		str(_exit.snappedf(0.1)), str(_from.snappedf(0.1))])
 	ride_finished.emit()
