@@ -149,3 +149,15 @@ __pycache__/
 # 重新生成：python _tools/split_ggs_bin.py campus_ggs.bin splatdata/campus_chunks10w 10 10
 /splatdata/campus_chunks10w/*
 !/splatdata/campus_chunks10w/chunks.json
+
+# ---- 工作草稿目录：`_` 前缀 = 临时，一律不入库 ----
+# 2026-11-07 清点：这四个目录合计 352 个未跟踪文件、约 1.8 GB，从来不是源码，
+# 却因为没有 ignore 规则而长期挂在 `git status` 里，把真正的改动淹掉了。
+#   _log/             探针日志 + 抓图 + 体素 bin（campus_vox30.bin 单个就 982 MB）
+#   _arisu_captures/  截图产物
+#   _sky_upscale/     超分试验输出（Real-ESRGAN 的 _trial_* / _q*_ss* 等）
+#   _backup/          手写 .bak 备份（有 git 之后不该再手写备份，提交历史就是备份）
+/_log/
+/_arisu_captures/
+/_sky_upscale/
+/_backup/
