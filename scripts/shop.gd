@@ -76,6 +76,16 @@ const TUCK := 0.02
 ## ⚠️ 5 个字 × (font_size 80 × pixel_size 0.005) = 2.00 m 宽，招牌板 3.40 m —— 放得下；
 ##    再长就要一起调 `SignBoard` 的宽度与字号（见 `_build_shell()` 末尾）。
 @export var sign_text := "柴关电脑城"
+## ── 新店壳：Sketchfab「Shop」by Nikitos & 3130，**CC BY 4.0**（可商用、可再分发）──
+## 用户 2026-11-07：「继续接入这个替换整个柴关电脑城，只保留电脑城名字牌子」。
+## 模型是个极简白色店铺（白墙 + 玻璃隔断 + 吊顶灯带 + 两组玻璃展柜），
+## 原生只有 6.357 × 2.884 × 5.201 m、1,158 面、无贴图。
+## 按**长度对齐**缩放（用户选的）：6.357 → 13.20 m，系数 2.0765，
+## 于是进深 10.80 m、层高 5.99 m（原程序化壳是 13.20 × 5.60 × 5.00）。
+## 填 "" 就退回原来的程序化屋壳。
+@export var shell_glb := "res://models/shop_building/shop.glb"
+## 新壳按哪条边对齐 `shop_len`。0 = 不缩放（用模型原生尺寸）
+@export var shell_fit_len := 0.0
 @export var wall_thickness := 0.2
 ## 单独 instance 出来看效果时打开；`game.gd` 里是等铺完地砖再手动 `build()`（材质才一样）
 @export var auto_build := false
@@ -85,6 +95,9 @@ var hut_len := 0.0
 var hut_depth := 0.0
 var hut_height := 0.0
 var shop_height := 0.0
+## 新屋壳（GLB）真实的进深。`shop_depth` 仍是**布局基准**（柜台/芹香按它摆），
+## 两者不一样：新壳比老壳深，多出来的往 −Z 长（见 `_build_shell_from_glb()`）。
+var shell_depth := 0.0
 var roof_overhang := 0.4
 var shop_len := 0.0
 var shop_depth := 0.0
@@ -119,6 +132,7 @@ func _wire_baked() -> void:
 	shop_len = float(get_meta("baked_shop_len", 0.0))
 	shop_depth = float(get_meta("baked_shop_depth", 0.0))
 	shop_height = float(get_meta("baked_shop_height", 0.0))
+	shell_depth = float(get_meta("baked_shell_depth", 0.0))
 	deck_rect = get_meta("baked_deck_rect", Rect2())
 	built_count = int(get_meta("baked_built_count", 0))
 	decor_count = int(get_meta("baked_decor_count", 0))
@@ -151,8 +165,12 @@ func build() -> void:
 	_decor.name = "Decor"
 	add_child(_decor)
 	_build_deck()
-	_build_shell()
-	_build_interior()
+	# 2026-11-07：屋壳换成 Sketchfab「Shop」的 GLB；拿不到就退回原程序化壳
+	if not _build_shell_from_glb():
+		_build_shell()
+	# 货架不再单独建（新壳自带两组玻璃展柜），但**柜台必须留** —— 买整机要用
+	_build_counter()
+	_build_clerk()
 	_build_lights()
 	_build_music_zone()
 	_report()
@@ -347,6 +365,136 @@ func _build_deck() -> void:
 
 
 # ══════════════════════════ 屋壳 ══════════════════════════
+
+# ══════════════════════════ 新屋壳（GLB，2026-11-07）══════════════════════════
+##
+## 返回 false = 没装成（文件缺 / 载入失败 / 没有网格），调用方退回程序化 `_build_shell()`。
+##
+## ⚠️ **不覆盖 `shop_len` / `shop_depth`**：这两个是柜台、芹香、音乐区的布局基准
+##    （`_build_counter()` 等按它们算坐标）。新壳比老壳深得多（10.80 vs 5.60），
+##    如果把它们改掉，柜台和芹香会跟着漂到屋子中间去。
+##    新壳真实尺寸另存 `shell_depth`，`shop_height` 只更新成新层高（灯要按它挂）。
+func _build_shell_from_glb() -> bool:
+	if shell_glb.is_empty() or not ResourceLoader.exists(shell_glb):
+		push_warning("[Shop] 缺 %s，退回程序化屋壳" % shell_glb)
+		return false
+	var ps := load(shell_glb) as PackedScene
+	if ps == null:
+		push_warning("[Shop] %s 不是 PackedScene" % shell_glb)
+		return false
+	var inst := ps.instantiate() as Node3D
+	if inst == null:
+		push_warning("[Shop] %s 实例化失败" % shell_glb)
+		return false
+
+	var shell := Node3D.new()
+	shell.name = "Shell"
+	add_child(shell)
+	shell.add_child(inst)
+
+	# 量模型自身包围盒。GLB 原点离得很远（实测中心 (212.2, −242.0, 1.1)），必须重新居中
+	var box := _walk_aabb(inst, Transform3D.IDENTITY)
+	if box.size.length() < 0.001:
+		push_warning("[Shop] %s 里没有可量的网格" % shell_glb)
+		shell.queue_free()
+		return false
+
+	# 缩放：按**长度**对齐 shop_len（用户 2026-11-07 选的）。原生 6.357 → 13.20 ≈ 2.0765
+	var want_len := shell_fit_len if shell_fit_len > 0.0 else shop_len
+	var s := 1.0
+	if want_len > 0.01 and box.size.x > 0.01:
+		s = want_len / box.size.x
+	shell.scale = Vector3.ONE * s
+
+	# 包围盒 XZ 中心挪到原点、底面挪到 y = 0
+	var c := box.get_center()
+	inst.position = Vector3(-c.x, -box.position.y, -c.z)
+
+	shell_depth = box.size.z * s
+	shop_height = box.size.y * s
+
+	# 正面（+Z）对齐老壳的位置：老壳正面在 z = shop_depth * 0.5。
+	# 新壳更深，多出来的往 −Z 长 —— 这样门、柜台、芹香全都不用重新摆。
+	shell.position = Vector3(0.0, 0.0, (shop_depth - shell_depth) * 0.5)
+	var front_z := shop_depth * 0.5
+	var back_z := front_z - shell_depth
+
+	# ── 碰撞：四面墙，正面留门洞（模型是玻璃的，没有入口就只能看不能进）──
+	var t := wall_thickness
+	var half_l := shop_len * 0.5
+	var half_door := door_width * 0.5
+	_collider("ShellWallBack", Vector3(0.0, shop_height * 0.5, back_z - t * 0.5),
+		Vector3(shop_len, shop_height, t))
+	for sx in [-1.0, 1.0]:
+		_collider("ShellWall%s" % ("W" if sx < 0.0 else "E"),
+			Vector3(sx * (half_l + t * 0.5), shop_height * 0.5, (front_z + back_z) * 0.5),
+			Vector3(t, shop_height, shell_depth + t * 2.0))
+	for sx in [-1.0, 1.0]:
+		var seg_w := half_l - half_door
+		_collider("ShellFront%s" % ("W" if sx < 0.0 else "E"),
+			Vector3(sx * (half_door + seg_w * 0.5), shop_height * 0.5, front_z + t * 0.5),
+			Vector3(seg_w, shop_height, t))
+
+	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
+	_build_sign(front_z)
+
+	print("[Shop] 新屋壳 %s：缩放 %.4f → 长 %.2f / 进深 %.2f / 层高 %.2f m（正面 z = %.2f）"
+		% [shell_glb.get_file(), s, shop_len, shell_depth, shop_height, front_z])
+	return true
+
+
+## 门正上方一块发光板 + `Label3D`。原来是 `_build_shell()` 末尾那段，抽出来两条路共用。
+func _build_sign(front_z: float) -> void:
+	# 2026-11-02 用户：「白色发光板子要碰撞」——从装饰改成带碰撞的箱子
+	_box("SignBoard", Vector3(0.0, shop_height + 0.55, front_z + 0.06),
+		Vector3(3.4, 0.72, 0.08), _mat["sign"])
+	var lb := Label3D.new()
+	lb.name = "SignText"
+	lb.text = sign_text
+	lb.font_size = 80
+	lb.pixel_size = 0.005
+	lb.outline_size = 18
+	lb.modulate = Color(0.06, 0.10, 0.16)
+	lb.outline_modulate = Color(0.85, 0.95, 1.0, 0.9)
+	lb.position = Vector3(0.0, shop_height + 0.55, front_z + 0.11)
+	lb.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	_decor.add_child(lb)
+	decor_count += 1
+
+
+## 只有碰撞、没有网格的墙（新壳的几何来自 GLB，不需要再画一遍）
+func _collider(nm: String, at: Vector3, size: Vector3) -> void:
+	var cs := CollisionShape3D.new()
+	cs.name = nm + "Shape"
+	var bs := BoxShape3D.new()
+	bs.size = size
+	cs.shape = bs
+	cs.position = at
+	_body.add_child(cs)
+	built_count += 1
+
+
+## 把一个节点的子树量成包围盒（纯本地空间，忽略根自身 transform）。
+## GLB 的原点常常离网格很远，必须先量出来才能居中。
+func _walk_aabb(n: Node, xf: Transform3D) -> AABB:
+	var out := AABB()
+	var first := true
+	if n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		if mi.mesh != null:
+			out = xf * mi.get_aabb()
+			first = false
+	for child in n.get_children():
+		var cxf := xf
+		if child is Node3D:
+			cxf = xf * (child as Node3D).transform
+		var cb := _walk_aabb(child, cxf)
+		if cb.size == Vector3.ZERO:
+			continue
+		out = cb if first else out.merge(cb)
+		first = false
+	return out
+
 
 func _build_shell() -> void:
 	var L := shop_len

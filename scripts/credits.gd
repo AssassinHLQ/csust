@@ -186,6 +186,25 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/shop_building",
+		"title": "柴关电脑城的新屋壳（Sketchfab「Shop」）",
+		"author": "**Nikitos & 3130**（Sketchfab，`vrcityphoto`）",
+		"license": "**CC BY 4.0** —— 必须署名，**可商用、可再分发**（这一条比火箭干净得多）",
+		"distributed": true,
+		"source": "https://sketchfab.com/3d-models/42510bda855c4e60bf5cf7ecb9a2a57c",
+		"license_file": "",
+		"note": "极简白色店铺：白墙 + 玻璃隔断 + 吊顶灯带 + 两组玻璃展柜。原生 "
+			+ "6.357 × 2.884 × 5.201 m / 1,158 面 / **无贴图**（纯材质色）。"
+			+ "按用户 2026-11-07 选的「长度对齐」缩放 2.0764 → 13.20 × 10.80 × 5.99 m，"
+			+ "正面 z 对齐老壳的 shop_depth/2，多出来的进深往 −Z 长，所以柜台/芹香位置不用动。"
+			+ "**只保留招牌**：原来的屋顶/三面墙/门柱/幕墙/货架全部不再程序化生成，"
+			+ "换成本 GLB + 5 块不可见碰撞盒（后墙 / 东西墙 / 正面门洞左右两段）。"
+			+ "GLB 原点离网格很远（中心 (212.2, −242.0, 1.1)），`shop.gd::_build_shell_from_glb()` "
+			+ "会现量包围盒再居中。烘焙进 `scenes/shop_baked.tscn` 时保持 instance 引用"
+			+ "（`_bake_buildings.gd::_own()` 对 `scene_file_path` 非空的节点只设 owner、不下钻）。",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/mondrian",
 		"title": "蒙德里安大楼外壳（第二关）",
 		"author": "使用者提供（来源未注明）",

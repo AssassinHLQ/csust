@@ -88,6 +88,8 @@ func _run() -> void:
 	shop.set_meta("baked_shop_len", shop.get("shop_len"))
 	shop.set_meta("baked_shop_depth", shop.get("shop_depth"))
 	shop.set_meta("baked_shop_height", shop.get("shop_height"))
+	# 新 GLB 屋壳的真实进深（和 `baked_shop_depth` 这个布局基准不是一回事）
+	shop.set_meta("baked_shell_depth", shop.get("shell_depth"))
 	shop.set_meta("baked_deck_rect", shop.get("deck_rect"))
 	shop.set_meta("baked_built_count", shop.get("built_count"))
 	shop.set_meta("baked_decor_count", shop.get("decor_count"))
@@ -138,7 +140,14 @@ func _bake(node: Node, path: String) -> void:
 
 func _own(n: Node, root_node: Node) -> void:
 	for c in n.get_children():
+		# ⚠️ 实例化进来的子场景（商店的新 GLB 屋壳等）：**要设 owner，但不往下钻**。
+		#    设 owner → `pack()` 写成 `instance=ExtResource(...)` 的引用（只占一行）；
+		#    往下钻   → 会把整个模型内联进 tscn，引用丢掉、体积暴涨。
+		#    （第一版这里直接 `continue`，连 owner 都没设，结果节点被 pack 整个丢弃，
+		#      烘出来的 Shell 是空的 —— 出图时才看出来。）
 		c.owner = root_node
+		if String(c.scene_file_path) != "":
+			continue
 		_own(c, root_node)
 
 
