@@ -658,6 +658,10 @@ func _ready() -> void:
 		_play_opening()
 
 
+## 东侧三块已经露出来过（成交后只翻一次 `visible`，之后就关掉心跳）
+var _east_rooms_done := false
+
+
 ## 备用 Boss：`scenes/bosses_standby.tscn` 里躺着 6 位（霸王龙 / 倭瓜 / 霍德 /
 ## 佩洛洛斯拉 / 比纳 / 哥利亚），主场景里**只留飞猪优香** —— 全摆上去太挤。
 ##
@@ -842,6 +846,9 @@ func _splats_ready() -> bool:
 func _process(delta: float) -> void:
 	_update_room_swap()
 	_tick_perf_overlay(delta)
+	# 东侧开发部三块等芹香那边成交才现身（见 `_setup_east_rooms`）；露出来之后就自动关掉
+	if not _east_rooms_done and ShopClerk.is_bought():
+		_reveal_east_rooms()
 	if _player and _player.global_position.y < FALL_LIMIT:
 		_player.global_position = _spawn
 		_player.velocity = Vector3.ZERO
@@ -1021,20 +1028,13 @@ func _setup_east_rooms() -> void:
 		_reveal_east_rooms()
 
 
-func _process(_delta: float) -> void:
-	if _east_rooms_done:
-		set_process(false)
-		return
-	if ShopClerk.is_bought():
-		_reveal_east_rooms()
-
-
 ## 把东侧三块露出来。**幂等**：已经打开过的节点不再动。
 ## 打开后要重切一遍渲染簇 —— 它们藏着的这段时间，`RenderDistance` 的簇表里没有它们
 ## （`_subtree_aabb()` 只认 `is_visible_in_tree()` 的网格）；重建会顺手把藏过的那几个
 ## 簇放回原样再重新收集，不会留下「永远被压下去」的节点。
 func _reveal_east_rooms() -> void:
 	_east_rooms_done = true
+	set_process(false)
 	for nm in EAST_ROOMS:
 		var node := get_node_or_null(nm) as Node3D
 		if node == null:
