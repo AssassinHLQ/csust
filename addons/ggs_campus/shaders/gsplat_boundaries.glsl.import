@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://1p4mdflws6d7"
+path="res://.godot/imported/gsplat_boundaries.glsl-4b4dc7f2bdd2bafdd72f483605ee896a.res"
+
+[deps]
+
+source_file="res://addons/ggs_campus/shaders/gsplat_boundaries.glsl"
+dest_files=["res://.godot/imported/gsplat_boundaries.glsl-4b4dc7f2bdd2bafdd72f483605ee896a.res"]
+
+[params]
+
