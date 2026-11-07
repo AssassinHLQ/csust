@@ -142,6 +142,46 @@ func _run() -> void:
 	await _settle(6)
 	await _shot("5_ground_front")
 
+	# ── 6. 机甲开火：双炮齐射，看炮口蓝焰 ──
+	var wpn := _player.get_node_or_null("Weapon") as Weapon
+	if wpn != null:
+		_player.global_position = Vector3(0, 0.6, 0)
+		_cf.call("_sync_face")
+		_cf.call("_push_cannon_muzzles")
+		await _settle(4)
+		# 从**侧前方**看：正前方看不清炮口（炮口朝前，焰沿视线方向被压扁）
+		_aim(Vector3(3.0, 1.7, 3.4), Vector3(0, 1.2, 0))
+		await _settle(4)
+		# 连开几发，让焰口保持点亮
+		for i in 6:
+			wpn.set("_cooldown", 0.0)
+			wpn.current_ammo = wpn.magazine_size
+			wpn.shoot()
+			_cf.call("_run_effects", 1.0 / 60.0)
+		await RenderingServer.frame_post_draw
+		await _shot("6_fire_side")
+
+		# 再来一张：**正侧面**。炮口焰朝前喷，正侧面才能看见焰柱的完整长度
+		# （正前方看是「正对镜头」，被压成一个圆点；侧后方被肩甲翼片挡住）。
+		for i in 6:
+			wpn.set("_cooldown", 0.0)
+			wpn.current_ammo = wpn.magazine_size
+			wpn.shoot()
+			_cf.call("_run_effects", 1.0 / 60.0)
+		_aim(Vector3(3.0, 1.5, -0.3), Vector3(0, 1.2, -0.3))
+		await _settle(2)
+		await _shot("7_fire_side")
+
+		# 正上方俯视：看两门炮是不是左右对称
+		for i in 6:
+			wpn.set("_cooldown", 0.0)
+			wpn.current_ammo = wpn.magazine_size
+			wpn.shoot()
+			_cf.call("_run_effects", 1.0 / 60.0)
+		_aim(Vector3(0.0, 4.6, 1.2), Vector3(0, 1.0, -0.3))
+		await _settle(2)
+		await _shot("8_fire_top")
+
 	MechState.set_carrier_for_test(false)
 	print("[Shot] 出图完成 → %s" % OUT_DIR)
 	quit(0)

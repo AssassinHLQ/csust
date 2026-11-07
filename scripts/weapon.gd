@@ -125,9 +125,37 @@ func _process(delta: float) -> void:
 
 
 func _follow_muzzle_bone() -> void:
+	# 机甲形态：由 `carrier_form.gd` 通过 `set_carrier_muzzles()` 接管，
+	# 这里直接让路（那套用的是载具骨架的炮口骨，不是本体的轨道枪）。
+	if _carrier_muzzles.size() > 0:
+		return
 	if skeleton == null or _muzzle_bone < 0:
 		return
 	muzzle.global_transform = skeleton.global_transform * skeleton.get_bone_global_pose(_muzzle_bone)
+
+
+## ── 机甲（载具）形态的双炮 ──
+##
+## 载具 `Arisu_Battle_Carrier.glb` 的骨架里**没有**本体的 `bone_Railgun_Muzzle_0*` /
+## `bone_magazine`（本喵拆 GLB 核过：那套轨道枪只在 `Arisu_ext.glb` 里）。
+## 所以机甲形态下 `_find_bone` 全部落空，`muzzle` 标记就停在变形前的位置 ——
+## 实测 y = −0.262，**掉到地面以下**，火光和弹道起点都在地底下（`_probe_carrier_fire.gd`）。
+##
+## 机甲自己的「炮」是 `bone_gear_cannon_L/R`（挂在 `bone_gear_Pillar_L/R` 下的两门肩炮），
+## 所以机甲形态下由 `carrier_form.gd` 把这两根骨喂进来，开火时**双臂齐射**。
+##
+## `xs` 是世界坐标列表；为空时退回本体那套单枪口逻辑。
+var _carrier_muzzles: Array[Vector3] = []
+
+
+## 机甲形态：设置双炮的**世界坐标**枪口。传空数组 = 退回本体单枪口。
+func set_carrier_muzzles(xs: Array[Vector3]) -> void:
+	_carrier_muzzles = xs.duplicate()
+
+
+## 现在有几个枪口在用（自检用）
+func muzzle_count() -> int:
+	return maxi(_carrier_muzzles.size(), 1)
 
 
 func set_debug_raycast(on: bool) -> void:
@@ -232,6 +260,21 @@ func _fire_raycast() -> void:
 			str(origin.snappedf(0.01)), str(dir.snappedf(0.01)), str(hit != null), str(collider)])
 
 	var muzzle_pos := muzzle.global_position
+	# ── 机甲形态：两门肩炮齐射 ──
+	# 命中判定**仍然只走那一条相机中心射线**（`intersect_ray` 只打一次，
+	# 保证「准星压着靶子就一定打得中」，不会因为双炮而各打各的）。
+	# 视觉上从**每个炮口**各牵一条弹道到同一个命中点：观感是齐射，判定是单发。
+	if _carrier_muzzles.size() > 0:
+		for mp in _carrier_muzzles:
+			var from_i := mp
+			if fx_on_aim_line:
+				from_i = origin + dir * clampf((mp - origin).dot(dir), 0.0, 0.25) + dir * fx_forward
+			_spawn_tracer(from_i, impact)
+			_muzzle_flash(from_i)
+		_schedule_impact(impact, normal, muzzle_pos.distance_to(impact) / maxf(tracer_speed, 1.0))
+		_apply_hit(collider, impact, dir)
+		return
+
 	# 视觉起点默认就在**真实枪口**（fx_on_aim_line = false）。
 	# 打开时把枪口挪到瞄准射线上：沿射向投影，且最多落在射线起点之后 0.25 m。
 	# ⚠️ 老版本是「投影到相机前方、再往前推」，表现就是「子弹从角色前面冒出来」
@@ -242,15 +285,20 @@ func _fire_raycast() -> void:
 			+ dir * fx_forward
 	_spawn_tracer(fx_from, impact)
 
+	_apply_hit(collider, impact, dir)
+	_muzzle_flash(fx_from)
+	_schedule_impact(impact, normal, fx_from.distance_to(impact) / maxf(tracer_speed, 1.0))
+
+
+## 结算命中（单枪口 / 双炮共用）。抽出来是为了别让两种路径各写一遍伤害逻辑
+## —— 那种「两处相似代码」正是以后改伤害时漏改一半的地方。
+func _apply_hit(collider: Object, impact: Vector3, dir: Vector3) -> void:
 	if collider and collider.has_method("take_damage"):
 		collider.take_damage(damage, impact, -dir)
 		hit_confirmed.emit(collider, impact)
 	elif collider is Node and collider.get_parent() and collider.get_parent().has_method("take_damage"):
 		collider.get_parent().take_damage(damage, impact, -dir)
 		hit_confirmed.emit(collider.get_parent(), impact)
-
-	_muzzle_flash(fx_from)
-	_schedule_impact(impact, normal, fx_from.distance_to(impact) / maxf(tracer_speed, 1.0))
 
 
 func _apply_spread(dir: Vector3, amount: float) -> Vector3:

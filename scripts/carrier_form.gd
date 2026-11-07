@@ -142,6 +142,10 @@ const SHOULDER_WING_BONES := [
 ## 炮口骨：开火时抖一下（用户没说要做，但机甲形态下这不是它的武器系统，
 ## 所以这里**只做视觉抖动**，不会真的发子弹；命中判定仍是 `Weapon` 那套）
 const CANNON_BONES := ["bone_gear_cannon_L", "bone_gear_cannon_R"]
+## 炮口**开枪点**的骨：两门肩炮的「出口」。
+## 每门炮挂在 `bone_gear_Pillar_*` 下，链是 cannon → cannon_out → outletB / outletU。
+## 取 `outletB_*`（下口）当枪口：它的姿态与炮管同向，且不会和 `outletU` 打架。
+const CANNON_MUZZLE_BONES := ["bone_gear_cannon_outletB_L", "bone_gear_cannon_outletB_R"]
 
 ## 每根推进器骨上的特效挂点：{bone_index: [flames...]}
 var _boost_fx: Array = []
@@ -149,9 +153,20 @@ var _boost_fx: Array = []
 var _boost_rest: Dictionary = {}
 var _wing_rest: Dictionary = {}
 
+# ── 双炮开火 ──
+## 炮口闪光节点（每门炮一个），平时隐藏
+var _cannon_fx: Array = []
+## 开火后坐脉冲 0→1，按指数衰减
+var _cannon_recoil := 0.0
+## 上一帧从 `Weapon` 拿到的 `_shot_index`，用来判「刚开了一枪」
+var _last_shot_index := 0
+## 连发时焰尖抖动的相位
+var _cannon_phase := 0.0
+
 # ── 数值暴露给自检 / HUD ──
 var flight_speed := 0.0
 var boost_dot_count := 0
+var cannon_fx_count := 0
 
 
 func _ready() -> void:
@@ -214,6 +229,7 @@ func set_form(on: bool) -> bool:
 		# 变形出来的那一刻是站着的（地面形态），先不飞
 		_airborne = false
 		_vert_want = 0.0
+		_last_shot_index = int(_weapon().get("_shot_index")) if _weapon() != null else 0
 		if _player != null:
 			_sync_face()
 	else:
@@ -228,6 +244,11 @@ func set_form(on: bool) -> bool:
 		# 人会像灯神一样永远浮在原地。
 		if _player != null and _player.has_method("set_flight_lock"):
 			_player.call("set_flight_lock", false)
+		# 清掉机甲的炮口，`Weapon` 退回本体那套「轨道枪口」逻辑
+		# （不清的话会后一套过期的世界坐标一直喂给 `Weapon`，本体开枪就从半空打光）。
+		var wpn := _weapon()
+		if wpn != null:
+			wpn.call("set_carrier_muzzles", [] as Array[Vector3])
 		_restore_bones()
 	print("[Carrier] 变形 → %s" % ("阿比·埃舒（载具）" if on else "爱丽丝本体"))
 	return _on
@@ -262,8 +283,9 @@ func _build() -> bool:
 	if _skel != null:
 		_snapshot_rest()
 		_build_boost_fx()
-		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根" % [
-			_boost_fx.size(), _found_wing_bones(), _found_cannon_bones()])
+		_build_cannon_fx()
+		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根｜炮口焰 %d 个" % [
+			_boost_fx.size(), _found_wing_bones(), _found_cannon_bones(), cannon_fx_count])
 	else:
 		push_warning("[Carrier] 载具模型里没找到 Skeleton3D，飞行特效不会出现")
 	return true
@@ -767,15 +789,24 @@ func _run_effects(delta: float) -> void:
 		var spread := Quaternion(Vector3.FORWARD, (0.10 * wing_t) + flutter * wing_t)
 		_skel.set_bone_pose_rotation(bi, spread * r0)
 
-	# ── 炮口：开火瞬间抖一下（`Weapon` 没有直接暴露「刚开火」的布尔，用 HUD 信号太绕；
-	#    这里改成「推力越大炮口越稳、悬停时轻微机械呼吸」，省一个跨脚本耦合）──
+	# ── 炮口：悬停时轻微机械呼吸；**开火时**由 `Weapon.fired` 信号触发一个后坐脉冲 ──
 	for bn in CANNON_BONES:
 		var bi := _skel.find_bone(bn)
 		if bi < 0:
 			continue
 		var base_rot := _skel.get_bone_pose_rotation(bi)
+		# `_cannon_recoil` 在开火那一帧被拉满，然后按指数衰减 —— 炮会后挫一下再回位
+		var kick := Quaternion(Vector3.RIGHT, _cannon_recoil * 0.16)
 		var jig := Quaternion(Vector3.UP, 0.012 * sin(_fire_phase) * (1.0 - wing_t))
-		_skel.set_bone_pose_rotation(bi, jig * base_rot)
+		_skel.set_bone_pose_rotation(bi, kick * jig * base_rot)
+	_cannon_recoil = move_toward(_cannon_recoil, 0.0, 6.0 * delta)
+
+	# ── 机甲形态：把两门炮的世界坐标喂给 `Weapon`，让它从炮口打光 ──
+	# ⚠️ 每帧都要推：炮口跟着骨骼动（肩翼会开合、炮会呼吸），只在开火时算会滞后一帧。
+	_push_cannon_muzzles()
+
+	# ── 炮口蓝焰：开火瞬间闪一下（独立的短寿命锥体，和腿上的推进器分开）──
+	_run_cannon_flash(delta)
 
 	# ── 火焰长度 / 亮度：推力 → 大小 ──
 	var flick := 0.85 + 0.15 * sin(_wing_phase * 5.3)
@@ -811,6 +842,161 @@ func _run_effects(delta: float) -> void:
 		var gp := fx["particles"] as GPUParticles3D
 		gp.emitting = t > 0.25
 		gp.speed_scale = lerpf(0.6, 1.8, t)
+
+
+# ── 双炮开火 ───────────────────────────────────────────────────────────────
+
+## 把两门炮的**世界坐标**推给 `Weapon`，让它从炮口而不是（找不到的）轨道枪口打光。
+##
+## 为什么必须每帧推：炮口骨在 `bone_gear_Pillar_*` → `cannon_rot` → `cannon_pos` 这条链
+## 下面，而本脚本每帧都在改 `bone_gear_wing_*` 和炮口的旋转（肩翼开合、开火后坐），
+## 炮口世界位置一直在动 —— 只在开火那一帧算会差出十几厘米。
+func _push_cannon_muzzles() -> void:
+	var wpn := _weapon()
+	if wpn == null:
+		return
+	var xs: Array[Vector3] = []
+	for bn in CANNON_MUZZLE_BONES:
+		var bi := _skel.find_bone(bn)
+		if bi < 0:
+			continue
+		xs.append((_skel.global_transform * _skel.get_bone_global_pose(bi)).origin)
+	if xs.is_empty():
+		# 载具模型换了 / 骨名变了 → 退回单枪口，至少不会掉到地底下
+		wpn.call("set_carrier_muzzles", [] as Array[Vector3])
+		return
+	wpn.call("set_carrier_muzzles", xs)
+
+
+## 找 `Weapon`：它是 `Player` 的直接子节点（见 `scenes/player.tscn`）。
+func _weapon() -> Weapon:
+	if _player == null:
+		return null
+	return _player.get_node_or_null("Weapon") as Weapon
+
+
+## 建两门炮的焰口节点（每门一组：三层锥体 + 一盏灯），平时隐藏，开火时闪。
+## 复用的就是推进器那套网格和材质 —— 同一个 `_make_flame_mesh()`，「蓝焰」在机甲上
+## 应该长得一样，不该出现两套美术。
+func _build_cannon_fx() -> void:
+	cannon_fx_count = 0
+	if _skel == null:
+		return
+	var cone := _make_flame_mesh()
+	# 三层锥体：同轴、从内到外依次更细更长。
+	# 复用推进器那套「底半径 + 长度」约定（网格已归一化）。
+	#
+	# ⚠️ 半径从 0.16/0.10/0.05 提到 0.30/0.19/0.10：
+	#    0.16 m 的焰口放在肩高、又被肩甲翼片夹着，出图（`7_fire_front.png`）上
+	#    只剩一小圈蓝晕，玩家正常视角根本看不见。炮口焰是「开火有反馈」的主要视觉，
+	#    宁可比真实比例夸张一点。长度也跟着从 0.95 提到 1.25。
+	var specs := [
+		{"mat": _make_flame_mat(FLAME_OUTER), "r": 0.30, "len": 1.25},
+		{"mat": _make_flame_mat(FLAME_MID), "r": 0.19, "len": 1.00},
+		{"mat": _make_flame_mat(FLAME_CORE), "r": 0.10, "len": 0.72},
+	]
+	for bn in CANNON_MUZZLE_BONES:
+		var bi := _skel.find_bone(bn)
+		if bi < 0:
+			continue
+		var holder := Node3D.new()
+		holder.name = "CannonFX_%d" % bi
+		holder.visible = false
+		_carrier.add_child(holder)
+		var layers: Array[MeshInstance3D] = []
+		for sp in specs:
+			var mi := MeshInstance3D.new()
+			mi.mesh = cone
+			mi.material_override = sp["mat"]
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.layers = 1
+			mi.set_meta("base_radius", float(sp["r"]))
+			mi.set_meta("base_len", float(sp["len"]))
+			mi.scale = Vector3(sp["r"], sp["len"], sp["r"])
+			holder.add_child(mi)
+			layers.append(mi)
+		var light := OmniLight3D.new()
+		light.light_color = Color(0.45, 0.75, 1.0)
+		light.omni_range = 5.0
+		light.light_energy = 0.0
+		light.shadow_enabled = false
+		holder.add_child(light)
+		_cannon_fx.append({
+			"bone": bi,
+			"holder": holder,
+			"layers": layers,
+			"light": light,
+			## 这一门还剩几秒的「亮着」时间
+			"left": 0.0,
+		})
+		cannon_fx_count += 1
+
+
+## 每帧：跟在炮口骨上；开火时把 `left` 拉满，然后按指数衰减。
+##
+## ── 焰口朝向：不要硬编码旋转，用骨骼自己的「前向轴」 ──
+##
+## 实测（`_diag_cannon_fx.gd`）：`bone_gear_cannon_outletB_L` 的 basis 是
+##   X=(0.97, 0.17, -0.18)  Y=(-0.07, -0.51, -0.86)  Z=(-0.24, 0.85, -0.48)
+## 也就是**骨骼的 +Y 朝下后方**（美术把炮骨摆成这样了），而 `_make_flame_mesh()`
+## 做的是「尖朝 −Y」。所以直接把网格挂上去，火焰是朝**下后方**喷的 ——
+## 本喵第一版就是这么写的，出图上肩炮那里什么都看不见（`7_fire_side.png`）。
+##
+## 正确做法：**用骨骼的 Z 轴当前向**（这个模型里骨骼 Z ≈ 模型前向），
+## 再用 `Basis.looking_at(前向, 上)` 重新架一个坐标系，让网格的 −Y 对到这根 Z 上。
+## 不写死角度：换一具骨架、骨名相同但美术姿势变了，也不会再错。
+func _run_cannon_flash(delta: float) -> void:
+	if _cannon_fx.is_empty() or _skel == null:
+		return
+	# 开火检测：`Weapon._shot_index` 每发 +1。用它而不是信号，
+	# 因为 `Weapon` 的 `fired` 信号是 `shot_index: int`，接起来要多一处跨脚本连接；
+	# 而这里每帧本来就在跑，读一个 int 最省事、也不会漏（连发 13 发/秒远低于帧率）。
+	var wpn := _weapon()
+	if wpn != null:
+		var si: int = int(wpn.get("_shot_index"))
+		if si > _last_shot_index:
+			_last_shot_index = si
+			_cannon_recoil = 1.0
+			for fx in _cannon_fx:
+				fx["left"] = 0.085        # ≈ 两帧多一点，连发时看起来是持续闪
+	_cannon_phase += delta * 40.0
+	for fx in _cannon_fx:
+		var bi: int = fx["bone"]
+		var holder: Node3D = fx["holder"]
+		var bone_gt := _skel.global_transform * _skel.get_bone_global_pose(bi)
+		# 骨骼的 Z 轴 = 炮管前向（实测这段数据里 Z ≈ 模型前方）
+		var fwd := bone_gt.basis.z.normalized()
+		# 网格的尖朝 −Y ⇒ 我们要让「−Y」对到 `fwd`，即「+Y」对到 `−fwd`。
+		# 用一个绕 X 的 180° 把网格翻过来，再用 `looking_at` 架坐标系：
+		#   `looking_at(dir)` 让 +Z 对到 dir，于是我们要让它对到 `−fwd`，
+		#   之后再绕 X 转 180°，网格的 −Y 就落在 `fwd` 上了。
+		var up := Vector3.UP
+		if absf(fwd.dot(up)) > 0.98:
+			up = Vector3.FORWARD
+		var b := Basis.looking_at(-fwd, up) * Basis(Vector3.RIGHT, PI)
+		holder.global_transform = Transform3D(b, bone_gt.origin)
+		var left: float = float(fx["left"])
+		if left > 0.0:
+			fx["left"] = maxf(left - delta, 0.0)
+		var on := left > 0.0
+		holder.visible = on
+		if not on:
+			(fx["light"] as OmniLight3D).light_energy = 0.0
+			continue
+		# 越接近熄灭越短，看起来像「闪一下」
+		var t := clampf(left / 0.085, 0.0, 1.0)
+		var jitter := 0.85 + 0.15 * sin(_cannon_phase)
+		var layers: Array = fx["layers"]
+		for mi in layers:
+			var m := (mi as MeshInstance3D)
+			var br: float = float(m.get_meta("base_radius", 0.1))
+			var bl: float = float(m.get_meta("base_len", 0.7))
+			var g := lerpf(0.45, 1.0, t) * jitter
+			m.scale = Vector3(br * g, bl * g, br * g)
+			var mat := m.material_override as StandardMaterial3D
+			if mat != null:
+				mat.emission_energy_multiplier = lerpf(1.0, 7.0, t)
+		(fx["light"] as OmniLight3D).light_energy = 3.2 * t * jitter
 
 
 ## 变回本体时把被特效改过的骨还原（不然下次变形出来是歪的）
