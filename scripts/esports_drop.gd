@@ -217,6 +217,11 @@ func _build_camera() -> void:
 	add_child(_cam)
 
 
+## ⚠️ 不能用 `look_at()`：相机在「正上方俯视」附近时，`look_at` 的 up 向量会退化成
+##    零向量 → 视线翻滚（使用者 2026-11-07 反馈的「房子上下反了」就是这一种：
+##    模型本身是对的 —— 地板朝上、天花板朝下、y=0 是地面，`_probe_esports_flip.gd` 量过 ——
+##    是镜头绕着自身 Z 轴翻了半圈）。这里直接给 `basis`：-Z 指向目标，
+##    X 轴固定为「水平面内与视线垂直」的方向，Y 轴永远是「屏幕上」。
 func _place_camera(t: float) -> void:
 	var orbit_start := FALL_TIME + HOLD_BEFORE_ORBIT
 	var k := clampf((t - orbit_start) / ORBIT_TIME, 0.0, 1.0)
@@ -224,13 +229,26 @@ func _place_camera(t: float) -> void:
 	var ang := deg_to_rad(ORBIT_START_DEG + ORBIT_SWEEP_DEG * ease_k)
 	var pitch := deg_to_rad(lerpf(ORBIT_PITCH_0, ORBIT_PITCH_1, ease_k))
 	var r := lerpf(ORBIT_RADIUS * 0.88, ORBIT_RADIUS, ease_k)
-	var dir := Vector3(sin(ang), 0.0, cos(ang))
-	var pos := _center + dir * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.2, 0.0)
+	# ang 的 0° = +Z（门口那一侧），顺时针扫
+	var horiz := Vector3(sin(ang), 0.0, cos(ang))
+	var pos := _center + horiz * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.2, 0.0)
 	var look := _center + Vector3(0.0, ORBIT_LOOK_HEIGHT, 0.0)
 	if t < FALL_TIME:
 		look.y += (_room.global_position.y - _base_y) * 0.38
 	_cam.global_position = pos
-	_cam.look_at(look, Vector3.UP)
+	# 手动正交化：永远「头朝上」
+	var to_target := (look - pos).normalized()
+	if to_target.length_squared() < 0.0001:
+		return
+	var right := Vector3.UP.cross(to_target)
+	if right.length_squared() < 0.0001:
+		# 视线几乎垂直于地面（正俯视）—— 用扫掠方向当右轴，免得退化成零
+		right = horiz.cross(Vector3.UP)
+	if right.length_squared() < 0.0001:
+		right = Vector3.RIGHT
+	right = right.normalized()
+	var up := to_target.cross(right).normalized()
+	_cam.global_transform = Transform3D(Basis(right, up, -to_target), pos)
 
 
 func _finish() -> void:
