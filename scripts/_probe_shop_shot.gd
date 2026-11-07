@@ -65,21 +65,47 @@ func _run() -> void:
 
 	# 正面 +Z 一侧看（门和招牌都在这一面）
 	var c := box.get_center()
-	var fit := maxf(box.size.x, box.size.y) * 0.5
-	var half := deg_to_rad(_cam.fov * 0.5)
-	var dist := fit / tan(half) * 1.35
+	var front_z := box.position.z + box.size.z      # 正面（+Z）
+	var back_z := box.position.z                     # 背面（−Z）
+	print("[shot] 正面 z = %.2f，背面 z = %.2f，中心 x = %.2f" % [front_z, back_z, c.x])
 
-	await _shoot(Vector3(c.x, c.y * 0.9, box.position.z + box.size.z + dist * 0.55),
-		Vector3(c.x, c.y * 0.75, c.z), out.path_join("1_front.png"))
-	await _shoot(Vector3(box.position.x - dist * 0.5, c.y * 1.6,
-		box.position.z + box.size.z + dist * 0.5),
-		Vector3(c.x, c.y * 0.8, c.z), out.path_join("2_three_quarter.png"))
-	# 进店：站在正面中轴偏一点，往里看
-	await _shoot(Vector3(c.x + 2.0, 1.75, box.position.z + box.size.z - 1.2),
-		Vector3(c.x - 1.0, 1.6, c.z - box.size.z * 0.35), out.path_join("3_inside.png"))
-	# 门面近景：招牌 + 入口高度
-	await _shoot(Vector3(c.x, 2.6, box.position.z + box.size.z + 13.0),
-		Vector3(c.x, 3.4, box.position.z + box.size.z), out.path_join("4_sign.png"))
+	# 关键节点世界坐标：判断入口、柜台、芹香到底落在哪
+	for nm in ["Body", "Decor"]:
+		var holder := _shop.get_node_or_null(nm)
+		if holder == null:
+			continue
+		for ch in holder.get_children():
+			if ch is Node3D and String(ch.name) in ["Counter", "CounterTop", "Register",
+					"SignBoard", "WallShelf", "WallShelf2", "WallShelf3"]:
+				print("[shot]   %-12s @ %s" % [
+					ch.name, str((ch as Node3D).global_position.snappedf(0.01))])
+	var clerk := _shop.get_node_or_null("ClerkSerika") as Node3D
+	if clerk != null:
+		print("[shot]   芹香         @ %s" % str(clerk.global_position.snappedf(0.01)))
+	else:
+		print("[shot]   !! 没有 ClerkSerika")
+
+	# ① 正面**正交立面图**：没有透视畸变，玻璃/实墙/门洞一眼分明
+	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_cam.size = 16.0
+	await _shoot(Vector3(c.x, c.y, front_z + 30.0), Vector3(c.x, c.y, front_z),
+		out.path_join("A_front_elevation.png"))
+	_cam.size = 8.0
+	await _shoot(Vector3(c.x, 2.2, front_z + 30.0), Vector3(c.x, 2.2, front_z),
+		out.path_join("B_front_door_zoom.png"))
+	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
+
+	# ② 站在房间**中心**（最开阔处）往门口看 —— 这是「从里往外」最稳的机位
+	var mid_z := (front_z + back_z) * 0.5
+	await _shoot(Vector3(c.x, 1.7, mid_z - 1.5), Vector3(c.x, 1.5, front_z + 3.0),
+		out.path_join("C_inside_to_door.png"))
+	# ③ 从房间西北角斜看东南（柜台/芹香在东南）
+	await _shoot(Vector3(box.position.x + 1.6, 1.7, back_z + 1.6),
+		Vector3(box.position.x + box.size.x - 1.0, 1.2, mid_z),
+		out.path_join("D_inside_to_counter.png"))
+	# ④ 门外 6 m、抬高到 2.2 m 往里看：模拟玩家跑过来的第一眼
+	await _shoot(Vector3(c.x, 2.2, front_z + 6.0), Vector3(c.x, 1.6, mid_z),
+		out.path_join("E_door_approach.png"))
 
 	print("[shot] 输出目录 %s" % out)
 	quit(0)

@@ -422,18 +422,22 @@ func _build_shell_from_glb() -> bool:
 	# ── 碰撞：四面墙，正面留门洞（模型是玻璃的，没有入口就只能看不能进）──
 	var t := wall_thickness
 	var half_l := shop_len * 0.5
-	var half_door := door_width * 0.5
 	_collider("ShellWallBack", Vector3(0.0, shop_height * 0.5, back_z - t * 0.5),
 		Vector3(shop_len, shop_height, t))
 	for sx in [-1.0, 1.0]:
 		_collider("ShellWall%s" % ("W" if sx < 0.0 else "E"),
 			Vector3(sx * (half_l + t * 0.5), shop_height * 0.5, (front_z + back_z) * 0.5),
 			Vector3(t, shop_height, shell_depth + t * 2.0))
-	for sx in [-1.0, 1.0]:
-		var seg_w := half_l - half_door
-		_collider("ShellFront%s" % ("W" if sx < 0.0 else "E"),
-			Vector3(sx * (half_door + seg_w * 0.5), shop_height * 0.5, front_z + t * 0.5),
-			Vector3(seg_w, shop_height, t))
+	# 正面：**只挡实墙那一段**。
+	# 正交立面图（`_arisu_captures/_shop_new/A_front_elevation.png`）实测：
+	# 这个模型正面**西侧约 1/3 是开口/玻璃、东侧约 2/3 是实墙**。
+	# 第一版沿用老壳习惯在正中开 1.6 m 门洞，结果 `ShellFrontW`（x −6.6~−0.8）
+	# 把模型真正的开口整个封死了，而实墙那段反而留了个洞 —— 正好反了。
+	# 现在西侧完全不设碰撞（留出开口），东侧从 open_x 一路封到东墙。
+	var open_x := 0.80
+	var wall_w := half_l - open_x
+	_collider("ShellFrontWall", Vector3(open_x + wall_w * 0.5, shop_height * 0.5,
+		front_z + t * 0.5), Vector3(wall_w, shop_height, t))
 
 	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
 	_build_sign(front_z)
