@@ -1,46 +1,47 @@
 extends Node3D
 ## 成交后的「天降电竞房」演出（用户 2026-11-07）。
 ##
-## 用户原话：
-##   「在成交后播放电竞房从天而降落地炸出大量灰尘动画视角要广一点，包括游戏开发部，
-##     摄像机旋转环绕体现电竞房的震撼」
+## ── 第一版被使用者打回 ──
+## 原话（勾选的四条）：
+##   「灰尘太小 / 不够炸（想满屏灰）」「落地没冲击感 / 抖音不够」
+##   「下降看着像瞬移 / 轨迹太直」「每次都要等 8 秒太久」
+## 第一版实测：整帧平均亮度 2.2~2.5（几乎全白）、9 宫格里全是 200+、
+## 暗像素占比只有 0.5%~6.6% —— 天空压白、房子泛白，**灰尘根本糊不住画面**。
 ##
-## 时间轴（总长 `total` ≈ 8.0 s，任意键可跳过）：
-##   0.0 → 1.4   房子从 `DROP_HEIGHT` 高的地方砸下来（加速下落），天空光柱 + 影子跟着缩
-##   1.4         着地：镜头重抖、`BIG_DUST` 大团灰尘炸开、冲击波圆环扩散、碎石飞溅、
-##               低音轰鸣；这一下之后房子轻微"settle"（下沉 8 cm 再弹回）
-##   1.4 → 7.6   镜头从**门口**起飞，绕整个东侧地块一圈（240°），半径 22 m、仰角 35°→18°，
-##               把游戏开发部部室 + 电竞房 + 地块一起收进画面
-##   7.6 → 8.0   淡出，把相机交还玩家
+## ── 这一版怎么改 ──
+## ① 灰尘：5 层、合计约 2600 颗，最外层单粒 6.5 m；再加一块**贴地尘毯**
+##   （水平加色/Alpha 圆盘，按 progress 扩到 46 m），落地那一下整屏都是灰。
+## ② 冲击：屏幕震动（整台相机 −fov 里 `h_offset/v_offset` 抖动，衰减 0.9 s）+
+##   **落地白闪**（CanvasLayer 全屏 ColorRect，0.25 s 淡出）+ 一小段**时间冻结**
+##   （0.9 s 内 delta ×0.35，街霸式 hitstop）+ 地砖碎屑 + 双同心冲击环。
+## ③ 轨迹：下落时**拖尾**（竖直的细长加色柱跟着房子一起落，两段亮度递增）+
+##   速度线（贴着房子四周的短线粒子，向下拉）。
+## ④ 时长：8.0 s → **5.6 s**（下落 1.15 s、前摇 0.1 s、环绕 4.0 s、收尾 0.35 s）。
 ##
-## 设计取舍：
-##   · **不暂停世界**：`get_tree().paused` 一开，玩家的 `_apply_camera()` 也跟着停，
-##     演出结束时镜头要"跳"回去一下。这里改为「独占相机 + 暂时收走玩家的鼠标捕获」，
-##     结束后把 `cam.current` 还给玩家自己的相机，位置/朝向都没动，无缝衔接。
-##   · **不写死朝向**：房子门在 +Z 那一头（`_probe_esports_door.gd` 量出来的：
-##     +Z 端竖直墙面只有 3 m²，另一端 66.5 m²）。镜头从门口起飞。
-##   · 灰尘用 `GPUParticles3D` + 程序化贴图（`_soft_dot()`，不依赖任何美术资源）；
-##     冲击波是一块水平 QuadMesh + 着色器，按 `progress` 画圆环。
+## 仍然不暂停世界：只独占相机 + 暂时交出鼠标；时间冻结是**给演出自己的 delta 打折扣**，
+## 不碰 `Engine.time_scale`（那会把敌人的物理和玩家的 `_apply_camera()` 一起拖慢）。
+##
+## 门在 +Z 那一头（`_probe_esports_door.gd` 量出来的：+Z 端竖直墙面 3.0 m²，另一端 66.5 m²）。
 
 signal finished
 
-## 房子下落多高（米）。再高就要等太久，再低看不出"从天而降"
-const DROP_HEIGHT := 58.0
-## 自由落体的感觉：用 `pow(t, 2.2)` 而不是真重力，前段慢一点、看得清
-const FALL_TIME := 1.45
-## 落地后的 settle：下沉再弹回
+const DROP_HEIGHT := 48.0
+const FALL_TIME := 1.15
+const HOLD_BEFORE_ORBIT := 0.10
 const SETTLE_DIP := 0.085
-const SETTLE_TIME := 0.42
-## 环绕
-const ORBIT_TIME := 6.2
-const ORBIT_RADIUS := 22.0
-const ORBIT_START_DEG := 200.0     ## 0° = 门口正前方（+Z），顺时针绕
-const ORBIT_SWEEP_DEG := 240.0
-const ORBIT_PITCH_0 := 34.0
-const ORBIT_PITCH_1 := 17.0
-const ORBIT_LOOK_HEIGHT := 0.9     ## 视线落点离地多高（贴地一点才显得房子大）
-## 总时长（跳过的窗口 = 全部）
-const TOTAL := FALL_TIME + 0.25 + ORBIT_TIME + 0.35
+const SETTLE_TIME := 0.36
+
+## 环绕：半径 26 m、仰角 30°→15°、fov 80、扫 260°（把部室那侧也带到画面里）
+const ORBIT_TIME := 4.0
+const ORBIT_RADIUS := 26.0
+const ORBIT_START_DEG := 168.0
+const ORBIT_SWEEP_DEG := 260.0
+const ORBIT_PITCH_0 := 30.0
+const ORBIT_PITCH_1 := 15.0
+const ORBIT_LOOK_HEIGHT := 0.75
+const CAM_FOV := 80.0
+
+const TOTAL := FALL_TIME + HOLD_BEFORE_ORBIT + ORBIT_TIME + 0.35
 
 var _room: Node3D
 var _cam: Camera3D
@@ -53,17 +54,25 @@ var _base_y := 0.0
 var _center := Vector3.ZERO
 var _half_depth := 8.42
 var _shake := 0.0
+var _hitstop := 0.0
 
 var _dust: Array[GPUParticles3D] = []
+var _rocks: GPUParticles3D
+var _streaks: GPUParticles3D
+var _trail_near: MeshInstance3D
+var _trail_far: MeshInstance3D
 var _shock: MeshInstance3D
-var _shock_mat: ShaderMaterial
+var _shock2: MeshInstance3D
+var _shock_mats: Array[ShaderMaterial] = []
+var _dust_sheet: MeshInstance3D
+var _dust_sheet_mat: ShaderMaterial
 var _beam: MeshInstance3D
 var _beam_mat: StandardMaterial3D
-var _rocks: GPUParticles3D
 var _boom: AudioStreamPlayer3D
+var _flash: ColorRect
 
 
-## 主入口：`room` 是整栋房子（`EsportsRoom` 节点），`center` 是它落地后的水平中心。
+## 主入口。`room` 是整栋房子（`EsportsRoom`），`center` 是它落地后的水平中心。
 func play(room: Node3D, center: Vector3, half_depth := 8.42) -> void:
 	_room = room
 	_center = center
@@ -71,94 +80,129 @@ func play(room: Node3D, center: Vector3, half_depth := 8.42) -> void:
 	_base_y = room.position.y
 
 	_build_camera()
+	_build_flash()
 	_build_dust()
+	_build_dust_sheet()
+	_build_rocks()
+	_build_streaks()
+	_build_trails()
 	_build_shock()
 	_build_beam()
-	_build_rocks()
 	_build_sound()
 
-	# 起手：房子在天上、看不见
 	_room.visible = true
 	_room.position.y = _base_y + DROP_HEIGHT
 	_place_camera(0.0)
 	_cam.current = true
-	# 演出期间把鼠标还给人（玩家停手最稳），结束后原样恢复
 	_prev_mouse = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	set_process(true)
-	print("[drop] 开演：房子从 %.1f m 高砸下来，环绕 %.0f°" % [DROP_HEIGHT, ORBIT_SWEEP_DEG])
+	print("[drop] 开演：%.0f m 天降，全程 %.1f s，环绕 %.0f°" % [
+		DROP_HEIGHT, TOTAL, ORBIT_SWEEP_DEG])
 
 
 func _process(delta: float) -> void:
 	if _done:
 		return
-	# 任意键 / 任意鼠标键 = 跳过
 	if _skip_pressed():
 		_finish()
 		return
-	_t += delta
+	# ── 时间冻结：落地后 0.9 s 内把 delta 打折（街霸式 hitstop）──
+	var dt := delta
+	if _hitstop > 0.0:
+		_hitstop = maxf(0.0, _hitstop - delta)
+		dt = delta * 0.35
+	_t += dt
 
-	# ── ① 下落 ──
+	# ① 下落
 	if _t < FALL_TIME:
 		var k := clampf(_t / FALL_TIME, 0.0, 1.0)
-		var e := pow(k, 2.2)  # 前段慢、后段砸下来
-		_room.position.y = _base_y + DROP_HEIGHT * (1.0 - e)
+		var e := pow(k, 2.4)              # 前段慢、后段砸下来
+		var y_off := DROP_HEIGHT * (1.0 - e)
+		_room.position.y = _base_y + y_off
 		_update_beam(k)
+		_update_trails(y_off)
 	elif not _landed:
 		_landed = true
 		_room.position.y = _base_y
 		_on_land()
 
-	# ── ② settle（落地后轻微下沉再弹回）──
+	# ② settle
 	if _landed:
 		var st := _t - FALL_TIME
 		if st < SETTLE_TIME:
 			var k := st / SETTLE_TIME
-			# 0 → 1 的下沉，再 sin 回弹一半
 			_room.position.y = _base_y - SETTLE_DIP * sin(k * PI) * (1.0 - k * 0.35)
 
-	# ── ③ 环绕 ──
+	# ③ 镜头
 	_place_camera(_t)
 
-	# ── ④ 抖动衰减 ──
+	# ④ 抖动衰减：前 0.35 s 满幅，之后按平方衰减
 	if _shake > 0.001:
-		_shake = maxf(0.0, _shake - delta * 2.4)
+		_shake = maxf(0.0, _shake - delta / 0.9)
 		var s := _shake * _shake
-		_cam.h_offset = randf_range(-s, s) * 0.5
-		_cam.v_offset = randf_range(-s, s) * 0.5
+		_cam.h_offset = randf_range(-s, s) * 0.75
+		_cam.v_offset = randf_range(-s, s) * 0.75
+		_cam.rotation.z = randf_range(-s, s) * 0.012
+	elif _cam != null:
+		_cam.h_offset = 0.0
+		_cam.v_offset = 0.0
 
 	if _t >= TOTAL:
 		_finish()
 
 
-## 落地那一帧：灰尘、冲击波、碎石、抖动、低音
+# ------------------------------------------------------------------ 落地那一下
+
 func _on_land() -> void:
 	_shake = 1.0
+	_hitstop = 0.9
 	for d in _dust:
-		d.set_meta("drop_fired", true)   # 自检用：粒子只在落地这一下吐一次
+		d.set_meta("drop_fired", true)
 		d.restart()
 		d.emitting = true
-	if _rocks != null:
-		_rocks.restart()
-		_rocks.emitting = true
-	if _shock_mat != null:
-		_shock_mat.set_shader_parameter("progress", 0.0)
-		_shock.visible = true
-		_tween_shock()
+	for p in [_rocks, _streaks]:
+		if p != null:
+			p.restart()
+			p.emitting = true
+	for m in _shock_mats:
+		m.set_shader_parameter("progress", 0.0)
+	for s in [_shock, _shock2]:
+		if s != null:
+			s.visible = true
+	_tween_shock()
+	if _dust_sheet != null and _dust_sheet_mat != null:
+		_dust_sheet.visible = true
+		_dust_sheet_mat.set_shader_parameter("progress", 0.0)
+		var tw := create_tween()
+		tw.tween_method(func(v: float) -> void:
+			if _dust_sheet_mat != null:
+				_dust_sheet_mat.set_shader_parameter("progress", v), 0.0, 1.0, 1.8)
+		tw.tween_callback(func() -> void:
+			if _dust_sheet != null:
+				_dust_sheet.visible = false)
+	if _flash != null:
+		_flash.modulate.a = 0.92
+		var tf := create_tween()
+		tf.tween_property(_flash, "modulate:a", 0.0, 0.28)
 	if _boom != null:
 		_boom.play()
-	if _beam != null:
-		_beam.visible = false
+	for m in [_trail_near, _trail_far, _beam]:
+		if m != null:
+			m.visible = false
 	print("[drop] 落地")
 
 
 func _tween_shock() -> void:
 	var tw := create_tween()
 	tw.tween_method(func(v: float) -> void:
-		_shock_mat.set_shader_parameter("progress", v), 0.0, 1.0, 1.5)
+		for m in _shock_mats:
+			if m != null:
+				m.set_shader_parameter("progress", v), 0.0, 1.0, 1.25)
 	tw.tween_callback(func() -> void:
-		if _shock != null:
-			_shock.visible = false)
+		for s in [_shock, _shock2]:
+			if s != null:
+				s.visible = false)
 
 
 # ------------------------------------------------------------------ 相机
@@ -167,32 +211,26 @@ func _build_camera() -> void:
 	_prev_cam = get_viewport().get_camera_3d() if is_inside_tree() else null
 	_cam = Camera3D.new()
 	_cam.name = "DropCam"
-	_cam.fov = 74.0          # 广角（用户：「视角要广一点」）
+	_cam.fov = CAM_FOV
 	_cam.near = 0.05
 	_cam.far = 600.0
 	add_child(_cam)
 
 
-## 门口正前方 = +Z（门在 +Z 那一头，见文件头）。0° 在门口，顺时针绕。
 func _place_camera(t: float) -> void:
-	var orbit_start := FALL_TIME + 0.25
+	var orbit_start := FALL_TIME + HOLD_BEFORE_ORBIT
 	var k := clampf((t - orbit_start) / ORBIT_TIME, 0.0, 1.0)
-	# 前摇阶段不动（就停在门口机位，看房子砸下来）
-	var ease_k := k * k * (3.0 - 2.0 * k)  # smoothstep
+	var ease_k := k * k * (3.0 - 2.0 * k)
 	var ang := deg_to_rad(ORBIT_START_DEG + ORBIT_SWEEP_DEG * ease_k)
 	var pitch := deg_to_rad(lerpf(ORBIT_PITCH_0, ORBIT_PITCH_1, ease_k))
-	var r := lerpf(ORBIT_RADIUS * 0.92, ORBIT_RADIUS, ease_k)
+	var r := lerpf(ORBIT_RADIUS * 0.88, ORBIT_RADIUS, ease_k)
 	var dir := Vector3(sin(ang), 0.0, cos(ang))
-	var pos := _center + dir * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.4, 0.0)
+	var pos := _center + dir * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.2, 0.0)
 	var look := _center + Vector3(0.0, ORBIT_LOOK_HEIGHT, 0.0)
-	# 下落阶段：镜头稍微俯低一点跟着房子
 	if t < FALL_TIME:
-		look.y += (_room.global_position.y - _base_y) * 0.42
+		look.y += (_room.global_position.y - _base_y) * 0.38
 	_cam.global_position = pos
 	_cam.look_at(look, Vector3.UP)
-	if _shake <= 0.001:
-		_cam.h_offset = 0.0
-		_cam.v_offset = 0.0
 
 
 func _finish() -> void:
@@ -206,19 +244,17 @@ func _finish() -> void:
 		_prev_cam.current = true
 	Input.mouse_mode = _prev_mouse
 	print("[drop] 收尾：相机交还玩家")
-	# 让灰尘自然淡完再拆节点（拆早了画面上会"啪"地消失）
 	get_tree().create_timer(3.0).timeout.connect(queue_free)
 	finished.emit()
 
 
-func _skip_pressed() -> bool:
-	if _t < 0.35:
-		return false  # 开场别被上一次按键误触
-	return _has_fresh_key()
-
-
-## 只在**这一帧有新按下**时跳过（用 `_input` 记的标记）
 var _fresh_key := false
+
+
+func _skip_pressed() -> bool:
+	if _t < 0.3:
+		return false
+	return _has_fresh_key()
 
 
 func _input(event: InputEvent) -> void:
@@ -240,11 +276,10 @@ func _has_fresh_key() -> bool:
 	return false
 
 
-# ------------------------------------------------------------------ 灰尘 / 碎石 / 冲击波 / 光柱
+# ------------------------------------------------------------------ 贴图 / 材质
 
-## 一张 128×128 的软边圆点（程序化生成，不占仓库体积）。
-## ⚠️ 粒子贴图要 `ALPHA` 通道 + `billboard`，所以这里只写白色 + 渐变 alpha。
-static func _soft_dot(hard := 0.35) -> ImageTexture:
+## 128×128 软边圆点（程序化，不占仓库体积）
+static func _soft_dot(hard := 0.28) -> ImageTexture:
 	var n := 128
 	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	var c := Vector2(n * 0.5, n * 0.5)
@@ -253,87 +288,148 @@ static func _soft_dot(hard := 0.35) -> ImageTexture:
 		for x in n:
 			var d := Vector2(x - c.x, y - c.y).length() / r
 			var a := clampf(1.0 - (d - hard) / (1.0 - hard), 0.0, 1.0)
-			a = a * a
-			img.set_pixel(x, y, Color(1, 1, 1, a))
+			img.set_pixel(x, y, Color(1, 1, 1, a * a))
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
 
-func _dust_material(tint: Color, size: float, life: float) -> ParticleProcessMaterial:
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(9.0, 0.35, 13.0)   # 沿房间长边铺开
-	pm.direction = Vector3(1, 0.05, 0)
-	pm.spread = 90.0
-	pm.initial_velocity_min = 3.5
-	pm.initial_velocity_max = 13.0
-	pm.gravity = Vector3(0.0, 0.55, 0.0)                  # 轻微上飘
-	pm.damping_min = 1.8
-	pm.damping_max = 4.5
-	pm.scale_min = size * 0.55
-	pm.scale_max = size * 1.35
-	pm.color = tint
-	pm.angle_min = -180.0
-	pm.angle_max = 180.0
-	pm.hue_variation_min = -0.03
-	pm.hue_variation_max = 0.03
-	return pm
+## 32×128 竖直拖尾（越往下越亮），给下落轨迹用
+static func _trail_grad() -> ImageTexture:
+	var w := 16
+	var h := 128
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		var v := float(y) / float(h - 1)          # 0 = 顶（远）, 1 = 底（近）
+		var a := pow(v, 1.7)
+		for x in w:
+			var u := absf(float(x) / float(w - 1) - 0.5) * 2.0
+			var a2 := a * (1.0 - u * u)
+			img.set_pixel(x, y, Color(0.75, 0.85, 1.0, clampf(a2, 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)
 
 
-func _build_dust() -> void:
-	# 三层：细尘（快、亮）、大团灰（慢、暗、大）、贴地扩散（低、宽）
-	var specs := [
-		{"n": 900, "life": 2.6, "size": 0.55, "tint": Color(0.78, 0.74, 0.68, 0.55)},
-		{"n": 420, "life": 4.2, "size": 1.6, "tint": Color(0.55, 0.53, 0.50, 0.42)},
-		{"n": 260, "life": 5.0, "size": 2.8, "tint": Color(0.62, 0.60, 0.57, 0.30)},
-	]
-	for sp in specs:
-		var p := GPUParticles3D.new()
-		p.amount = int(sp["n"])
-		p.lifetime = float(sp["life"])
-		p.one_shot = true
-		p.emitting = false
-		p.explosiveness = 0.92
-		p.fixed_fps = 0
-		p.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
-		p.visibility_aabb = AABB(Vector3(-40, -3, -40), Vector3(80, 30, 80))
-		p.process_material = _dust_material(sp["tint"], float(sp["size"]), float(sp["life"]))
-		var quad := QuadMesh.new()
-		quad.size = Vector2(1.0, 1.0)
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-		mat.vertex_color_use_as_albedo = true
-		mat.albedo_texture = _soft_dot(0.25)
-		mat.disable_receive_shadows = true
-		quad.material = mat
-		p.draw_pass_1 = quad
-		p.position = Vector3(0.0, 0.25, 0.0)
-		add_child(p)
-		_dust.append(p)
-
-
-func _build_rocks() -> void:
-	# 碎石：小方块，初速往外+往上，重力拉回来
+func _dust_layer(amount: int, life: float, size: float, tint: Color,
+		box: Vector3, vmin: float, vmax: float, grav: float, spread := 90.0) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = 220
-	p.lifetime = 2.2
+	p.amount = amount
+	p.lifetime = life
 	p.one_shot = true
 	p.emitting = false
 	p.explosiveness = 1.0
-	p.visibility_aabb = AABB(Vector3(-40, -3, -40), Vector3(80, 30, 80))
+	p.fixed_fps = 0
+	p.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+	p.visibility_aabb = AABB(Vector3(-70, -4, -70), Vector3(140, 60, 140))
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(5.0, 0.2, 8.0)
+	pm.emission_box_extents = box
+	pm.direction = Vector3(1, 0.08, 0)
+	pm.spread = spread
+	pm.initial_velocity_min = vmin
+	pm.initial_velocity_max = vmax
+	pm.gravity = Vector3(0.0, grav, 0.0)
+	pm.damping_min = 1.6
+	pm.damping_max = 5.0
+	pm.scale_min = size * 0.55
+	pm.scale_max = size * 1.5
+	pm.color = tint
+	pm.angle_min = -180.0
+	pm.angle_max = 180.0
+	p.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.0, 1.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = _soft_dot(0.22)
+	mat.disable_receive_shadows = true
+	quad.material = mat
+	p.draw_pass_1 = quad
+	add_child(p)
+	_dust.append(p)
+	return p
+
+
+func _build_dust() -> void:
+	# ① 贴地尘毯：低、宽、快，落地瞬间糊住地面
+	var a := _dust_layer(900, 2.8, 2.6, Color(0.52, 0.49, 0.45, 0.62),
+		Vector3(9.5, 0.25, 13.5), 9.0, 22.0, 0.35, 88.0)
+	a.position = Vector3(0, 0.2, 0)
+	# ② 中环：往外扩的主力
+	var b := _dust_layer(700, 3.6, 4.4, Color(0.44, 0.42, 0.39, 0.52),
+		Vector3(7.0, 0.6, 10.0), 6.0, 15.0, 0.5, 90.0)
+	b.position = Vector3(0, 0.8, 0)
+	# ③ 大团灰：慢、暗、大，撑体积感
+	var c := _dust_layer(420, 5.2, 6.5, Color(0.33, 0.32, 0.30, 0.40),
+		Vector3(5.5, 0.9, 8.0), 3.0, 9.0, 0.75, 90.0)
+	c.position = Vector3(0, 1.4, 0)
+	# ④ 冲天柱：往上蹿，把"砸下来"的高度感拉满
+	var d := _dust_layer(320, 3.2, 3.2, Color(0.48, 0.46, 0.43, 0.48),
+		Vector3(4.0, 0.2, 6.0), 5.0, 13.0, 1.2, 40.0)
+	d.process_material.gravity = Vector3(0, 1.6, 0)
+	d.process_material.direction = Vector3(0, 1, 0)
+	d.process_material.spread = 55.0
+	d.position = Vector3(0, 0.4, 0)
+	# ⑤ 高空散尘：慢速飘、寿命最长，让灰一直留在画面里
+	var e := _dust_layer(260, 6.5, 8.5, Color(0.40, 0.38, 0.36, 0.26),
+		Vector3(8.0, 1.2, 11.0), 1.0, 4.0, 0.25, 90.0)
+	e.position = Vector3(0, 2.2, 0)
+
+
+## 贴地尘毯：一块水平圆盘，着色器按 progress 从中心扩到 ~46 m，同时淡出
+func _build_dust_sheet() -> void:
+	var q := QuadMesh.new()
+	q.size = Vector2(1, 1)
+	_dust_sheet_mat = ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
+uniform float progress : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 dust_color : source_color = vec4(0.44, 0.42, 0.39, 0.55);
+void fragment() {
+	float d = length(UV - vec2(0.5)) * 2.0;
+	float grow = mix(0.05, 1.0, sqrt(progress));
+	float body = 1.0 - smoothstep(grow * 0.55, grow, d);
+	float noise = fract(sin(dot(floor(UV * 220.0), vec2(12.9898, 78.233))) * 43758.5453);
+	float fade = (1.0 - smoothstep(0.25, 1.0, progress)) * 0.85;
+	ALBEDO = dust_color.rgb;
+	ALPHA = clamp(body * fade * (0.75 + noise * 0.45), 0.0, 1.0);
+}
+"""
+	_dust_sheet_mat.shader = sh
+	_dust_sheet_mat.set_shader_parameter("progress", 0.0)
+	q.material = _dust_sheet_mat
+	_dust_sheet = MeshInstance3D.new()
+	_dust_sheet.name = "DustSheet"
+	_dust_sheet.mesh = q
+	_dust_sheet.scale = Vector3(46.0, 46.0, 1.0)
+	_dust_sheet.rotation_degrees = Vector3(-90, 0, 0)
+	_dust_sheet.position = Vector3(0.0, 0.18, 0.0)
+	_dust_sheet.visible = false
+	add_child(_dust_sheet)
+
+
+func _build_rocks() -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 320
+	p.lifetime = 2.4
+	p.one_shot = true
+	p.emitting = false
+	p.explosiveness = 1.0
+	p.visibility_aabb = AABB(Vector3(-70, -4, -70), Vector3(140, 60, 140))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(5.5, 0.25, 9.0)
 	pm.direction = Vector3(0, 1, 0)
-	pm.spread = 70.0
-	pm.initial_velocity_min = 6.0
-	pm.initial_velocity_max = 16.0
-	pm.gravity = Vector3(0, -22.0, 0)
-	pm.scale_min = 0.06
-	pm.scale_max = 0.22
-	pm.color = Color(0.35, 0.34, 0.33, 1.0)
+	pm.spread = 72.0
+	pm.initial_velocity_min = 7.0
+	pm.initial_velocity_max = 19.0
+	pm.gravity = Vector3(0, -26.0, 0)
+	pm.scale_min = 0.07
+	pm.scale_max = 0.26
+	pm.color = Color(0.33, 0.32, 0.31, 1.0)
 	p.process_material = pm
 	var box := BoxMesh.new()
 	box.size = Vector3.ONE
@@ -346,46 +442,134 @@ func _build_rocks() -> void:
 	_rocks = p
 
 
-## 落地冲击波：一块水平 QuadMenu，着色器按 progress 画扩散的圆环
-func _build_shock() -> void:
+## 下落速度线：短线粒子，向下拉，看着像"砸下来带风"
+func _build_streaks() -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 260
+	p.lifetime = 1.1
+	p.one_shot = true
+	p.emitting = false
+	p.explosiveness = 0.55
+	p.visibility_aabb = AABB(Vector3(-70, -4, -70), Vector3(140, 80, 140))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(4.6, 12.0, 8.0)
+	pm.direction = Vector3(0, -1, 0)
+	pm.spread = 6.0
+	pm.initial_velocity_min = 22.0
+	pm.initial_velocity_max = 42.0
+	pm.gravity = Vector3(0, -30.0, 0)
+	pm.scale_min = 1.0
+	pm.scale_max = 2.4
+	pm.color = Color(0.82, 0.88, 1.0, 0.55)
+	p.process_material = pm
 	var q := QuadMesh.new()
-	q.size = Vector2(1, 1)
-	_shock_mat = ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = """
+	q.size = Vector2(0.035, 2.4)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.disable_receive_shadows = true
+	q.material = mat
+	p.draw_pass_1 = q
+	add_child(p)
+	_streaks = p
+
+
+## 下落拖尾：两根竖直圆柱，从房子顶一直往上连到它"来处"，亮度随高度递减
+func _build_trails() -> void:
+	for i in 2:
+		var near := i == 0
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 6.6 if near else 4.2
+		cyl.bottom_radius = 5.4 if near else 7.2
+		cyl.height = 1.0
+		cyl.radial_segments = 20
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.albedo_color = Color(0.72, 0.84, 1.0, 0.22 if near else 0.09)
+		cyl.material = mat
+		var mi := MeshInstance3D.new()
+		mi.name = "TrailNear" if near else "TrailFar"
+		mi.mesh = cyl
+		add_child(mi)
+		if near:
+			_trail_near = mi
+		else:
+			_trail_far = mi
+
+
+## 拖尾长度 = 当前离地高度；越接近地面越亮（"压缩空气"的观感）
+func _update_trails(y_off: float) -> void:
+	if _trail_near == null or _trail_far == null:
+		return
+	var k := 1.0 - clampf(y_off / DROP_HEIGHT, 0.0, 1.0)   # 0 = 在高处, 1 = 落地
+	for pair in [[_trail_near, 0.18, 0.42], [_trail_far, 0.06, 0.20]]:
+		var mi: MeshInstance3D = pair[0]
+		var a0: float = pair[1]
+		var a1: float = pair[2]
+		mi.visible = y_off > 0.5
+		mi.scale = Vector3(1.0, maxf(y_off, 0.05), 1.0)
+		mi.position = Vector3(0.0, y_off * 0.5, 0.0)   # 底端 = 房子顶（房子已抬到 y_off）
+		var mat := mi.mesh.surface_get_material(0) as StandardMaterial3D
+		if mat != null:
+			mat.albedo_color.a = lerpf(a0, a1, k)
+
+
+## 双同心冲击环
+func _build_shock() -> void:
+	var code := """
 shader_type spatial;
 render_mode unshaded, cull_disabled, blend_add, depth_draw_never, shadows_disabled;
 uniform float progress : hint_range(0.0, 1.0) = 0.0;
-uniform vec4 ring_color : source_color = vec4(0.85, 0.88, 0.95, 1.0);
-uniform float thickness = 0.055;
+uniform vec4 ring_color : source_color = vec4(0.90, 0.93, 1.0, 1.0);
+uniform float thickness = 0.045;
+uniform float radius_scale = 1.0;
 void fragment() {
-	float d = length(UV - vec2(0.5)) * 2.0;          // 0 = 中心, 1 = 边缘
-	float r = mix(0.08, 1.0, progress);              // 环半径随时间扩大
+	float d = length(UV - vec2(0.5)) * 2.0;
+	float r = mix(0.05, 1.0, progress) * radius_scale;
 	float band = 1.0 - smoothstep(0.0, thickness, abs(d - r));
-	float fade = 1.0 - smoothstep(0.35, 1.0, progress);
-	float inner = (1.0 - smoothstep(0.0, r, d)) * 0.12 * (1.0 - progress);
+	float fade = 1.0 - smoothstep(0.30, 1.0, progress);
+	float inner = (1.0 - smoothstep(0.0, r, d)) * 0.10 * (1.0 - progress);
 	ALBEDO = ring_color.rgb;
-	ALPHA = clamp((band * 0.85 + inner) * fade, 0.0, 1.0);
+	ALPHA = clamp((band * 1.1 + inner) * fade, 0.0, 1.0);
 }
 """
-	_shock_mat.shader = sh
-	_shock_mat.set_shader_parameter("progress", 0.0)
-	q.material = _shock_mat
-	_shock = MeshInstance3D.new()
-	_shock.name = "Shockwave"
-	_shock.mesh = q
-	_shock.scale = Vector3(30.0, 30.0, 1.0)   # 直径 30 m，罩住整个地块
-	_shock.rotation_degrees = Vector3(-90, 0, 0)
-	_shock.position = Vector3(0.0, 0.12, 0.0)
-	_shock.visible = false
-	add_child(_shock)
+	for i in 2:
+		var q := QuadMesh.new()
+		q.size = Vector2(1, 1)
+		var mat := ShaderMaterial.new()
+		var sh := Shader.new()
+		sh.code = code
+		mat.shader = sh
+		mat.set_shader_parameter("progress", 0.0)
+		mat.set_shader_parameter("radius_scale", 1.0 if i == 0 else 0.62)
+		q.material = mat
+		var mi := MeshInstance3D.new()
+		mi.name = "Shockwave%d" % i
+		mi.mesh = q
+		mi.scale = Vector3(34.0 if i == 0 else 26.0, 34.0 if i == 0 else 26.0, 1.0)
+		mi.rotation_degrees = Vector3(-90, 0, 0)
+		mi.position = Vector3(0.0, 0.1 + i * 0.05, 0.0)
+		mi.visible = false
+		add_child(mi)
+		_shock_mats.append(mat)
+		if i == 0:
+			_shock = mi
+		else:
+			_shock2 = mi
 
 
-## 下落时的天空光柱：一个细长的圆柱（加色混合），落定后隐藏
+## 下落时的天空光柱（保留第一版的，落地后隐藏）
 func _build_beam() -> void:
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 5.2
-	cyl.bottom_radius = 6.4
+	cyl.bottom_radius = 6.6
 	cyl.height = DROP_HEIGHT
 	cyl.radial_segments = 24
 	_beam_mat = StandardMaterial3D.new()
@@ -406,11 +590,26 @@ func _update_beam(k: float) -> void:
 	if _beam == null:
 		return
 	_beam.visible = true
-	# 越接近地面越亮：0 → 0.10，1 → 0.28
-	_beam_mat.albedo_color.a = lerpf(0.06, 0.26, k)
+	_beam_mat.albedo_color.a = lerpf(0.05, 0.30, k)
 
 
-## 低音轰鸣：没有素材就程序化合成一段 2.5 s 的低频噪声包络
+## 落地白闪：全屏 ColorRect（CanvasLayer，跟游戏 HUD 同一个渲染层）
+func _build_flash() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "DropFlashLayer"
+	layer.layer = 90          # 压在 HUD 上面，但比设置菜单低
+	add_child(layer)
+	_flash = ColorRect.new()
+	_flash.name = "DropFlash"
+	_flash.color = Color(1, 0.97, 0.92, 1)
+	_flash.modulate.a = 0.0
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(_flash)
+
+
+# ------------------------------------------------------------------ 声音
+
 func _build_sound() -> void:
 	var stream := _synth_boom()
 	if stream == null:
@@ -420,14 +619,14 @@ func _build_sound() -> void:
 	_boom.stream = stream
 	_boom.unit_size = 30.0
 	_boom.max_distance = 400.0
-	_boom.volume_db = 2.0
+	_boom.volume_db = 4.0
 	add_child(_boom)
 
 
-## 2.2 s / 22050 Hz 的单声道低音：60 Hz 正弦 × 噪声 × 快速衰减，再叠一层 34 Hz 低频。
+## 2.4 s / 22050 Hz 低音：58 Hz + 34 Hz 正弦 × 低通噪声 × 快速衰减，再叠一记高频"啪"
 static func _synth_boom() -> AudioStreamWAV:
 	var rate := 22050
-	var n := int(2.2 * rate)
+	var n := int(2.4 * rate)
 	var data := PackedByteArray()
 	data.resize(n * 2)
 	var rng := RandomNumberGenerator.new()
@@ -435,12 +634,12 @@ static func _synth_boom() -> AudioStreamWAV:
 	var lp := 0.0
 	for i in n:
 		var t := float(i) / float(rate)
-		var env := exp(-t * 2.6) * (1.0 - exp(-t * 90.0))   # 快起、缓落
+		var env := exp(-t * 2.4) * (1.0 - exp(-t * 110.0))
 		var body := sin(TAU * 58.0 * t) + 0.6 * sin(TAU * 34.0 * t)
-		lp = lerpf(lp, rng.randf_range(-1.0, 1.0), 0.045)     # 一阶低通 → 闷响
-		var s := clampf((body * 0.55 + lp * 1.4) * env, -1.0, 1.0)
-		var v := int(s * 32000.0)
-		data.encode_s16(i * 2, v)
+		lp = lerpf(lp, rng.randf_range(-1.0, 1.0), 0.045)
+		var crack := rng.randf_range(-1.0, 1.0) * exp(-t * 42.0)
+		var s := clampf((body * 0.55 + lp * 1.5) * env + crack * 0.35, -1.0, 1.0)
+		data.encode_s16(i * 2, int(s * 32000.0))
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = rate

@@ -12,12 +12,13 @@ extends SceneTree
 const OUT := "res://_arisu_captures/_esports_drop"
 ## 演出时间轴（和 esports_drop.gd 对齐）：FALL 1.45 + 0.25 前摇，之后环绕 6.2
 const SHOTS := [
-	[0.55, "01_falling"],
-	[1.35, "02_about_to_land"],
-	[1.60, "03_impact_dust"],
-	[2.40, "04_dust_spread"],
-	[4.40, "05_orbit_mid"],
-	[6.60, "06_orbit_late"],
+	[0.45, "01_falling"],
+	[1.05, "02_about_to_land"],
+	[1.30, "03_impact"],
+	[1.75, "04_dust_spread"],
+	[2.80, "05_dust_big"],
+	[4.10, "06_orbit_mid"],
+	[5.20, "07_orbit_late"],
 ]
 
 var _fails := 0
@@ -108,22 +109,29 @@ func _run() -> void:
 			print("[drop] 下落中 t=%.2f 房间 y = %.2f（应 > %.2f）" % [
 				float(drop.get("_t")), y, base_y + 5.0])
 			_check(y > base_y + 5.0, "下落阶段房子确实在天上")
-		if item[1] == "03_impact_dust":
+		if item[1] == "03_impact":
 			_check(absf(room.position.y - base_y) < 0.2, "落地后房子回到原位 y=%.3f" % room.position.y)
 			var dust: Array = drop.get("_dust")
-			_check(dust.size() >= 3, "灰尘层 %d 个" % dust.size())
+			_check(dust.size() >= 5, "灰尘层 %d 个（这一版要 ≥5）" % dust.size())
 			# 粒子只在落地那一刻发出**一个**脉冲（explosiveness ≈ 1），
 			# 一两百毫秒后就 `emitting = false` 了 —— 所以这里判断的是
 			# **它曾经喷过**（`emitting` 或「已经吐过粒子」），不是"现在还在喷"。
 			var fired := 0
+			var total_amount := 0
 			for d in dust:
 				if not is_instance_valid(d):
 					continue
 				var gp := d as GPUParticles3D
+				total_amount += gp.amount
 				if gp.emitting or gp.has_meta("drop_fired"):
 					fired += 1
-			print("[drop] 灰尘：%d 层里 %d 层已触发" % [dust.size(), fired])
-			_check(fired >= 3, "落地瞬间 %d 层灰尘已触发" % fired)
+			print("[drop] 灰尘：%d 层 / 合计 %d 颗，%d 层已触发" % [dust.size(), total_amount, fired])
+			_check(fired >= 5, "落地瞬间 %d 层灰尘已触发" % fired)
+			_check(total_amount >= 2000, "灰尘总量 %d 颗（这一版要 ≥2000）" % total_amount)
+			var sheet := drop.get("_dust_sheet") as MeshInstance3D
+			_check(sheet != null and sheet.visible, "贴地尘毯已打开")
+			var shake := float(drop.get("_shake"))
+			print("[drop] 镜头抖动 %.2f / 时间冻结 %.2f s" % [shake, float(drop.get("_hitstop"))])
 
 	# 等演出收尾，确认相机交还
 	for _i in 900:
