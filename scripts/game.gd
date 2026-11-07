@@ -1070,6 +1070,22 @@ func _play_esports_drop() -> void:
 	var room := get_node_or_null("EsportsRoom") as Node3D
 	if room == null:
 		return
+	# ── 使用者 2026-11-07：「我自己摆算了」──
+	# 所以房子在哪、朝哪，**一律读场景里你们摆好的 transform**，这里不写死任何坐标。
+	#   · 落地中心 = 节点的世界 XZ（原地垂直落下）
+	#   · 落地高度 = 节点的世界 Y（你往上抬它就落得高一点）
+	#   · 长边半深 = 从模型实测包围盒取，换了模型也不用改代码
+	#   · 门朝向 = 节点本地 +Z 转成世界方向（`rotation_degrees.y` 一转就跟着走）
+	#   想"这一局先不演、直接现身"：把下面的 EARLY_RETURN 改成 true。
+	var center := Vector3(room.global_position.x, 0.0, room.global_position.z)
+	var floor_y := room.global_position.y
+	var half_depth := _esports_room_half_depth(room)
+	var door_dir := (room.global_basis.z).normalized()
+	door_dir.y = 0.0
+	if door_dir.length_squared() < 0.0001:
+		door_dir = Vector3.FORWARD
+	door_dir = door_dir.normalized()
+
 	var scr := load("res://scripts/esports_drop.gd") as GDScript
 	if scr == null:
 		push_warning("[Game] 找不到 scripts/esports_drop.gd，电竞房不演，直接现身")
@@ -1080,9 +1096,27 @@ func _play_esports_drop() -> void:
 		return
 	drop.name = "EsportsDrop"
 	add_child(drop)
-	# 世界水平中心 = 房间当前的世界位置（原地垂直落下），长边半深 8.42 m
-	drop.play(room, Vector3(room.global_position.x, 0.0, room.global_position.z), 8.42)
-	print("[Game] 电竞房演出开始（任意键跳过）")
+	drop.play(room, center, half_depth, floor_y, door_dir)
+	print("[Game] 电竞房演出开始（任意键跳过）：中心 %s、门朝向 %s" % [
+		str(center.snappedf(0.01)), str(door_dir.snappedf(0.01))])
+
+
+## 从 `EsportsRoom` 下面的模型实测包围盒，取「长边的一半」当演出用的半深。
+## 模型缺了 / 没网格时退回 API 里写死的 8.42 m（就是当前这版 GLB 的实测值）。
+func _esports_room_half_depth(room: Node3D) -> float:
+	var box := AABB()
+	var first := true
+	for m in room.find_children("*", "MeshInstance3D", true, false):
+		var mi := m as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var a: AABB = mi.global_transform * mi.mesh.get_aabb()
+		box = a if first else box.merge(a)
+		first = false
+	if first:
+		return 8.42
+	# 长边如果沿 Z 就是 size.z；沿 X 也能兜住（取两者的大者）
+	return maxf(box.size.z, box.size.x) * 0.5
 
 
 ## 小屋桌子上的电脑（用户 2026-10-22：「桌子上放个显示器……按 F 使用，再按 F 退出」）。

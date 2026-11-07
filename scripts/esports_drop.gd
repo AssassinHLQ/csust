@@ -51,6 +51,8 @@ var _t := 0.0
 var _done := false
 var _landed := false
 var _base_y := 0.0
+## 门朝向（世界水平单位向量）；环绕的 0° 就落在这个方向上
+var _door_dir := Vector3.FORWARD
 var _center := Vector3.ZERO
 var _half_depth := 8.42
 var _shake := 0.0
@@ -73,11 +75,17 @@ var _flash: ColorRect
 
 
 ## 主入口。`room` 是整栋房子（`EsportsRoom`），`center` 是它落地后的水平中心。
-func play(room: Node3D, center: Vector3, half_depth := 8.42) -> void:
+## door_dir = 门朝向（世界水平方向，已归一化）。使用者会在编辑器里随手转房子，
+## 所以机位不能写死「0° = +Z」—— 见 _dir_from_deg()。
+func play(room: Node3D, center: Vector3, half_depth := 8.42,
+		floor_y := -1.0, door_dir := Vector3.FORWARD) -> void:
 	_room = room
 	_center = center
 	_half_depth = half_depth
-	_base_y = room.position.y
+	_base_y = floor_y if floor_y == -1.0 else floor_y
+	_door_dir = door_dir.normalized()
+	if _door_dir.length_squared() < 0.0001:
+		_door_dir = Vector3.FORWARD
 
 	_build_camera()
 	_build_flash()
@@ -222,6 +230,18 @@ func _build_camera() -> void:
 ##    模型本身是对的 —— 地板朝上、天花板朝下、y=0 是地面，`_probe_esports_flip.gd` 量过 ——
 ##    是镜头绕着自身 Z 轴翻了半圈）。这里直接给 `basis`：-Z 指向目标，
 ##    X 轴固定为「水平面内与视线垂直」的方向，Y 轴永远是「屏幕上」。
+## 把「相对门朝向的角度」转成世界水平方向。
+## 使用者在编辑器里把房子转个向，环绕也跟着转 —— 本喵不用改任何常量。
+func _dir_from_deg(deg: float) -> Vector3:
+	var a := deg_to_rad(deg)
+	# 以门朝向为 0°、顺时针：先取「门朝向」的垂直方向当 +90°
+	var fwd := _door_dir
+	var right := Vector3.UP.cross(fwd).normalized()   # 注意：这是**左手**侧的垂直方向
+	if right.length_squared() < 0.0001:
+		right = Vector3.RIGHT
+	return (fwd * cos(a) + right * sin(a)).normalized()
+
+
 func _place_camera(t: float) -> void:
 	var orbit_start := FALL_TIME + HOLD_BEFORE_ORBIT
 	var k := clampf((t - orbit_start) / ORBIT_TIME, 0.0, 1.0)
@@ -229,8 +249,8 @@ func _place_camera(t: float) -> void:
 	var ang := deg_to_rad(ORBIT_START_DEG + ORBIT_SWEEP_DEG * ease_k)
 	var pitch := deg_to_rad(lerpf(ORBIT_PITCH_0, ORBIT_PITCH_1, ease_k))
 	var r := lerpf(ORBIT_RADIUS * 0.88, ORBIT_RADIUS, ease_k)
-	# ang 的 0° = +Z（门口那一侧），顺时针扫
-	var horiz := Vector3(sin(ang), 0.0, cos(ang))
+	# ang 的 0° = 门朝向（你摆在哪就绕哪），正值顺时针扫
+	var horiz := _dir_from_deg(rad_to_deg(ang))
 	var pos := _center + horiz * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.2, 0.0)
 	var look := _center + Vector3(0.0, ORBIT_LOOK_HEIGHT, 0.0)
 	if t < FALL_TIME:
