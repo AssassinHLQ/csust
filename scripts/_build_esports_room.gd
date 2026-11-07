@@ -112,12 +112,18 @@ func _shape(body: StaticBody3D, nm: String, pos: Vector3, size: Vector3) -> void
 
 func _monitor(root: Node3D, nm: String, pos: Vector3, rot_y: float,
 		text: String, px: float) -> Node3D:
+	# ⚠️ 显示器模型是爱给网素材、被 .gitignore 挡在仓外：缺文件时**只少这块屏**，
+	#    字牌照摆（不然桌上光秃秃更难看），绝不能让 load() 返回 null 直接崩。
 	var scene := load(MONITOR) as PackedScene
-	var mon := scene.instantiate() as Node3D
-	mon.name = nm
-	mon.position = pos
-	mon.rotation.y = rot_y
-	root.add_child(mon)
+	var mon: Node3D = null
+	if scene != null:
+		mon = scene.instantiate() as Node3D
+		mon.name = nm
+		mon.position = pos
+		mon.rotation.y = rot_y
+		root.add_child(mon)
+	else:
+		push_warning("[esports] 没有 %s → 跳过显示器 %s" % [MONITOR, nm])
 	# 屏面最前沿在局部 +z≈0.116；字放 0.13，跟着屏幕一起转
 	var lx := pos.x + sin(rot_y) * 0.13
 	var lz := pos.z + cos(rot_y) * 0.13
@@ -371,14 +377,18 @@ func _run() -> void:
 	_box(root, "FrameTopBeam", Vector3(-3.6, 1.75, 4.45), Vector3(2.0, 0.04, 0.04), black)
 	_box(root, "FrameBotBeam", Vector3(-3.6, 0.77, 4.45), Vector3(2.0, 0.04, 0.04), black)
 	var card_scene := load(CARD) as PackedScene
+	if card_scene == null:
+		# 显卡模型被 .gitignore 挡在仓外：缺文件时只少卡、框架和灯带照留
+		push_warning("[esports] 没有 %s → 开放架上不摆显卡" % CARD)
 	for i in 8:
 		var col := i % 2
 		var row := i / 2
 		var p := Vector3(-4.05 + 0.42 * float(col), 0.95 + 0.21 * float(row), 4.20)
-		var card := card_scene.instantiate() as Node3D
-		card.name = "GPU%d" % i
-		card.position = p
-		root.add_child(card)
+		if card_scene != null:
+			var card := card_scene.instantiate() as Node3D
+			card.name = "GPU%d" % i
+			card.position = p
+			root.add_child(card)
 		_box(root, "GPU%dGlow" % i, p + Vector3(0, -0.092, -0.03),
 			Vector3(0.36, 0.006, 0.006), cyan if i % 2 == 0 else magenta)
 	# 4 个 120 mm 风扇（框架右侧）

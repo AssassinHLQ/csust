@@ -69,14 +69,14 @@ func _run() -> void:
 	var back_z := box.position.z                     # 背面（−Z）
 	print("[shot] 正面 z = %.2f，背面 z = %.2f，中心 x = %.2f" % [front_z, back_z, c.x])
 
-	# 关键节点世界坐标：判断入口、柜台、芹香到底落在哪
+	# 关键节点世界坐标：判断入口与芹香站位
+	# （Counter / Register / WallShelf 已于 2026-11-07 撤掉，只留人和招牌）
 	for nm in ["Body", "Decor"]:
 		var holder := _shop.get_node_or_null(nm)
 		if holder == null:
 			continue
 		for ch in holder.get_children():
-			if ch is Node3D and String(ch.name) in ["Counter", "CounterTop", "Register",
-					"SignBoard", "WallShelf", "WallShelf2", "WallShelf3"]:
+			if ch is Node3D and String(ch.name) in ["SignBoard"]:
 				print("[shot]   %-12s @ %s" % [
 					ch.name, str((ch as Node3D).global_position.snappedf(0.01))])
 	var clerk := _shop.get_node_or_null("ClerkSerika") as Node3D
@@ -99,10 +99,14 @@ func _run() -> void:
 	var mid_z := (front_z + back_z) * 0.5
 	await _shoot(Vector3(c.x, 1.7, mid_z - 1.5), Vector3(c.x, 1.5, front_z + 3.0),
 		out.path_join("C_inside_to_door.png"))
-	# ③ 从房间西北角斜看东南（柜台/芹香在东南）
-	await _shoot(Vector3(box.position.x + 1.6, 1.7, back_z + 1.6),
-		Vector3(box.position.x + box.size.x - 1.0, 1.2, mid_z),
-		out.path_join("D_inside_to_counter.png"))
+	# ③ 对着芹香看：**从门外正对开口拍进去**（她站位在开口那片 x ∈ [−6.6, 0.8]）。
+	#    机位在店内 5.8 m 处会撞上内隔断（第一版就是这样，画面全是白墙）。
+	if clerk != null:
+		var cp := clerk.global_position
+		await _shoot(Vector3(cp.x - 1.2, 1.65, front_z + 5.0),
+			cp + Vector3(0.0, 1.0, 0.0), out.path_join("D_clerk.png"))
+	else:
+		print("[shot] !! 没有 ClerkSerika，跳过 D")
 	# ④ 门外 6 m、抬高到 2.2 m 往里看：模拟玩家跑过来的第一眼
 	await _shoot(Vector3(c.x, 2.2, front_z + 6.0), Vector3(c.x, 1.6, mid_z),
 		out.path_join("E_door_approach.png"))
@@ -117,20 +121,27 @@ func _add_env() -> void:
 	e.background_mode = Environment.BG_COLOR
 	e.background_color = LIGHT_BG
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.88, 0.92, 1.0)
-	e.ambient_light_energy = 1.8
-	e.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	e.ambient_light_color = Color(0.86, 0.90, 1.0)
+	# ⚠️ 环境光**必须低**。第一版给了 1.8 + 线性色调映射，等于自己给白色再加爆；
+	#    这个素材的墙面本来就是纯白（0.95），环境光一高就直接糊成一片。
+	e.ambient_light_energy = 0.30
+	# ACES 会把高光滚下来；线性映射会把 1.0 以上全部硬切成纯白。
+	e.tonemap_mode = Environment.TONE_MAPPER_ACES
+	e.tonemap_exposure = 1.0
+	e.ssao_enabled = true
+	e.ssao_intensity = 1.6
 	env.environment = e
 	root.add_child(env)
 
 	var key := DirectionalLight3D.new()
-	key.rotation_degrees = Vector3(-40, 28, 0)
-	key.light_energy = 1.7
+	key.rotation_degrees = Vector3(-42, 26, 0)
+	key.light_energy = 1.5
+	key.light_color = Color(1.0, 0.97, 0.92)
 	key.shadow_enabled = true
 	root.add_child(key)
 	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-14, -135, 0)
-	fill.light_energy = 0.7
+	fill.rotation_degrees = Vector3(-12, -138, 0)
+	fill.light_energy = 0.35
 	fill.shadow_enabled = false
 	root.add_child(fill)
 

@@ -39,7 +39,7 @@ func _run() -> void:
 		quit(1); return
 	var shape := rig.get_node("Body/Collision") as CollisionShape3D
 	var mons := 0
-	for i in 4:
+	for i in 2:
 		if rig.get_node_or_null("Monitor%d" % i) is Node3D:
 			mons += 1
 	print("[rig] visible=", rig.visible, " 碰撞关=", shape.disabled,
@@ -84,8 +84,6 @@ func _run() -> void:
 	await _shot(cam, Vector3(47.15, 1.78, 2.95), Vector3(48.2, 1.55, 5.03), "34_pc_wall_case_angle")
 	cam.fov = 70.0
 	await _shot(cam, Vector3(47.0, 1.7, 2.2), Vector3(47.3, 1.3, 5.03), "36_pc_wall_dual")
-	cam.fov = 52.0
-	await _shot(cam, Vector3(46.6, 1.65, 2.9), Vector3(46.5, 1.45, 5.03), "38_pc_wall_quad")
 
 	player.global_position = Vector3(46.5, 0.8, 3.1)
 	player.velocity = Vector3.ZERO

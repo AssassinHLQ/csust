@@ -37,7 +37,7 @@ func _run() -> void:
 			first = false
 		print("  %s pos=%s size=%s" % [card.name, str(card.global_position.snappedf(0.01)),
 			str(box.size.snappedf(0.001))])
-	for i in 4:
+	for i in 2:
 		var nm := "Monitor%d" % i
 		var mon := rig.get_node_or_null(nm) as Node3D
 		if mon == null:

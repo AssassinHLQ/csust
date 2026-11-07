@@ -12,8 +12,8 @@ extends SceneTree
 
 const OUT := "res://_log/sky_%s_%02d.png"
 const HOURS := [8.0, 12.0, 18.0]
-const EYE := Vector3(0.0, 3.0, 18.0)
-const LOOK := Vector3(0.0, 6.0, -6.0)
+const EYE := Vector3(-0.5, 5.0, 20.0)
+const LOOK := Vector3(-0.5, 9.0, 48.0)
 
 
 func _initialize() -> void:

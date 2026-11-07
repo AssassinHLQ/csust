@@ -495,7 +495,11 @@ func _build_seg_signs() -> void:
 		lab.outline_size = 10
 		lab.pixel_size = 0.009
 		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		lab.no_depth_test = true
+		# ⚠️ 原来这里是 `true`（强制画在所有东西前面）—— 但 `parkour.gd::_gate_world_labels()`
+		#    在 `_ready()` 里会把本场景**所有** Label3D 统一改成 `no_depth_test = false`，
+		#    所以这一行其实一直是「白写的」，改了也没用；这里如实写成 false，
+		#    免得下次有人以为它还在强制前置。穿墙与否统一由 `parkour.gd` 的距离门控管。
+		lab.no_depth_test = false
 		lab.modulate = spec["col"] as Color
 		lab.position = Vector3(b.position.x + b.size.x * 0.5,
 			_pk.top_at(i) + 3.8, b.position.z + b.size.z * 0.5 + 2.8)

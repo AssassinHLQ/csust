@@ -87,16 +87,13 @@ func _run() -> void:
 				p.z - bs.size.z * 0.5, p.z + bs.size.z * 0.5])
 
 	print("")
-	print("[parts] ── 柜台 / 货架 / 芹香（店内本地坐标）──")
-	for nm in ["Counter", "CounterTop", "Register", "WallShelf", "WallShelf3"]:
-		var node := _shop.get_node_or_null("Body/" + nm) as Node3D
-		if node == null:
-			continue
-		var lp := inv * node.global_position
-		print("  %-12s 本地=(%7.2f,%6.2f,%7.2f)" % [nm, lp.x, lp.y, lp.z])
+	print("[parts] ── 芹香站位（店内本地坐标）──")
 	var clerk := _shop.get_node_or_null("ClerkSerika") as Node3D
 	if clerk != null:
 		var lp := inv * clerk.global_position
-		print("  芹香         本地=(%7.2f,%6.2f,%7.2f)" % [lp.x, lp.y, lp.z])
+		print("  芹香         本地=(%7.2f,%6.2f,%7.2f)  朝向 rotation.y=%.1f°"
+			% [lp.x, lp.y, lp.z, rad_to_deg(clerk.rotation.y)])
+	else:
+		print("  !! 没有 ClerkSerika")
 
 	quit(0)

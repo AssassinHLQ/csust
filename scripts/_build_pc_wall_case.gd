@@ -146,15 +146,20 @@ func _initialize() -> void:
 	var cream := Color(0.95, 0.93, 0.86, 1.0)
 
 	# 机箱外壳：GLB 已按 0.1 比例居中，放大 2.6×，底面落在 y=0
+	# ⚠️ 外壳是爱给网素材、被 .gitignore 挡在仓外：缺文件时仍把内衬/背板/托架建出来
+	#    （不然屋里那面墙会突然空一大块），只是没有白壳和玻璃。
 	var shell_scene := load(SHELL) as PackedScene
-	var shell := shell_scene.instantiate() as Node3D
-	shell.name = "Shell"
-	shell.position = Vector3(0, 0.6102, 0)
-	shell.rotation.y = PI
-	shell.scale = Vector3(SCALE, SCALE, SCALE)
-	root.add_child(shell)
-	for mi in shell.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).material_override = white
+	if shell_scene != null:
+		var shell := shell_scene.instantiate() as Node3D
+		shell.name = "Shell"
+		shell.position = Vector3(0, 0.6102, 0)
+		shell.rotation.y = PI
+		shell.scale = Vector3(SCALE, SCALE, SCALE)
+		root.add_child(shell)
+		for mi in shell.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).material_override = white
+	else:
+		push_warning("[wall] 没有 %s → 机箱只剩内部结构" % SHELL)
 
 	# 内衬（背面 + 顶 + 底 + 两侧），挡住外壳背面的背面剔除
 	_box(root, "LinerBack", Vector3(0, 0.61, 0.270), Vector3(1.22, 1.20, 0.02), liner)
@@ -171,15 +176,18 @@ func _initialize() -> void:
 	fans.name = "Fans"
 	root.add_child(fans)
 	var card_scene := load(CARD) as PackedScene
+	if card_scene == null:
+		push_warning("[wall] 没有 %s → 机箱里不摆显卡" % CARD)
 	for i in 8:
 		var col := i % 2
 		var row := i / 2
 		var p := Vector3(-0.22 + 0.44 * float(col), 0.24 + 0.21 * float(row), -0.12)
-		var card := card_scene.instantiate() as Node3D
-		card.name = "GPU%d" % i
-		card.position = p
-		card.rotation.y = PI
-		root.add_child(card)
+		if card_scene != null:
+			var card := card_scene.instantiate() as Node3D
+			card.name = "GPU%d" % i
+			card.position = p
+			card.rotation.y = PI
+			root.add_child(card)
 		_box(root, "GPU%d_Glow" % i, p + Vector3(0, 0.0904, -0.029),
 			Vector3(0.36, 0.006, 0.006), cyan if i % 2 == 0 else magenta)
 

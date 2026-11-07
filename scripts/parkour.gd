@@ -126,20 +126,34 @@ var _player: Player
 var _resume_pending := false
 
 
-## 世界招牌的**可见距离**（米）。用户 2026-11-06：「把这些穿墙大字去掉，
-## 我之前说了只有站在最附近才可以显示」。
+## ── 招牌可见距离（2026-11-07 改）──────────────────────────────────────────────
 ##
-## 原来 `parkour.tscn` 里 64 个 Label3D 全是默认值 = 不限距离 + 正常深度测试。
-## 但画室 609 的泼溅是走 Compositor 画的，**不写引擎深度缓冲**，于是这些招牌
-## 隔着泼溅墙也照画不误，整张地图飘着大字。
-## 现在统一压到 `LABEL_NEAR_END` 米内，靠近了才看得见。
+## 历史：2026-11-06 用户说「把这些穿墙大字去掉，只有站在最附近才可以显示」，
+## 于是**全部** Label3D 被压到 6 m 内可见 —— 结果整条跑道上「第 N 段」「+15.00%」
+## 这些牌子全得踩上去才看得见，跑起来就不知道前面是哪儿、下一块跳多少。
 ##
-## ⚠️ 为什么不用深度测试解决就够了：泼溅（画室609）是走 Compositor 单独画的，
-##    **不写引擎的深度缓冲**，所以实体墙能挡住招牌、泼溅墙挡不住。画室正好挨着
-##    跑酷起点（截图里那一堆字就是它们），所以半径必须收紧到「最附近」。
-##    要改可见范围只动这一对常量即可。
+## 2026-11-07 用户重新划界：「只要开始平台上面的字，在六米内才显示就可以了，
+## 跑酷那一长段不要这样子」。所以现在拆成两档：
+##
+##   · **近档 6 m**  —— 只给「站台上/零散装饰」用：`SignPost`（跑酷 · 12 段 → /
+##                     第 1 段 · 起点）、`ReadyZone`（跑酷准备区）、`Island`（终点岛
+##                     那块「坐火箭 · 去结算屋」与传送台）。
+##                     ⚠️ 注意 `Route/P1` **不算**站台 —— 它是跑道第一块砖，
+##                     「第 1 段 · 起点」那两根信号桅杆是挂在 `Route/Beacon_K1` 上的。
+##   · **远档**     —— 跑道上剩下的全部（`Route` 下所有 `Pct` / `Sign` / 规则牌），
+##                     以及任何不在上面两个清单里的节点：不限距离 = 引擎默认。
+##
+## 为什么还要留着距离门控这件事：画室 609 的泼溅走 Compositor 画，**不写引擎深度
+## 缓冲**，所以实体墙挡得住招牌、泼溅墙挡不住。`_gate_world_labels()` 会把
+## `no_depth_test` 统一关掉（靠真深度测试挡住实体墙），近档再用距离兜住泼溅墙。
+##
+## 想改可见范围只动这两个常量；想把某个节点整体挪到某一档，改 `_label_near_zone()`。
 const LABEL_NEAR_END := 6.0
 const LABEL_NEAR_MARGIN := 2.0
+
+## 走近档（6 m）的根节点路径（相对本场景）。空字符串 = 整棵子树都按近档处理。
+## 命中第一条就停 —— 所以顺序 = 优先级，`Route` 永远不进这个表。
+const LABEL_NEAR_ROOTS := ["SignPost", "ReadyZone", "Island"]
 
 ## 画室 609 的房间盒子（实测值，来自游戏日志）：
 ##   `[Game] 609 门内外切换：… 房间矩形 (10.71, 8.3, 20.64)，中心 (-0.5, 1.5, 3.54)`
@@ -176,21 +190,30 @@ func _ready() -> void:
 	_gate_world_labels.call_deferred()
 
 
-## 把本场景里所有世界空间文字（Label3D / Sprite3D）**压成近距离显示**，
-## 并显式关掉 `no_depth_test`（让实体墙能挡住它们）。
+## 把本场景里所有世界空间文字（Label3D / Sprite3D）统一成「正常深度测试」，
+## **再按位置分档**决定要不要压近距离（见上面 `LABEL_NEAR_ROOTS` 那段注释）。
 ##
 ## 为什么放在 `_ready()` 末尾一次性扫：`parkour.tscn` 里有 64 个招牌，
 ## 逐个改 `.tscn` 容易漏、以后新加也会忘；扫一遍子树是唯一不漏的做法。
+## 唯一的例外是运行期才生成的牌子（`parkour_futures.gd` / `ram_market.gd`），
+## 它们在 `_ready()` 之后才 add_child —— 那几个自己写好了数值。
 func _gate_world_labels() -> void:
 	_label_nodes.clear()
 	var n := 0
+	var near := 0
 	for node in find_children("*", "Label3D", true, false):
 		var lab := node as Label3D
 		if lab == null:
 			continue
 		lab.no_depth_test = false
-		lab.visibility_range_end = LABEL_NEAR_END
-		lab.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		if _label_near_zone(lab):
+			lab.visibility_range_end = LABEL_NEAR_END
+			lab.visibility_range_end_margin = LABEL_NEAR_MARGIN
+			near += 1
+		else:
+			# 远档：不限距离 = 引擎默认值（0），显式写出来，免得 .tscn 里留着的旧值
+			# 把人骗了
+			lab.visibility_range_end = 0.0
 		# 立刻对齐当前开关状态：`_update_label_visibility()` 有「状态没变就早退」
 		# 的优化，新收集进来的牌子不会被它扫到（踩过一次：4 个动态牌一直亮着）。
 		lab.visible = _labels_on
@@ -201,12 +224,27 @@ func _gate_world_labels() -> void:
 		if spr == null:
 			continue
 		spr.no_depth_test = false
-		spr.visibility_range_end = LABEL_NEAR_END
-		spr.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		if _label_near_zone(spr):
+			spr.visibility_range_end = LABEL_NEAR_END
+			spr.visibility_range_end_margin = LABEL_NEAR_MARGIN
+		else:
+			spr.visibility_range_end = 0.0
 		n += 1
-	print("[Parkour] 世界招牌 %d 个：%.0f m 内显示（余量 %.0f），人在画室内全部隐藏"
-		% [n, LABEL_NEAR_END, LABEL_NEAR_MARGIN])
+	print("[Parkour] 世界招牌 %d 个：%d 个近档（%.0f m 内显示），其余不限距离；人在画室内全部隐藏"
+		% [n, near, LABEL_NEAR_END])
 	_update_label_visibility()
+
+
+## 这个节点属不属于「近档」（6 m 内才显示）—— 只看它挂在哪棵子树下。
+## `LABEL_NEAR_ROOTS` 里是相对本场景的路径；取不到就按远档处理（宁可看得见）。
+func _label_near_zone(node: Node) -> bool:
+	for root_path in LABEL_NEAR_ROOTS:
+		var root := get_node_or_null(NodePath(root_path))
+		if root == null:
+			continue
+		if root == node or root.is_ancestor_of(node):
+			return true
+	return false
 
 
 ## 玩家在画室 609 盒子里 → 招牌全关；出了房间（再多 1.5 m）→ 全开。

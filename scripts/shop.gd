@@ -86,6 +86,13 @@ const TUCK := 0.02
 @export var shell_glb := "res://models/shop_building/shop.glb"
 ## 新壳按哪条边对齐 `shop_len`。0 = 不缩放（用模型原生尺寸）
 @export var shell_fit_len := 0.0
+## 芹香的本地站位。
+##
+## 用户 2026-11-07：「芹香的桌子也不要了，放个人就行了」—— 柜台整套撤掉，只留人。
+## 原来她站 (5.86, 0, 0.20)、朝 −X 对着柜台；柜台没了之后改到**西侧开口内侧**迎客：
+## 新壳的开口在本地 x ∈ [−6.6, 0.8]（见 `_build_shell_from_glb()`），所以站在 x = −3.2
+## 正好落在开口那片，玩家从正面进来第一眼就看见她。嫌偏就往零调。
+@export var clerk_local := Vector3(-3.2, 0.0, -1.6)
 @export var wall_thickness := 0.2
 ## 单独 instance 出来看效果时打开；`game.gd` 里是等铺完地砖再手动 `build()`（材质才一样）
 @export var auto_build := false
@@ -146,6 +153,12 @@ func _wire_baked() -> void:
 		zone.body_entered.connect(_on_music_body.bind(1))
 		zone.body_exited.connect(_on_music_body.bind(-1))
 		_music_area = zone
+	# 烘焙场景里的屋壳是 GLB 实例，材质修正必须**运行时**再做一遍 ——
+	# 烘进 tscn 的只是 instance 引用，材质来自导入缓存，改不到里面去。
+	var shell_node := get_node_or_null("Shell")
+	if shell_node != null:
+		var glb_root := shell_node.get_child(0) as Node3D if shell_node.get_child_count() > 0 else null
+		_fix_glb_materials(glb_root)
 	_build_clerk()
 
 
@@ -168,8 +181,9 @@ func build() -> void:
 	# 2026-11-07：屋壳换成 Sketchfab「Shop」的 GLB；拿不到就退回原程序化壳
 	if not _build_shell_from_glb():
 		_build_shell()
-	# 货架不再单独建（新壳自带两组玻璃展柜），但**柜台必须留** —— 买整机要用
-	_build_counter()
+	# 货架不再单独建（新壳自带两组玻璃展柜）。
+	# 2026-11-07 用户：「芹香的桌子也不要了，放个人就行了」—— 柜台整套撤掉，只留人。
+	# （查过：买整机的逻辑不引用 Counter 节点，删掉不影响交易流程。）
 	_build_clerk()
 	_build_lights()
 	_build_music_zone()
@@ -442,9 +456,68 @@ func _build_shell_from_glb() -> bool:
 	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
 	_build_sign(front_z)
 
+	_fix_glb_materials(inst)
+
 	print("[Shop] 新屋壳 %s：缩放 %.4f → 长 %.2f / 进深 %.2f / 层高 %.2f m（正面 z = %.2f）"
 		% [shell_glb.get_file(), s, shop_len, shell_depth, shop_height, front_z])
 	return true
+
+
+## 把 GLB 材质的「自发光烘焙」改成普通受光。
+##
+## ⚠️ 为什么必须做（用户 2026-11-07 问「为什么我 blend 看是光照清晰好看，这里就是全白」）：
+##    这个素材的 4 个材质**全部**带 `emissiveFactor = [1,1,1]`，白墙还用同一张
+##    4096² 灰阶 lightmap 同时当 `baseColorTexture` 和 `emissiveTexture` ——
+##    作者把光照**烘进了自发光通道**（自发光/无光照型素材）。
+##    Blender / Sketchfab 直接显示那张烘焙图，所以层次分明；
+##    搬进 Godot 就变成「白底色 × 环境光 + 纯白自发光」，整个店糊成一片纯白。
+##
+## 处理：结构件（白墙 / 地台）关掉自发光、丢掉那张 lightmap 底色，改成普通受光
+##      白材质，交给场景灯与昼夜系统；灯带（light）保留自发光，它本来就该亮。
+## 用 `set_surface_override_material` 复制一份再改 —— 直接改会污染导入缓存里的共享资源。
+func _fix_glb_materials(inst: Node3D) -> void:
+	if inst == null:
+		return
+	var seen := {}
+	for n in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		for s in mi.mesh.get_surface_count():
+			var src := mi.mesh.surface_get_material(s) as BaseMaterial3D
+			if src == null:
+				continue
+			var key := src.resource_name
+			if seen.has(key):
+				# 已经处理过同名材质：沿用那一份 override
+				if seen[key] is BaseMaterial3D:
+					mi.set_surface_override_material(s, seen[key])
+				continue
+			var mat := src.duplicate() as BaseMaterial3D
+			var is_light := key.to_lower().contains("light")
+			# ⚠️ 玻璃不能碰：它 `alphaMode=BLEND` → Godot 里 `transparency = ALPHA`。
+			#    本喵第一版一视同仁改成「不透明白」，窗户全被糊死了。
+			var is_glass := src.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+			if is_light:
+				# 灯带：保留（并稍微加强）自发光
+				mat.emission_enabled = true
+				mat.emission = Color(1.0, 0.98, 0.94)
+				mat.emission_energy_multiplier = 1.8
+				print("[Shop]   材质 %-16s 保留自发光（灯带）" % key)
+			elif is_glass:
+				print("[Shop]   材质 %-16s 玻璃，保持半透明原样" % key)
+			else:
+				# 结构件：关自发光。那张 lightmap 不能继续当底色 ——
+				# 当底色的话「烘焙阴影」会被真实光照再乘一次 = 双重阴影。
+				mat.emission_enabled = false
+				mat.albedo_texture = null
+				mat.vertex_color_use_as_albedo = false
+				mat.albedo_color = Color(0.95, 0.96, 0.97)
+				mat.metallic = 0.0
+				mat.roughness = 0.55
+				print("[Shop]   材质 %-16s 关自发光 → 普通受光白（粗糙 0.55）" % key)
+			seen[key] = mat
+			mi.set_surface_override_material(s, mat)
 
 
 ## 门正上方一块发光板 + `Label3D`。原来是 `_build_shell()` 末尾那段，抽出来两条路共用。
@@ -769,10 +842,13 @@ func _build_clerk() -> void:
 	var clerk := ShopClerk.new()
 	# 2026-10-22 小空 → 芹香（校服版），节点名跟着换；见 `scripts/shop_clerk.gd`
 	clerk.name = "ClerkSerika"
-	clerk.position = Vector3(5.86, 0.0, 0.20)
-	clerk.rotation.y = -PI * 0.5     # 模型朝 +Z → 转 -90° 朝 -X（柜台外侧）
+	clerk.position = clerk_local
+	# 模型朝 +Z → `rotation.y = 0` 就是面朝 +Z 的门口迎客。
+	# （旧值是 -PI*0.5「朝 -X 对着柜台」，柜台 2026-11-07 撤掉后那个朝向没意义了。）
+	clerk.rotation.y = 0.0
 	add_child(clerk)
 	decor_count += 1
+	print("[Shop] 芹香站在本地 %s，面朝 +Z 门口（没有柜台了）" % str(clerk_local))
 
 
 ## 一组货架：两块侧板 + 三块隔板（全部带碰撞，数字只写一遍）

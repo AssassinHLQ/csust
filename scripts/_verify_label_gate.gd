@@ -1,6 +1,8 @@
 extends SceneTree
-## 校验招牌门控：
-##   ① 所有 Label3D 都是 `no_depth_test = false` 且 `visibility_range_end = 6`
+## 校验招牌门控（2026-11-07 起是**两档**）：
+##   ① 所有 Label3D 都是 `no_depth_test = false`；
+##      近档（`SignPost` / `ReadyZone` / `Island` 下的）`visibility_range_end = 6`，
+##      其余（跑道 `Route` 下的一切）**不限距离**（`visibility_range_end = 0`）
 ##   ② 区域门控的几何判据正确：画室盒子中心判「内」、跑酷起点判「外」
 ##   ③ 找不到玩家时默认「隐藏」（避免开局闪字）
 ##
@@ -8,6 +10,7 @@ extends SceneTree
 
 const SCENE := "res://scenes/parkour.tscn"
 const WANT_END := 6.0
+const NEAR_ROOTS := ["SignPost", "ReadyZone", "Island"]
 const ROOM_CENTER := Vector3(-0.5, 1.5, 3.54)
 const ROOM_HALF := Vector3(5.36, 4.15, 10.32)
 const ROOM_EXIT_MARGIN := 1.5
@@ -32,6 +35,7 @@ func _process(_delta: float) -> bool:
 		return false
 
 	var total := 0
+	var near_count := 0
 	var bad_range: Array = []
 	var visible_now := 0
 	for n in _inst.find_children("*", "Label3D", true, false):
@@ -39,17 +43,23 @@ func _process(_delta: float) -> bool:
 		if l == null or l.text.strip_edges() == "":
 			continue
 		total += 1
-		if l.no_depth_test or not is_equal_approx(l.visibility_range_end, WANT_END):
-			bad_range.append("%s (depth=%s end=%.1f)"
-				% [String(_inst.get_path_to(n)), str(l.no_depth_test), l.visibility_range_end])
+		var want_near := _is_near(n)
+		if want_near:
+			near_count += 1
+		var want_end := WANT_END if want_near else 0.0
+		if l.no_depth_test or not is_equal_approx(l.visibility_range_end, want_end):
+			bad_range.append("%s (depth=%s end=%.1f want=%.1f)"
+				% [String(_inst.get_path_to(n)), str(l.no_depth_test),
+					l.visibility_range_end, want_end])
 		if l.visible:
 			visible_now += 1
 
 	var ok := true
-	print("[gate] ① 有字招牌 %d 个，距离/深度不合格 %d 个" % [total, bad_range.size()])
+	print("[gate] ① 有字招牌 %d 个（近档 %d / 远档 %d），距离/深度不合格 %d 个"
+		% [total, near_count, total - near_count, bad_range.size()])
 	for i in mini(bad_range.size(), 8):
 		print("     x " + String(bad_range[i]))
-	if bad_range.size() > 0 or total == 0:
+	if bad_range.size() > 0 or total == 0 or near_count == 0:
 		ok = false
 
 	# ③ 没有玩家时应默认隐藏
@@ -81,6 +91,17 @@ func _process(_delta: float) -> bool:
 	_inst.queue_free()
 	quit()
 	return true
+
+
+## 与 `parkour.gd::_label_near_zone()` 同一判据：挂在这几棵子树下的算近档。
+func _is_near(n: Node) -> bool:
+	for p in NEAR_ROOTS:
+		var r: Node = _inst.get_node_or_null(NodePath(p))
+		if r == null:
+			continue
+		if r == n or r.is_ancestor_of(n):
+			return true
+	return false
 
 
 func _box_dist(p: Vector3) -> float:

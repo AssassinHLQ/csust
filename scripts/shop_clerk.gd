@@ -573,6 +573,11 @@ func bought() -> bool:
 	return _bought
 
 
+## 给活动室那台八卡机架查状态用（静态，没拿到店员实例也能问）
+static func is_bought() -> bool:
+	return _bought
+
+
 ## 播放对话。`play_steps` 会自己暂停世界、打字、等翻页，结束后恢复。
 ## 第一句问「你配电脑吗?」，然后给玩家两个选项（W/S 选、空格确认）。
 ## 播放器发来的业务回调（目前只有成交扣款）

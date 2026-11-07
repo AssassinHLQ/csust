@@ -1,0 +1,1740 @@
+extends Node3D
+## 玩法场景总控：把 Player / Weapon / HUD / 高斯泼溅校园接起来，记账击杀。
+
+const SceneFlow := preload("res://scripts/scene_flow.gd")
+## 609 画室桌上的十颗 9950X3D（隐藏福利）。单独一个场景，方便在编辑器里拖位置。
+const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
+## 商店东侧延长的地块与游戏开发部部室直接摆在 `scenes/game.tscn` 里
+## （`LotEast` / `GameDevRoom` 两个实例），编辑器里能选中拖动。
+
+## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
+const FALL_LIMIT := -60.0
+
+## 设计分辨率（project.godot 的 window/size/viewport_*）。
+## ⚠️ 2026-11-06：这个口径搬进了 `scripts/render_env.gd`（校园场景也要算同一个
+##    自动上限），实际参与运算的是 `RenderEnv.DESIGN_VIEWPORT`。这里保留一份只为
+##    对照，**改这里的值不会生效**。
+const DESIGN_VIEWPORT := Vector2(1600, 900)
+
+## ── 为什么要把兜底方盒地板挖掉房间那一块 ──
+##
+## `Floor/Mesh` 的顶面正好在 **y ≈ 0**，而画室609 扫描出来的地面在 **y ≈ 0.03**
+## —— 两者**共面**。Compute 后端靠 `depth_rejected = gsplat_depth >
+## scene_depth + depth_bias` 决定一个泼溅是不是"在场景不透明几何后面"，
+## 共面就意味着扫描地面会被判成"在后面"而**整片剔掉**，露出深色方盒：
+## 实测地板上是一片黑洞（`_arisu_captures/_backend_ab/compute.png`）。
+##
+## 试过并且**否掉**的五条路（前四条有实测图）：
+##   1. `depth_bias` 0.05 → 0.5：黑洞没了，但 0.5 m 以内的泼溅会盖住角色腿脚。
+##      偏置是**全局一个数**，地板要的和角色要的差一个数量级，调不拢。
+##   2. 关掉深度剔除：地板干净了，角色被泼溅整个盖住。
+##   3. `Floor/Mesh` 改 `DEPTH_DRAW_DISABLED`：**没用** —— Godot 的不透明深度
+##      **预通道**照样把它写进深度缓冲，`scene_depth` 里仍有它；彩色通道还糊住下半屏。
+##   4. 整块藏掉 `Floor/Mesh`：房间里的地面完美，**但房间外那片平台没影了**。
+##      碰撞体还在，于是玩家走出那扇门之后**站在看不见的地板上**，人又钻进扫描
+##      墙壁的背面，画面糊成一坨。这一版就是这样翻的车。
+##   5. 整体下压：要让 20 m 外的掠射角也不冲突得压到接近 1 m，门外就成了悬空平台。
+##
+## 所以只能**挖洞**：保留整块方盒地板，只把房间占位的那一块切掉。
+## 房间里靠扫描地面，房间外照旧是方盒平台，两边都不动位置、不悬空、不露馅。
+##
+## ⚠️ 洞必须跟着房间的**真实朝向**。第一版用房间的**世界轴对齐包围盒**挖，
+##    而房间是斜的（`yaw_degrees = 248.6`）：包围盒 23.9 × 27.2 m，房间实际
+##    只有 22.6 × 16.8 m —— 包围盒那四个角落在房间外面，既没扫描地面也没方盒
+##    地板，于是平台中间破出一大片**真空**（实测图：`_arisu_captures/_gameplay/`
+##    里那条"中间空了"的边界）。所以改用 **CSG 布尔减法**，洞是房间自己的
+##    那个旋转矩形，和扫描地面严丝合缝。
+##
+## 场景里的方盒地板（**只是没加载泼溅时的兜底**；碰撞体 Floor/Collision 另算）。
+const FLOOR_MESH_PATH := "Floor/Mesh"
+## 洞相对房间footprint 的外扩量（米）。**负数 = 洞略小于房间**，让平台和扫描
+## 地面重叠一点点：宁可重叠一条 15 cm 的窄边（在墙根，基本看不见），
+## 也不要留一条头发丝宽的缝 —— 缝下面就是几百米高的天空。
+const FLOOR_HOLE_MARGIN := -0.15
+## 想回到"一整块方盒地板"（例如排查别的问题）就把这里改成 false，
+## 或启动时加 `-- --solid-floor`。
+const CARVE_FALLBACK_FLOOR := true
+
+## ── 「空地」铺地砖（2026-10-18）──
+## 用户：「平台中间，高斯泼溅下面很大一片空的地方」→ 又补一句
+## **「场地最外面不要填上，因为会有影响跑酷」**。
+##
+## 现场量到的是：40×40 的平台只有 `albedo_color = (0.21,0.23,0.27)` 一个纯色、
+## 没有任何贴图。所以这里**只给平台这一块换材质**，平台外一律不铺 ——
+## 掉出平台就该继续往下掉（跑酷的失败判定靠这个），别在外面加地面。
+const LOT_TEX := "res://assets/tex/lot_paver.png"
+const LOT_TEX_N := "res://assets/tex/lot_paver_n.png"
+## 平台贴图重复次数：平台 40 m ÷ 16 = 2.5 m 一次重复，图里是 2×2 块 → 一块砖 1.25 m
+const LOT_UV_SCALE := 16.0
+
+## ── 开场剧情（第七节 `story_script.gd` / `dialogue_box.gd`）──
+## 剧本文件。想换一段就改这里；也可以只改文件名不管这里 ——
+## 找不到它会自动退回 `story/` 目录里**排序第一份**，并打印用了哪一份。
+const OPENING_STORY := "res://story/开场.txt"
+const STORY_DIR := "res://story/"
+
+## 进关卡要不要自动播开场剧情。
+##
+## ⚠️ `--script` 模式下**一律不播**（见 `_play_opening()`）：13 套自检各自
+##    instantiate 这个场景，一播就把整棵树暂停了，`_verify_settings` 的
+##    「初始没有暂停」当场就红。想「进关卡直接开打」用 `-- --story=off`。
+const PLAY_OPENING := true
+
+var _floor_carved := false
+## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
+var _room_scene: SplatScene = null
+## `_fit_render_scale` 算出来的**自动上限**（只看窗口尺寸，默认 1.0）
+## ⚠️ 2026-11-06 起，画面旋钮的实际落地统一在 `scripts/render_env.gd`（`RenderEnv`），
+##    这里只剩「存自动上限 + 打日志」这层薄壳。原因见那个文件开头的注释
+##    （校园场景 `next_level.gd` 之前完全不碰画面设置，滑块在第二关是失效的）。
+var _auto_scale := 1.0
+
+var _player: Player
+var _weapon: Weapon
+var _hud: CanvasLayer
+## 场上所有泼溅场地（现在是校园 + 画室609 两份；按类型收，不写死节点名）
+var _splats: Array[SplatScene] = []
+## 渲染距离（Minecraft 式「远处不渲染」）。见 `scripts/render_distance.gd`。
+var _rd: RenderDistance
+## 场上所有 Boss「木桩」（现在是霸王龙优香 + 飞猪优香两位）
+var _bosses: Array[Boss] = []
+var _companions: Array[Companion] = []
+var _spawn := Vector3.ZERO
+## 本场景是从别的场景走门进来的（`scene_gate.gd` → `scene_flow.gd`）
+var _entered_via_gate := false
+## 天空盒已经装上（`_enter_tree` 里做，见那里的说明）
+var _sky_done := false
+var _score := 0
+var _shots := 0
+var _hits := 0
+## 输入自检用：累计收到的真实键盘按下事件数（见 _input）。一直 0 就说明
+## 按键事件压根没进 Godot，而不是 InputMap 没匹配上。
+var _keys_seen := 0
+## ── F3 性能浮层（默认关闭）──
+##
+## 2026-11 用户报「站到窗+储物柜那一角就非常卡」。远距离探针只能看到平均帧率，
+## 复现不了现场手感，所以给一个就地读数的浮层：按 F3 开关，显示 FPS / 帧耗时 /
+## draw call / 图元 / 主线程与物理耗时 / 显存 / 玩家坐标。
+## 0.2 s 刷一次 —— 每帧改 Label 文本本身就有开销，会污染读数。
+const PERF_KEY := KEY_F3
+const PERF_REFRESH := 0.2
+var _perf_layer: CanvasLayer
+var _perf_label: Label
+var _perf_clock := 0.0
+## 最近 120 帧的真实帧间隔（ms）。p99 比平均帧率有用得多：
+## 「平均 60 fps 但 p99 130 ms」玩起来就是一顿一顿，平均帧率完全看不出来。
+## 注：`Performance.TIME_PROCESS` 在这个工程里和真实帧间隔对不上（浮层开着报
+## 29 ms、实测 194 fps），所以不显示它，只显示量出来的帧间隔。
+const PERF_WINDOW := 120
+var _perf_dts: Array[float] = []
+var _perf_phys_sum := 0.0
+var _perf_frames := 0
+## 最近一个刷新周期里跑了多少物理帧 —— 「每帧几个物理步」。
+## 这一栏是用来判「物理雪球」的：帧一慢，Godot 每帧最多补
+## `max_physics_steps_per_frame`（默认 8）步，物理成本又推高帧时间。
+## ⚠️ 别用「帧时间 ÷ 步数」当每步成本 —— 步数是跟着帧时间算出来的，
+##    除出来恒等于 1/步频，本喵踩过这个坑。
+var _perf_phys_frames := 0
+var _perf_steps := 0
+
+
+## 输入自检：把「窗口到底有没有拿到前台焦点」打出来，并尽力抢一次前台。
+##
+## ⚠️ 为什么必须由**游戏自己**报，而不是写个探针去测：
+## `Input.action_press()` 与 `Input.parse_input_event()` 都是**直接往 Godot 的
+## Input 单例里塞事件**，绕过「操作系统 → 窗口 → Godot」这一整段。所以完全可能
+## 「探针里 WASD 走得飞起、真人按下去毫无反应」—— 缺的正是这一段。
+## 本喵为此误判过两轮。
+##
+## 症状特征（用来和别的病因区分）：
+##   场上其它角色照常走动/播动画，**只有键鼠没反应**，鼠标也没被捕获
+##   ⇒ 游戏逻辑和帧率都正常，纯粹是窗口收不到操作系统的输入事件。
+##   对照：物理时间被稀释时（见 _fit_render_scale 的注释）是**所有东西一起变慢**。
+##
+## 自检运行（`--script`）时不抢前台、也不打印：13 套自检各自开一个窗口，
+## 抢前台会互相干扰，而且它们自己会注入事件、不需要焦点。
+func _watch_input() -> void:
+	if OS.get_cmdline_args().has("--script"):
+		return
+	# 探针带 `--no-capture` 时也别自愈式抢鼠标（用户 2026-10-21：跑游戏会抢鼠标）
+	if OS.get_cmdline_user_args().has("--no-capture"):
+		return
+	_report_input.call_deferred()
+
+
+## 数「收到的真实按键事件」。
+##
+## ⚠️ 这是唯一能回答「键盘到底有没有到 Godot」的办法：
+## `Input.is_action_pressed()` 为 false 有两种完全不同的原因 ——
+##   ① 按键事件压根没进 Godot（操作系统/焦点层面的问题）
+##   ② 事件进来了，但 InputMap 没匹配上动作（映射问题）
+## 看这个计数就知道是哪种：一直 0 就是①，在涨就是②。
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and (event as InputEventKey).pressed:
+		var key := event as InputEventKey
+		_keys_seen += 1
+		if not key.echo and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
+			_toggle_perf_overlay()
+
+
+func _report_input() -> void:
+	for i in 12:
+		await get_tree().create_timer(1.0).timeout
+		var focus := DisplayServer.window_is_focused()
+		var note := ""
+		if not focus:
+			note = "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
+		elif get_tree().paused:
+			note = "   ← 游戏被暂停（Esc 设置菜单开着，或正在播剧情对话）"
+		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			# 自愈：有焦点、没暂停、鼠标却没被捕获 ⇒ 自己收回来。
+			# （焦点丢失时 Godot 会把鼠标放出来且**不会自动收回**；player.gd 的
+			#   _notification 只在「重新获得焦点」那一刻收，漏了就一直是 VISIBLE。）
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			note = "   ← 有焦点却没捕获，已自动收回 mouse_mode=%d" % Input.mouse_mode
+		print("[Game] 输入自检 第 %2d 秒：focused=%s  mouse_mode=%d  paused=%s  累计按键事件=%d" % [
+			i + 1, str(focus), Input.mouse_mode, str(get_tree().paused), _keys_seen])
+		print("[Game]            └─ Player：%s%s" % [_player_state(), note])
+
+
+## Player 节点还活不活 —— 这是把「两个症状是不是同一个原因」分开的关键。
+##
+## 如果 `player.gd` 的 `_ready()` 根本没跑，那么「没捕获鼠标」和「WASD 不动」
+## 就是**同一个原因**（脚本没执行）；而如果它活得好好的，两个症状就得分开查。
+## 只看鼠标模式是分不出来的 —— 默认值本来就是 0（VISIBLE）。
+func _player_state() -> String:
+	var pl := get_node_or_null("Player")
+	if pl == null:
+		return "**节点不存在**"
+	var s := "script=%s  is_physics_processing=%s  is_processing_input=%s  vel=%s  pos=%s" % [
+		"有" if pl.get_script() != null else "**无**",
+		str(pl.is_physics_processing()), str(pl.is_processing_input()),
+		str((pl as CharacterBody3D).velocity.snappedf(0.01)),
+		str((pl as Node3D).global_position.snappedf(0.01))]
+	return s
+
+
+## ── F3 性能浮层 ──
+func _toggle_perf_overlay() -> void:
+	if _perf_layer == null:
+		_build_perf_overlay()
+	_perf_layer.visible = not _perf_layer.visible
+	_perf_clock = 0.0
+	if _perf_layer.visible:
+		_update_perf_overlay()
+	else:
+		print("[Game] F3 性能浮层：关")
+
+
+func _build_perf_overlay() -> void:
+	_perf_layer = CanvasLayer.new()
+	_perf_layer.name = "PerfOverlay"
+	_perf_layer.layer = 200
+	# 建出来先藏着：`_toggle_perf_overlay()` 会紧接着取反，第一次按 F3 才是「打开」
+	_perf_layer.visible = false
+	add_child(_perf_layer)
+	# 不压血条（左上角 HP 面板占着），放到它下面一格，垫半透明底免得看不清
+	var panel := PanelContainer.new()
+	panel.position = Vector2(16, 132)
+	_perf_layer.add_child(panel)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0.55)
+	sb.set_corner_radius_all(4)
+	sb.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", sb)
+	_perf_label = Label.new()
+	_perf_label.add_theme_font_size_override("font_size", 14)
+	_perf_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_perf_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.92))
+	_perf_label.add_theme_constant_override("outline_size", 4)
+	panel.add_child(_perf_label)
+
+
+func _tick_perf_overlay(delta: float) -> void:
+	if _perf_layer == null or not _perf_layer.visible:
+		return
+	_perf_dts.append(delta * 1000.0)
+	if _perf_dts.size() > PERF_WINDOW:
+		_perf_dts.pop_front()
+	_perf_phys_sum += float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_perf_frames += 1
+	var pf := Engine.get_physics_frames()
+	if _perf_phys_frames > 0:
+		_perf_steps += pf - _perf_phys_frames
+	_perf_phys_frames = pf
+	_perf_clock += delta
+	if _perf_clock < PERF_REFRESH:
+		return
+	_perf_clock = 0.0
+	_update_perf_overlay()
+
+
+func _update_perf_overlay() -> void:
+	if _perf_label == null:
+		return
+	var n := maxi(_perf_frames, 1)
+	var phys := _perf_phys_sum / float(n)
+	var steps := float(_perf_steps) / float(n)
+	_perf_phys_sum = 0.0
+	_perf_frames = 0
+	_perf_steps = 0
+	var dts := _perf_dts.duplicate()
+	dts.sort()
+	var p50 := 0.0
+	var p99 := 0.0
+	var mx := 0.0
+	if not dts.is_empty():
+		p50 = dts[dts.size() / 2]
+		p99 = dts[mini(int(float(dts.size()) * 0.99), dts.size() - 1)]
+		mx = dts[dts.size() - 1]
+	var pos := Vector3.ZERO
+	if _player != null:
+		pos = _player.global_position
+	var stat := "最近 %d 帧 p50 %5.1f / p99 %5.1f / max %5.1f ms" % [dts.size(), p50, p99, mx]
+	if dts.is_empty():
+		stat = "正在采样…（0.2 s 出数）"
+	_perf_label.text = "\n".join([
+		"F3 性能浮层 —— 再按一次关闭",
+		"FPS %6.1f    %s" % [Engine.get_frames_per_second(), stat],
+		"draw call %5d      图元 %9d" % [
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))],
+		"显存 %7.0f MiB      物体 %6d" % [
+			float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0,
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))],
+		"物理 %6.2f ms      物理步/帧 %4.2f（上限 %d）" % [
+			phys, steps, Engine.max_physics_steps_per_frame],
+		"位置 (%7.2f, %6.2f, %7.2f)" % [pos.x, pos.y, pos.z],
+	])
+
+
+## 全屏帧率护栏：只有视口面积**远大于**设计分辨率时才缩小 3D 渲染分辨率。
+##
+## ── 病根订正 ──
+## 最初把「全屏后掉到 2 fps → 物理时间被稀释 → WASD 按了不动」归咎于**分辨率**，
+## 于是加了「按面积开方缩小 3D 分辨率」这个补丁。后来用
+## scripts/_probe_splat_perf.gd（关垂直同步、每档预热 15 帧再连测 40 帧、
+## 三档交错重复 3 轮）重测，真凶是 **MSAA 4×**：
+##     2560×1334，scale 0.649 + MSAA 4× + 全套后处理 → 54.0 fps（中位）
+##     2560×1334，scale 1.000 + 无 MSAA  + 全套后处理 → 43.2 fps（中位）
+##     2560×1334，scale 1.000 + 无 MSAA  + 只留 ACES    → 44.0 fps（中位）
+## 关键读数：关掉 MSAA、后处理一套不动，锐度就已经和「全关后处理」持平
+## （同一视角裁黑板算拉普拉斯方差：363 vs 370，而降分辨率那一档只有 100）。
+## 原因是 MSAA 4× 即使在 0.649 下也要生成 1662×866×4 = 576 万采样，比原生
+## 无 MSAA 的 341 万还多 —— 分辨率一直是被 MSAA 挤掉的，不是它自己太贵；
+## 而 MSAA 对泼溅只在 quad 的几何边缘起作用（高斯的柔边来自 alpha 衰减），
+## 实测锐度贡献约 2%。
+## 所以 `project.godot` 已把 `msaa_3d` 关掉，这里相应放开原生分辨率：
+## 同一取景下黑板那块的高频能量涨 4.06 倍（右墙海报 2.14 倍），只付 −20% 帧率。
+##
+## ── 保留护栏的依据：物理时间稀释是真实机制 ──
+## Godot 每帧最多跑 `max_physics_steps_per_frame`（默认 8）步物理 —— 渲染一慢，
+## **物理时间就被稀释**：fps < 7.5 时物理步数掉到 60 以下，玩家真实速度同比例
+## 变慢，症状和「输入坏了」一模一样（本喵先用 `Input.action_press` 测出能走
+## 1.93 m 就误判过一轮 —— 可那次是**窗口化**跑的，换成全屏才暴露）。
+## 诊断办法见 scripts/_probe_gameplay_input.gd：**位移必须和帧率、物理帧数一起报**。
+## 实测 2560×1334（面积比 0.42）在无 MSAA 下有 43 fps，离 7.5 还差 5.7 倍余量，
+## 所以阈值放到 `RENDER_SCALE_AREA_RATIO_MIN`：只有 6 倍设计面积（≈4K 及以上）
+## 才会触发，避免在 8K 屏上重演那场事故。
+##
+## ⚠️ 两个仍然适用的坑：
+##   1. 不能只在 `_ready()` 里算一次 —— 那一刻窗口还没变成全屏尺寸（实测还没
+##      2560×1440），算出来是「不用缩放」。所以挂在 `Viewport.size_changed` 上，
+##      尺寸一变就重算。自检会事后 `root.size = 1600×900`，正好也走这条信号。
+##   2. 尺寸回到设计分辨率时必须**显式设回 1.0**，不能「提前 return 什么都不做」——
+##      否则触发过护栏的那次缩放会一直留着，自检拿到的就是被降过分辨率的画面。
+##
+## 视口面积 / 设计面积 低于这个比值（即窗口大于约 6 倍设计分辨率）才降分辨率。
+## 1600×900 × 6 ≈ 2938×1653。2560×1334 的比值是 0.42，远在阈值之上。
+## ⚠️ 2026-11-06：同上，实际参与运算的是 `RenderEnv.RENDER_SCALE_AREA_RATIO_MIN`，
+##    这里保留一份只为对照，**改这里的值不会生效**。
+const RENDER_SCALE_AREA_RATIO_MIN := 0.16
+
+func _fit_render_scale() -> void:
+	var vp := get_viewport()
+	var size := Vector2(vp.size)
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	# 算法在 `RenderEnv.auto_scale_for()`（纯函数，两个场景共用一个口径）
+	_auto_scale = RenderEnv.auto_scale_for(size)
+	print("[Game] _fit_render_scale：渲染尺寸 %s → 自动上限 %.3f" % [str(size), _auto_scale])
+	# ⚠️ **必须 deferred**：这个函数是 `Viewport.size_changed` 的回调，而
+	#    `_apply_render()` 里的 `window_set_mode()`/`window_set_size()` 会**同步**
+	#    再触发一次 `size_changed` —— 直接调就是无限递归（实测 5000+ 条错误、
+	#    窗口在窗口/全屏之间疯狂重建，画面与鼠标全歪）。
+	#    推迟到本帧末执行，就切断这条同步回环。
+	_apply_render.call_deferred()
+
+
+## 画面旋钮 → 实际渲染参数。设置界面一改就立刻生效（走 `GameSettings.listen`）。
+##
+## 2026-10-20 用户：「画质不要这样子调，要单独调帧率、单独调分辨率、单独调抗锯齿
+## 之类的，还有什么可以单独调的也写上去」—— 所以**一项一项读**，互不覆盖。
+##
+## ⚠️ 2026-11-06：真正的落地逻辑搬去了 `scripts/render_env.gd::RenderEnv.apply()`，
+##    因为校园场景（`next_level.gd`）之前完全没有这段代码 —— 设置滑块在那里是失效的。
+##    这里只负责「传自动上限 + 打一行日志」，两个场景调的是同一个函数。
+func _apply_render() -> void:
+	var r := RenderEnv.apply(self, _auto_scale)
+	if r.is_empty():
+		return
+	var target: float = r["scale"]
+	var fps: int = r["fps"]
+	var rd: float = r["rd"]
+	var lod_px: float = r["lod"]
+	print("[Game] LOD 阈值 %.1f px（投影高度小于它切低模；越大越省性能）" % lod_px)
+	# 打一行：GPU 占用直接跟这些数走，排查「怎么突然很烫」时先看它
+	print("[Game] 画面：3D 缩放 %.2f（自动上限 %.2f）  %s  %s  AA %s  阴影 %s  渲染距离 %d m  "
+		% [target, _auto_scale,
+			"垂直同步" if bool(GameSettings.value("vsync")) else "不开垂直同步",
+			"不限帧" if fps <= 0 else "%d fps" % fps,
+			GameSettings.value_text("aa_mode", GameSettings.value("aa_mode")),
+			GameSettings.value_text("shadow_quality", GameSettings.value("shadow_quality")),
+			int(rd)]
+		+ "SSAO %s  辉光 %s  SSR %s  雾 %s  %s" % [
+			"开" if bool(GameSettings.value("ssao")) else "关",
+			"开" if bool(GameSettings.value("glow")) else "关",
+			"开" if bool(GameSettings.value("ssr")) else "关",
+			"开" if bool(GameSettings.value("fog")) else "关",
+			GameSettings.choice_label("window_mode", GameSettings.value("window_mode"))])
+
+
+## 设置变了：画面相关的键统统走 `_apply_render`（其余设置由各自的系统自己 listen）。
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key in GameSettings.RENDER_KEYS:
+		_apply_render()
+
+
+# --- 天空盒 ---------------------------------------------------------------------
+#
+# 用户 2026-10-19：「说到天空我想起来该加天空盒了」。
+# 原来 `game.tscn` 里是一块**程序化天空**（`ProceduralSkyMaterial`，三色渐变），
+# 所以跑酷那边抬头永远是同一片灰蓝。现在换成全景贴图：
+#
+#   素材：AllSky Free（**MIT**，Richard Whitelock）—— 原图 8192~16384 像素的
+#         equirect PNG，本喵缩到 **4096×2048** 转 JPEG（一张 0.2~0.9 MB），
+#         导入后 VRAM 也就 4k×2k，跑酷一路飞过去不会因此掉帧。
+#
+# ⚠️ 为什么在**代码里**换、不改 `game.tscn`：用户那份 game.tscn 还有没提交的
+#    房间碰撞改动，本喵不去动它；而且这样能留一个命令行开关，方便对比：
+#
+#     godot --path . -- --sky=pink     粉紫黄昏（默认）
+#     godot --path . -- --sky=day      晴空
+#     godot --path . -- --sky=night    月夜星空
+#     godot --path . -- --sky=dusk     深暮（很暗，只适合夜景测试）
+#
+# 2026-10-21 用户「天空盒之前是 4 个，总共 10 个，现在想把 10 个天空盒都加入备用」：
+# AllSky Free 那一包**刚好 10 张**，现在全在里面了（`_sky_convert.py` 统一缩到
+# 4096×2048 转 JPEG，一张 83 ~ 889 KB）。多出来的 6 张是**备用**，默认仍然是 pink，
+# 想换随时 `--sky=<key>`，不用改代码：
+#     overcast   阴天（灰白云层，最平）
+#     space      异星太空（地平线有行星）
+#     cartoon    卡通夜空（插画感的深蓝 + 星）
+#     coldnight  寒夜（几乎是纯黑 + 冷调）
+#     coldsunset 冷色日落（灰蓝橙，雾很厚）
+#     bluesunset 蓝调日落（橙地平线 + 蓝顶，对比最强）
+const SKIES := {
+	"pink": "res://assets/sky/sky_pink.jpg",
+	"day": "res://assets/sky/sky_day.jpg",
+	"night": "res://assets/sky/sky_night.jpg",
+	"dusk": "res://assets/sky/sky_dusk.jpg",
+	"overcast": "res://assets/sky/sky_overcast.jpg",
+	"space": "res://assets/sky/sky_space.jpg",
+	"cartoon": "res://assets/sky/sky_cartoon.jpg",
+	"coldnight": "res://assets/sky/sky_coldnight.jpg",
+	"coldsunset": "res://assets/sky/sky_coldsunset.jpg",
+	"bluesunset": "res://assets/sky/sky_bluesunset.jpg",
+}
+const SKY_DEFAULT := "pink"
+## 每张天空配一个雾色：雾是把远处的板子往「天色」里压，配色不一致会显得脏。
+## 后 6 条是**量出来的**：取全景图「地平线那一带」（纵向 42%~56%）的平均色再压暗 15%
+## （雾色比天色略深，远景才有层次），数值见 `_arisu_captures/_sky_convert.py` 的输出。
+const SKY_FOG := {
+	"pink": Color(0.62, 0.48, 0.55),
+	"day": Color(0.55, 0.62, 0.72),
+	"night": Color(0.10, 0.11, 0.18),
+	"dusk": Color(0.26, 0.18, 0.20),
+	"overcast": Color(0.54, 0.53, 0.52),
+	"space": Color(0.08, 0.07, 0.08),
+	"cartoon": Color(0.19, 0.31, 0.49),
+	"coldnight": Color(0.05, 0.08, 0.13),
+	"coldsunset": Color(0.55, 0.58, 0.60),
+	"bluesunset": Color(0.36, 0.45, 0.57),
+}
+
+
+func _setup_sky() -> void:
+	if _sky_done:
+		return
+	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if we == null or we.environment == null:
+		return
+	_sky_done = true
+	var key := SKY_DEFAULT
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--sky="):
+			key = a.substr(6).strip_edges().to_lower()
+	# 打错名字不要静默回退到默认 —— 10 个 key 记不住，把可用的直接打到日志里
+	if not SKIES.has(key):
+		push_warning("[Game] 没有叫「%s」的天空盒，用默认 %s。可用的 %d 个：%s"
+			% [key, SKY_DEFAULT, SKIES.size(), ", ".join(SKIES.keys())])
+		key = SKY_DEFAULT
+	var path: String = SKIES[key]
+	var tex := load(path) as Texture2D
+	if tex == null:
+		push_warning("[Game] 天空贴图加载失败：%s" % path)
+		return
+	var mat := PanoramaSkyMaterial.new()
+	mat.panorama = tex
+	mat.filter = true                       # 线性过滤，云边不会一格一格的
+	var sky := Sky.new()
+	sky.sky_material = mat
+	sky.process_mode = Sky.PROCESS_MODE_REALTIME
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	we.environment.sky = sky
+	we.environment.background_mode = Environment.BG_SKY
+	# ⚠️ **必须关掉雾对天空的影响**（`fog_sky_affect` 默认 1.0）：
+	#    这场的雾是 `fog_density = 0.006` 的指数雾，天空在无穷远 —— 不关的话
+	#    雾会把整张全景图均匀糊成一片雾色（本喵第一版就是这样：日志里明明
+	#    `PanoramaSkyMaterial` 挂上了，画面上还是那块灰蓝，查了半天）。
+	#    关掉之后天空恢复细节，几何体的雾照旧。
+	we.environment.fog_sky_affect = 0.0
+	we.environment.fog_light_color = SKY_FOG.get(key, we.environment.fog_light_color)
+	print("[Game] 天空盒 = %s（%s，%d×%d）" % [key, path, tex.get_width(), tex.get_height()])
+
+
+## 天空盒在 `_enter_tree()` 里就装好，而不是等 `_ready()`。
+##
+## 子节点的 `_ready()` **先于**父节点执行，而同伴 / 芹香 / 老师的模型加载要占 1.6 s 左右
+## —— 放在 `_ready` 里就等于「人都建完了才贴天空」，进场第一帧没有天。
+## `_enter_tree` 是父节点先跑，HDRI 全景图排在所有模型前面。
+## 用户 2026-10-27：「先把蒙德里安和 HDRI 天空加载好，保证进入流畅」。
+func _enter_tree() -> void:
+	_setup_sky()
+
+
+func _ready() -> void:
+	var vp := get_viewport()
+	if not vp.size_changed.is_connected(_fit_render_scale):
+		vp.size_changed.connect(_fit_render_scale)
+	# 画质档位（设置界面里可调）：先注册监听，再走一次 _fit_render_scale ——
+	# 它会算出自动上限并顺带调 _apply_render()，两条路径共用同一处落地逻辑。
+	GameSettings.listen(_on_setting_changed)
+	_fit_render_scale()
+	_watch_input()
+	_player = $Player
+	_weapon = $Player/Weapon
+	_hud = $HUD
+	_spawn = _player.global_position
+	# 从别的场景走门回来：落到对应门前（`scene_gate.gd` 的 arrival_offset），
+	# 并把「这一趟不重播开场剧情」记下来。
+	_entered_via_gate = _apply_scene_entry()
+	# 一个场景一个存档点：从门进来就落在门前，直接进场景就是默认出生点。
+	_spawn = _player.global_position
+	_player.set_respawn_point(_spawn)
+	if not _player.died.is_connected(_on_player_died):
+		_player.died.connect(_on_player_died)
+	_build_room_proxy()
+	_check_room_furniture()
+	# 「空地」铺地砖：只换平台这一块的材质，平台外什么都不加（见 LOT_TEX 上面那段）。
+	# ⚠️ 必须在房间泼溅挖洞**之前**做 —— `_carve_fallback_floor()` 会复制
+	#    `mesh.get_active_material(0)`，晚一步挖出来的洞就是没贴图的那块。
+	_dress_empty_lot()
+
+	_hud.bind(_player, _weapon)
+	# 小屋里的「召唤同伴」台（踩上去把跑酷时留在跑道口的同伴召回小屋）
+	_build_summon_pad()
+	# 小屋桌子上的电脑（假 Arch Linux 终端，按 F 进出，见 scripts/hut_computer.gd）
+	_build_computer()
+	# 609 画室桌上的十颗 Ryzen 9 9950X3D（隐藏福利，2026-11 用户要求）
+	_spawn_room609_cpus()
+	# 商店与蒙德里安大楼**已经烘焙进场景**（`scenes/shop_baked.tscn` /
+	# `scenes/mondrian_house_baked.tscn`，在 game.tscn 里是实例节点），
+	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
+	# `scripts/_bake_buildings.gd`。
+
+	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
+	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
+	_spawn_standby_bosses()
+
+	# 泼溅场地也是一场一行：两份（校园 / 画室609）同时解码时，玩家得分清
+	# 是哪一份在等。HUD 侧 bind_splats() 按传入顺序从上往下排。
+	for child in get_children():
+		if child is SplatScene:
+			var room := child as SplatScene
+			_splats.append(room)
+			# 房间泼溅一就位就把共面的方盒地板改成不写深度（见 FLOOR_MESH_PATH 的注释）。
+			room.loaded.connect(_on_splat_loaded.bind(room))
+			if room.is_ready():
+				_on_splat_loaded({}, room)
+	if not _splats.is_empty():
+		if _hud.has_method("bind_splats"):
+			_hud.bind_splats(_splats)
+		elif _hud.has_method("bind_splat"):
+			_hud.bind_splat(_splats[0])
+
+	# Boss 与同伴都是场景里的直接子节点，按类型收一遍（不写死节点名，
+	# 以后再加一位 Boss / 一名同伴只要往场景里摆就行）
+	for child in get_children():
+		if child is Boss:
+			var boss := child as Boss
+			_bosses.append(boss)
+			boss.died.connect(_on_target_died)
+		elif child is Companion:
+			_companions.append(child as Companion)
+	# ⚠️ Boss 不一定在 game 的**直接子节点**下：备用 Boss 是从
+	#    `bosses_standby.tscn` 里摘出来再挂到 game 下的。`Boss._ready()` 会把自己
+	#    加进 `bosses` 组，而且子节点的 `_ready` 先跑，所以这里按组再收一遍就齐了。
+	#    （第 8 段的比纳**不在**这个组里：它要等玩家跑到黑市才由 `DarkGate` 生成，
+	#      见下面的 `_on_gate_boss`。）
+	for node in get_tree().get_nodes_in_group("bosses"):
+		var b := node as Boss
+		if b == null or _bosses.has(b) or not is_ancestor_of(b):
+			continue
+		_bosses.append(b)
+		b.died.connect(_on_target_died)
+	if not _bosses.is_empty() and _hud.has_method("bind_bosses"):
+		_hud.bind_bosses(_bosses)
+	# 黑市闸门：玩家跑进第 8 段时它才把比纳生成出来（用户：「比纳不能一开始就加载」），
+	# 那一刻补进 `_bosses`、接上计分，并让 HUD 顺着往后加一条血条。
+	for node in get_tree().get_nodes_in_group("dark_gates"):
+		if node.has_signal("boss_spawned") and not node.is_connected(
+				"boss_spawned", Callable(self, "_on_gate_boss")):
+			node.connect("boss_spawned", Callable(self, "_on_gate_boss"))
+	# 跑酷准备区：踏进去 = 同伴全部原地待命（用户：「爱丽丝单枪匹马前去」）
+	for node in get_tree().get_nodes_in_group("ready_zones"):
+		if node.has_signal("entered") and not node.is_connected(
+				"entered", Callable(self, "_on_ready_zone_entered")):
+			node.connect("entered", Callable(self, "_on_ready_zone_entered"))
+	# 兜底：**踩上第 1 站 `Launch` 本身也算进准备区**（2026-10-20 用户：
+	# 「召回所有人后再次跑酷，准备区用不了了」）。
+	# 垫子已经扩到 13×8、离开还会重新武装，但玩家从屋子那边绕到跑道西头、
+	# 或者干脆从侧面插进跑道时可能真的一脚都没踩到垫子 —— 那就由这一条兜住：
+	# `parkour.gd` 在第一次踩上第 0 站时发 `checkpoint_reached(0)`。
+	var parkour := get_node_or_null("Parkour") as Parkour
+	if parkour != null and not parkour.checkpoint_reached.is_connected(_on_parkour_checkpoint):
+		parkour.checkpoint_reached.connect(_on_parkour_checkpoint)
+	_weapon.fired.connect(func(_i: int) -> void: _shots += 1)
+
+	for target in get_tree().get_nodes_in_group("targets"):
+		if target.has_signal("died"):
+			target.died.connect(_on_target_died)
+	# 场景里的靶子没进组也接一下
+	for child in get_children():
+		if child is Target and not child.is_in_group("targets"):
+			child.died.connect(_on_target_died)
+
+	# 渲染距离：放到**最后**再切簇 —— 商店是代码建的、备用 Boss 是运行时挂的、
+	# 房间泼溅还没解码完，早切了就漏（漏掉的簇不会被裁，只是白占位）。
+	_setup_render_distance()
+
+	# 开场剧情放**最后**：HUD / Boss / 同伴都接好了再演，
+	# 这样对话框一结束世界就是完整可玩的（暂停期间 `splat_scene.gd` 的解码线程
+	# 照常在后台跑，只是 `_process` 里的收尾被推迟到恢复之后）。
+	#
+	# 从别的场景走门回来时**不重播**：开场是「第一次到这里」的演出，
+	# 每次从门厅回来都演一遍会把玩家按在椅子上。
+	if _entered_via_gate:
+		print("[Game] 从别的场景返回：跳过开场剧情")
+	else:
+		_play_opening()
+
+
+## 备用 Boss：`scenes/bosses_standby.tscn` 里躺着 6 位（霸王龙 / 倭瓜 / 霍德 /
+## 佩洛洛斯拉 / 比纳 / 哥利亚），主场景里**只留飞猪优香** —— 全摆上去太挤。
+##
+## 命令行（写在 `--` 之后）：
+##     -- --bosses=all            六位全部上场
+##     -- --bosses=hod,peroro     只上场点名的（按节点名做包含匹配，不分大小写）
+##     -- --bosses=off            什么都不加（等同不传）
+## 自检 / 探针也用它：节点名和以前完全一致，所以 `get_node("Boss")` 之类一行都不用改。
+const STANDBY_SCENE := "res://scenes/bosses_standby.tscn"
+## 新区域：商店（初始小屋右边，跨出平台铺一块地板）。见 `scripts/shop.gd`。
+const SHOP_SCENE := "res://scenes/shop.tscn"
+## 蒙德里安大楼（两层，商店正对面）。
+##
+## 位置的理由写在 `_build_mondrian()` 上面那段：南墙 z = +19.50、屋檐正好压在
+## Deck 南沿（z = +20.00）上，北墙 z = +7.50 与商店门（z = −12.66）留 20.16 m 空地。
+##
+## ⚠️ x 为什么是 **27.30** 而不是 Deck 正中（30.01）：商店门中心在 x = 27.30，
+##    用户要的是「进入入口在这个商店对面」—— 两门必须**正对**。第一版摆 29.00，
+##    两门横向差 1.70 m，实测从商店门口直着走 +Z，人会在 z = −8.30 被大楼
+##    北墙挡住（那里是实墙，不是门洞）。现在两门中心都在 x = 27.30，
+##    从商店门出来一直走就进大楼。
+const MONDRIAN_SCENE := "res://scenes/mondrian_house.tscn"
+const MONDRIAN_POS := Vector3(27.30, 0.0, 13.50)
+
+
+## 解析 `--bosses=`：返回空数组 = 不加。
+func _wanted_standby() -> PackedStringArray:
+	for a in OS.get_cmdline_user_args():
+		if not a.begins_with("--bosses="):
+			continue
+		var v := a.substr(9).strip_edges()
+		if v.is_empty() or v == "off" or v == "none":
+			return PackedStringArray()
+		return v.split(",", false)
+	return PackedStringArray()
+
+
+func _spawn_standby_bosses() -> void:
+	var want := _wanted_standby()
+	if want.is_empty():
+		return
+	if not ResourceLoader.exists(STANDBY_SCENE):
+		push_warning("[Game] 找不到 %s，备用 Boss 不上场" % STANDBY_SCENE)
+		return
+	var ps := load(STANDBY_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] %s 不是 PackedScene" % STANDBY_SCENE)
+		return
+	var holder := ps.instantiate()
+	if holder == null:
+		push_warning("[Game] %s 实例化失败" % STANDBY_SCENE)
+		return
+	var all := want.size() == 1 and String(want[0]).to_lower() == "all"
+	var picked: Array[Node] = []
+	for child in holder.get_children():
+		var keep := all
+		if not keep:
+			var key := String(child.name).to_lower()
+			for w in want:
+				var q := String(w).strip_edges().to_lower()
+				if q != "" and key.contains(q):
+					keep = true
+					break
+		if keep:
+			picked.append(child)
+	# ⚠️ 先摘出来再加：直接 add_child 会改 `holder.get_children()`，遍历会漏人。
+	# 另外要把 `owner` 清掉，否则 Godot 会警告「owner 不一致」（它们原本属于
+	# `BossesStandby` 这棵场景树，现在要挂到 Game 下）。
+	for child in picked:
+		child.owner = null
+		holder.remove_child(child)
+		add_child(child)
+	holder.queue_free()
+	print("[Game] --bosses=%s：备用 Boss 上场 %d 位（%s）" % [
+		",".join(want), picked.size(),
+		", ".join(picked.map(func(n): return String(n.name)))])
+
+
+## 播开场剧情。见 `OPENING_STORY` / `PLAY_OPENING`。
+## 命令行覆盖（都写在 `--` 之后）：
+##     -- --story=off                不播开场，直接开打
+##     -- --story=res://story/x.txt  改播指定的那一份（调某一段剧情用）
+## 从别的场景走门回来时，把玩家放到那扇门前。
+## 返回 true = 这一次是从别的场景进来的（调用方据此跳过开场剧情）。
+func _apply_scene_entry() -> bool:
+	var entry := SceneFlow.consume_entry()
+	if entry.is_empty():
+		return false
+	var gate_id := String(entry.get("gate", ""))
+	var gate := SceneFlow.find_gate(self, gate_id)
+	if gate == null:
+		print("[Game] 从别的场景返回，但场上没有落点门「%s」—— 用默认出生点" % gate_id)
+		return true
+	var point: Vector3 = gate.call("arrival_point")
+	_player.global_position = point
+	_player.velocity = Vector3.ZERO
+	print("[Game] 从别的场景返回：落点 = 门「%s」前 %s"
+		% [gate_id, str(point.snappedf(0.01))])
+	return true
+
+
+func _play_opening() -> void:
+	if not PLAY_OPENING:
+		return
+	# ⚠️ `--script`（自检 / 探针）不自动播。自检里凡是 instantiate 场景的用例
+	#    都会断言「没被暂停」，自动播会一起带红；探针要自己显式调 `play_file`。
+	if OS.get_cmdline_args().has("--script"):
+		return
+	var path := OPENING_STORY
+	var explicit := false
+	for a in OS.get_cmdline_user_args():
+		if a == "--story=off":
+			print("[Game] --story=off：跳过开场剧情")
+			return
+		if a.begins_with("--story="):
+			path = a.substr(8)
+			explicit = true
+	var box := get_node_or_null("DialogueBox")
+	if box == null:
+		push_warning("[Game] 场景里没有 DialogueBox，跳过开场剧情")
+		return
+	if not FileAccess.file_exists(path):
+		if explicit:
+			push_warning("[Game] --story 指定的剧本不存在：%s" % path)
+			return
+		var alt := StoryScript.first_in_dir(STORY_DIR)
+		if alt.is_empty():
+			print("[Game] %s 不存在，%s 里也没有剧本，跳过开场剧情"
+				% [OPENING_STORY, STORY_DIR])
+			return
+		print("[Game] %s 不存在，改用目录里排序第一份：%s" % [OPENING_STORY, alt])
+		path = alt
+	# 别在这一帧就开演 —— 等画面真的出来（见 `_wait_world_then_play()`）
+	_wait_world_then_play(box, path)
+
+
+## 等「画面真的出来了」再开演。
+##
+## 用户 2026-10-18：「语音在刚开游戏就开始播放了，应该等到看见游戏画面才播放」。
+## 病根：`_play_opening()` 是在 `_ready()` 里直接调的，而那一刻**第一帧还没画出来**
+## —— 房间泼溅要解码 2.1 s（缓存命中）、着色器还在编译，屏幕上可能只有代理网格
+## 甚至黑色；配音却已经从第 0 秒开始放了，等玩家看见画面时第一句已经过半。
+##
+## 所以这里等两件事，然后才 `play_file()`：
+##   ① 泼溅就绪（`--splat=off` 或没有泼溅时直接算就绪）；
+##   ② 至少画过几帧（`frame_post_draw` 保证这一帧真的上了屏）。
+## 上限 `OPENING_WAIT_MAX` 秒：冷缓存解 615 万点要 50 s，不能让开场一直等下去
+## —— 超时就照常开演，最多回到「边加载边念」的老样子，不会卡死。
+const OPENING_WAIT_MAX := 10.0
+
+func _wait_world_then_play(box: Node, path: String) -> void:
+	var t0 := Time.get_ticks_msec()
+	var frames := 0
+	while true:
+		await get_tree().process_frame
+		frames += 1
+		var waited := float(Time.get_ticks_msec() - t0) / 1000.0
+		if frames >= 3 and (_splats_ready() or waited >= OPENING_WAIT_MAX):
+			break
+		if frames >= 3000:
+			break
+	var waited := float(Time.get_ticks_msec() - t0) / 1000.0
+	# 再等一帧**真的画完**：这时屏幕上一定已经有世界了。
+	await RenderingServer.frame_post_draw
+	print("[Game] 开场剧情：等画面 %.1f s / %d 帧（泼溅 %s）→ 开演" % [
+		waited, frames, "就绪" if _splats_ready() else "还没就绪（等超时了）"])
+	box.call("play_file", path)
+
+
+## 场上所有泼溅都**解码完了**？（没有泼溅 / `--splat=off` / 解码失败也算）
+##
+## 用 `loading` 而不是 `is_ready()`：`--splat=off` 时 SplatScene 在 `_ready()` 里
+## 提前返回、永远不 `is_ready()`，用它当判据会让每一次 `--splat=off` 的启动都白等
+## 满 `OPENING_WAIT_MAX` 秒。
+func _splats_ready() -> bool:
+	for s in _splats:
+		if s != null and s.loading:
+			return false
+	return true
+
+
+func _process(delta: float) -> void:
+	_update_room_swap()
+	_tick_perf_overlay(delta)
+	if _player and _player.global_position.y < FALL_LIMIT:
+		_player.global_position = _spawn
+		_player.velocity = Vector3.ZERO
+		print("[game] 掉出平台，已送回出生点")
+
+
+## 被 boss 打倒：玩家自己在 0.6 s 后回到本场景唯一的存档点，这里只记一笔。
+func _on_player_died() -> void:
+	print("[game] 玩家倒下 → 送回本场景的存档点 %s" % str(_spawn.snappedf(0.01)))
+
+
+func _on_target_died(_by: float) -> void:
+	_score += 1
+	_hits += 1
+
+
+## 玩家踏进「跑酷准备区」（第 1 段跑道东口那块金垫子）：
+## 所有同伴改成**原地待命** —— 不追、也不会因为被甩太远而拉过来，
+## 整条 570 m 就爱丽丝一个人跑（用户 2026-10-19）。
+func _on_ready_zone_entered() -> void:
+	var n := 0
+	for c in _companions:
+		var comp := c as Companion
+		if comp == null or comp.is_standby():
+			continue
+		comp.set_standby(true)
+		n += 1
+	if n > 0:
+		Sfx.play("ui_toggle", -4.0)
+		print("[Game] 踏入跑酷准备区：%d 名同伴原地待命，爱丽丝单枪匹马" % n)
+
+
+## 跑酷检查点推进。只有**第 0 站（跑道 `Launch`）**会转成「进准备区」——
+## 其余站什么都不做（免得每一跳都去碰同伴）。
+func _on_parkour_checkpoint(index: int, _label: String) -> void:
+	if index == 0:
+		_on_ready_zone_entered()
+
+
+## ── 小屋里的「召唤同伴」台（2026-10-19）──
+##
+## 用户：「在你做的这个房子里面可以召唤同伴，如果不玩跑酷了，可以在这里重新呼叫
+## 同伴回来」。小屋里那块金垫子（`SummonPad`）踩上去 = 7 名同伴**瞬移回小屋**、
+## 恢复跟随；跑酷准备区把她们留在 500 m 外的跑道口时，这是唯一的召回入口。
+##
+## 位置放在 `MeshHut` **里面**（局部 `(1.0, 0.03, 0.3)`）：门开在 −X、走道沿局部
+## z ∈ [−0.9, 0.9]，桌子和凳子都在 z ≈ −1.3 ~ −2.2 那一侧、货架在 z = +2.4，
+## 所以这块垫子正好落在「进门就看得到、又不撞家具」的空地上。
+## 挂在 `MeshHut` 下而不是 `Game` 下：以后挪小屋，垫子跟着走。
+const SUMMON_PAD_LOCAL := Vector3(1.0, 0.03, 0.3)
+## 召回后同伴站成一排：沿小屋长轴（局部 x）、间隔 0.7 m，整排**居中在局部 x = 0.2**。
+## 为什么是「一排」而不是围成一圈：小屋只有 6.2 × 5.2 m，围着玩家摆 7 个人会撞进
+## 桌子/凳子/货架的碰撞盒里（物理引擎一帧之内会把她们顶出去，看起来像抽搐）。
+## 整排宽度 6 × 0.7 = 4.2 m，居中在 x = 0.2 → 局部 x ∈ [−1.9, +2.3]，
+## 离两面山墙（±3.1）都还有 0.8 m 以上。
+const SUMMON_ROW_X := 0.2
+const SUMMON_ROW_STEP := 0.7
+## 这一排**往垫子哪一侧偏**（局部 z，+Z = 货架那侧的空地，−Z 是桌子/凳子）
+const SUMMON_ROW_Z := 1.2
+
+var _summon_pad: SummonPad
+
+
+## 在小屋里摆召唤台，并把 `summoned` 接到 `_on_summon()`。
+func _build_summon_pad() -> void:
+	var hut := get_node_or_null("MeshHut")
+	if hut == null:
+		push_warning("[Game] 场景里没有 MeshHut，召唤台不摆")
+		return
+	var pad := SummonPad.new()
+	pad.name = "SummonPad"
+	pad.position = SUMMON_PAD_LOCAL
+	hut.add_child(pad)
+	pad.summoned.connect(_on_summon)
+	_summon_pad = pad
+	print("[Game] 小屋召唤台就位：世界坐标 %s（踩上去召回全部同伴）"
+		% str(pad.global_position.snappedf(0.01)))
+
+
+## 新区域「商店」：初始小屋右边的平台外面（`scenes/shop.tscn` + `scripts/shop.gd`）。
+##
+## ⚠️ 2026-10-27 起**运行时不再走这里**：商店已经烘焙成 `scenes/shop_baked.tscn`，
+##    在 `game.tscn` 里是实例节点，运行时由 `shop.gd::_wire_baked()` 补信号。
+##    这个函数保留给烘焙工具 `scripts/_bake_buildings.gd`（它重建一遍再打包）。
+##
+## 为什么当初在代码里建：位置和长度得**先量小屋**（长 = 2 × 小屋外墙长 6.60 = 13.20 m）
+## 再定；而且必须等 `_dress_empty_lot()` 铺完地砖再建。
+## 高斯泼溅（`splatdata/shop_raw.sog`，70 MB）**故意不加载**，见 `shop.gd` 文件头。
+func _build_shop() -> void:
+	var ps := load(SHOP_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] 找不到 %s，商店不建" % SHOP_SCENE)
+		return
+	var shop := ps.instantiate() as Shop
+	if shop == null:
+		push_warning("[Game] %s 的根节点不是 Shop" % SHOP_SCENE)
+		return
+	# 先关掉 auto_build：add_child 之后由这里显式 build()（顺序可控，且只建一次）
+	shop.auto_build = false
+	add_child(shop)
+	shop.build()
+
+
+## 新区域「蒙德里安大楼」：**商店正对面**的两层大房子
+## （`scenes/mondrian_house.tscn` + `scripts/mondrian_house.gd`）。
+##
+## ── 用户 2026-10-26 的两句话 ──
+## ① 「新建场景，进入入口在这个商店对面建个大房子，要有一二层，使用蒙德里安风格建筑做」
+## ② 「房子靠后到接近边缘，不要挡店铺」
+##
+## ② 是这次改摆位的原因：第一版摆在 z = −2.00，北墙 z = −8.00 离商店门
+## （z = −12.66）只有 4.70 m —— 从店里一出来正对一面 16 m 宽、8 m 高的墙，
+## 把整间店挡得严严实实。
+##
+## ── 新摆位：z = +13.50（`_probe_mondrian_spot.gd` 现场量的）──
+##   商店门中心 (27.30, 2.35, −12.66)；Deck 地板 x 20.01 ~ 40.00、z −20.00 ~ +20.00；
+##   Deck 南沿 z = +20.00 就是这片地块的边，再往南（z = +21.5）打射线直接打空。
+##   所以把楼往 +Z 顶到头：南墙 z = +19.50、屋檐外沿 z = +20.00 ——
+##   **屋檐正好压在 Deck 南沿那条线上**，从平台上看轮廓是齐的。
+##   北墙 z = +7.50 → 商店门口到楼门 **20.16 m** 空地，出门看得见店招，视线不再被挡。
+##   x 仍是 27.30：两门中心正对，从店里出来直走就能进楼。
+##
+## ⚠️ 九个采样点（包围盒四角 + 四边中点 + 中心）逐点从上往下打射线：全部落在
+##    y = 0 的实地上，最低点 y = +0.000。这一条必须每次都验 ——
+##    `mondrian_house.gd` 的一层地面是**只有视觉、没有碰撞**的（见 `_build_floor_slab`
+##    那段：给碰撞就得让底面落到 y = 0 和地砖共面，会闪），玩家踩的是 Deck / 主平台。
+##
+## ⚠️ x 不跟着 z 一起挪到 Deck 正中的原因：楼半宽 8.00（含檐 8.50），而 Deck 只有
+##    20.01 ~ 40.00 这 20 m 宽，居中到 x = 30.01 就和商店门差 2.71 m；而 x = 27.30 时
+##    西侧 0.71 m 落在**主平台**（`Floor`，x −20 ~ +20）上 —— 那块也是 y = 0 的实心
+##    地板，脚下照样不悬空，只是地面从平台那侧换成 Deck 那侧（同一张地砖图，
+##    `shop.gd::_deck_material()` 本来就是克隆平台那块材质）。
+##
+## ⚠️ 2026-10-27 起运行时不再走这里：大楼已经烘焙成 `scenes/mondrian_house_baked.tscn`，
+##    在 `game.tscn` 里是实例节点。这个函数留给 `scripts/_bake_buildings.gd`。
+func _build_mondrian() -> void:
+	var ps := load(MONDRIAN_SCENE) as PackedScene
+	if ps == null:
+		push_warning("[Game] 找不到 %s，蒙德里安大楼不建" % MONDRIAN_SCENE)
+		return
+	var house := ps.instantiate() as MondrianHouse
+	if house == null:
+		push_warning("[Game] %s 的根节点不是 MondrianHouse" % MONDRIAN_SCENE)
+		return
+	house.name = "MondrianHouse"
+	house.position = MONDRIAN_POS
+	house.auto_build = false
+	add_child(house)
+	house.build()
+
+
+## 渲染距离（Minecraft 式「远处不渲染」）。用户 2026-10-22 计划第 2 条。
+##
+## 只做两件事：① 把树切成「对角 ≤ 60 m」的簇并预存包围球；② 每 0.1 s 按
+## `簇的最近点 > 渲染距离` 把远的簇 `visible = false`。
+## 「一部分落在渲染距离内也要显示」这条由「球心距离 − 半径」保证，见 `render_distance.gd` 文件头。
+##
+## ⚠️ 必须**在这里**（`_ready` 末尾）切簇：商店是 `_build_shop()` 代码建的、
+##    备用 Boss 是 `_spawn_standby_bosses()` 挂上去的，早一步就漏。
+func _setup_render_distance() -> void:
+	_rd = RenderDistance.new()
+	_rd.name = "RenderDistance"
+	add_child(_rd)
+	_rd.watch(self)
+
+
+## 小屋桌子上的电脑（用户 2026-10-22：「桌子上放个显示器……按 F 使用，再按 F 退出」）。
+##
+## 挂成 `MeshHut` 的子节点，这样 `hut_computer.gd` 里的坐标就是小屋局部坐标
+## （桌面顶面 y = 0.80、桌面中心 x = −0.6 / z = −2.2 都是照着 `mesh_hut.tscn` 量的）。
+## ⚠️ 必须在 `_setup_render_distance()` **之前**建：晚一步它就不进裁切簇，
+##    显示器会在 100 m 外也照画（不致命，但白费）。
+func _build_computer() -> void:
+	var hut := get_node_or_null("MeshHut") as Node3D
+	if hut == null:
+		push_warning("[Game] 找不到 MeshHut，电脑不建")
+		return
+	var pc := HutComputer.new()
+	pc.name = "HutComputer"
+	hut.add_child(pc)
+
+
+## 609 画室桌上的十颗 Ryzen 9 9950X3D（2026-11 用户：「在 609 上面放十颗，
+## 按市场价算，这是隐藏的福利」）。整组是一个独立场景 `room609_cpus.tscn`，
+## 在编辑器里打开它能直接拖位置；这里只负责挂进本关。
+func _spawn_room609_cpus() -> void:
+	if get_node_or_null("Room609Cpus") != null:
+		return
+	var cpus := ROOM609_CPUS.instantiate()
+	cpus.name = "Room609Cpus"
+	add_child(cpus)
+	print("[Game] 609 画室屋顶摆好149 颗 Ryzen 9 9950X3D（¥4,599/颗直接进卡，隐藏福利）")
+
+
+## 玩家踏上召唤台：所有同伴解除待命、瞬移回小屋站成一排。
+func _on_summon() -> void:
+	var n := 0
+	var total := _companions.size()
+	for i in total:
+		var comp := _companions[i]
+		if not is_instance_valid(comp):
+			continue
+		comp.set_standby(false)
+		comp.global_position = _summon_spot(i, total)
+		comp.velocity = Vector3.ZERO
+		n += 1
+	if _summon_pad != null:
+		_summon_pad.show_result("已召回 %d 人" % n)
+	Sfx.play("ui_open", -2.0)
+	print("[Game] 召唤同伴：%d/%d 名回到小屋（垫子 %s）"
+		% [n, total, str(_summon_pad.global_position.snappedf(0.01)) if _summon_pad else "—"])
+
+
+## 第 i 名同伴的落点：小屋**局部**坐标 → 世界。
+## 垫子在局部 (1.0, 0.03, 0.3)，一排人沿局部 x 排开、整体往 +Z（货架那侧空地）
+## 偏 1.2 m —— 避开桌子（z −2.2）和凳子（z −1.3）。
+##
+## ⚠️ 用 `hut.to_global()` 而不是「垫子世界坐标 + 偏移」：小屋现在没旋转，
+##    但以后一挪一转身，按垫子坐标加世界偏移的那一版就会把一整排人塞进墙里。
+func _summon_spot(i: int, total: int) -> Vector3:
+	var hut := _summon_pad.get_parent() as Node3D
+	var span := SUMMON_ROW_STEP * float(maxi(total, 1) - 1) * 0.5
+	var dx := -span + SUMMON_ROW_STEP * float(i)
+	return hut.to_global(Vector3(SUMMON_ROW_X + dx, 0.06, SUMMON_ROW_Z))
+
+
+## 黑市闸门放出了比纳（玩家刚跑进第 8 段）。
+## 这时才把它算进 Boss 名单、接上计分、让 HUD 补一条血条 —— 顺序不能反：
+## `bind_bosses` 是全量重绑，这里只加一行，前面几位 Boss 的连线和行号都不动。
+func _on_gate_boss(boss: Boss) -> void:
+	if boss == null or _bosses.has(boss):
+		return
+	_bosses.append(boss)
+	boss.died.connect(_on_target_died)
+	if _hud != null and _hud.has_method("add_boss"):
+		_hud.add_boss(boss)
+	print("[Game] 黑市 Boss 上线：%s（血量 %.0f）" % [boss.display_name, boss.max_health])
+
+
+## ── 画室609：门内看泼溅、门外看普通网格 ──
+##
+## 用户要的：「走出 609 门就隐藏高斯泼溅，外部看起来从高斯泼溅变成普通网格，
+## 走回去又隐藏普通网格、显示高斯泼溅」。**位置就是碰撞网格**（用户原话）。
+##
+## 所以代理网格的每一个**墙**盒子都照着 `Room609/RoomCollision` 的 `CollisionShape3D`
+## 原样复制（尺寸取 `BoxShape3D.size`、位置取它的全局变换），不估、不缩、不对齐
+## 到别的东西上 —— 碰撞在哪儿，看起来的墙就在哪儿。
+## 分类是**按几何**做的，不看名字（用户 2026-10-27 把 `ArtChairA` 直接改成了屋顶板）：
+## 高盒子 = 墙；扁且贴墙顶 = 屋顶板；其余 = 屋里家具，只挡人、不出代理网格。
+## 再补一块盖在墙顶的**黑色顶板**：碰撞里没有顶，但站在外面从高处看，没有顶就一眼
+## 看进空房间里。顶板的长宽和高度**全部取自（对齐后的）墙包围盒** ——
+## 用户在编辑器里改完墙的碰撞体，屋顶跟着走，不用再改代码。
+##
+## 判定：墙体的世界包围盒（`_room_box`）收缩 `ROOM_SWAP_HYSTERESIS` 之后
+## `has_point(player)` 就是「在屋里」。进/出各用一条边界（滞回），
+## 免得贴着门框走的时候每帧来回闪。
+## ── 画室家具的碰撞 ──
+##
+## 2026-10-26 用户：「老师左边桌子那里还没有加碰撞体吗?」
+## → 「加碰撞这里，需要在 godot 编辑器也看得见，因为这样子我好微调，
+##    你自己大概给画室加上碰撞吧」
+##
+## **所以这些盒子写在 `scenes/game.tscn` 里**，挂在 `Room609/RoomCollision` 下：
+##   墙：WallXNeg / WallXPos / WallZNegA / WallZNegB / WallZPos
+##   家具：ArtDesk（老师西侧那张办公桌）、ArtChairA / ArtChairB（桌旁两把凳子）
+## 编辑器里点得到、Inspector 里能改 `size` / `position`，拖动手柄还能挪。
+##
+## ⚠️ 不要再在代码里建同名盒子 —— 会变成两套碰撞叠在一起（玩家离桌子半个身位
+##    就被看不见的第二块挡住）。这里只做**检测与报告**：万一场景里那几个节点被
+##    删了或改名了，启动日志会点名，而不是静默失效。
+const ROOM_COLLISION_PATH := "Room609/RoomCollision"
+## 场景里应该存在的家具碰撞节点名（只用于自检点名，**不用来建节点**）
+const ROOM_FURNITURE := ["ArtDesk", "ArtChairA", "ArtChairB"]
+## 墙的高度下限：高过它的盒子才算墙（家具 0.45~1.18 m、屋顶板 0.45 m 都不算）
+const ROOM_WALL_MIN_HEIGHT := 2.0
+const ROOM_PROXY_NAME := "RoomProxy"
+const ROOM_SWAP_HYSTERESIS := 0.25
+## 配色照 `scenes/mesh_hut.tscn` 那间手工小屋的调子（用户说的「你之前做的这样子」）
+const ROOM_WALL_COLOR := Color(0.86, 0.83, 0.76)
+## 门板：淡黄色。门洞可能是整面全高切出来的（只剩左右两段墙），所以门板也是
+## 一整块板；**没有碰撞**，人照常穿过去 —— 只是从门外看，屋里不再一览无余。
+const ROOM_DOOR_COLOR := Color(0.96, 0.90, 0.62)
+## 门板比洞口每边多出多少（盖住软边，别在缝里漏光）
+const ROOM_DOOR_OVERLAP := 0.12
+## 门洞扫描：沿墙心线每 5 cm 打点；比 0.8 m 窄的空段不当门
+const ROOM_DOOR_SCAN_STEP := 0.05
+const ROOM_DOOR_MIN_WIDTH := 0.80
+## 门板高度（到平台面算起）。门洞本身是全高的，上面那截用墙材质补成「门楣」
+const ROOM_DOOR_HEIGHT := 2.6
+const ROOM_ROOF_COLOR := Color(0.27, 0.28, 0.30)
+const ROOM_ROOF_THICKNESS := 0.3
+
+var _room_proxy: Node3D
+## 墙体的世界包围盒（= 房间占位）。空 AABB 表示没建代理。
+var _room_box := AABB()
+var _room_inside := true
+
+
+## 照碰撞盒建出「门外看到的网格」。放在 `_ready()`，因为碰撞盒在场景里就有，
+## 不必等泼溅加载完 —— 加载那几秒里如果什么都不显示，房间就是一个黑洞。
+## ── 画室家具的碰撞（用户 2026-10-26：「老师左边桌子那里还没有加碰撞体吗?」）──
+##
+## ── 画室家具碰撞的**自检**（节点本身写在 `game.tscn` 里，见上面 ROOM_FURNITURE 注释）──
+##
+## 只做事后核对：场景里那几个 `CollisionShape3D` 还在不在、尺寸是不是正数、
+## 有没有和墙重叠。缺了就点名，免得哪天被误删还静默生效。
+func _check_room_furniture() -> void:
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		push_warning("[Game] 找不到 %s" % ROOM_COLLISION_PATH)
+		return
+	var found := 0
+	var names: Array[String] = []
+	for want in ROOM_FURNITURE:
+		var cs := body.get_node_or_null(want) as CollisionShape3D
+		if cs == null:
+			push_warning("[Game] 画室家具碰撞缺了 `%s`（应挂在 %s 下）"
+				% [want, ROOM_COLLISION_PATH])
+			continue
+		var box := cs.shape as BoxShape3D
+		if box == null:
+			push_warning("[Game] `%s` 的 shape 不是 BoxShape3D" % want)
+			continue
+		if box.size.x <= 0.0 or box.size.y <= 0.0 or box.size.z <= 0.0:
+			push_warning("[Game] `%s` 的尺寸有非正数：%s" % [want, str(box.size)])
+			continue
+		found += 1
+		names.append("%s(%.2f×%.2f×%.2f @ %s)" % [want, box.size.x, box.size.y, box.size.z,
+			str(cs.global_position.snappedf(0.01))])
+	print("[Game] 画室碰撞体 %d/%d 在位（高盒子当墙、贴顶扁盒子当屋顶，其余当家具）：%s"
+		% [found, ROOM_FURNITURE.size(), ", ".join(names)])
+
+
+func _build_room_proxy() -> void:
+	# 已经烘焙进场景（`scenes/room609_proxy_baked.tscn`，game.tscn 里的 RoomProxy 实例）
+	# → 只做运行时接线，不再现场建网格。
+	var baked := get_node_or_null(ROOM_PROXY_NAME) as Node3D
+	if baked != null:
+		_wire_baked_room_proxy(baked)
+		return
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		return
+
+	# 先收集所有碰撞盒，再按**几何**分类 —— 名字不可靠：用户 2026-10-27 直接把
+	# `ArtChairA` 改成了盖在墙顶的「屋顶板」。分类规则：
+	#   · 高盒子（高 > 2 m）        = 墙，参与房间矩形；
+	#   · 扁盒子且贴到墙顶（1 m 内）= 屋顶板，黑色屋顶**照它生成**；
+	#   · 其余（桌子、凳子）        = 屋里家具，只挡人，不参与外观。
+	var all_boxes: Array[AABB] = []
+	var all_xf: Array[Transform3D] = []
+	var all_size: Array[Vector3] = []
+	for c in body.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var size: Vector3 = (cs.shape as BoxShape3D).size
+		all_boxes.append(cs.global_transform * AABB(-size * 0.5, size))
+		all_xf.append(cs.global_transform)
+		all_size.append(size)
+
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var wall_idx: Array[int] = []
+	for i in all_boxes.size():
+		if all_size[i].y <= ROOM_WALL_MIN_HEIGHT:
+			continue
+		wall_idx.append(i)
+		lo = lo.min(all_boxes[i].position)
+		hi = hi.max(all_boxes[i].position + all_boxes[i].size)
+	if wall_idx.is_empty():
+		return
+
+	var proxy := Node3D.new()
+	proxy.name = ROOM_PROXY_NAME
+	add_child(proxy)
+
+	var wall_mat := StandardMaterial3D.new()
+	wall_mat.albedo_color = ROOM_WALL_COLOR
+	wall_mat.roughness = 0.95
+
+	var wall_boxes: Array[AABB] = []
+	var wall_meshes: Array[MeshInstance3D] = []
+	for i in wall_idx:
+		var mi := MeshInstance3D.new()
+		mi.name = "Wall%d" % wall_meshes.size()
+		var m := BoxMesh.new()
+		m.size = all_size[i]
+		mi.mesh = m
+		mi.material_override = wall_mat
+		proxy.add_child(mi)
+		# ⚠️ 先 add_child 再写 global_transform：不在树里时 global == local。
+		mi.global_transform = all_xf[i]
+		wall_boxes.append(all_boxes[i])
+		wall_meshes.append(mi)
+	var walls := wall_meshes.size()
+
+	# 四面墙的**外表面**对齐到房间矩形。
+	#
+	# ⚠️ 2026-10-21 用户「门那里还是不对」—— 609 的碰撞盒是手摆的，x+ 那一面其实是
+	#    两段墙，外表面一个在 x = 4.856、一个在 4.808，**差 4.8 cm**。代理墙照碰撞盒建，
+	#    于是同一面墙上多出一道 4.8 cm 的台阶：正对着门框上方，从门外斜看就是一条竖线，
+	#    屋顶边缘也缺一块（4.856 的屋顶挑在 4.808 的墙外面）。
+	#    这里只对「厚度 ≤ 0.35 m、外表面离房间矩形 ≤ 10 cm」的墙板做对齐 ——
+	#    碰撞体一律不动（视觉比碰撞凸出几厘米，玩家最多把脸贴进去 4.8 cm，比看见台阶好）。
+	var snapped := 0
+	for i in wall_boxes.size():
+		var b: AABB = wall_boxes[i]
+		var shift := Vector3.ZERO
+		for axis in 3:
+			if b.size[axis] > 0.35:
+				continue
+			var d_max: float = (b.position[axis] + b.size[axis]) - hi[axis]
+			var d_min: float = b.position[axis] - lo[axis]
+			if absf(d_max) > 0.0005 and absf(d_max) <= 0.10:
+				shift[axis] = -d_max
+			elif absf(d_min) > 0.0005 and absf(d_min) <= 0.10:
+				shift[axis] = -d_min
+		if shift != Vector3.ZERO:
+			wall_meshes[i].global_position += shift
+			b.position += shift
+			wall_boxes[i] = b
+			snapped += 1
+	if snapped > 0:
+		print("[Game] 609 代理墙：%d 面墙的外表面被对齐到房间矩形（手摆碰撞盒之间差了几厘米）"
+			% snapped)
+
+	# 对齐会让墙的实际范围变几厘米 —— 屋顶必须按**对齐后**的盒子重算，
+	# 否则屋顶边缘会挑在墙外（用户 2026-10-27：「黑色屋顶根据我建的碰撞体来」）。
+	lo = Vector3(INF, INF, INF)
+	hi = Vector3(-INF, -INF, -INF)
+	for b in wall_boxes:
+		lo = lo.min(b.position)
+		hi = hi.max(b.position + b.size)
+
+	# ── 黑色屋顶 ──
+	# 有「屋顶板」碰撞盒（扁、贴墙顶）就照它生成：位置、厚度、出檐全由用户在编辑器里定。
+	# 没有就退回老办法（按墙包围盒自动铺一块 0.3 m 厚的板）。
+	var roof_idx: Array[int] = []
+	for i in all_boxes.size():
+		if i in wall_idx:
+			continue
+		var b: AABB = all_boxes[i]
+		if b.size.y <= ROOM_WALL_MIN_HEIGHT and (b.position.y + b.size.y) >= hi.y - 1.0:
+			roof_idx.append(i)
+
+	var roof_mat := StandardMaterial3D.new()
+	roof_mat.albedo_color = ROOM_ROOF_COLOR
+	roof_mat.roughness = 0.9
+	if roof_idx.is_empty():
+		var roof := MeshInstance3D.new()
+		roof.name = "Roof"
+		var rm := BoxMesh.new()
+		rm.size = Vector3(hi.x - lo.x, ROOM_ROOF_THICKNESS, hi.z - lo.z)
+		roof.mesh = rm
+		roof.material_override = roof_mat
+		proxy.add_child(roof)
+		roof.global_position = Vector3((lo.x + hi.x) * 0.5,
+			hi.y + ROOM_ROOF_THICKNESS * 0.5, (lo.z + hi.z) * 0.5)
+		print("[Game] 609 黑色屋顶（自动按墙包围盒）：%.2f × %.2f m，底面 y=%.2f，"
+			% [rm.size.x, rm.size.z, hi.y]
+			+ "盖住 x %.2f ~ %.2f、z %.2f ~ %.2f" % [lo.x, hi.x, lo.z, hi.z])
+	else:
+		for k in roof_idx.size():
+			var i: int = roof_idx[k]
+			var mi := MeshInstance3D.new()
+			mi.name = "Roof" if k == 0 else "Roof%d" % (k + 1)
+			var rm := BoxMesh.new()
+			rm.size = all_size[i]
+			mi.mesh = rm
+			mi.material_override = roof_mat
+			proxy.add_child(mi)
+			mi.global_transform = all_xf[i]
+			var c := all_xf[i].origin
+			print("[Game] 609 黑色屋顶（照第 %d 块碰撞板）：%.2f × %.2f × %.2f @ (%.3f, %.3f, %.3f)"
+				% [i, all_size[i].x, all_size[i].y, all_size[i].z, c.x, c.y, c.z])
+
+	_build_room_door(proxy, wall_boxes, AABB(lo, hi - lo), wall_mat)
+
+	# ⚠️ 代理必须**双面**渲染。
+	#
+	# 用户 2026-10-22：「初始房间的画室高斯泼溅呢」。实测（探针
+	# `_probe_room_swap.gd` / `_probe_room_splat.gd`）：开机到泼溅解码完
+	# （缓存命中 3.0 s、冷启动更久）这段时间里 `RoomProxy.visible` 本来就是
+	# `true`（配置正确），可**玩家站在屋里看着它却是空的** —— 因为代理是
+	# `BoxMesh` + `StandardMaterial3D`，面朝外、背面剔除，从屋里看全部被剔掉，
+	# 于是「先把实心房间给玩家看」这条设计根本做不到：玩家看到的是一圈被挖掉的
+	# 地板洞 + 洞底透出来的天空，像泼溅“消失”了。
+	# 双面之后，未就绪的那几秒是一个真正实心的米色房间。
+	for node in proxy.find_children("*", "MeshInstance3D", true, false):
+		var mat := (node as MeshInstance3D).material_override as BaseMaterial3D
+		if mat != null:
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	_room_proxy = proxy
+	_room_box = AABB(lo, hi - lo)
+	print("[Game] 609 门内外切换：代理网格 %d 面墙 + 顶板；房间矩形 %s，中心 %s" % [
+		walls, str(_room_box.size.snappedf(0.01)),
+		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 烘焙版代理（`scenes/room609_proxy_baked.tscn`）：网格已经躺在 tscn 里，能直接拖。
+##
+## 房间矩形**仍然从碰撞盒量** —— 碰撞是判定依据，网格只是外观。这样即使你在编辑器里
+## 只挪了外观，玩家进屋/出屋的切换还是按碰撞走，不会出现「人还在屋里却换成外面视角」。
+func _wire_baked_room_proxy(proxy: Node3D) -> void:
+	_room_proxy = proxy
+	_room_box = _room_box_from_collisions()
+	if _room_box.size == Vector3.ZERO:
+		push_warning("[Game] RoomProxy 是烘焙版，但没量到墙的碰撞盒（%s）" % ROOM_COLLISION_PATH)
+	print("[Game] 609 门内外切换：代理网格为**烘焙场景**（%d 个节点）；房间矩形 %s，中心 %s" % [
+		proxy.get_child_count(), str(_room_box.size.snappedf(0.01)),
+		str((_room_box.position + _room_box.size * 0.5).snappedf(0.01))])
+
+
+## 墙（高 > 2 m 的盒子，不含家具/屋顶板）的世界包围盒 —— 进出判定、地洞都用它。
+func _room_box_from_collisions() -> AABB:
+	var body := get_node_or_null(ROOM_COLLISION_PATH)
+	if body == null:
+		return AABB()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var n := 0
+	for c in body.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var s: Vector3 = (cs.shape as BoxShape3D).size
+		if s.y <= ROOM_WALL_MIN_HEIGHT:   # 家具、屋顶板都不算墙
+			continue
+		var b: AABB = cs.global_transform * AABB(-s * 0.5, s)
+		lo = lo.min(b.position)
+		hi = hi.max(b.position + b.size)
+		n += 1
+	return AABB() if n == 0 else AABB(lo, hi - lo)
+
+
+## 门板：把门洞糊上一块**淡黄色**的板。
+##
+## 用户原话：「这里可以做个淡黄色的门吗，把门填满，不要漏出破绽，当然这个门没有碰撞
+## 正常穿过，只是视觉上遮住房内」。
+##
+## ⚠️ **门洞的位置是扫出来的，不是拿 `box_door_*` 猜的。**
+## 第一版照 `box_door_side`（"z-"）建，门板就贴在了 z− 那面墙上 —— 可那面被
+## `WallZNegA` 一整条封死，真正「没有碰撞箱」的缺口在 **x+ 面**：`WallXPos` 的
+## 下沿 `z = −1.65` 与 `WallZNegB` 的上沿 `z = −3.76` 之间那 2.11 m。
+## 用户一眼看穿：「做错地方了，是放在没有碰撞箱的地方不是放在墙那里」。
+##
+## 三个要点：
+##  1. **比洞口每边大 0.12 m**：门洞是碰撞盒切出来的，而泼溅墙有软边、代理墙也有
+##     接缝，严丝合缝的板一定会在边上漏出屋里的黑；压过墙 0.12 m 就看不出来了。
+##  2. **门扇缩在墙厚中间**（离外表面 0.15 m），四周用一圈比墙厚的门框收口 ——
+##     门扇四条边全藏在门洞里，从门外看不到「一块飘在墙面上的黄板子」。
+##  3. **无碰撞**：它只是个 `MeshInstance3D`，挂在 `RoomProxy` 下面 —— 于是
+##     「走出门 → 代理网格亮起来」时门板一起出现、「走回屋里 → 代理网格隐藏」时
+##     门板一起消失，不用单独写开关。
+
+
+## 门洞 = 墙环上**没有碰撞盒**的那一段。
+##
+## 做法：沿四面墙的**墙心线**（离外表面 0.15 m）每 5 cm 打一个点，落在任何一个
+## 碰撞盒里就算「有墙」；取最长的一段「连续没墙、且两端都有墙」的区间。
+## 只认两端都有墙的 —— 房间四角的开口（墙本来就到边）不算门。
+func _room_doorway(walls: Array[AABB], room: AABB) -> Dictionary:
+	const HALF_WALL := 0.15
+	const EDGE := 0.20
+	var lo := room.position
+	var hi := room.position + room.size
+	var faces := [
+		{"side": "x-", "axis": 0, "plane": lo.x + HALF_WALL, "outer": lo.x},
+		{"side": "x+", "axis": 0, "plane": hi.x - HALF_WALL, "outer": hi.x},
+		{"side": "z-", "axis": 2, "plane": lo.z + HALF_WALL, "outer": lo.z},
+		{"side": "z+", "axis": 2, "plane": hi.z - HALF_WALL, "outer": hi.z},
+	]
+	var best := {}
+	var best_w := 0.0
+	for f in faces:
+		var axis: int = int(f["axis"])
+		var plane: float = float(f["plane"])
+		var t_lo: float = (lo.z if axis == 0 else lo.x) + EDGE
+		var t_hi: float = (hi.z if axis == 0 else hi.x) - EDGE
+		var n := int(round((t_hi - t_lo) / ROOM_DOOR_SCAN_STEP)) + 1
+		var hit := PackedByteArray()
+		hit.resize(n)
+		for i in n:
+			var t := t_lo + float(i) * ROOM_DOOR_SCAN_STEP
+			var p := Vector3(plane, 1.6, t) if axis == 0 else Vector3(t, 1.6, plane)
+			for b in walls:
+				if b.has_point(p):
+					hit[i] = 1
+					break
+		var i2 := 0
+		while i2 < n:
+			if hit[i2] != 0:
+				i2 += 1
+				continue
+			var a := i2
+			while i2 < n and hit[i2] == 0:
+				i2 += 1
+			if a == 0 or i2 >= n:
+				continue
+			var w := float(i2 - a) * ROOM_DOOR_SCAN_STEP
+			if w > best_w:
+				best_w = w
+				best = {
+					"side": String(f["side"]), "axis": axis, "plane": plane,
+					"outer": float(f["outer"]),
+					"lo": t_lo + float(a) * ROOM_DOOR_SCAN_STEP,
+					"hi": t_lo + float(i2) * ROOM_DOOR_SCAN_STEP,
+					"width": w,
+				}
+	return best if best_w >= ROOM_DOOR_MIN_WIDTH else {}
+
+
+## 把扫描出来的门洞两条边**订正到墙盒的真实边界**（毫米级）。
+##
+## `_room_doorway` 是沿墙心线每 5 cm 打一个点扫出来的，误差可达一个步长；
+## 门楣要严丝合缝地嵌进那个洞，就不能拿 5 cm 的精度去建（宽 1 cm 是缝、窄 1 cm 会叠着闪）。
+## 做法：在所有墙盒里找「负侧那面墙的 max」和「正侧那面墙的 min」，取离扫描值最近的一个
+## （0.12 m 以内），找不到就保持原值。
+func _snap_door_edges(walls: Array[AABB], axis: int, t_lo: float, t_hi: float) -> Array:
+	var tang := 2 if axis == 0 else 0
+	var best_lo := t_lo
+	var best_hi := t_hi
+	var d_lo := 0.12
+	var d_hi := 0.12
+	for b in walls:
+		var a: float = b.position[tang]
+		var e: float = a + b.size[tang]
+		if absf(e - t_lo) < d_lo:
+			d_lo = absf(e - t_lo)
+			best_lo = e
+		if absf(a - t_hi) < d_hi:
+			d_hi = absf(a - t_hi)
+			best_hi = a
+	return [best_lo, best_hi]
+
+
+func _build_room_door(proxy: Node3D, walls: Array[AABB], room: AABB, wall_mat: Material) -> void:
+	var door := _room_doorway(walls, room)
+	if door.is_empty():
+		print("[Game] 609 代理墙环上没有找到「没有碰撞」的缺口 —— 不做门板")
+		return
+	var axis := int(door["axis"])            # 0 = 洞开在 x± 面（法向 x），2 = z± 面
+	var plane := float(door["plane"])        # 墙心线的法向坐标
+	var outer := float(door["outer"])        # 墙外表面的法向坐标
+	var t_lo := float(door["lo"])
+	var t_hi := float(door["hi"])
+	# 扫描步长 5 cm，只够"找门"，不够"做门楣"：门楣要和两边的墙**严丝合缝**
+	# （宽 1 cm 就是一道缝，窄 1 cm 就是叠着闪）。这里拿墙盒自己的边界把两条边订正到毫米。
+	var exact := _snap_door_edges(walls, axis, t_lo, t_hi)
+	t_lo = float(exact[0])
+	t_hi = float(exact[1])
+	var center := (t_lo + t_hi) * 0.5
+	var gap := t_hi - t_lo
+	# 「往屋外」是法向的哪一边：x+ / z+ 是 +1，x− / z− 是 −1
+	var out_sign := 1.0 if outer > plane else -1.0
+	# 人在平台面上走（y = 0），所以门从**平台面**起，而不是从埋在地下的碰撞盒底部起
+	var floor_y := maxf(room.position.y, 0.0)
+	var top_y := room.position.y + room.size.y
+	var door_top := floor_y + ROOM_DOOR_HEIGHT
+	var w := gap + ROOM_DOOR_OVERLAP * 2.0
+	var thick := 0.08
+	# 门洞是全高切出来的，但门只做到 2.6 m：上面那截拿**墙的材质**填平，
+	# 看上去就是「门 + 门楣」，一点缝都不漏（比一整条 5.4 m 的黄漆自然得多）
+	_put_door_box(proxy, "DoorPanel", axis, plane, floor_y, door_top, center, w, thick,
+		_door_mat(ROOM_DOOR_COLOR, false, 0.45))
+	if door_top < top_y:
+		# 门楣：把门洞上方那截补齐到墙顶，**和墙完全同一块板**。
+		#
+		# ⚠️ 2026-10-21 用户两轮：「门这里上面有破绽要去除」→「门那里还是不对」。
+		#    第一轮把缩进 4 cm 改成外凸 3 mm，缝小了但还在 —— 因为门楣原来是
+		#    **0.08 厚的独立薄板**，两侧还比洞口多压 12 cm，等于在墙面上贴了一块
+		#    「略凸的补丁」，补丁的两条竖边从斜角看就是两道线。
+		#    现在：厚度 = 墙厚（2 × |外表面 − 墙心线|）、法向位置 = 墙心线、
+		#    宽度 = **精确洞口宽**（不多一分），上下顶到墙顶 —— 它就是墙的一部分，
+		#    左右两条边与相邻墙板是**齐平的对接缝**（同一平面、同一材质、不重叠），
+		#    既不共面打架（z-fighting 只发生在重叠处），也没有凸出来的边。
+		var wall_thick := absf(outer - plane) * 2.0
+		_put_door_box(proxy, "DoorLintel", axis, plane, door_top, top_y,
+			center, gap, wall_thick, wall_mat)
+	# 门框：四根比墙厚的条，贴在墙外表面上收口（门扇缩在墙里，四条边全靠它遮住）
+	var bar := 0.14
+	var bar_d := 0.12
+	var n_face := outer
+	var frame_mat := _door_mat(ROOM_DOOR_COLOR.darkened(0.35), false, 0.15)
+	# 2026-10-21：竖框顶到 `door_top + bar`（= 横条顶面），四角才是**严丝合缝的直角**；
+	# 原来竖框只到 `door_top + 0.07`，横条比它高出 7 cm，两个上角各留一个小台阶。
+	_put_door_box(proxy, "DoorFrameL", axis, n_face, floor_y - 0.02, door_top + bar,
+		t_lo, bar, bar_d, frame_mat)
+	_put_door_box(proxy, "DoorFrameR", axis, n_face, floor_y - 0.02, door_top + bar,
+		t_hi, bar, bar_d, frame_mat)
+	# 横条宽度 = 洞口 + 两根竖条（不多那 2 cm），端头与竖框外沿齐平，不再探出小尾巴
+	_put_door_box(proxy, "DoorFrameT", axis, n_face, door_top, door_top + bar,
+		center, gap + bar, bar_d, frame_mat)
+	# 把手：一颗小圆柱，让这块黄板一眼看得出是「门」而不是刷了漆的墙。
+	#
+	# ⚠️ 2026-10-22 用户：「门把手怎么没有沾到门上」—— 老代码把它放在
+	#    `outer + out_sign * 0.10`（墙**外表面**再往外 10 cm），可门扇是缩在墙厚
+	#    中间的：门板外表面在 `plane + thick/2 = plane + 0.04`，墙外表面在
+	#    `outer = plane + 0.15`。于是把手悬空在门板外面 **0.21 m**，
+	#    从侧面看就是一颗浮在门框边的木块。
+	#    现在改成从**门板外表面**长出来，长度缩短到 0.12 m，横向离门边 0.30 m（再靠外会顶到门框竖条）。
+	var knob := MeshInstance3D.new()
+	knob.name = "DoorKnob"
+	var km := CylinderMesh.new()
+	km.top_radius = 0.045
+	km.bottom_radius = 0.045
+	km.height = 0.12
+	km.radial_segments = 10
+	knob.mesh = km
+	var kmat := StandardMaterial3D.new()
+	kmat.albedo_color = Color(0.32, 0.24, 0.16)
+	kmat.metallic = 0.5
+	kmat.roughness = 0.45
+	knob.material_override = kmat
+	proxy.add_child(knob)
+	knob.global_position = _door_point(axis,
+		plane + out_sign * (thick * 0.5 + km.height * 0.5), floor_y + 1.05,
+		center + (w * 0.5 - 0.30))
+	knob.global_rotation = Vector3(0, 0, PI * 0.5) if axis == 0 else Vector3(PI * 0.5, 0, 0)
+	# 门内侧也来一颗（真人站在屋里看门时，门板上也得有个把手，不然门内那面就是块光板）
+	var knob_in := MeshInstance3D.new()
+	knob_in.name = "DoorKnobIn"
+	knob_in.mesh = km
+	knob_in.material_override = kmat
+	proxy.add_child(knob_in)
+	knob_in.global_position = _door_point(axis,
+		plane - out_sign * (thick * 0.5 + km.height * 0.5), floor_y + 1.05,
+		center + (w * 0.5 - 0.30))
+	knob_in.global_rotation = knob.global_rotation
+	print("[Game] 609 门洞（没有碰撞盒的那一段）：%s 面 %.2f ~ %.2f，宽 %.2f m，中心 %.2f" % [
+		String(door["side"]), t_lo, t_hi, gap, center])
+	print("[Game] 609 门板：%.2f × %.2f m（门楣补齐到墙顶，比洞口每边多 %.2f m，无碰撞）"
+		% [w, ROOM_DOOR_HEIGHT, ROOM_DOOR_OVERLAP])
+
+
+## 门板 / 门框的通用放置。`axis` = 0 时洞在 x± 面（法向 x、沿墙 z），= 2 时反过来。
+func _put_door_box(proxy: Node3D, nm: String, axis: int, n: float, y0: float, y1: float,
+		t: float, w: float, thick: float, mat: Material) -> void:
+	var h := y1 - y0
+	if h <= 0.01:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	var m := BoxMesh.new()
+	m.size = Vector3(thick, h, w) if axis == 0 else Vector3(w, h, thick)
+	mi.mesh = m
+	mi.material_override = mat
+	proxy.add_child(mi)
+	mi.global_position = _door_point(axis, n, (y0 + y1) * 0.5, t)
+
+
+## 门板坐标系 → 世界坐标：`axis` = 0 时（法向 = x，沿墙 = z），= 2 时（法向 = z，沿墙 = x）
+func _door_point(axis: int, n: float, y: float, t: float) -> Vector3:
+	return Vector3(n, y, t) if axis == 0 else Vector3(t, y, n)
+
+
+## 门板 / 门框的材质。`unshaded` = 完全不吃光（会变成一块纯色贴纸），
+## 一般不要开；背光那一面靠 `glow`（自发光）提亮就够了 —— 纯 PBR 在逆光时是黑的。
+func _door_mat(col: Color, unshaded: bool, glow: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.roughness = 0.85
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if glow > 0.0:
+		m.emission_enabled = true
+		m.emission = col
+		m.emission_energy_multiplier = glow
+	if unshaded:
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return m
+
+
+## 给 40×40 平台铺地砖（见 `LOT_TEX` 上面那段）。
+##
+## **只动平台本身，平台外一格都不铺**：跑酷的失败判定是「掉下去」，
+## 外面补了地面就掉不下去了（用户 2026-10-18 专门交代过）。
+##
+## ⚠️ 必须在 `_carve_fallback_floor()` 之前调用：挖洞那一步复制的是
+##    `mesh.get_active_material(0)`，晚一步挖出来的洞就是没贴图的那块。
+func _dress_empty_lot() -> void:
+	var mesh := get_node_or_null(FLOOR_MESH_PATH) as MeshInstance3D
+	if mesh == null:
+		return
+	var tex := load(LOT_TEX) as Texture2D
+	if tex == null:
+		push_warning("[Game] 没有地面贴图 %s（先跑 tools/make_lot_paver.py）" % LOT_TEX)
+		return
+	var src = mesh.get_active_material(0)
+	var m: StandardMaterial3D = (src as StandardMaterial3D).duplicate() \
+		if src is StandardMaterial3D else StandardMaterial3D.new()
+	m.albedo_texture = tex
+	# 原来的 (0.21,0.23,0.27) 会把贴图压暗一倍；但也不能全白 ——
+	# 这是黄昏/阴天的场景，铺成亮白瓷砖会跟墙、天空打架。
+	m.albedo_color = Color(0.58, 0.62, 0.68)
+	m.uv1_scale = Vector3(LOT_UV_SCALE, LOT_UV_SCALE, LOT_UV_SCALE)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var nmap := load(LOT_TEX_N) as Texture2D
+	if nmap != null:
+		m.normal_enabled = true
+		m.normal_texture = nmap
+		m.normal_scale = 0.7
+	m.roughness = 0.95
+	m.metallic = 0.0
+	mesh.set_surface_override_material(0, m)
+	print("[Game] 空地铺地砖：%s（UV %.0f×，平台 40×40 m，平台外不铺）" % [LOT_TEX, LOT_UV_SCALE])
+
+
+## 每帧：在屋里 → 泼溅显示、代理藏；出屋 → 反过来。
+## 泼溅**没就位之前**代理一直显示（宁可先看到一个实心房间，也别看到黑洞）。
+func _update_room_swap() -> void:
+	if _room_proxy == null or _player == null:
+		return
+	var p := _player.global_position
+	if _room_box.grow(-ROOM_SWAP_HYSTERESIS).has_point(p):
+		_room_inside = true
+	elif not _room_box.grow(ROOM_SWAP_HYSTERESIS).has_point(p):
+		_room_inside = false
+
+	var ready := _room_scene != null and _room_scene.is_ready()
+	_room_proxy.visible = not _room_inside or not ready
+	if _room_scene != null and _room_scene.splat_node != null:
+		_room_scene.splat_node.visible = _room_inside and ready
+
+
+## 只有 `venue == "room"` 的场地才和方盒地板共面（校园那份在平台下方 12 m）。
+## `--splat=off` 时 SplatScene 会提前返回、绝不发 loaded，所以 11 套玩法自检不受影响。
+func _on_splat_loaded(_info: Dictionary, scene: SplatScene) -> void:
+	if scene == null or scene.venue != "room":
+		return
+	_room_scene = scene
+	var t_carve := Time.get_ticks_msec()
+	_carve_fallback_floor()
+	print("[Game] 泼溅就位后的挖地板 %d ms" % (Time.get_ticks_msec() - t_carve))
+	# ⚠️ 立刻换一次代理/泼溅：开场剧情一开就 `get_tree().paused = true`，
+	#    `_process` 里的 `_update_room_swap()` **不会跑** —— 而房间这份泼溅
+	#    是 2.1 s 才解码完、往往正好落在剧情里。不在这里换，代理网格（米色墙 +
+	#    深色顶板）会一直盖在泼溅上面，用户看到的就是「高斯泼溅根本没加载」。
+	_update_room_swap()
+
+
+## 把 `Floor/Mesh` 这块方盒地板挖掉房间那一块：房间用扫描地面，四周照旧是平台。
+## 见 FLOOR_MESH_PATH 上方那段长注释。
+##
+## ── 洞的形状：**房间自己的矩形**，不是泼溅的内容盒（2026-10-18 订正）──
+## 第一版拿 `content_min/max`（源坐标系的内容盒）当洞，被 yaw 一旋就成了
+## 22.34 × 16.50 m 的斜矩形。而那个内容盒里**装的不只是房间**：从窗户看出去的
+## 校园、拍摄时的离群点都在里面，房间本身只有 10.7 × 20.6 m。于是平台中间被
+## 挖掉一大圈**没有地板、也没有扫描地面**的真空 —— 用户报的「地板中间没填满」。
+##
+## 现在直接量 `Room609/RoomCollision`（= 房间四面墙）的世界包围盒来挖：
+## 洞里只剩房间本身（扫描地面铺满它），洞外一直到平台边沿全是地砖。
+## 墙根的 15 cm 重叠靠 `FLOOR_HOLE_MARGIN`（负数 = 洞略小）保证，那里被墙挡着看不见。
+func _carve_fallback_floor() -> void:
+	if _floor_carved:
+		return
+	_floor_carved = true
+	var mesh := get_node_or_null(FLOOR_MESH_PATH) as MeshInstance3D
+	if mesh == null:
+		return
+	if not CARVE_FALLBACK_FLOOR or OS.get_cmdline_user_args().has("--solid-floor"):
+		print("[Game] --solid-floor / CARVE_FALLBACK_FLOOR=false：方盒地板保持整块不动")
+		return
+	var box := mesh.mesh as BoxMesh
+	var splat_node := _room_scene.splat_node if _room_scene != null else null
+	if box == null or splat_node == null:
+		push_warning("[Game] 方盒地板不是 BoxMesh 或房间未就绪，跳过挖洞")
+		return
+
+	# 洞 = 房间墙体的世界矩形（`_build_room_proxy()` 里量好的那个）。
+	var hole := _room_box
+	if hole.size.x <= 0.01 or hole.size.z <= 0.01:
+		push_warning("[Game] 房间矩形是空的（代理网格没建出来），跳过挖洞")
+		return
+	# 厚度给世界 4 m，足够穿透这块 1 m 厚的平台板；竖向中心压在平台顶面（y = 0）。
+	var hole_size := Vector3(
+		hole.size.x + FLOOR_HOLE_MARGIN * 2.0, 4.0, hole.size.z + FLOOR_HOLE_MARGIN * 2.0)
+	var hole_center := Vector3(
+		hole.position.x + hole.size.x * 0.5, 0.0, hole.position.z + hole.size.z * 0.5)
+
+	var mat := mesh.get_active_material(0)
+	var combiner := CSGCombiner3D.new()
+	combiner.name = "FloorCarved"
+	var slab := CSGBox3D.new()
+	slab.name = "Slab"
+	slab.size = box.size
+	if mat != null:
+		slab.material = mat
+	combiner.add_child(slab)
+	var cutter := CSGBox3D.new()
+	cutter.name = "RoomHole"
+	cutter.operation = CSGShape3D.OPERATION_SUBTRACTION
+	cutter.size = hole_size
+	combiner.add_child(cutter)
+	mesh.get_parent().add_child(combiner)
+	# ⚠️ 先进树再写 global_transform：不在树里时 global == local，
+	#    而这里要的是「跟 `Floor/Mesh` 在同一处、同一朝向」。
+	slab.global_transform = mesh.global_transform
+	cutter.global_transform = Transform3D(Basis.IDENTITY, hole_center)
+	mesh.visible = false
+	print("[Game] 房间泼溅就位：方盒地板挖掉房间那一块（CSG 减法，洞 = 房间墙体矩形）；Floor/Collision 不动")
+	print("[Game]   洞 世界尺寸 %.2f × %.2f m（房间 %.2f × %.2f m，外扩 %.2f m），中心 %s；板子 %s" % [
+		hole_size.x, hole_size.z, hole.size.x, hole.size.z,
+		FLOOR_HOLE_MARGIN, str(hole_center.snappedf(0.01)), str(box.size)])
+
+
+func stats() -> Dictionary:
+	return {
+		"score": _score,
+		"shots": _shots,
+		"hits": _hits,
+		"accuracy": 0.0 if _shots == 0 else float(_hits) / float(_shots),
+	}

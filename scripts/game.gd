@@ -6,6 +6,17 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
 ## 商店东侧延长的地块与游戏开发部部室直接摆在 `scenes/game.tscn` 里
 ## （`LotEast` / `GameDevRoom` 两个实例），编辑器里能选中拖动。
+##
+## ⚠️ 2026-11-07 用户：「游戏开发部电竞房不要一开始就出来，要等在芹香那儿买完才出来」
+##    → 东侧地块 + 部室 + 电竞房三块**默认 `visible = false`**（写在 `game.tscn` 里，
+##    编辑器里照样能选中拖动），由本脚本盯着 `ShopClerk.is_bought()` 翻成 `true`。
+##    为什么是「藏」而不是「先不 add_child」：`RenderDistance` 只给 `is_visible_in_tree()`
+##    的网格算包围盒（见 `render_distance.gd::_subtree_aabb`），藏着的簇根本没进切簇，
+##    本来就一个 draw call 都不提交 —— 所以不缺性能，还省了「啥时候实例化」的时序坑
+##    （`PC5090Rig` 等好几个节点都在等 `is_bought()`，异步建会被它们扑空）。
+##    买完打开时顺手 `_rebuild_render_distance()`：切簇按「当时的可见几何」算的，
+##    藏在里面时才冒出来的玩家/同伴刚好补进新簇。
+const EAST_ROOMS := ["LotEast", "GameDevRoom", "EsportsRoom"]
 
 ## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
 const FALL_LIMIT := -60.0
@@ -553,6 +564,11 @@ func _ready() -> void:
 	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
 	# `scripts/_bake_buildings.gd`。
 
+	# 东侧的开发部三块房子：等芹香那边成交才露出来（见 `EAST_ROOMS` 上面那段）。
+	# 位置放在准备「切簇」之前 —— 成交过的话这里就把它们打开，切簇会把它们切进去；
+	# 没成交就留个心跳盯着 `ShopClerk.is_bought()`，成交那一刻自己打开并重切簇。
+	_setup_east_rooms()
+
 	# 备用 Boss（见 scenes/bosses_standby.tscn）。必须在下面「按类型收 Boss」之前，
 	# 否则它们进不了 `_bosses`、也不会被 HUD 绑血条。
 	_spawn_standby_bosses()
@@ -627,6 +643,8 @@ func _ready() -> void:
 	# 渲染距离：放到**最后**再切簇 —— 商店是代码建的、备用 Boss 是运行时挂的、
 	# 房间泼溅还没解码完，早切了就漏（漏掉的簇不会被裁，只是白占位）。
 	_setup_render_distance()
+	# 东侧三块（地块 / 部室 / 电竞房）此时还是 `visible = false` 的话，本来就没进切簇；
+	# 等成交时 `_reveal_east_rooms()` 会把它们打开并重切一遍（见该函数上面那段）。
 
 	# 开场剧情放**最后**：HUD / Boss / 同伴都接好了再演，
 	# 这样对话框一结束世界就是完整可玩的（暂停期间 `splat_scene.gd` 的解码线程
@@ -988,6 +1006,44 @@ func _setup_render_distance() -> void:
 	_rd.name = "RenderDistance"
 	add_child(_rd)
 	_rd.watch(self)
+
+
+## ── 东侧三块（地块 / 部室 / 电竞房）等成交才现身 ──
+##
+## 用户 2026-11-07：「游戏开发部电竞房不要一开始就出来，要等在芹香那儿买完才出来」。
+## `game.tscn` 里这三块都写着 `visible = false`，本函数在 `_ready` 里看一眼：
+##   · 已经成交（自检 / 探针会直接写 `ShopClerk._bought = true`）→ 当场打开，随后的切簇会带上它们；
+##   · 还没成交 → 只开一个 0.5 s 的心跳（`_process`），成交那一刻再打开。
+func _setup_east_rooms() -> void:
+	_east_rooms_done = false
+	set_process(true)
+	if ShopClerk.is_bought():
+		_reveal_east_rooms()
+
+
+func _process(_delta: float) -> void:
+	if _east_rooms_done:
+		set_process(false)
+		return
+	if ShopClerk.is_bought():
+		_reveal_east_rooms()
+
+
+## 把东侧三块露出来。**幂等**：已经打开过的节点不再动。
+## 打开后要重切一遍渲染簇 —— 它们藏着的这段时间，`RenderDistance` 的簇表里没有它们
+## （`_subtree_aabb()` 只认 `is_visible_in_tree()` 的网格）；重建会顺手把藏过的那几个
+## 簇放回原样再重新收集，不会留下「永远被压下去」的节点。
+func _reveal_east_rooms() -> void:
+	_east_rooms_done = true
+	for nm in EAST_ROOMS:
+		var node := get_node_or_null(nm) as Node3D
+		if node == null:
+			push_warning("[Game] 场景里没有 `%s`，开发部三块露不全" % nm)
+			continue
+		node.visible = true
+	if _rd != null:
+		_rd.rebuild()
+	print("[Game] 已成交 → 东侧开发部三块现身：%s" % ", ".join(EAST_ROOMS))
 
 
 ## 小屋桌子上的电脑（用户 2026-10-22：「桌子上放个显示器……按 F 使用，再按 F 退出」）。
