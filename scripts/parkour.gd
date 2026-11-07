@@ -54,18 +54,30 @@ const BankCard := preload("res://scripts/bank_card.gd")
 ## 解析不到 `class_name`（`RenderEnv` 那次栽过），这样最稳。
 const RocketRideScript := preload("res://scripts/rocket_ride.gd")
 
-## 去程：传送门相对跑道口的偏移。原代码就是往 +Z 挪 4.5 m ——
-## 离开跑道（z 2.5~5.5），又还在主平台上。
+## 跑道口那一头**唯一的停机位**（相对 `Launch`，往 +Z 挪 4.5 m ——
+## 离开跑道 z 2.5~5.5，又还在主平台上）。
+##
+## ⚠️ 2026-11-07 起这个点**同时**是：传送门所在处 / 去程起飞点 / **回程落点**。
+##    原来回程落点被我自己推开了 4 m（旧 `HOME_LAND_OFFSET`），理由是「免得两枚
+##    火箭叠在同一个格子里」—— 用户反馈「火箭落地不是传送门那一块，是因为有东西
+##    挡住吧」：**挡住它的就是另一枚火箭**，地上并没有任何实体（射线量过，见
+##    `scripts/_probe_rocket_land.gd`）。现在改成两枚火箭**互换位置**（见
+##    `_start_ride()` 里的空载摆渡），这一个停机位就够用了。
 const PORTAL_OFFSET := Vector3(0.0, 0.0, 4.5)
-## 去程火箭的**落点**（相对结算屋）。错开 5 m / 3 m，别把 21 m 高的箭体插进屋里。
-## 实测结算屋只是一面 4×2.3×0.2 的墙板（z = −15.1），人出舱点在它前 2.2 m。
-const ISLAND_LAND_OFFSET := Vector3(5.0, 0.0, 3.0)
-## 回程火箭的**停放点**（相对岛上传送台）。台面是 3×3、z −6~−3，
-## 往 −Z 挪 3 m 正好落在台子外侧，不压台面。
-const RETURN_PARK_OFFSET := Vector3(0.0, 0.0, -3.0)
-## 回程火箭的**落点**（相对跑道口）。和去程火箭的停放点错开 4 m，
-## 免得两枚 21 m 的火箭叠在同一个格子里。
-const HOME_LAND_OFFSET := Vector3(4.0, 0.0, 4.5)
+## 岛上那一头**唯一的停机位**（相对 `Island/Props/ReturnPad`，往 −Z 挪 5 m）。
+##
+## 位置是被三件东西夹出来的（全部实测，见 `_probe_rocket_land.gd` 与
+## `_arisu_captures/_rocket_spots/`）：
+##   · 传送台台面 3×3（z −6~−3）—— 不能压上去；
+##   · 信号塔平台 4×4、y 18（x −597~−593、z −6.5~−2.5）—— 42 m 的箭体是根
+##     半径 1.5 m 的柱子，z 必须退到 −8 以外才不相交（−4 m 时只剩 0.5 m，
+##     俯视图里看着像穿塔，所以多让 1 m）；
+##   · 结算屋屋顶（x −596.2~−591.8、z −15.2~−11.8、y 10.3）—— z 不能超过 −11。
+## 折中到 z = −9.5：离塔 1.5 m、离屋顶 0.8 m、离传送台 5 m。
+const ISLAND_SPOT_OFFSET := Vector3(0.0, 0.0, -5.0)
+## 空载摆渡的巡航高度（米）。比载人那趟（`RocketRide.lift_altitude` = 45 m）
+## 高一倍多，两枚对飞时不会在半空中撞在一起。
+const FERRY_ALTITUDE := 95.0
 
 ## 最好成绩存这儿（`user://`，跨启动保留）
 const BEST_PATH := "user://parkour_best.cfg"
@@ -184,6 +196,7 @@ func _ready() -> void:
 	_spawn_bank_sign()
 	_spawn_settlement()
 	_ensure_roof_solid()
+	_spawn_ride_rockets()
 	# 立即扫一遍（覆盖 .tscn 里摆好的招牌），再延迟扫一遍 —— 子场景
 	# `parkour_futures.gd` 会在运行时动态生成「第 N 段」规则牌，第一遍扫不到。
 	_gate_world_labels()
@@ -741,10 +754,12 @@ func _on_return_pad_entered(body: Node3D) -> void:
 		Sfx.play("ui_toggle")
 		print("[Parkour] 传送台（火箭不可用，退回瞬移）→ 主平台 %s" % str(return_target))
 		return
-	_return_rocket = rocket
+	# ⚠️ 这里**不要**写 `_return_rocket = rocket`：换过一次边之后，站在岛上的
+	#    可能正是 `_finish_rocket` 那一枚，赋值会让两个变量指向同一个节点，
+	#    `_other_rocket()` 就永远返回 null、空载摆渡失效。位置一律用 `_rocket_at()` 查。
 	Sfx.play("ui_toggle")
-	print("[Parkour] 传送台 → 坐火箭回主平台（人出舱 %s）" % str(return_target))
-	_start_ride(rocket, return_target, _player, "回程", true)
+	print("[Parkour] 传送台 → 坐火箭回跑道口（人出舱 %s）" % str(return_target))
+	_start_ride(rocket, _home_spot(), return_target, _player, "回程", true)
 
 
 ## 一个节点的世界包围盒：节点**自己**是网格就用它（跑道标记没有碰撞，只有网格），
@@ -863,9 +878,18 @@ func _spawn_settlement() -> void:
 var _trap_done := false
 ## 通关后立的传送门（见 _spawn_finish_portal）
 var _finish_portal: Node3D
-## 去程那枚火箭（和传送门一起生成，停在跑道口当载具兼地标）
+## 两枚火箭：**开场就各就各位**，一直站在两头。
+##
+## ⚠️ 2026-11-07 改：原来只有 `_finish_rocket` 是常驻的，回程那枚是**懒生成**
+##    （第一次踩岛上传送台才造出来，省得没走到岛上的人白扛 116k 面）。
+##    用户反馈「火箭是我站在传送台才出现的，不是一直在那儿等着的」——
+##    一站上去凭空冒出一枚 42 m 的火箭确实很怪，所以现在两枚都在 `_ready()` 里造好。
+##    代价是多一份 GLB 实例（`ResourceLoader` 会缓存 PackedScene 和网格，
+##    第二枚只多付一份节点/材质，不重复解码文件）。
+##
+## 名字保持 `_finish_` / `_return_` 是为了少动代码，但**别再按名字认位置**：
+## 两枚每次飞完都会互换（见 `_start_ride()`），谁在哪头要用 `_rocket_at()` 现查。
 var _finish_rocket: Node3D
-## 回程那枚火箭（**懒生成**：第一次踩岛上传送台才造。省得没走到岛上的人白扛 116k 面）
 var _return_rocket: Node3D
 ## 正在飞。防止降落动画途中又踩一次触发盒，重复起飞
 var _riding := false
@@ -1085,11 +1109,15 @@ func _spawn_finish_portal() -> void:
 	door.add_child(area)
 
 	_finish_portal = door
-	# 火箭和门立在同一格：用户 2026-11-06「SpaceX 火箭加入跑酷尽头那个传送门」
-	if not is_instance_valid(_finish_rocket):
-		_finish_rocket = _spawn_ride_rocket(door.global_position)
-	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s），火箭就位" % [
-		str(door.global_position.snappedf(0.1)), PORTAL_DEST])
+	# 火箭和门立在同一格：用户 2026-11-06「SpaceX 火箭加入跑酷尽头那个传送门」。
+	# 火箭本身在 `_ready()` 里就造好了（两头各一枚常驻），这里只兜底补造。
+	if _rocket_at(_home_spot()) == null:
+		var r := _spawn_ride_rocket(door.global_position)
+		if r != null:
+			_finish_rocket = r
+	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s），火箭就位：%s" % [
+		str(door.global_position.snappedf(0.1)), PORTAL_DEST,
+		"有" if _rocket_at(_home_spot()) != null else "无"])
 
 
 func _on_finish_portal_body(body: Node3D) -> void:
@@ -1100,10 +1128,11 @@ func _on_finish_portal_body(body: Node3D) -> void:
 	var shed := get_node_or_null(PORTAL_DEST) as Node3D
 	if shed == null:
 		return
-	if not is_instance_valid(_finish_rocket):
-		_finish_rocket = _spawn_ride_rocket(
-			(get_node_or_null("Launch") as Node3D).global_position + PORTAL_OFFSET)
-		if _finish_rocket == null:
+	# 站在跑道口那一头的是哪一枚就用哪一枚（换边之后可能已经是对面那枚）
+	var rocket := _rocket_at(_home_spot())
+	if rocket == null:
+		rocket = _spawn_ride_rocket(_home_spot())
+		if rocket == null:
 			# 兜底：火箭造不出来就退回原来的瞬移，别把人困在门口
 			_portal_cooldown = 2.0
 			body.global_position = shed.global_position + Vector3(0.0, 0.1, 0.6)
@@ -1112,28 +1141,90 @@ func _on_finish_portal_body(body: Node3D) -> void:
 			Sfx.play("ui_open", -2.0)
 			print("[Parkour] 传送门（火箭不可用，退回瞬移）→ 结算屋")
 			return
+	print("[Parkour] 传送门 → 坐火箭去结算屋（火箭 %s）" % str(rocket.global_position.snappedf(0.1)))
 	_portal_cooldown = 2.0
-	_start_ride(_finish_rocket, shed.global_position + Vector3(0.0, 0.1, 0.6), body, "去程", false)
+	_start_ride(rocket, _island_spot(),
+		shed.global_position + Vector3(0.0, 0.1, 0.6), body, "去程", false)
 
 
-## 岛上那枚回程火箭 —— 懒生成，造不出来返回 null（调用方退回瞬移）。
+## ── 两头各一个停机位 ─────────────────────────────────────────────────
+## 跑道口：传送门脚下（去程起飞 / **回程落地**）
+func _home_spot() -> Vector3:
+	var launch := get_node_or_null("Launch") as Node3D
+	if launch == null:
+		return Vector3.ZERO
+	return launch.global_position + PORTAL_OFFSET
+
+
+## 岛上：传送台外侧 4 m（回程起飞 / 去程落地）
+func _island_spot() -> Vector3:
+	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
+	if pad == null:
+		return Vector3.ZERO
+	return pad.global_position + ISLAND_SPOT_OFFSET
+
+
+## 除 `r` 之外的另一枚火箭（空载摆渡要用）
+func _other_rocket(r: Node3D) -> Node3D:
+	if r == _finish_rocket:
+		return _return_rocket
+	if r == _return_rocket:
+		return _finish_rocket
+	return null
+
+
+## 谁站在 `spot` 附近。**别按 `_finish_` / `_return_` 的名字认位置** ——
+## 两枚每飞一趟就互换一次（见 `_start_ride()`），名字早就对不上号了。
+func _rocket_at(spot: Vector3, tol := 3.0) -> Node3D:
+	for r in [_finish_rocket, _return_rocket]:
+		var n := r as Node3D
+		if n != null and is_instance_valid(n) and n.global_position.distance_to(spot) <= tol:
+			return n
+	return null
+
+
+## 造两枚火箭，开场就停在两头。
+##
+## 用户 2026-11-07：「火箭是我站在传送台才出现的，不是一直在那儿等着的」——
+## 所以不再是「踩到才懒生成」，`_ready()` 里两枚都造好，走不走得到岛上都在那儿站着。
+func _spawn_ride_rockets() -> void:
+	if not is_instance_valid(_finish_rocket):
+		_finish_rocket = _spawn_ride_rocket(_home_spot())
+	if not is_instance_valid(_return_rocket):
+		_return_rocket = _spawn_ride_rocket(_island_spot())
+	if _finish_rocket == null or _return_rocket == null:
+		print("[Parkour] !! 火箭没造全（跑道口 %s / 岛上 %s）→ 缺的那头会退回瞬移" % [
+			"有" if _finish_rocket != null else "无",
+			"有" if _return_rocket != null else "无"])
+		return
+	print("[Parkour] 火箭就位：跑道口 %s / 岛上 %s（各高 %.0f m，%s）" % [
+		str(_finish_rocket.global_position.snappedf(0.1)),
+		str(_return_rocket.global_position.snappedf(0.1)),
+		float(_finish_rocket.call("height")),
+		"占位" if bool(_finish_rocket.call("is_placeholder")) else "Falcon9"])
+
+
+## 岛上那枚。造不出来返回 null（调用方退回瞬移）。
 ##
 ## ⚠️ 用户 2026-11-07：「第一次传送回来怎么不是 SpaceX」——
 ##    如果这里返回 null，`_on_return_pad_entered` 会**静默退回瞬移**（压根没有火箭），
 ##    看起来就像「回程不是 SpaceX」。所以每条失败路径都必须留下带原因的日志。
 func _ensure_return_rocket() -> Node3D:
-	if is_instance_valid(_return_rocket):
-		return _return_rocket
+	var here := _rocket_at(_island_spot())
+	if here != null:
+		return here
+	# 不在停机位（理论上不该发生）：再造一枚补上
 	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
 	if pad == null:
 		push_warning("[Parkour] 回程火箭造不出来：找不到 Island/Props/ReturnPad")
 		print("[Parkour] !! 回程火箭失败：Island/Props/ReturnPad 不存在 → 将退回瞬移")
 		return null
-	var r := _spawn_ride_rocket(pad.global_position + RETURN_PARK_OFFSET)
+	var r := _spawn_ride_rocket(_island_spot())
 	if r == null:
 		print("[Parkour] !! 回程火箭失败：_spawn_ride_rocket 返回 null → 将退回瞬移")
 	else:
-		print("[Parkour] 回程火箭已就位：%s（缩放 %.2f，高 %.1f m）" % [
+		_return_rocket = r
+		print("[Parkour] 回程火箭补造：%s（缩放 %.2f，高 %.1f m）" % [
 			str(r.global_position.snappedf(0.1)),
 			float(r.get("rocket_scale")), float(r.call("height"))])
 	return r
@@ -1148,28 +1239,30 @@ func _spawn_ride_rocket(at: Vector3) -> Node3D:
 	return r
 
 
-## 火箭落点：去程落在结算屋旁，回程落回跑道口旁
-func _rocket_land_for(rocket: Node3D) -> Vector3:
-	if rocket == _finish_rocket:
-		var shed := get_node_or_null(PORTAL_DEST) as Node3D
-		if shed != null:
-			return shed.global_position + ISLAND_LAND_OFFSET
-	elif rocket == _return_rocket:
-		var launch := get_node_or_null("Launch") as Node3D
-		if launch != null:
-			return launch.global_position + HOME_LAND_OFFSET
-	return rocket.global_position
-
-
-## 起飞。`exit_point` 是**人**的最终落点，和火箭落点可以不同（见上面的 OFFSET 注释）。
-func _start_ride(rocket: Node3D, exit_point: Vector3, body: Node3D, tag: String, reset_after: bool) -> void:
+## 起飞。`land` 是火箭落点，`exit_point` 是**人**的最终落点（两者可以不同）。
+##
+## ── 关键：另一枚同时空载起飞，两枚互换位置 ──
+## 用户 2026-11-07 的三条连起来是同一件事：火箭要**一直在**两头等着、
+## 而且落地要落在传送门脚下。但一个停机位同一时刻只能站一枚 ——
+## 玩家坐 A 飞向那头时，那头站着 B，A 落地就会和 B 叠在一起（旧代码的解法是把
+## 回程落点推开 4 m，用户看到的就是「落地不是传送门那一块」）。
+##
+## 现在让 B 在 A 起飞的同时**飞向 A 刚离开的那个点补位**：
+## 玩家落地时那头正好空出来，两头永远「走一枚、来一枚」，全程没有瞬移
+## （瞬移会被看见凭空消失/出现）。B 走的是 95 m 高度，A 走 45 m，空中不会撞。
+func _start_ride(rocket: Node3D, land: Vector3, exit_point: Vector3,
+		body: Node3D, tag: String, reset_after: bool) -> void:
 	if _riding or rocket == null:
 		return
 	_riding = true
 	_ride_reset_after = reset_after
-	var land := _rocket_land_for(rocket)
 	if rocket.has_signal("ride_finished") and not rocket.is_connected("ride_finished", _on_ride_finished):
 		rocket.connect("ride_finished", _on_ride_finished)
+	# 另一枚空载去补位（目标 = 这枚刚离开的停机位）
+	var other := _other_rocket(rocket)
+	if other != null and is_instance_valid(other):
+		if other.has_method("depart_to"):
+			other.call("depart_to", rocket.global_position, FERRY_ALTITUDE)
 	print("[Parkour] %s：坐火箭 %s → %s（人出舱 %s）" % [
 		tag, str(rocket.global_position.snappedf(0.1)),
 		str(land.snappedf(0.1)), str(exit_point.snappedf(0.1))])
@@ -1181,7 +1274,9 @@ func _on_ride_finished() -> void:
 	if _ride_reset_after:
 		_ride_reset_after = false
 		reset_run()
-	print("[Parkour] 火箭落地，人已就位")
+	print("[Parkour] 火箭落地，人已就位（跑道口 %s / 岛上 %s）" % [
+		"有" if _rocket_at(_home_spot()) != null else "空",
+		"有" if _rocket_at(_island_spot()) != null else "空"])
 
 
 func _on_avenger_died(_by_damage: float) -> void:

@@ -116,9 +116,8 @@ func _flight_shot(file: String) -> void:
 	if rocket == null:
 		return
 	var shed := _lvl.get_node_or_null("Island/Props/Shed") as Node3D
-	var land := shed.global_position + Vector3(5.0, 0.0, 3.0)
-	_lvl.call("_start_ride", rocket, shed.global_position + Vector3(0.0, 0.1, 0.6),
-		player, "出图", false)
+	_lvl.call("_start_ride", rocket, _lvl.call("_island_spot"),
+		shed.global_position + Vector3(0.0, 0.1, 0.6), player, "出图", false)
 
 	# 升空 1.10 s 之后进巡航，取巡航中段
 	while float(rocket.get("_elapsed")) < 1.10 + 1.30:

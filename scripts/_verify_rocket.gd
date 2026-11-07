@@ -3,11 +3,12 @@ extends SceneTree
 ##
 ## 覆盖：
 ##   ① Falcon 9 GLB 真的载进来了、尺寸对（70 m × 5.05 m、非占位）
-##   ② 去程：通关 → 传送门 + 火箭一起立在跑道口 → 踩进去 → 起飞 → 落结算屋旁 → 出舱点对
+##   ② 去程：通关 → 传送门 + 火箭一起立在跑道口 → 踩进去 → 起飞 → 落岛上停机位 → 出舱点对
 ##   ③ 骑乘锁：飞行中玩家 `is_riding()` 为真、被抬到空中；落地后解除
-##   ④ 火箭飞完要回停放点（它是摆渡车，不是一次性消耗品）
-##   ⑤ 回程：踩岛上传送台 → 火箭懒生成 → 飞回跑道口 → 出舱点 = `return_target`
+##   ④ 落地**就地停住**（不再瞬移回起点），另一枚空载摆渡到空出来的那头补位
+##   ⑤ 回程：传送台旁一直有一枚在等（不再懒生成）→ 飞回跑道口 → **落在传送门脚下**
 ##   ⑥ 防重复触发：飞行途中再踩触发盒不会二次起飞
+##   ⑦ 两枚火箭从头到尾都在两个停机位上，从不叠在一起
 ##
 ## 用法：_tools/run_probe.sh res://scripts/_verify_rocket.gd
 ##
@@ -126,7 +127,7 @@ func _run() -> void:
 
 	var peak_y := _player.global_position.y
 	var ticks := 0
-	var home := rocket.global_position
+	var takeoff := rocket.global_position
 	while bool(_lvl.get("_riding")) and ticks < 900:
 		ticks += 1
 		await physics_frame
@@ -143,10 +144,29 @@ func _run() -> void:
 	var d_shed := _player.global_position.distance_to(shed.global_position)
 	_check(d_shed < 2.0, "人离结算屋 %.2f m（期望 < 2，和改前的断言同口径）" % d_shed)
 
-	# ── ④ 火箭回停放点 ──
-	print("\n---------- 4. 火箭归位 ----------")
-	var d_home := rocket.global_position.distance_to(home)
-	_check(d_home < 0.5, "飞完回到停放点：偏差 %.2f m（期望 < 0.5）" % d_home)
+	# ── ④ 就地停住 + 另一枚补位 ──
+	print("\n---------- 4. 落地就地停住 + 另一枚补位 ----------")
+	var island_spot: Vector3 = _lvl.call("_island_spot")
+	var home_spot: Vector3 = _lvl.call("_home_spot")
+	var d_land := rocket.global_position.distance_to(island_spot)
+	_check(d_land < 0.5,
+		"载人那枚落在岛上停机位 %s：偏差 %.2f m（< 0.5）" % [
+			str(island_spot.snappedf(0.1)), d_land])
+	var flew := rocket.global_position.distance_to(takeoff)
+	_check(flew > 500.0,
+		"确实飞过去了：起点 %s → 落点相距 %.0f m（> 500）" % [
+			str(takeoff.snappedf(0.1)), flew])
+	var other := _lvl.call("_other_rocket", rocket) as Node3D
+	_check(other != null, "另一枚火箭存在（两枚常驻，不是懒生成）")
+	if other != null:
+		var d_ferry := other.global_position.distance_to(home_spot)
+		_check(d_ferry < 0.5,
+			"另一枚空载摆渡回了跑道口停机位 %s：偏差 %.2f m（< 0.5）" % [
+				str(home_spot.snappedf(0.1)), d_ferry])
+		var gap := other.global_position.distance_to(rocket.global_position)
+		_check(gap > 5.0, "两枚没有叠在一起：相距 %.1f m（> 5）" % gap)
+		_check(not bool(other.call("is_riding")),
+			"摆渡那枚已经落地（没有半悬在空中）")
 
 	# ── ⑥ 防重复触发 ──
 	print("\n---------- 6. 防重复触发 ----------")
@@ -178,8 +198,12 @@ func _run() -> void:
 	print("\n---------- 5. 回程：岛上传送台 → 跑道口 ----------")
 	var pad := _lvl.get_node_or_null("Island/Props/ReturnPad") as Node3D
 	_check(pad != null, "Island/Props/ReturnPad 存在")
-	_check(_lvl.get("_return_rocket") == null, "回程火箭此刻还没生成（懒生成，省 116k 面）")
-	if pad != null:
+	# 用户 2026-11-07：「火箭是我站在传送台才出现的，不是一直在那儿等着的」
+	var waiting := _lvl.call("_rocket_at", island_spot) as Node3D
+	_check(waiting != null, "传送台旁**一直**有一枚火箭在等（开场就造好，不是踩上去才冒出来）")
+	if pad != null and waiting != null:
+		var near_pad := waiting.global_position.distance_to(pad.global_position)
+		_check(near_pad < 6.0, "它离传送台 %.1f m（< 6，站上台就能看见它）" % near_pad)
 		_player.global_position = pad.global_position + Vector3(0.0, 0.10, 0.0)
 		_player.velocity = Vector3.ZERO
 		var h := 0
@@ -187,8 +211,6 @@ func _run() -> void:
 			h += 1
 			await physics_frame
 		_check(bool(_lvl.get("_riding")), "踩传送台 → 回程火箭起飞")
-		var ret := _lvl.get("_return_rocket") as Node3D
-		_check(ret != null, "回程火箭已懒生成出来")
 		var t2 := 0
 		while bool(_lvl.get("_riding")) and t2 < 900:
 			t2 += 1
@@ -196,7 +218,12 @@ func _run() -> void:
 		var target: Vector3 = _lvl.get("return_target")
 		var d_back := _player.global_position.distance_to(target)
 		_check(d_back < 0.5,
-			"人落在 return_target：距 %.2f m（期望 < 0.5，原断言是 < 0.30）" % d_back)
+			"人落在 return_target：距 %.2f m（期望 < 0.5）" % d_back)
+		# 用户 2026-11-07：「火箭落地不是传送门那一块」—— 现在必须正好落在门脚下
+		var d_gate := waiting.global_position.distance_to(home_spot)
+		_check(d_gate < 0.5,
+			"回程落在传送门脚下 %s：偏差 %.2f m（< 0.5）" % [
+				str(home_spot.snappedf(0.1)), d_gate])
 		_check(_lvl.get("checkpoint") == -1 and not bool(_lvl.get("timer_running")),
 			"回程后检查点/计时已清空（`reset_run()` 在骑乘结束后才调）")
 

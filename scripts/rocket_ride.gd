@@ -13,11 +13,17 @@ class_name RocketRide extends Node3D
 ##
 ## 全程玩家被 `player.set_ride_lock(true)` 锁住输入、不落重力，位置由本节点每帧写入。
 ##
+## ── 落地后不回家 ──
+## 飞完就**停在落点**（`_finish()`）。换边由 `parkour.gd` 派另一枚**空载摆渡**
+## （`depart_to()`）飞过去补位 —— 两枚火箭在两头互换，玩家看到的永远是
+## 「这头走一枚、那头来一枚」，没有任何瞬移。
+##
 ## ── 尺度 ──
 ## GLB 原始高 70 m（真实 Falcon 9 尺寸）。实测跑道口 → 结算屋 **579 m**，
-## 70 m 是赛道跨度的 12% —— 比例上不离谱，但站在 2 m 的玩家旁边是 35 倍身高，
-## 而且会盖住 8.3 m 高的画室。所以默认缩到 `rocket_scale = 0.30`（高 21 m）：
-## 仍然是一眼认得出的火箭，又不至于压扁场景。想改大改小只动这一个数。
+## 70 m 是赛道跨度的 12%。2026-11-06 先缩到 0.30（21 m），用户 2026-11-07 说
+## 「感觉火箭不够大」，提到 `rocket_scale = 0.60`（**42 m**）——
+## 参照旁边的柴关电脑城层高 5.99 m，42 m 是它的 7 倍，够压场。
+## 还嫌小就往 0.8 调（56 m）；1.0 = 真实 70 m。想改大改小只动这一个数。
 ##
 ## ── 素材缺失要能降级 ──
 ## `models/rocket_falcon9/` 是第三方素材（CC BY-NC，Forest Katsch），按项目惯例
@@ -71,10 +77,15 @@ var _dir := Vector3.FORWARD        ## 水平飞行方向（单位向量）
 var _elapsed := 0.0
 var _active := false
 var _placeholder := false
+## 这一趟的巡航高度。载人时 = `lift_altitude`；空载摆渡会更高（见 `depart_to()`）
+var _lift := 45.0
+## 这一趟是「空载摆渡」（换边），不载人、不发 `ride_finished`
+var _ferry := false
 
 
 func _ready() -> void:
 	set_physics_process(false)
+	_lift = lift_altitude
 	_build()
 
 
@@ -121,9 +132,46 @@ func park_at(p: Vector3) -> void:
 	_from = p
 	global_position = p
 	_dir = Vector3.FORWARD
+	_ferry = false
+	_lift = lift_altitude
 	if _pivot != null:
 		_pivot.basis = Basis.IDENTITY
 	set_physics_process(false)
+
+
+## 空载摆渡：自己从当前位置飞到 `dest`，不载人，**不发 `ride_finished`**。
+##
+## ── 为什么需要它 ──
+## 用户 2026-11-07 的三条反馈连起来是一件事：两头的火箭必须**一直在**，
+## 而且落地要落在传送门脚下。但一个停机位同一时刻只能站一枚 ——
+## 玩家坐 A 从这头飞向那头时，那头本来就站着 B，A 落地就会和 B 叠在一起。
+##
+## 所以让 B **同时起飞飞去 A 刚离开的那个点补位**：两头永远是「走一枚、来一枚」，
+## 玩家落地时那头正好空出来，全程没有任何瞬移（瞬移会被看见凭空消失/出现）。
+## 摆渡的巡航高度取 `FERRY_ALTITUDE`（95 m），比载人那趟（45 m）高一倍，
+## 两枚对飞不会在半空中撞上。
+func depart_to(dest: Vector3, altitude: float) -> void:
+	if _active:
+		push_warning("[Rocket] 摆渡被忽略：这枚正忙着（上一趟还没落地）")
+		return
+	_build()
+	_from = global_position
+	_to = dest
+	_exit = dest
+	_player = null
+	_ferry = true
+	_lift = maxf(altitude, lift_altitude)
+	# 水平朝向。起落点重合时没有方向，退回单位 +Z，免得归一化出 NaN
+	var flat := _to - _from
+	flat.y = 0.0
+	_dir = flat.normalized() if flat.length_squared() > 0.0001 else Vector3.FORWARD
+	_elapsed = 0.0
+	_active = true
+	if _pivot != null:
+		_pivot.basis = Basis.IDENTITY
+	set_physics_process(true)
+	print("[Rocket] 空载摆渡 %s → %s（alt %.0f m）" % [
+		str(_from.snappedf(0.1)), str(_to.snappedf(0.1)), _lift])
 
 
 ## 起飞。`rocket_from` 也是飞完之后回归的 home。
@@ -146,6 +194,8 @@ func begin(rocket_from: Vector3, rocket_to: Vector3, player_exit: Vector3, playe
 
 	_elapsed = 0.0
 	_active = true
+	_ferry = false
+	_lift = lift_altitude
 	global_position = _from
 	if _pivot != null:
 		_pivot.basis = Basis.IDENTITY
@@ -186,20 +236,20 @@ func _physics_process(delta: float) -> void:
 		# ① 升空：垂直拔起（ease-out，开始快后段收）
 		var k := _elapsed / maxf(t1, 0.001)
 		var e := 1.0 - pow(1.0 - k, 2.0)
-		pos = _from + Vector3.UP * (lift_altitude * e)
+		pos = _from + Vector3.UP * (_lift * e)
 	elif _elapsed < t2:
 		# ② 巡航：等高横扫，机身中途前倾最多 max_tilt_deg
 		var k := (_elapsed - t1) / maxf(t_cruise, 0.001)
 		var e := k * k * (3.0 - 2.0 * k)          # smoothstep
-		var a := _from + Vector3.UP * lift_altitude
-		var b := _to + Vector3.UP * lift_altitude
+		var a := _from + Vector3.UP * _lift
+		var b := _to + Vector3.UP * _lift
 		pos = a.lerp(b, e)
 		tilt = deg_to_rad(max_tilt_deg) * sin(k * PI)
 	else:
 		# ③ 降落：从巡航高度垂直落到地面（ease-in，越接近地面越慢）
 		var k := (_elapsed - t2) / maxf(t_land, 0.001)
 		var e := k * k
-		var a := _to + Vector3.UP * lift_altitude
+		var a := _to + Vector3.UP * _lift
 		pos = a.lerp(_to, e)
 		if _elapsed >= t3:
 			pos = _to
@@ -233,12 +283,28 @@ func _carry_player() -> void:
 	_player.global_position = global_position + rot * seat
 
 
-## 落地收尾：停稳 → 0.35 s 把人挪到出舱点 → 解锁输入 → 火箭回 home
+## 落地收尾：停稳 → 0.35 s 把人挪到出舱点 → 解锁输入 → **就地停住**
+##
+## ⚠️ 2026-11-07 改：原来这里会把火箭瞬移回 `_from`（它的起点）。用户反馈
+##    「火箭落地不是传送门那一块」「回来后又回去」—— 那个「又回去」就是这一行：
+##    人刚站到出舱点，火箭就在眼前凭空消失、回到 570 m 外的老窝。
+##    现在它**落在哪儿就停在哪儿**；换边交给 `parkour.gd` 派另一枚空载飞过来补位
+##    （见 `depart_to()`），两头永远是「走一枚、来一枚」。
 func _finish() -> void:
 	if not _active:
 		return
 	_active = false
 	set_physics_process(false)
+
+	# 空载摆渡：落点即终点，停住就完事，不发信号
+	if _ferry:
+		_ferry = false
+		_from = _to
+		global_position = _to
+		if _pivot != null:
+			_pivot.basis = Basis.IDENTITY
+		print("[Rocket] 摆渡到位 %s" % str(_to.snappedf(0.1)))
+		return
 
 	if _player == null or not is_instance_valid(_player):
 		ride_finished.emit()
@@ -259,12 +325,13 @@ func _finish() -> void:
 		if moved != null:
 			moved.global_position = _exit
 
-	# 火箭回停放点：它是个摆渡车，不是一次性消耗品
-	global_position = _from
+	# 就地停住：落点就是它新的停放点（原因见上面 `_finish()` 的注释）
+	_from = _to
+	global_position = _to
 	if _pivot != null:
 		_pivot.basis = Basis.IDENTITY
-	print("[Rocket] 落地完成，人 → %s，火箭回 %s" % [
-		str(_exit.snappedf(0.1)), str(_from.snappedf(0.1))])
+	print("[Rocket] 落地完成，人 → %s，火箭停在 %s" % [
+		str(_exit.snappedf(0.1)), str(_to.snappedf(0.1))])
 	ride_finished.emit()
 
 
