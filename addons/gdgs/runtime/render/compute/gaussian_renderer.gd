@@ -34,6 +34,22 @@ var _idle_skip_read := false
 ## 画面是错的（`sort_values` 还是上一帧的排列，和新的 `culled_splats` 对不上），
 ## 所以它只能用来读时间，不能拿来出图。开法：`-- --gdgs-skip-sort`
 var _skip_sort_debug := false
+## ── 换场景后的「重新武装」（2026-11-07）──
+##
+## `purge_gpu()` 把注册表整份抹掉之后，`_last_point_data_size` 还是旧值，
+## 于是新场景注册回来的那份点数据尺寸如果**恰好一样**（同一个房间二次进入、
+## 或两个场景点数一致），`_sync_scene_resources()` 会认为「没变」而跳过上传，
+## 新场景的泼溅就永远不显示。这里记一个标记，下一次渲染开始时先让缓存
+## 「认为自己什么都没注入过」，强制整份重传一次。
+var _rearm_requested := false
+
+func request_rearm() -> void:
+	_rearm_requested = true
+
+func take_rearm() -> bool:
+	var was := _rearm_requested
+	_rearm_requested = false
+	return was
 
 func render_for_compositor(
 	state_cache: GaussianGpuStateCache,
@@ -46,6 +62,12 @@ func render_for_compositor(
 ) -> Dictionary:
 	_read_idle_skip_setting()
 	state_cache.flush_pending_cleanup()
+	if take_rearm():
+		# 切场景那一轮显式放掉 GPU 之后的第一次渲染：让缓存忘掉「已经注入过」，
+		# 逼它把新场景的点数据整份重传（见 `_rearm_requested` 的说明）。
+		state_cache.mark_all_render_states_needs_splat_upload(true)
+		state_cache.mark_all_render_states_needs_instance_upload(true)
+		state_cache.mark_all_render_states_needs_relight_upload(true)
 
 	if not scene_registry.has_gpu_data():
 		if state_cache.has_render_states():

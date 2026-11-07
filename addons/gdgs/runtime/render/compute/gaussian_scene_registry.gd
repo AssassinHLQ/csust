@@ -45,6 +45,30 @@ func unregister_splat_node(node: Node) -> Dictionary:
 	_splat_nodes.erase(node)
 	return _sync_scene_resources(true)
 
+## 切场景专用：忘掉所有节点、并且把合并出来的大缓冲**真的清空**。
+##
+## `unregister_splat_node()` 走的是 `_sync_scene_resources(true)`：只剩 0 个节点时
+## 它会返回 `_change_result(true, ...)`（请 GPU 缓存清理）并把各个
+## `PackedByteArray` 置空 —— 但那是**逐节点**的路径，换场景时旧场景整棵树
+## 是 `queue_free()` 掉的，注册表里残留的是「已经 freed 的节点」，
+## `_prune_splat_nodes()` 只在下次同步时才扫。这里直接一次性抹干净，
+## 免得那块 665 MB 的合并点数据等到下一帧才掉。
+##
+## ⚠️ 清空之后**必须**让注册表在下一帧整份重注入（见
+##    `gaussian_render_manager.gd::purge_gpu()`），否则新场景的泼溅不会上传。
+func forget_all() -> void:
+	_splat_nodes.clear()
+	_node_entries.clear()
+	_point_count = 0
+	_point_data_byte = PackedByteArray()
+	_splat_lighting_byte = PackedByteArray()
+	_splat_instance_ids_byte = PackedByteArray()
+	_instance_count = 0
+	_instance_transforms_byte = PackedByteArray()
+	_instance_relight_byte = PackedByteArray()
+	_light_rig_byte = PackedByteArray()
+	_light_count = 0
+
 func mark_resource_dirty(node: Node) -> Dictionary:
 	if node == null:
 		return {}

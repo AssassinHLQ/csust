@@ -55,3 +55,13 @@ func notify_lighting_changed(_node: Node) -> void:
 ## when nothing was ever attached.
 func shutdown() -> void:
 	pass
+
+## Release backend-wide GPU buffers **now**, without tearing the backend down.
+##
+## Scene changes call this between freeing the old scene and loading the new one:
+## a backend may keep buffers in a node parented to the scene root (the Compute
+## manager does), and those outlive the scene. Default is a no-op; backends that
+## own such buffers override it. Must be safe to call at any time and when
+## nothing was ever attached.
+func release_gpu() -> void:
+	pass

@@ -10,6 +10,10 @@ class DeletionQueue:
 	
 	func flush(device : RenderingDevice) -> void:
 		# We work backwards in order of allocation when freeing resources
+		if device == null:
+			# device 已经被 `release_all()` 收走过一次：RID 早就还了，这里只是收尾
+			queue.clear()
+			return
 		var t0 := Time.get_ticks_usec()
 		for i in range(queue.size() - 1, -1, -1):
 			if not queue[i].is_valid(): continue
@@ -48,6 +52,19 @@ func _notification(what):
 		# All resources must be freed after use to avoid memory leaks.
 		deletion_queue.flush(device)
 		shader_cache.clear()
+
+## **立刻**释放这份 context 持有的全部 RID，不等 GC（切场景用）。
+##
+## `NOTIFICATION_PREDELETE` 那条路要等 RefCounted 被回收才生效 —— 实测切场景后
+## 粗层那 656 MB 会挂在驱动里好一阵子（`[SceneFlow]` 日志「缓冲」一栏跨场景不动）。
+## 这里显式 flush，显存当帧就还。
+##
+## ⚠️ 不把 `device` 置 null：`device : RenderingDevice` 是强类型引用，置 null 会让
+##    退出时报「resources still in use」；队列空了之后 PREDELETE 的 flush 本就是空操作。
+## ⚠️ 只在**渲染线程**、且这份 context 不会再被提交时调。
+func release_all() -> void:
+	deletion_queue.flush(device)
+	shader_cache.clear()
 	
 # --- WRAPPER FUNCTIONS ---
 func submit() -> void: device.submit(); needs_sync = true

@@ -73,6 +73,20 @@ func shutdown() -> void:
 	if manager != null and manager.has_method("shutdown"):
 		manager.shutdown()
 
+## 切场景专用：把这块后端常驻在 `root` 上的 GPU 缓冲**当帧**放干净。
+##
+## 本后端的渲染管理器挂在 `tree.root` 下（`_ensure_manager()`），
+## `change_scene_to_file()` 不会动 root —— 所以它是跨场景常驻的，
+## 场景里那棵旧树被 free 之后，它手里那套 splats / culled / sort 缓冲
+## （画室609 一份就是 1.28 GB）还会留着，直到 GC 回收 context 才落下去。
+##
+## 用 `_get_manager_from_main_loop()` 而不是 `_get_manager(node)`：调用时机是
+## 「旧场景已经 free、新场景还没加载」，此刻手上没有任何节点可以当锚点。
+func release_gpu() -> void:
+	var manager := _get_manager_from_main_loop()
+	if manager != null and manager.has_method("purge_gpu"):
+		manager.purge_gpu()
+
 func _ensure_manager(node: Node) -> Node:
 	var tree: SceneTree = node.get_tree()
 	if tree == null or tree.root == null:

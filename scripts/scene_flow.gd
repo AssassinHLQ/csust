@@ -96,11 +96,19 @@ static func switch_scene(path: String, spawn_gate: String, from_gate: String,
 	var t_block := Time.get_ticks_msec()
 	var old := tree.current_scene
 	var old_path := old.scene_file_path if old != null else ""
+	# ⚠️ GGS 校园（`campus_ggs.gd`）自己那份显存**必须在 free 旧树之后再放**：
+	#    它手里握着 `Texture2DRD` + 光栅器 context，`queue_free()` 只摘树，
+	#    真正的 RID 要等 `_exit_tree()` 之后、且不等 GC 才落下来。
+	var ggs := old.get_node_or_null("CampusGGS") if old != null else null
 	if old != null:
 		old.queue_free()
 		await tree.process_frame
 		await tree.process_frame
-		report_memory("旧场景已释放（%s）" % old_path)
+	# 旧场景 free 完了，但它留下的 GPU 缓冲还没还 —— 见下面 `_release_backend_gpu()`。
+	if ggs != null and is_instance_valid(ggs) and ggs.has_method("release_gpu_for_scene_change"):
+		ggs.call("release_gpu_for_scene_change")
+	_release_backend_gpu()
+	report_memory("旧场景已释放（%s）" % old_path)
 	# 加载是同步阻塞的：先把「载入中」画上屏，再让主线程去 load，
 	# 否则大场景那几秒只有一块黑屏，看起来像卡死。
 	if loading != null:
@@ -146,6 +154,51 @@ static func switch_scene(path: String, spawn_gate: String, from_gate: String,
 	await fade.finished
 	overlay.queue_free()
 	switching = false
+
+
+## 把「后端常驻」的那块 GPU 缓冲**当帧**还掉（切场景用）。
+##
+## ── 为什么光 `queue_free()` 不够（2026-11-07 用户：「进入第二场景不释放第一场景的显存」）──
+## 用户看到的真实现象（`logs\godot.log`，进入 `next_level.tscn` 那一次）：
+##   ```
+##   切换前          VRAM 2152.3 MiB（纹理 579.7 / 缓冲 1306.1）
+##   旧场景已释放     VRAM 1731.7 MiB（纹理 179.8 / 缓冲 1285.4）   ← 纹理掉了 400，缓冲只掉 21
+##   切换后          VRAM 1741.5 MiB（纹理 188.2 / 缓冲 1286.8）
+##   ```
+## 也就是说网格/纹理确实跟着旧场景释放了，但**「缓冲」这一栏从 1306 到 1287，之后
+## 一直纹丝不动**。原因有两个，都要单独收拾：
+##
+##  ① **GDGS Compute 管理器的 splats 缓冲**：渲染管理器挂在本场景树的 `root` 下
+##     （`gaussian_compute_backend.gd::_ensure_manager()`），`change_scene_to_file()`
+##     不动 root，所以它跨场景常驻。注册表点数归零后 `cleanup_all()` 会触发，
+##     但那只是丢掉 `context` 引用 —— RID 还攒在 `deletion_queue` 里等
+##     `NOTIFICATION_PREDELETE`，真正落显存得等 GC。
+##  ② **GGS 校园光栅器**：粗层 153 万点一份 656 MB、细层再加几百 MB，
+##     同理要等 GC 才还（走 `campus_ggs.gd::release_gpu_for_scene_change()`）。
+##
+## ── 时机 ──
+## 只在「旧场景已经 free、新场景还没 `load()`」这个空档调：
+##   · 早了：旧场景还活着，泼溅节点还在往那套缓冲里写，提前还 = 正在用的资源被释放；
+##   · 晚了：`change_scene_to_file()` 已经把新场景的纹理/网格塞进同一个 device，
+##           两份同时在线，峰值又回去了。
+## 两个后端都自带「下一次渲染整份重注入」（`request_rearm()`），所以放完不会
+## 让新场景的泼溅永远不显示。
+##
+## ⚠️ GGS 校园不走这里：它挂在**当前场景**下（`next_level.gd` 的 `CampusGGS`），
+##    由 `switch_scene()` 在 free 旧树之后单独调
+##    `campus_ggs.gd::release_gpu_for_scene_change()`。
+static func _release_backend_gpu() -> void:
+	var before := _vram_line()
+	var gdgs := load("res://addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd")
+	if gdgs != null and gdgs.has_method("release_gpu"):
+		gdgs.call("release_gpu")
+	print("[SceneFlow] 后端 GPU 缓冲已当帧释放（GDGS）：VRAM %.1f → %.1f MiB"
+		% [before, _vram_line()])
+
+
+## 只看显存总量（MiB），给上面的对账用
+static func _vram_line() -> float:
+	return float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0
 
 
 ## 黑屏还没撤的时候，把目标场景里的泼溅全部加载完（含主线程那 1~2 s 的

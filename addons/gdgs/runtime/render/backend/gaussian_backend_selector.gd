@@ -47,6 +47,19 @@ static func reset() -> void:
 	_resolved_backend = null
 	_resolution_done = false
 
+## 切场景时调：把**当前后端**常驻在 root 上的 GPU 缓冲当帧放掉。
+##
+## 为什么需要：Compute 后端的渲染管理器挂在 `tree.root`（`_ensure_manager()`），
+## `change_scene_to_file()` 不动 root，所以它跨场景常驻；旧场景 free 之后
+## 手里那套 splats / culled / sort 缓冲（画室609 一份 1.28 GB）要等到 GC
+## 才还 —— 实测日志里「缓冲」那一栏跨场景纹丝不动就是这个。
+##
+## 这里**不** `reset()`：后端本身、它缓存的 resolve 结果都还要继续用，
+## 只是把显存放掉；下一次 `attach_node` 会把新场景的节点重新注册进来。
+static func release_gpu() -> void:
+	if _resolved_backend != null and _resolved_backend.has_method("release_gpu"):
+		_resolved_backend.release_gpu()
+
 static func _resolve(tree: SceneTree) -> RefCounted:
 	if _is_headless():
 		# No display server and no RenderingDevice: nothing renders regardless of

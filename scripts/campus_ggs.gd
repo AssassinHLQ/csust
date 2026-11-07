@@ -232,6 +232,88 @@ func _ready() -> void:
 	_overlay.add_child(_overlay_label)
 	set_process(true)
 
+
+## 切场景专用：把校园这块泼溅的显存**当帧**放干净（不等 GC）。
+##
+## 为什么需要（2026-11-07 用户：「进入第二场景不释放第一场景的显存」）：
+## 场景切换时 `_exit_tree()` 里的 `_release_campus()` 只是把光栅器对象丢掉，
+## 而光栅器手里的 `context` 是 RefCounted，RID 攒在 `deletion_queue` 里等
+## `NOTIFICATION_PREDELETE` 才 `free_rid` —— 真正落显存要等引擎回收。
+## 粗层 153 万点一份就 656 MB（splats 352 + culled 70 + 两份 sort 各 117），
+## 细层再加几百 MB，于是日志里「缓冲」那一栏跨场景几乎不动。
+##
+## `scene_flow.gd` 在「旧场景已 free、新场景还没 load」这个空档调本函数。
+## 不用在这里等渲染线程：`RenderingServer.call_on_render_thread()` 后面紧跟
+## `get_rendering_info()` 读回，队列一定已经排空。
+##
+## ⚠️⚠️ **千万别在这里 `set_process(false)`**（本喵第一版就是这么写的，结果
+##    切过去之后校园整块没显示、只有天空）：`switch_scene()` 后面还会
+##    `report_memory()` / 等预载 / 淡入十几帧，`_process` 一停，`_make_bundle()`
+##    就永远不会被调用 —— 而 bundle 正是重建光栅器的那一步。
+##    `_released = true` 本身已经保证下一帧会走「出门重建」分支。
+func release_gpu_for_scene_change() -> void:
+	_join_window_write()
+	# 先摘掉 quad 和材质参数（同 `_exit_tree()` 的理由：别让材质指着要还的纹理）
+	if quad != null:
+		if _quad_mat != null:
+			_quad_mat.set_shader_parameter("render_texture", null)
+			_quad_mat.set_shader_parameter("coarse_texture", null)
+		remove_child(quad)
+		quad.free()
+		quad = null
+		_quad_mat = null
+	# 收掉两条加载线程（它们由主线程驱动，join 必须在主线程做）
+	for r in [rasterizer, coarse_rasterizer]:
+		if r != null:
+			if r.load_thread != null and r.load_thread.is_started():
+				r.should_terminate_thread[0] = true
+				r.load_thread.wait_to_finish()
+	var fine = rasterizer
+	var coarse = coarse_rasterizer
+	rasterizer = null
+	coarse_rasterizer = null
+	_active = false
+	_released = true
+	_ready_done = false
+	_coarse_done = false
+	# ⚠️ 不清 `_outside_clock`：`_process` 的「出门重建」分支要有它 ≥ 0.25 s 才肯重建，
+	#    而它在旧场景里早就攒够了 —— 清掉反而要多等四分之一秒。
+	#    也不动 `_window_names`：那是「上次窗口选了哪 6 块」，重建时可以省一次拼 bin。
+	# 再让渲染线程把 RID 当帧还掉
+	RenderingServer.call_on_render_thread(func() -> void:
+		if fine != null:
+			fine.release_all_now()
+		if coarse != null:
+			coarse.release_all_now())
+	# ⚠️ 4.7.1 没有 `RenderingServer.rendering_device_sync()`；读一次渲染信息
+	#    把渲染线程队列排空，等价于「等它做完」。
+	RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)
+	tex = null
+	coarse_tex = null
+	print("[campus_ggs] 切场景：校园泼溅显存已当帧释放（细层 %s / 粗层 %s，游戏时间 %.1f s）" % [
+		"有" if fine != null else "无", "有" if coarse != null else "无",
+		Time.get_ticks_msec() / 1000.0])
+
+
+## 给探针看的：这份校园现在到底有没有光栅器 / 是否已经上传完
+func debug_state() -> Dictionary:
+	var p: Variant = player
+	return {
+		"released": _released,
+		"process": is_processing(),
+		"gave_up": _gave_up,
+		"ready_done": _ready_done,
+		"chunks": _use_chunks,
+		"player": "（空）" if p == null else str((p as Node3D).global_position),
+		"fine": rasterizer != null,
+		"coarse": coarse_rasterizer != null,
+		"fine_loaded": rasterizer != null and bool(rasterizer.is_loaded),
+		"coarse_loaded": coarse_rasterizer != null and bool(coarse_rasterizer.is_loaded),
+		"outside_clock": _outside_clock,
+		"window": _window_names.size(),
+	}
+
+
 func _exit_tree() -> void:
 	_join_window_write()
 	# ⚠️ 退出时 `queue_free()` 要等到这一帧末尾才真正释放，而 `_release_campus()`

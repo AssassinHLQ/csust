@@ -80,6 +80,14 @@ class RenderState:
 var _render_states: Dictionary = {}
 var _render_state_lru: Array = []
 var _pending_gpu_cleanup := false
+## `release_gpu_now()` 放掉、但引用计数可能还没归零的 context。
+## 主线程稍后用 `take_released_contexts()` 收掉（见 `gaussian_render_manager.gd`）。
+var _released_contexts: Array = []
+
+func take_released_contexts() -> Array:
+	var out := _released_contexts
+	_released_contexts = []
+	return out
 
 func has_render_states() -> bool:
 	return not _render_states.is_empty()
@@ -327,6 +335,41 @@ func cleanup_state(state) -> void:
 func cleanup_all() -> void:
 	for state in _render_states.values():
 		cleanup_state(state)
+	_render_states.clear()
+	_render_state_lru.clear()
+	_pending_gpu_cleanup = false
+
+## **立刻**把每一份 RenderState 的 GPU 资源还给驱动，且**不等 GC**。
+##
+## 和 `cleanup_all()` 的区别只在释放时机：
+##   · `cleanup_all()` → `cleanup_state()` → `state.context.free()`：`GdgsRenderingDeviceContext`
+##     是 RefCounted，RID 攒在 `deletion_queue` 里等 `NOTIFICATION_PREDELETE` 才 flush，
+##     所以「切场景」那一刻显存并不会马上掉，要等引擎回收这些对象；
+##   · 本函数显式调 `context.release_all()`，RID 当帧就 `free_rid`。
+##
+## ⚠️ 只允许在**渲染线程**、且**这一帧不会再渲染泼溅**的时候调
+##    （`gaussian_render_manager.gd::purge_gpu()` 已经保证这一点）：
+##    否则正在提交的命令缓冲会引用已释放的 RID，vulkan 层会直接报错。
+func release_gpu_now() -> void:
+	for state in _render_states.values():
+		if state == null:
+			continue
+		var ctx = state.context
+		if ctx != null:
+			ctx.release_all()
+			_released_contexts.append(ctx)
+			state.context = null
+		state.shaders.clear()
+		state.pipelines.clear()
+		state.descriptors.clear()
+		state.needs_gpu_rebuild = true
+		state.needs_splat_upload = true
+		state.needs_instance_upload = true
+		state.needs_relight_upload = true
+		state.rendered_once = false
+		state.last_world_position = Vector3(INF, INF, INF)
+		state.last_depth_alpha = -1.0
+		state.last_texture_size = Vector2i.ZERO
 	_render_states.clear()
 	_render_state_lru.clear()
 	_pending_gpu_cleanup = false

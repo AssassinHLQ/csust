@@ -319,6 +319,60 @@ func cleanup_gpu():
 	if render_texture: render_texture.texture_rd_rid = RID()
 	if context: context.free()
 
+## 切场景专用：把 splats 缓冲**当帧**还给驱动。
+##
+## 为什么要单独一个函数（2026-11-07 用户：「进入第二场景不释放第一场景的显存」）：
+## 光栅器整个对象会被 `campus_ggs.gd::_release_campus()` 丢掉、`context.free()`
+## 也调了 —— 但 `context` 是 RefCounted，RID 攒在 `deletion_queue` 里等
+## `NOTIFICATION_PREDELETE` 才 `free_rid`，真正落显存要等 GC。粗层那份
+## 153 万点 = **656 MB**（`splats` 352 + `culled_splats` 70 + 两份 sort 各 117），
+## 细层还要 1/3，加起来几百 MB 到一 GiB 都可能挂着。
+##
+## **必须在渲染线程调**。把 `splats` 换成 1 个元素的空缓冲并立刻还掉原来那块，
+## 其余（culled / sort / 纹理）由 `release_all_now()` 在同一帧一并还掉。
+func release_splats() -> void:
+	if context == null or not descriptors.has('splats'):
+		return
+	var device = context.device
+	var old = descriptors['splats']
+	descriptors['splats'] = context.create_storage_buffer(4 * 4)
+	if old != null and old.rid.is_valid():
+		device.free_rid(old.rid)
+		# 已经还掉了，别再让它留在队列里被 PREDELETE 顺手再还一次
+		context.deletion_queue.queue.erase(old.rid)
+	_bin_loading = false
+	is_loaded = false
+	num_splats_loaded[0] = 0
+	print("[ggs] 切场景：splats 缓冲已提前还给驱动")
+
+## 切场景专用：整份 context 立即释放。
+## 顺序照 `cleanup_gpu()` 的教训：先把纹理拥有权还掉，再 flush RID 队列。
+##
+## **必须在渲染线程调**（`campus_ggs.gd` 走 `RenderingServer.call_on_render_thread`）：
+## 这些 RID 正在被提交中的命令缓冲引用，主线程直接还掉会让 vulkan 层报
+## 「正在使用的资源被释放」。
+##
+## `load_thread` 不在这里 join：它是**主线程**线程（`pump_load()` 在主线程驱动），
+## 在渲染线程 join 会把自己卡死。调用方（`campus_ggs.gd::_release_campus`）在
+## 主线程那边已经 `should_terminate = true` 并 `wait_to_finish()` 过了。
+func release_all_now() -> void:
+	should_terminate_thread[0] = true
+	if _bin_file != null:
+		_bin_file.close()
+		_bin_file = null
+	if render_texture:
+		render_texture.texture_rd_rid = RID()
+	var ctx = context
+	context = null
+	is_loaded = false
+	_bin_loading = false
+	descriptors.clear()
+	shaders.clear()
+	pipelines.clear()
+	if ctx != null:
+		ctx.release_all()
+	print("[ggs] 切场景：光栅器 context 已当帧释放")
+
 func rasterize() -> void:
 	if not context: init_gpu()
 	if _bin_loading:
