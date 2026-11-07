@@ -254,10 +254,9 @@ func _may_capture() -> bool:
 
 
 func _input(event: InputEvent) -> void:
-	# 火箭骑乘期间一律不收输入：视角由 `set_ride_yaw()` 接管，位置由火箭写入。
-	# 连 Esc 也一并屏蔽 —— 飞行最多约 5 s，中途放开鼠标只会让镜头乱掉；
-	# 万一逻辑卡死，`rocket_ride.gd` 里有 `watchdog_extra` 超时兜底会强制收尾。
-	if _ride_active:
+	# 火箭骑乘期间：**允许转视角**（用户 2026-11-07：「起飞不能转动视角」）。
+	# 只屏蔽开火 / 开镜 / 滚轮缩放这些操作键；鼠标移动那条分支在下面照常走。
+	if _ride_active and not (event is InputEventMouseMotion):
 		return
 
 	# --- 鼠标移动：转视角 ---
@@ -389,6 +388,11 @@ func set_ride_lock(on: bool) -> void:
 	velocity = Vector3.ZERO
 	_aim_held = false
 	_fire_held = false
+	# 骑乘期间把角色网格藏起来。用户 2026-11-07：「起飞后爱丽丝还是看得见」——
+	# 相机是第三人称弹簧臂、就架在她身后，不藏的话画面里就是一个站在火箭尖上的人。
+	# 相机挂在 `rig` 上，藏网格不影响取景。
+	if model_root != null:
+		model_root.visible = not on
 	if on:
 		_ride_yaw = _yaw
 		if anim != null and anim.has_method("set_locomotion"):
@@ -407,12 +411,13 @@ func is_riding() -> bool:
 
 func _physics_process(delta: float) -> void:
 	if _ride_active:
-		# 人挂在火箭上：不落重力、不吃输入、不做 move_and_slide。
+		# 人挂在火箭上：不落重力、不吃移动输入、不做 move_and_slide。
 		# 位置由 `rocket_ride.gd::_carry_player()` 每帧写入，这里只管相机。
+		#
+		# ⚠️ 用户 2026-11-07：「起飞不能转动视角」。之前这里每帧把 `_yaw` 拉向
+		#    `_ride_yaw`，等于把玩家刚用鼠标转出来的角度立刻抹掉 —— 表现就是转不动。
+		#    现在只在**起飞那一刻**由 `set_ride_yaw()` 定一次初值，之后完全交给玩家。
 		velocity = Vector3.ZERO
-		_yaw = lerp_angle(_yaw, _ride_yaw, clampf(4.0 * delta, 0.0, 1.0))
-		# 略微低头，看着前方的航向（-0.05 rad ≈ -2.9°）
-		_pitch = lerpf(_pitch, -0.05, clampf(3.0 * delta, 0.0, 1.0))
 		rig.rotation.y = _yaw
 		_apply_camera(delta)
 		if anim != null and anim.has_method("set_locomotion"):

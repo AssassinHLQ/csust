@@ -1116,14 +1116,27 @@ func _on_finish_portal_body(body: Node3D) -> void:
 	_start_ride(_finish_rocket, shed.global_position + Vector3(0.0, 0.1, 0.6), body, "去程", false)
 
 
-## 岛上那枚回程火箭 —— 懒生成，造不出来返回 null（调用方退回瞬移）
+## 岛上那枚回程火箭 —— 懒生成，造不出来返回 null（调用方退回瞬移）。
+##
+## ⚠️ 用户 2026-11-07：「第一次传送回来怎么不是 SpaceX」——
+##    如果这里返回 null，`_on_return_pad_entered` 会**静默退回瞬移**（压根没有火箭），
+##    看起来就像「回程不是 SpaceX」。所以每条失败路径都必须留下带原因的日志。
 func _ensure_return_rocket() -> Node3D:
 	if is_instance_valid(_return_rocket):
 		return _return_rocket
 	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
 	if pad == null:
+		push_warning("[Parkour] 回程火箭造不出来：找不到 Island/Props/ReturnPad")
+		print("[Parkour] !! 回程火箭失败：Island/Props/ReturnPad 不存在 → 将退回瞬移")
 		return null
-	return _spawn_ride_rocket(pad.global_position + RETURN_PARK_OFFSET)
+	var r := _spawn_ride_rocket(pad.global_position + RETURN_PARK_OFFSET)
+	if r == null:
+		print("[Parkour] !! 回程火箭失败：_spawn_ride_rocket 返回 null → 将退回瞬移")
+	else:
+		print("[Parkour] 回程火箭已就位：%s（缩放 %.2f，高 %.1f m）" % [
+			str(r.global_position.snappedf(0.1)),
+			float(r.get("rocket_scale")), float(r.call("height"))])
+	return r
 
 
 ## 造一枚火箭停在 `at`：当载具兼地标
