@@ -1,0 +1,34 @@
+把画面设置补到校园场景：抽出 RenderEnv 共用落地层
+
+用户报「next_level.gd（校园场景）完全不碰任何画面设置 是为什么,需要同步画面设置」。
+实测确实如此：next_level.gd 里 GameSettings / render_ / shadow / msaa / lod / _apply
+一个都不匹配，而 next_level.tscn 是有 SettingsMenu 的 —— 于是在校园里拖
+「3D 渲染缩放 / 帧率上限 / 垂直同步 / 抗锯齿 / 阴影质量 / SSAO / 辉光 / SSR / 雾 /
+渲染距离 / 窗口模式」，界面数字会变、也会落盘，画面完全不动。
+
+修法：把原先埋在 game.gd::_apply_render() 里的叶子逻辑整体搬进新的
+scripts/render_env.gd（class_name RenderEnv，全静态），两个场景各留一层薄壳
+（_fit_render_scale / _apply_render / _on_setting_changed），调的是同一个
+RenderEnv.apply()。game.gd 里 _fps_limit / _apply_aa / _apply_shadows /
+_apply_window_mode / _restore_window_rect 五个私有函数与 _shadow_authored /
+_last_window_mode / _applying_window 三个实例变量整体删除，改为静态。
+
+_shadow_authored 改静态后必须处理换场景：instance_id 会被回收复用，把上一关的
+「这盏灯原本不投影」套到新场景的灯上是真 bug。apply() 记 _active_root_id，一变就清表。
+next_level.tscn 没有 RenderDistance 节点，用 get_node_or_null() 取，取不到就只剩
+远裁剪面那一层保险。
+
+校园远裁剪面已量过：97 个块中心范围 x -83~116、z -236~-85，root 在 (0, 24.48, -155.56)，
+半径约 150~180 m，默认渲染距离 300 m 覆盖得住（player.tscn 原本写死 far=500）。
+
+顺带修 _verify_settings.gd 一处假红：set_value() 的 snappedf() 把 crosshair_dot_alpha
+存成 0.9500000000000001，用 != 比就永远失败（打印出来是「0.95（期望 0.95）」）。
+浮点改走 is_equal_approx()。另一条「关闭后鼠标重新被捕获」是 headless 环境性失败，未动。
+
+新增探针：
+  _verify_next_level_render.gd（需 --no-ggs-campus）→ PASS
+  _verify_scene1_render.gd（--splat=off）→ PASS（主场景重构后没坏）
+  _probe_cloth_caps.gd / _probe_cloth_caps_perf.gd → 查 Godot 4.7 布料能力与开销
+  _tools/tri_rank.py → 纯 Python 解析 GLB accessor 数三角面，不碰 .godot 导入缓存
+
+MEMORY.md 增 §23。
