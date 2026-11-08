@@ -23,9 +23,13 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var damage := 18.0
 @export var fire_interval := 0.075      # 连发间隔（约 13 发/秒）
 ## **激光大炮**的连发间隔（秒）。用户 2026-11-08：「炮是激光大炮」。
-## 机甲那两门炮不能沿用步枪的 0.075 s —— 13 发/秒的光束叠在一起会糊成一片，
-## 而且「炮」的手感应该是**一发一发**的。0.36 s ≈ 2.8 发/秒，单发有分量。
-@export var beam_fire_interval := 0.36
+##
+## ⚠️ 先看下面 `beam_damage_scale` 那段「必须按持续 DPS 倒推」的说明。
+## 同日用户又追加「机甲伤害不变，加快三倍射速」——
+## 0.36 / 3 = **0.12 s**（≈ 8.3 发/秒），单发仍 171，持续 DPS 从 468 提到 ~1425。
+## 用户给的理由是「我的游戏整体流程是 20 分钟」：机甲是这条流程里的爆发段，
+## 不该让他在原地磨。
+@export var beam_fire_interval := 0.12
 ## 激光大炮的单发伤害倍率（相对 `damage`）。炮比枪疼，这是常识。
 ##
 ## ⚠️ **这个数必须按「持续 DPS」倒推，不能只看单发好不好看。**
@@ -35,6 +39,8 @@ signal hit_confirmed(collider: Object, position: Vector3)
 ## 本喵当初只顾着「炮要一发一发、有分量」，把间隔拉到 0.42 秒却没回头算总账。
 ## 现在按「单发份量够重 + 总输出约为机枪两倍」定：
 ##   18 × 9.5 = 171 / 0.36 s = **475 DPS ≈ 机枪的 1.98 倍**
+## 之后射速又按用户要求乘 3（间隔 0.36 → 0.12），**伤害倍率不动**——
+## 「伤害不变」是用户的原话，所以这里保持 9.5。
 ## 改这两个数之前先跑 `_probe_carrier_dps.gd`，它会把两边的 DPS 都打出来比对。
 @export var beam_damage_scale := 9.5
 @export var auto_fire := true
@@ -208,7 +214,10 @@ func shoot() -> bool:
 		_turning = true
 		return false
 	_turning = false
-	if current_ammo <= 0:
+	# ── 机甲形态：无限子弹、不换弹（用户 2026-11-08）──
+	# 空仓判定与扣弹都跳过；`try_reload()` 那边也会直接拒绝，所以打不出换弹。
+	var infinite := has_infinite_ammo()
+	if not infinite and current_ammo <= 0:
 		# 空仓：干响一声。`_trigger` 全程保持 true，所以这一句在换弹开始前
 		# 每帧都会被走到 —— 靠 `Sfx` 里 "empty" 的 gap_ms=150 节流，
 		# 不然会变成一串「咔咔咔咔」。
@@ -217,8 +226,9 @@ func shoot() -> bool:
 		return false
 
 	_cooldown = maxf(beam_fire_interval if use_beam() else fire_interval, 0.0)
-	current_ammo -= 1
-	ammo_changed.emit(current_ammo, magazine_size)
+	if not infinite:
+		current_ammo -= 1
+		ammo_changed.emit(current_ammo, magazine_size)
 	_shot_index += 1
 
 	if _driver:
@@ -343,6 +353,11 @@ func _apply_spread(dir: Vector3, amount: float) -> Vector3:
 # --- 换弹 ---
 
 func try_reload() -> void:
+	# 机甲形态无限子弹：换弹是**无意义**的，按 R 也什么都不做。
+	# 不做这个提前返回的话，玩家在机甲里按 R 会看到 HUD 转一圈换弹进度条、
+	# 却因为 `shoot()` 不扣弹而永远不需要它 —— 属于假反馈。
+	if has_infinite_ammo():
+		return
 	if _reloading or current_ammo >= magazine_size:
 		return
 	_reloading = true
@@ -392,9 +407,32 @@ func reload_progress() -> float:
 ## 由 `carrier_form.gd` 在变形 / 变回时通过 `set_beam_mode()` 置位。
 var beam_mode := false
 
+## ── 机甲形态的无限子弹（用户 2026-11-08：「机甲状态无限子弹不换弹」）──
+##
+## 为什么用 `beam_mode` 而不是 `use_beam()`：`use_beam()` 还要求
+## `_carrier_muzzles` 非空，而炮口是**每帧**由 `carrier_form.gd::_push_cannon_muzzles()`
+## 推过来的 —— 变形的第一帧炮口数组还是空的。那一刻如果按 `use_beam()` 判定，
+## 就会退回去扣本体的子弹（本体的弹匣在机甲形态下根本不该被碰）。
+## `beam_mode` 是变形那一刻就置好的，没有这个空窗。
+func has_infinite_ammo() -> bool:
+	return beam_mode
+
 
 func set_beam_mode(on: bool) -> void:
 	beam_mode = on
+	if on:
+		# 变形前可能正卡在换弹中途（本体弹匣打空了）：直接结束，
+		# 否则玩家变形出来还要干等最多 1.05 s 才打得出第一发。
+		_reloading = false
+		_reload_timer = 0.0
+		current_ammo = magazine_size
+		# `-1 / -1` 是「无限」的约定值，HUD 认它、显示 `∞`
+		# （见 `hud.gd::_on_ammo`）。用魔法数而不是新开一个信号，
+		# 是因为弹匣显示只有一个入口，多一个信号就多一处要同步的地方。
+		ammo_changed.emit(-1, -1)
+	else:
+		# 变回本体：把真实弹匣数报回去，HUD 从 ∞ 切回 `12 / 60` 这种。
+		ammo_changed.emit(current_ammo, magazine_size)
 
 
 ## 现在是不是「激光大炮」模式（机甲形态）。

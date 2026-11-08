@@ -25,6 +25,8 @@ const MIN_BEAM_DPS := 400.0
 var _player: Player
 var _wpn: Weapon
 var _dummy: Dummy
+## 最近一次 `ammo_changed` 收到的参数（用来验「无限」约定值 -1/-1）
+var _last_ammo := Vector2i(999, 999)
 var _pass := 0
 var _fail := 0
 
@@ -70,6 +72,8 @@ func _run() -> void:
 		push_error("[DPS] 没有 Weapon")
 		quit(1)
 		return
+	_wpn.ammo_changed.connect(func(c: int, m: int) -> void:
+		_last_ammo = Vector2i(c, m))
 
 	# 不跑物理：这条自检只关心开火，不关心站立 / 掉落。
 	# `set_flight_lock(true)` 让 `player.gd` 跳过重力与跳跃，位置就稳住了。
@@ -125,6 +129,34 @@ func _run() -> void:
 	_wpn.call("set_carrier_muzzles", muzzles)
 	_wpn.call("set_beam_mode", true)
 	_check(_wpn.call("use_beam"), "Weapon 切到了光束模式")
+	_check(_last_ammo == Vector2i(-1, -1),
+		"进入机甲时发出「无限」约定值 -1/-1（实收 %s）" % str(_last_ammo))
+
+	print("")
+	print("========== 2b. 无限子弹 / 不换弹 ==========")
+	# 把弹匣压到 3 发：如果「无限」没生效，第 4 发就会空仓 + 自动换弹，
+	# 下面几条会立刻红。
+	_wpn.current_ammo = 3
+	var idx0: int = int(_wpn.get("_shot_index"))
+	var fired := 0
+	for i in 60:
+		_player.set("velocity", Vector3.ZERO)
+		if _wpn.shoot():
+			fired += 1
+		await physics_frame
+	print("       60 帧里打出 %d 发（弹匣里只有 3 发）" % fired)
+	_check(fired >= 5, "机甲真的打出去了（%d 发 ≥ 5）" % fired)
+	_check(_wpn.current_ammo == 3, "开了 %d 发之后弹药数一点没动（还是 %d）" % [
+		fired, _wpn.current_ammo])
+	_check(int(_wpn.get("_shot_index")) == idx0 + fired,
+		"每次开火都记了一发（%d → %d）" % [idx0, int(_wpn.get("_shot_index"))])
+	_wpn.call("try_reload")
+	await physics_frame
+	_check(not bool(_wpn.call("is_reloading")), "机甲形态按 R 不会进入换弹")
+	_check(_wpn.current_ammo == 3, "拒绝换弹的同时也没顺手把弹药补满")
+
+	print("")
+	print("========== 2c. 激光大炮的持续 DPS ==========")
 	dummy.total = 0.0
 	dummy.hits = 0
 	var beam := await _measure(WINDOW)

@@ -649,6 +649,14 @@ func bind(player: Player, weapon: Weapon) -> void:
 
 
 func _on_ammo(current: int, maximum: int) -> void:
+	# `-1 / -1` = 无限（机甲形态，用户 2026-11-08：「机甲状态无限子弹不换弹」）。
+	# 显示 `∞` 而不是冻住的 `60 / 60`：后者会让玩家以为弹匣是满的、
+	# 打一会儿就该换弹了，而机甲**永远不会**需要换弹 —— 那是假信息。
+	# 约定值定义在 `weapon.gd::set_beam_mode()`。
+	if current < 0:
+		ammo.text = "∞"
+		ammo.modulate = Color.WHITE
+		return
 	ammo.text = "%d / %d" % [current, maximum]
 	ammo.modulate = Color(1, 0.45, 0.4) if current == 0 else Color.WHITE
 

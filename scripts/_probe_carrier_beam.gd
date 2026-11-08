@@ -118,7 +118,15 @@ func _run() -> void:
 	print("       开火后冷却 = %.3f s（步枪 %.3f / 激光 %.3f）" % [
 		cd, float(wpn.fire_interval), float(wpn.beam_fire_interval)])
 	_ok(absf(cd - float(wpn.beam_fire_interval)) < 0.001, "冷却用的是激光间隔 %.2f s" % wpn.beam_fire_interval)
-	_ok(cd > float(wpn.fire_interval) * 3.0, "激光明显比步枪慢（%.2f vs %.3f）" % [cd, wpn.fire_interval])
+	# ⚠️ 这条断言的原意是「炮不是 13 发/秒 的弹链」，2026-11-08 用户要求
+	#    「加快三倍射速」之后间隔变成 0.12 s，原来那句
+	#    `cd > fire_interval * 3.0` 已经不成立、也**不该**再成立。
+	#    「炮的身份」现在由**两条**共同保证：射速仍慢于步枪 + 单发份量够重。
+	#    只留射速那一条会越来越松，所以补上伤害那条。
+	_ok(cd > float(wpn.fire_interval),
+		"激光射速慢于步枪（%.2f > %.3f），不是弹链" % [cd, float(wpn.fire_interval)])
+	_ok(wpn.beam_damage_scale >= 5.0,
+		"单发份量是步枪的 %.1f 倍（≥ 5 倍，「炮」的身份靠这个守住）" % wpn.beam_damage_scale)
 	print("       伤害倍率 = %.1f×（单发 %.1f 点）" % [wpn.beam_damage_scale, wpn.damage * wpn.beam_damage_scale])
 	_ok(wpn.beam_damage_scale > 1.0, "激光伤害比步枪高")
 

@@ -115,7 +115,11 @@ func _run() -> void:
 	var ok1 := _wpn.shoot()
 	print("       shoot() 返回 %s，弹药 %d → %d" % [str(ok1), ammo_before, _wpn.current_ammo])
 	_ok(ok1, "机甲形态下 shoot() 成功")
-	_ok(_wpn.current_ammo == ammo_before - 1, "弹药确实减了 1")
+	# ⚠️ 规格 2026-11-08 改过：用户要「机甲状态无限子弹不换弹」。
+	#    所以这里**不能**再断言「弹药减 1」——那条是机甲还吃弹匣时的规矩。
+	#    现在该断言的是「弹药数一点没动」（详细的无限弹用例在
+	#    `_probe_carrier_dps.gd` 第 2b 节：把弹匣压到 3 发再连打）。
+	_ok(_wpn.current_ammo == ammo_before, "机甲形态下不扣弹（弹药仍是 %d）" % _wpn.current_ammo)
 
 	# 连开 5 发，确认不会卡住
 	var fired := 0
