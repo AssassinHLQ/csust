@@ -101,6 +101,11 @@ func _run() -> void:
 	var p_hover := _pitch_deg(skel, carrier, hip, head)
 	var lean_hover := rad_to_deg(float(cf.get("_lean")))
 	print("       脊梁俯仰 %+.2f°（机身补偿 %+.2f°）" % [p_hover, lean_hover])
+	# ⚠️ 脊梁平**不等于**脸平（2026-11-08 用户第二次说「还是仰视」才发现：
+	#    `Move_Ing` 把脸抬了 46°，而脊梁一动不动）。所以这里必须单独量「脸」。
+	var f_hover := _face_deg(skel, carrier, head)
+	print("       脸的仰角 %+.2f°（正 = 仰视）" % f_hover)
+	_check(absf(f_hover) <= 12.0, "悬停时脸是平视的（|%+.2f°| ≤ 12°）" % f_hover)
 	_check(p_hover >= HOVER_MIN, "悬停没有后仰（%+.2f° ≥ %+.1f°）" % [p_hover, HOVER_MIN])
 	_check(p_hover <= HOVER_MAX, "悬停没有过分低头（%+.2f° ≤ %+.1f°）" % [p_hover, HOVER_MAX])
 	_check(absf(p_hover) <= 8.0, "悬停基本平视（|%+.2f°| ≤ 8°）" % p_hover)
@@ -134,6 +139,24 @@ func _run() -> void:
 	_check(absf(lean_ground) < 1.0, "落地后俯仰回到 0（%.2f°）" % lean_ground)
 
 	_done()
+
+
+## 「脸」的仰角（度，正 = 仰视）。
+##
+## 头骨的 **local Y** 就是脸朝前 —— 这是 `_diag_carrier_head.gd` 在地上待机姿态下
+## 自标定出来的（local Y 与模型正面的点积 +1.000、仰角 +1.4°，而 local X 仰角 88°、
+## local Z 仰角 −83°，只有 Y 讲得通）。
+func _face_deg(skel: Skeleton3D, carrier: Node3D, head: int) -> float:
+	var xf := skel.global_transform * skel.get_bone_global_pose(head)
+	var dir := xf.basis.y.normalized()
+	# 模型正面要去掉俯仰：载具节点本身会被 `_lean` 压下去，
+	# 拿带俯仰的 basis.z 当水平参照会把机身俯仰算进「脸」里。
+	var fwd := carrier.global_transform.basis.z
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-6:
+		return 0.0
+	fwd = fwd.normalized()
+	return rad_to_deg(atan2(dir.y, absf(dir.dot(fwd))))
 
 
 func _pitch_deg(skel: Skeleton3D, carrier: Node3D, hip: int, head: int) -> float:

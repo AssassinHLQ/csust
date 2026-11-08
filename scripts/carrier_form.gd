@@ -87,7 +87,34 @@ const HOLD_STIFFNESS := 3.0
 #   · 「开启期间还是可以飞行积攒能量条的」          → 攒条与加速互不阻塞
 const CRUISE_KEY := KEY_T
 const ENERGY_KEY := KEY_R
-## 巡航者模式的飞行加速倍率（乘在 `player.gd` 的飞行目标速度上）。
+## 头部朝向的闭环补偿（用户 2026-11-08：「飞行还是仰视没修好」）。
+##
+## ── 为什么上轮那个「机身俯仰」没用 ──
+## 本喵上轮量的是**脊梁**（胯→头）的夹角，修到 +1.91° 就以为平视了。
+## 这次换了量法（`_diag_carrier_head.gd`）：先在地面待机下自标定出「头骨哪根
+## 局部轴 = 脸朝前」，结果是 **local Y**（在 `Idle` / `Walk` 下它的前向分量
+## 正好 +1.000、仰角 +1.4°，即站定时脸正对前方）。然后拿它去量各条动画：
+##
+##     Idle              +1.46°      Walk   +1.30°       ← 正常
+##     Move_Ing         +45.99°      ← **飞行时播的就是这条，脸朝上 46 度**
+##     Normal_Attack_Ing −11.64°
+##
+## 也就是那 46° 的仰头**是动画自带的**，脊梁平不平根本管不着它。
+##
+## ── 做法：闭环，而不是写死一个角度 ──
+## 每帧量出「脸」当前的仰角，然后绕**水平横轴**把它掰回 0。
+## 写死 −46° 只对 `Move_Ing` 成立，而飞行在借不到 `Move_Ing` 时会退回 `Walk`
+## （那时脸本来就是平的，硬掰 −46° 就变成低头看脚）。闭环对任何动画都自洽。
+##
+## ⚠️ 只在**飞行中**生效：地面待机 `Normal_Idle` 实测 −18.6°（低头，是动画的
+##    表演），站定/走路的头部动作不该被本喵抹平。
+const HEAD_FIX_ENABLE := true
+## 补偿力度：1.0 = 完全掰平
+const HEAD_FIX_GAIN := 1.0
+## 单帧最大补偿角（度），防止某个畸形帧把脖子拧断
+const HEAD_FIX_MAX_DEG := 60.0
+## 用来量「脸」的头骨与它 local Y 轴 = 脸朝前（实测，见上）
+const HEAD_BONE := "Bip001 Head"
 ##
 ## 用户 2026-11-08：「巡航者太慢了」。原来写 1.6（巡航 11 → 17.6 m/s，
 ## 加力 19 → 30.4 m/s）。提到 **2.6** 后：巡航 **28.6**、加力 **49.4 m/s**
@@ -321,6 +348,8 @@ func _ready() -> void:
 		_player = _find_player_up(self)
 	_model = get_node_or_null("../Model")
 	set_process(false)
+	# 头部补偿写在 `_process` 里，必须晚于 `AnimationPlayer`（默认 priority 0）
+	process_priority = 10
 	# 载具形态下由本脚本接管垂直运动；平时不接管（`player.gd` 照常）。
 	set_physics_process(true)
 
@@ -1054,6 +1083,48 @@ func _update_lean(delta: float) -> void:
 	_lean = lerpf(_lean, want, clampf(6.0 * delta, 0.0, 1.0))
 
 
+## 每帧把「脸」掰回水平（只在飞行中）。原理与实测数据见 `HEAD_FIX_ENABLE` 那段。
+func _fix_head_face() -> void:
+	if not HEAD_FIX_ENABLE or _skel == null or _model == null:
+		return
+	if not _on or not _airborne:
+		return
+	var hi := _skel.find_bone(HEAD_BONE)
+	if hi < 0:
+		return
+	# 头骨的**世界**基（实测 local Y = 脸朝前）
+	var xf := _skel.global_transform * _skel.get_bone_global_pose(hi)
+	var dir := xf.basis.y.normalized()
+	# 模型水平正面（`_model` 是 `Arisu` 节点，`player.gd` 每帧写它的 yaw）
+	var fwd := _model.global_transform.basis.z
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-6:
+		return
+	fwd = fwd.normalized()
+	var face := dir.dot(fwd)
+	# 仰角：用 atan2(竖直分量, 水平前向分量)。
+	# ⚠️ 不能只看 `dir.y`：`Move_Ing` 里脸既朝上、又偏到侧面 45°
+	#    （前向分量 0.694），所以必须带上前向分量一起算，否则角度会偏大。
+	var elev := atan2(dir.y, absf(face))
+	# ⚠️ 符号是**实测**定的，不是推出来的：本喵第一版写成 `-elev`，
+	#    结果验收量到 +72.33°（比修前的 46° 还大）—— 正好是「补偿量加了两次」，
+	#    说明旋转方向与推导相反。改成 `+elev` 后闭环收敛到 0。
+	var want := clampf(elev * HEAD_FIX_GAIN, -deg_to_rad(HEAD_FIX_MAX_DEG),
+		deg_to_rad(HEAD_FIX_MAX_DEG))
+	if absf(want) < deg_to_rad(0.3):
+		return
+	# 绕「水平横轴」转。`UP × fwd` 对 fwd = +Z 是 +X，配合上面的符号即可掰平。
+	var ax_world := Vector3.UP.cross(fwd)
+	if ax_world.length_squared() < 1e-6:
+		return
+	# 世界轴 → 头骨局部轴（骨骼姿势是局部的，必须换过去再乘）
+	var ax_local := (xf.basis.inverse() * ax_world.normalized()).normalized()
+	var cur := _skel.get_bone_pose_rotation(hi)
+	# ⚠️ 读的是**动画刚写进去的**当前姿势，再乘补偿 —— 不能读静止姿势，
+	#    那样每帧都会从绑定姿势重算，动画本身的动作就被抹掉了。
+	_skel.set_bone_pose_rotation(hi, Quaternion(ax_local, want) * cur)
+
+
 ## 每帧：推力 → 火焰长度 / 亮度 / 粒子 / 骨姿态
 func _run_effects(delta: float) -> void:
 	if _boost_fx.is_empty():
@@ -1333,6 +1404,11 @@ func _restore_bones() -> void:
 func _process(delta: float) -> void:
 	if _ap == null or _player == null:
 		return
+	# ⚠️ 头部补偿必须在**这里**（idle 阶段）做，不能放 `_physics_process`：
+	#    `AnimationPlayer` 默认也在 idle 写骨头，而一帧里 physics 在 idle 之前，
+	#    写在 physics 的骨姿势会被同一帧的动画覆盖掉。本节点的 `process_priority`
+	#    设成 10，保证在动画器（默认 0）之后跑。
+	_fix_head_face()
 	var v := _player.velocity
 	var speed := Vector2(v.x, v.z).length()
 
