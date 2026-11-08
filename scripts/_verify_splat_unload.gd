@@ -147,6 +147,37 @@ func _run() -> void:
 	if not rel_back:
 		_fails += 1
 
+	# ── 2.6 站在屋顶上不许加载（2026-11-08 用户：「为什么上面也加载?!」）──
+	# 用户实测坐标 (-1.30, 5.80, 3.84)：水平在门框矩形内，y 在屋顶板上。
+	# 609 墙顶 5.65、屋顶板顶面 5.80 —— 所以 y 上限必须**严格取墙顶**，
+	# 加一点正余量就会把 5.80 包进去（本喵第一版加 0.30 就是这么错的）。
+	var ylo: float = _room.get("_room_y_lo")
+	var yhi: float = _room.get("_room_y_hi")
+	_log("   房间高度窗口 y %.2f~%.2f（要求上限 ≤ 5.65，即墙顶）" % [ylo, yhi])
+	if yhi > 5.70:
+		_fails += 1
+		_log("   ✗ 高度上限太高，站在屋顶（y=5.80 附近）会被判成屋里")
+	else:
+		_log("   ✓ 高度上限卡在墙顶")
+
+	_player.set_physics_process(false)
+	_player.global_position = Vector3(-1.30, 5.80, 3.84)
+	var t_roof := Time.get_ticks_msec()
+	var rel_roof := await _wait_splat(false, 15000)
+	_log("   %s 站屋顶 (-1.30, 5.80, 3.84) 不加载（%.2f s）" % [
+		"✓" if rel_roof else "✗", float(Time.get_ticks_msec() - t_roof) / 1000.0])
+	if not rel_roof:
+		_fails += 1
+
+	# 从屋顶走回屋里：应当重新加载
+	_player.global_position = Vector3(0.0, 0.5, 4.0)
+	var t_down := Time.get_ticks_msec()
+	var rel_down := await _wait_splat(true, 90000)
+	_log("   %s 从屋顶回到屋里自动加载（%.2f s）" % [
+		"✓" if rel_down else "✗", float(Time.get_ticks_msec() - t_down) / 1000.0])
+	if not rel_down:
+		_fails += 1
+
 	# ── 3. 打开开关，出门 → 释放 + 显存下降 ──
 	GameSettings.set_value("splat_unload_outside", true)
 	await process_frame

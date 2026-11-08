@@ -255,6 +255,10 @@ var _start_ms := 0
 var _room_xz := Rect2()
 ## `_room_xz` 是不是由**墙碰撞盒**算出来的（true 时不允许被点云兜底覆盖）
 var _room_xz_is_walls := false
+## 房间的高度窗口（世界 y）。见 `_room_xz_from_walls()` 里那段「为什么上面也加载」。
+## 相等 / 反序 = 没算出来，此时只按 XZ 判。
+var _room_y_lo := 0.0
+var _room_y_hi := 0.0
 ## 玩家在范围内的累计秒数 / 在范围外的累计秒数（去抖用）
 var _inside_clock := 0.0
 var _outside_clock := 0.0
@@ -440,10 +444,21 @@ func _remember_room_xz() -> void:
 		hi = hi.max(w)
 	_room_xz = Rect2(lo.x - unload_pad, lo.z - unload_pad,
 		(hi.x - lo.x) + unload_pad * 2.0, (hi.z - lo.z) + unload_pad * 2.0)
-	print("[SplatScene] 房间水平范围（点云整体 + %.1f m 余量，无墙碰撞盒兜底）：x %.1f~%.1f，z %.1f~%.1f" % [
+	# 兜底路径也要给高度窗口，否则 `_room_y_lo == _room_y_hi == 0` 会被当成
+	# 「没算出来」而只按 XZ 判 —— 那正是「站屋顶也加载」的老毛病。
+	# 点云盒含屋顶离群点（609：−5.50~7.87），上限同样要收到「内容顶」下面。
+	# 这里没有墙盒可用，就用 `content_max`（裁剪后的内容顶，609 = 5.41）当屋顶线。
+	var roof_y: float = hi.y
+	if content_max.y > content_min.y:
+		var cmax_w := basis * content_max + offset
+		roof_y = cmax_w.y
+	_room_y_lo = lo.y
+	_room_y_hi = roof_y
+	print("[SplatScene] 房间水平范围（点云整体 + %.1f m 余量，无墙碰撞盒兜底）：x %.1f~%.1f，z %.1f~%.1f，y %.1f~%.1f" % [
 		unload_pad,
 		_room_xz.position.x, _room_xz.position.x + _room_xz.size.x,
-		_room_xz.position.y, _room_xz.position.y + _room_xz.size.y])
+		_room_xz.position.y, _room_xz.position.y + _room_xz.size.y,
+		_room_y_lo, _room_y_hi])
 
 
 ## 墙碰撞盒往里收多少米当作「房间内沿」。
@@ -456,29 +471,86 @@ const _WALL_INSET := 0.05
 const _EDGE_FRAMES := 2
 
 
-## 从 `RoomCollision` 的墙碰撞盒算出房间水平矩形（世界空间）。
+## 从 `RoomCollision` 的墙碰撞盒算出房间水平矩形（世界空间）+ 高度窗口。
 ## 没有墙碰撞盒 / 尺寸为 0 时返回空 `Rect2()`，让调用方走兜底。
+##
+## ── 为什么要带高度（2026-11-08 用户：「为什么上面也加载?!」）──
+## 只判 XZ 会把**屋顶上**当成屋里：用户实测站在屋顶 `y = 5.80`、
+## 水平 `(x, z) = (-1.30, 3.84)`（在门框矩形内），609 的泼溅就被重新加载了，
+## 显存又涨回 2299 MiB、FPS 掉到 4.0。屋顶本来就在房间正上方，XZ 判据分不出来。
+##
+## 高度窗口取**墙盒的 y 范围**（609 实测 −2.65~5.65）。墙盒从 −2.65 起是因为
+## 它埋在平台下面防穿地 —— 玩家正常活动在 `y ≈ 0`（平台面），
+## 所以下限用墙底、上限用墙顶，正好覆盖「人在屋里」的全部高度。
+##
+## ⚠️ 不能用墙盒**完整** y 范围而不留余量：玩家跳跃时头顶会短暂高过墙顶。
+## ⚠️ 也不能把上限压到平台面（y=0）：二楼/攀爬类场地会误判。
+##
+## ── 上限为什么严格取「墙顶」（2026-11-08 第二版）──
+## 第一版上限取了 `墙顶 + 0.30`（6.10），结果用户报的那个位置 `y = 5.80`
+## （站屋顶板上）**还是落在窗口里**，照样加载。
+## 实测 609：墙顶 **5.65**、屋顶板顶面 **5.80** —— 屋顶板比墙还高，
+## 站在屋顶上时脚底就在 5.80。任何「墙顶 + 正余量」都会把它包进去。
+## 所以上限**严格等于墙顶**，站在屋顶上必然判成「屋外」。
+## 下限给 `_PLAYER_HEIGHT` 的宽限（人从屋顶边的墙里往下掉时才算进屋）。
+## 估算用的玩家脚底到头顶高度（胶囊 y ≈ 1.8 m）。
+const _PLAYER_HEIGHT := 1.8
+
+
 func _room_xz_from_walls() -> Rect2:
 	var col := get_node_or_null("RoomCollision")
 	if col == null:
 		return Rect2()
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
+	var y_lo := INF
+	var y_hi := -INF
 	var found := false
 	for c in col.get_children():
 		var cs := c as CollisionShape3D
 		if cs == null or not (cs.shape is BoxShape3D):
 			continue
-		var xs := (cs.shape as BoxShape3D).size * 0.5 * cs.global_transform.basis.get_scale()
+		var raw: Vector3 = (cs.shape as BoxShape3D).size
+		var xs := raw * 0.5 * cs.global_transform.basis.get_scale()
 		var ctr := cs.global_transform.origin
 		lo = lo.min(Vector2(ctr.x - xs.x, ctr.z - xs.z))
 		hi = hi.max(Vector2(ctr.x + xs.x, ctr.z + xs.z))
+		# 高度只认**墙**（高盒子）：屋顶板/家具是扁的，它们会把 y 上限抬高或压低。
+		# 判据跟 `game.gd::ROOM_WALL_MIN_HEIGHT` 一致（2.0 m）。
+		if raw.y > 2.0:
+			y_lo = minf(y_lo, ctr.y - xs.y)
+			y_hi = maxf(y_hi, ctr.y + xs.y)
 		found = true
 	if not found or hi.x <= lo.x or hi.y <= lo.y:
 		return Rect2()
+	# 高度窗口：墙底 → 墙顶。
+	# 实测 609 墙顶 5.65、屋顶板顶面 5.80 —— 站在屋顶上时脚底在 5.80 > 5.65，
+	# 一定判成「屋外」。这就是用户要的「上面不该加载」。
+	#
+	# ⚠️ 余量加在**上限之上**会很危险：加 0.30 就到 5.95，而用户站的是 5.80，
+	#    又会被包进去（本喵第一版就是这么错的）。所以这里**只在屋里方向留余量**，
+	#    上限严格取墙顶。
+	_room_y_lo = y_lo
+	_room_y_hi = y_hi
 	var inset := _WALL_INSET
 	return Rect2(lo.x + inset, lo.y + inset,
 		(hi.x - lo.x) - inset * 2.0, (hi.y - lo.y) - inset * 2.0)
+
+
+## 玩家位置算不算「在屋里」：XZ 在门框矩形内 **且** 高度在窗口内。
+## 单独抽出来，是因为 `_update_room_exit_unload()` 里要用，别的地方也可能要。
+func _is_inside_room(pos: Vector3) -> bool:
+	if _room_xz.size == Vector2.ZERO:
+		return true
+	if not _room_xz.has_point(Vector2(pos.x, pos.z)):
+		return false
+	# 高度窗口没算出来（兜底路径）时只管 XZ
+	if _room_y_hi <= _room_y_lo:
+		return true
+	# ⚠️ 用**脚底位置**判，不用头顶：玩家 `global_position` 是胶囊中心附近，
+	#    站屋顶时 y=5.80 已经高于墙顶 5.65。这里比的是「脚有没有踩进屋里」，
+	#    所以把脚下留一点余量 —— 人从屋顶往下掉时才会被判成进屋。
+	return pos.y >= _room_y_lo - _PLAYER_HEIGHT and pos.y <= _room_y_hi
 
 
 ## 节点离开场景树：反注册设置监听（否则静态 `_listeners` 会越积越多，
@@ -559,7 +631,7 @@ func _update_room_exit_unload(delta: float) -> void:
 	if p == null:
 		return
 	var pos := p.global_position
-	var inside := _room_xz.has_point(Vector2(pos.x, pos.z))
+	var inside := _is_inside_room(pos)
 	if inside:
 		_inside_streak += 1
 		_outside_streak = 0
