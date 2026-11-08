@@ -229,7 +229,13 @@ func _run() -> void:
 	_check(waiting != null, "传送台旁**一直**有一枚火箭在等（开场就造好，不是踩上去才冒出来）")
 	if pad != null and waiting != null:
 		var near_pad := waiting.global_position.distance_to(pad.global_position)
-		_check(near_pad < 6.0, "它离传送台 %.1f m（< 6，站上台就能看见它）" % near_pad)
+		# 用户 2026-11-08：「就是不要塔了，直接上火箭」—— 岛上那枚现在**站在原信号塔那一格**，
+		# 也就是传送台正上方，所以这里要的是"几乎重合"，不是以前的"< 6 m"。
+		_check(near_pad < 0.5,
+			"回程火箭立在原信号塔那一格（离传送台 %.2f m，< 0.5 —— 塔的位置换成了火箭）" % near_pad)
+		# 塔必须真的没了，不然"换成火箭"就只是嘴上说说
+		_check(_lvl.get_node_or_null("Island/Props/Tower") == null,
+			"信号塔已从场景删除（`Island/Props/Tower` 查不到）")
 		_player.global_position = pad.global_position + Vector3(0.0, 0.10, 0.0)
 		_player.velocity = Vector3.ZERO
 		var h := 0

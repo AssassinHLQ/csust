@@ -2135,7 +2135,13 @@ func _test_ram_loot() -> void:
 		_check(prompt != null and prompt.text.contains("真的要拾取吗"),
 			"第一次 F → 弹确认「真的要拾取吗？」")
 		await _press_key(KEY_F)
-		await _wait_ms(900)          # 牢笼落地 0.45 s + 0.2 s 才轮到 Boss 出场
+		# ⚠️ 这里的等待时长很讲究：牢笼落地 0.45 s，而**镜头锁定只有 1.0 s**
+		#    （`player.gd::look_at_node(boss, 1.0)`，从优香出场那一刻开始计时）。
+		#    2026-11-08 起牢笼与优香**同步**出场（原来优香晚 0.45 s），所以锁定的
+		#    起算点也提前了 0.45 s —— 照旧等 900 ms 会刚好**等过**锁定窗口，
+		#    `look_locked()` 变成 false，断言假红（点积仍是 1.00 就是证据）。
+		#    等 600 ms：牢笼已落地（0.45 s），锁定还剩约 0.4 s，两头都稳。
+		await _wait_ms(600)
 		_check(fut.assets_yuan == a0 + 59999,
 			"第二次 F 确认 → 资产 +¥59,999（合计 ¥%d）" % fut.assets_yuan)
 		var game := _pk.get_parent()
@@ -2146,12 +2152,28 @@ func _test_ram_loot() -> void:
 				if c is MeshInstance3D:
 					bars += 1
 		_check(cage != null and bars >= 60,
-			"牢笼从信号塔顶滑下来罩住传送台，**更密**（%d 根钢条，原来 30）" % bars)
+			"牢笼从空中落下罩住火箭，栅条够密（%d 根钢条）" % bars)
+		# ── 2026-11-08 用户：「牢笼要的，优香出来同步牢笼落下困住火箭不让我们进去」──
+		# 三条一起验：① 牢笼罩的是**火箭**不是空地；② 牢笼够大够高，盖住箭体底部；
+		#              ③ 牢笼落下的同时优香就在场（不是错开 0.45 s 才来）。
+		if cage != null:
+			var island_rocket := _pk.call("_rocket_at", _pk.call("_island_spot"), 8.0) as Node3D
+			if island_rocket != null:
+				var d_rocket: float = (cage as Node3D).global_position.distance_to(
+					island_rocket.global_position + Vector3(0.0, 2.5, 0.0))
+				_check(d_rocket < 2.5,
+					"牢笼罩的是**火箭**（笼底中心离箭体轴线 %.2f m，< 2.5）" % d_rocket)
+			var pad_node := _pk.get_node_or_null("Island/Props/ReturnPad") as Node3D
+			if pad_node != null:
+				var d_pad: float = (cage as Node3D).global_position.distance_to(
+					pad_node.global_position + Vector3(0.0, 2.5, 0.0))
+				_check(d_pad < 2.5,
+					"传送台也在笼子里（离笼底中心 %.2f m）→ 玩家进不去" % d_pad)
 		var squash: Node = null
 		for c in game.get_children():
 			if c is Boss and String(c.name).to_lower().contains("squash"):
 				squash = c
-		_check(squash != null, "牢笼落地后 **倭瓜优香** 登场（BossSquash）")
+		_check(squash != null, "牢笼落下时 **倭瓜优香** 同步登场（BossSquash）")
 		if squash != null:
 			# 2026-10-20 用户：「真正拾取 5090 后视角强制锁定倭瓜优香一秒钟」
 			var to_boss := ((squash as Node3D).global_position + Vector3(0, 1.6, 0)

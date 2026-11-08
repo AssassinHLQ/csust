@@ -21,13 +21,14 @@ func _run() -> void:
 
 	var shed := pk.get_node_or_null("Island/Props/Shed") as Node3D
 	var pad := pk.get_node_or_null("Island/Props/ReturnPad") as Node3D
-	var tower := pk.get_node_or_null("Island/Props/Tower") as Node3D
+	# 信号塔已删（用户 2026-11-08「不要塔了，直接上火箭」），改看站在原塔位的回程火箭
+	var island_rocket := pk.get("_return_rocket") as Node3D
 	var gpu := pk.get_node_or_null("Island/Props/Shed/RTX5090") as Node3D
 	var sp := pk.get_node_or_null("Island/Props/Shed/Settlement") as Node3D
-	print("[trap] Shed %s\n[trap] ReturnPad %s\n[trap] Tower %s\n[trap] 5090 %s\n[trap] Settlement %s" % [
+	print("[trap] Shed %s\n[trap] ReturnPad %s\n[trap] 火箭 %s\n[trap] 5090 %s\n[trap] Settlement %s" % [
 		str(shed.global_position.snappedf(0.01)) if shed else "没有",
 		str(pad.global_position.snappedf(0.01)) if pad else "没有",
-		str(tower.global_position.snappedf(0.01)) if tower else "没有",
+		str(island_rocket.global_position.snappedf(0.01)) if island_rocket else "没有",
 		str(gpu.global_position.snappedf(0.01)) if gpu else "没有",
 		str(sp.global_position.snappedf(0.01)) if sp else "没有"])
 

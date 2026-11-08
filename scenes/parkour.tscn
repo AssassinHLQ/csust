@@ -2853,66 +2853,6 @@ mesh = SubResource("Cyl_bollard")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.4, 0.6, -7.4)
 shape = SubResource("Shape_bollard")
 
-[node name="Tower" type="StaticBody3D" parent="Island/Props" unique_id=650639809]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 5)
-
-[node name="Leg0" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=1396788125]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 5, 1.2)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_leg")
-
-[node name="Col0" type="CollisionShape3D" parent="Island/Props/Tower" unique_id=1183050589]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 5, 1.2)
-shape = SubResource("Shape_leg")
-
-[node name="Leg1" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=897856418]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 5, -1.2)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_leg")
-
-[node name="Col1" type="CollisionShape3D" parent="Island/Props/Tower" unique_id=412480989]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 5, -1.2)
-shape = SubResource("Shape_leg")
-
-[node name="Leg2" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=2012200269]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 5, 1.2)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_leg")
-
-[node name="Col2" type="CollisionShape3D" parent="Island/Props/Tower" unique_id=1540953802]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 5, 1.2)
-shape = SubResource("Shape_leg")
-
-[node name="Leg3" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=836523938]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 5, -1.2)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_leg")
-
-[node name="Col3" type="CollisionShape3D" parent="Island/Props/Tower" unique_id=282335114]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 5, -1.2)
-shape = SubResource("Shape_leg")
-
-[node name="Platform" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=1058238796]
-transform = Transform3D(4, 0, 0, 0, 0.4, 0, 0, 0, 4, 0, 10.2, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Box_unit")
-
-[node name="Mast" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=97559337]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 12.8, 0)
-material_override = SubResource("Mat_tower")
-mesh = SubResource("Cyl_mast")
-
-[node name="Beacon" type="MeshInstance3D" parent="Island/Props/Tower" unique_id=472507958]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 15.6, 0)
-material_override = SubResource("Mat_beacon")
-mesh = SubResource("Sphere_beacon")
-
-[node name="Light" type="OmniLight3D" parent="Island/Props/Tower" unique_id=926352625]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 15.6, 0)
-light_color = Color(1, 0.45, 0.35, 1)
-light_energy = 3.0
-omni_range = 22.0
-
 [node name="Shed" type="StaticBody3D" parent="Island/Props" unique_id=461399771]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -4)
 

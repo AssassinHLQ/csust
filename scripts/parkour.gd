@@ -64,17 +64,24 @@ const RocketRideScript := preload("res://scripts/rocket_ride.gd")
 ##    `scripts/_probe_rocket_land.gd`）。现在改成两枚火箭**互换位置**（见
 ##    `_start_ride()` 里的空载摆渡），这一个停机位就够用了。
 const PORTAL_OFFSET := Vector3(0.0, 0.0, 4.5)
-## 岛上那一头**唯一的停机位**（相对 `Island/Props/ReturnPad`，往 −Z 挪 5 m）。
+## 岛上那一头的**停机位** —— 用户 2026-11-08：「就是不要塔了，直接上火箭」。
 ##
-## 位置是被三件东西夹出来的（全部实测，见 `_probe_rocket_land.gd` 与
-## `_arisu_captures/_rocket_spots/`）：
-##   · 传送台台面 3×3（z −6~−3）—— 不能压上去；
-##   · 信号塔平台 4×4、y 18（x −597~−593、z −6.5~−2.5）—— 42 m 的箭体是根
-##     半径 1.5 m 的柱子，z 必须退到 −8 以外才不相交（−4 m 时只剩 0.5 m，
-##     俯视图里看着像穿塔，所以多让 1 m）；
-##   · 结算屋屋顶（x −596.2~−591.8、z −15.2~−11.8、y 10.3）—— z 不能超过 −11。
-## 折中到 z = −9.5：离塔 1.5 m、离屋顶 0.8 m、离传送台 5 m。
-const ISLAND_SPOT_OFFSET := Vector3(0.0, 0.0, -5.0)
+## 信号塔（`Island/Props/Tower`）已**整个从 `parkour.tscn` 删掉**，它原来站的那一格
+## （岛上局部 `(-4, 0, 5)` = 世界 `(-594.95, 8.0, -4.5)`）现在归火箭 —— 也就是
+## 传送台（`Island/Props/ReturnPad`，同一格）**正上方**，偏移量因此是 0。
+##
+## ⚠️ 这里原来叫 `ISLAND_SPOT_OFFSET = (0, 0, -5)`，往 −Z 让开 5 m。那段注释写得很清楚：
+##    「42 m 的箭体是根半径 1.5 m 的柱子，z 必须退到 −8 以外才不相交（−4 m 时只剩
+##    0.5 m，俯视图里看着像穿塔）」—— **它让开的对象正是信号塔本身**。
+##    塔删了，让开的理由就不存在了，所以偏移改成 0：火箭就立在传送台那一格，
+##    视觉上等于「塔的位置换成了火箭」。
+##
+## 还要确认不相交的两件东西（都还在）：
+##   · 结算屋屋顶（x −596.2~−591.8、z −15.2~−11.8、y 10.3）—— 箭体半径 1.5 m、
+##     站 z = −4.5，离屋顶南沿 −11.8 还有 7.3 m，安全；
+##   · 传送台台面 3×3（z −6~−3）—— 火箭**立在台面上**是刻意的（用户要的就是这个），
+##     台面只是块薄装饰，不挡起飞。
+const ISLAND_SPOT_OFFSET := Vector3(0.0, 0.0, 0.0)
 ## 空载摆渡的巡航高度（米）。比载人那趟（`RocketRide.lift_altitude` = 45 m）
 ## 高一倍多，两枚对飞时不会在半空中撞在一起。
 const FERRY_ALTITUDE := 95.0
@@ -874,8 +881,28 @@ func _spawn_settlement() -> void:
 ## 神秘 boss 倭瓜优香，boss 出场提示是：爱丽丝还我十万美刀!!!」
 ##
 ## 牢笼罩住 `ReturnPad`（回初始平台的传送台）—— 它本来就是唯一的退路，罩住就回不去。
-## 信号塔现在也挪到了同一个位置（`Island/Props/Tower`），牢笼就是从塔顶滑下来的。
+##
+## ⚠️ 2026-11-08：曾经用来「从塔顶滑下来」的信号塔（`Island/Props/Tower`）已按用户要求
+##    「不要塔了，直接上火箭」整个删除，火箭就立在原来塔的那一格上。
+##    牢笼的下落起点改成**空中**（`CAGE_DROP_HEIGHT`），不再依赖任何场景节点 ——
+##    它一直是算坐标的，删塔不会让它报错，只是「从塔顶滑下」这个说法过期了。
 var _trap_done := false
+## 牢笼从多高开始往下滑（米，相对地面）。原塔顶平台在 y ≈ 18.2（台面上方 10.2），
+## 取 10.0 ≈ 原位；牢笼够高，落定后仍罩得住人。
+const CAGE_DROP_HEIGHT := 10.0
+## 牢笼半边长（米）与高度（米）。
+##
+## ⚠️ 2026-11-08 用户：「牢笼要的，优香出来同步牢笼落下**困住火箭**不让我们进去」——
+##    原来牢笼是 3×3 / 高 2.6，只圈住传送台那一小块。现在岛上那枚火箭就立在原信号塔
+##    那一格（= 传送台正上方，见 `ISLAND_SPOT_OFFSET`），所以牢笼要**同时罩住火箭底部**：
+##    边长放到 4×4（半边长 2.0），火箭箭体半径 ~0.76 m、四片着陆腿外沿 ~1.5 m，罩得下。
+##    高度放到 5.0 m —— 盖住舱门和发动机段，从外面看得出「船被困住了」。
+##
+## ⚠️ 牢笼是**四面墙 + 顶盖**的 StaticBody3D（见 `_build_cage`），所以它一落下来，
+##    玩家既进不去传送台、也上不了船，必须打倒倭瓜优香才开（`_on_avenger_died()`）。
+##    这正是用户要的「不让我们进去」。
+const CAGE_HALF := 2.0
+const CAGE_HEIGHT := 5.0
 ## 通关后立的传送门（见 _spawn_finish_portal）
 var _finish_portal: Node3D
 ## 两枚火箭：**开场就各就各位**，一直站在两头。
@@ -921,7 +948,8 @@ var _saved_station := 0
 ## 存档点**写死**在大平台台面上（用户 2026-11「存档点错了……应该存档在这个大平台才对」）：
 ## 记玩家落点会把边缘/半空的坐标存下来，复活直接生成到板子底下摔死。
 ## 平台：`Island` 中心 (-590.95, 7.4, -9.5)，16×16 m 板厚 1.2 → 台面 y = 8.0。
-## 安全点选在平台东侧空地：避开结算屋（x ≈ -594）、信号塔腿（x ≈ -595）和倭瓜出生点（-591, -2.5）。
+## 安全点选在平台东侧空地：避开结算屋（x ≈ −594）、**回程火箭**（站在 (-594.95, ·, -4.5)，
+## 即原信号塔那一格）和倭瓜出生点（−591, −2.5）。
 const ISLAND_CENTER := Vector3(-590.95, 7.4, -9.5)
 const ISLAND_TOP_Y := 8.0
 const ISLAND_SPAWN := Vector3(-587.5, 8.08, -8.5)
@@ -941,34 +969,57 @@ func trap_sequence() -> void:
 	if pad == null:
 		push_warning("[Parkour] 找不到 ReturnPad，牢笼跳过")
 		return
-	_cage = _build_cage(pad)
+	# 罩住**火箭**，不只是传送台（用户 2026-11-08：「牢笼落下困住火箭不让我们进去」）。
+	# 火箭就在传送台正上方（`ISLAND_SPOT_OFFSET` = 0），但这里是问节点要真实位置，
+	# 万一以后又把停机位挪开，牢笼会自动跟着火箭走，不会罩错地方。
+	var target := _cage_target(pad)
+	_cage = _build_cage(target)
 	var tw := create_tween()
 	tw.tween_property(_cage, "global_position",
-		pad.global_position + Vector3(0.0, 0.02, 0.0), 0.45) 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_callback(func() -> void:
-		Sfx.play("ui_open", 4.0)
-		_spawn_avenger(pad))
+		target.global_position + Vector3(0.0, 0.02, 0.0), 0.45) 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	# 牢笼落定与倭瓜优香出场**同步**（用户 2026-11-08：「优香出来同步牢笼落下」）。
+	# 原来是 tween_callback 里才 spawn，两者错开 0.45 s；现在先 spawn 再起 tween，
+	# 优香从第一帧起就站在笼子外面看着，时间上完全对齐。
 	Sfx.play("ui_close", 2.0)
-	print("[Parkour] 牢笼从信号塔顶滑下，罩住传送台")
+	Sfx.play("ui_open", 4.0)
+	_spawn_avenger(pad)
+	print("[Parkour] 牢笼从天而降 %.1f m，罩住火箭（%.0f×%.0f×%.0f m）；倭瓜优香同时出场" % [
+		CAGE_DROP_HEIGHT, CAGE_HALF * 2.0, CAGE_HEIGHT, CAGE_HALF * 2.0])
 
 
-func _build_cage(pad: Node3D) -> Node3D:
+## 牢笼该罩住谁：优先岛上那枚**火箭**，找不到火箭才退回传送台。
+func _cage_target(pad: Node3D) -> Node3D:
+	var r := _rocket_at(_island_spot(), 8.0) as Node3D
+	if r != null:
+		return r
+	push_warning("[Parkour] 岛上传送台旁没找到火箭，牢笼改为罩传送台")
+	return pad
+
+
+## 造牢笼。`anchor` 是要罩住的东西（岛上那枚火箭；找不到火箭时退回传送台）。
+func _build_cage(anchor: Node3D) -> Node3D:
 	var cage := Node3D.new()
 	cage.name = "TrapCage"
 	get_parent().add_child(cage)           # 挂到 game 下：牢笼不随 Parkour 的局部变换
-	cage.global_position = pad.global_position + Vector3(0.0, 7.6, 0.0)  # 塔顶平台下沿
+	# 下落起点：原塔顶平台所在高度（见 `CAGE_DROP_HEIGHT`）。塔已删，这里纯算数
+	cage.global_position = anchor.global_position + Vector3(0.0, CAGE_DROP_HEIGHT, 0.0)
 	var steel := StandardMaterial3D.new()
 	steel.albedo_color = Color(0.20, 0.21, 0.24)
 	steel.metallic = 0.8
 	steel.roughness = 0.4
-	var half := 1.5
-	var h := 2.6
+	# 尺寸见 `CAGE_HALF` / `CAGE_HEIGHT` 上面那段：罩住火箭底部与舱门，不只传送台
+	var half := CAGE_HALF
+	var h := CAGE_HEIGHT
 	var bar := 0.07
-	# 2026-10-20 用户：「牢笼密集一点」—— 间距从 0.6 m 收到 **0.3 m**
-	# （每面 11 根、顶盖 22 根，合计 66 根；之前是每面 5 根、顶 10 根）
+	# 2026-10-20 用户：「牢笼密集一点」—— 间距从 0.6 m 收到 **0.3 m**。
+	#
+	# ⚠️ 2026-11-08：笼子边长从 3 m 放大到 4 m（要罩住火箭），**间距仍是 0.3 m**，
+	#    所以栅条数量按边长算，不能写死 range(-5, 6) —— 那样 4 m 的笼子只有
+	#    中间 3 m 有栅条，两边各空 0.5 m，看着像缺了一截。
+	var n_per_side := int(round(half / 0.3))
 	var offs: Array[float] = []
-	for k in range(-5, 6):
-		offs.append(float(k) * 0.3)
+	for k in range(-n_per_side, n_per_side + 1):
+		offs.append(float(k) * (half / float(n_per_side)))
 	for side in 4:
 		for t in offs:
 			var pos := Vector3(t, h * 0.5, half)
@@ -981,7 +1032,7 @@ func _build_cage(pad: Node3D) -> Node3D:
 	for t in offs:
 		_add_cage_bar(cage, Vector3(t, h, 0.0), Vector3(bar, bar, 2.0 * half), steel)
 		_add_cage_bar(cage, Vector3(0.0, h, t), Vector3(2.0 * half, bar, bar), steel)
-	# 碰撞：四面薄墙（不封顶，掉下来时玩家还在里面也无所谓 —— 反正出不去）
+	# 碰撞：四面薄墙 + 顶盖（封顶！玩家想从上面翻进笼子也没门 —— 用户要的是「进不去」）
 	var body := StaticBody3D.new()
 	body.name = "Col"
 	cage.add_child(body)
@@ -992,6 +1043,14 @@ func _build_cage(pad: Node3D) -> Node3D:
 		cs.shape = bx
 		cs.position = Vector3(0.0, h * 0.5, half) if side == 0 			else Vector3(0.0, h * 0.5, -half) if side == 1 			else Vector3(half, h * 0.5, 0.0) if side == 2 			else Vector3(-half, h * 0.5, 0.0)
 		body.add_child(cs)
+	# 顶盖碰撞：栅条只是 Mesh（没有碰撞），不加这块板的话玩家可以**从上面翻进笼子里**。
+	# 用户要的是「困住火箭不让我们进去」，所以顶上也得封死。
+	var roof := CollisionShape3D.new()
+	var rbox := BoxShape3D.new()
+	rbox.size = Vector3(2.0 * half + bar, 0.16, 2.0 * half + bar)
+	roof.shape = rbox
+	roof.position = Vector3(0.0, h, 0.0)
+	body.add_child(roof)
 	return cage
 
 
