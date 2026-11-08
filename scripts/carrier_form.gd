@@ -99,6 +99,70 @@ const FLAME_LEN := 0.85
 ##    `model_root.rotation.y = 0 → 脸朝世界 +Z` 那段铁证）。所以这里要再转 180°。
 ##    不转的话，游戏里人看着在倒着走 / 背对移动方向。
 @export var facing_yaw_deg := 180.0
+
+## ── 从本体 glb 借战斗动作 ──
+##
+## `Arisu_Battle_Carrier.glb` 只有 `Idle` / `Walk` 两条（BA 素材里载具形态就是
+## 「过场精简版」）。但 `Arisu (Battle).glb` 有 35 条完整战斗动作，而且**同一套骨架**：
+## 本喵拆 GLB 核过 —— 两边都是 145 关节的 skin，Carrier 只多 3 个网格节点，
+## 动作里唯一的差异是 10 根 `Mouth_*`（口型网格，不是骨骼）。
+##
+## 所以启动时把需要的动作搬进机甲的 `AnimationPlayer`（换轨道前缀），
+## 运行时几毫秒，不需要 Blender 重导。搬哪些由用户 2026-11-08 指定：
+##   · 战斗：Idle / Move / 攻击 / 换弹
+##   · 受击：死亡 / 濒死 / 恐慌 / 撤退
+##   · 必杀：Exs01 / Exs02 / Cutin
+## `Recorded` 那三条是录制空壳（13 轨道 / 命中 2 根骨），不要。
+const BORROW_GLB := "res://models/Arisu_Battle.glb"
+const BORROW_CLIPS := [
+	# 战斗
+	"Normal_Idle", "Move_Ing", "Normal_Attack_Ing", "Normal_Reload",
+	"Normal_Attack_Start", "Normal_Attack_Delay", "Normal_Attack_End",
+	# 受击
+	"Vital_Death", "Vital_Dying_Ing", "Vital_Panic", "Vital_Retreat",
+	# 必杀
+	"Exs01", "Exs02_01", "Exs02_02",
+	"Exs01_Cutin_01", "Exs01_Cutin_02", "Exs02_Cutin_01", "Exs02_Cutin_02",
+]
+## 借来的动作要不要循环（只有这几条是循环的，其余都是一次性）
+const BORROW_LOOP := ["Normal_Idle", "Move_Ing", "Cafe_Idle", "Cafe_Walk"]
+## 开火动作的播放倍速（和本体 `AnimDriver.FIRE_SPEED` 同一个数：
+## `Normal_Attack_Ing` 原长 2.67 s，原速播「一次射击要演 2.67 秒」，手感卡）
+const FIRE_SPEED := 2.5
+## 借动作的报告（自检 / 控制台用）
+var borrow_report := {}
+## 从 `BORROW_GLB` 借战斗 / 受击 / 必杀动作，搬进机甲自己的 `AnimationPlayer`。
+##
+## 只搬一次（`_ap` 上有 meta 守着）：`_build()` 每个进程只会跑一次，
+## 但探针里可能反复 `set_form()`，重复搬会白花时间。
+func _borrow_anims() -> void:
+	if _ap == null:
+		return
+	if _ap.has_meta("carrier_borrowed"):
+		return
+	_ap.set_meta("carrier_borrowed", true)
+	if not ResourceLoader.exists(BORROW_GLB):
+		push_warning("[Carrier] 没有 %s，机甲只有 Idle/Walk（无法借战斗动作）" % BORROW_GLB)
+		return
+	borrow_report = AnimExtra.merge_glb_multi(_ap, BORROW_GLB, {}, _skel, BORROW_CLIPS)
+	if not bool(borrow_report.get("ok", false)):
+		push_warning("[Carrier] 借动作失败：%s" % str(borrow_report.get("error", "")))
+		return
+	# 循环模式：借来的 `Normal_Idle` / `Move_Ing` 必须设成循环，否则播一次就停住
+	for clip in BORROW_LOOP:
+		if _ap.has_animation(clip):
+			_ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+	var merged: Array = borrow_report["merged"]
+	var names: Array = []
+	for m in merged:
+		names.append(String(m["to"]))
+	print("[Carrier] 借到 %d 条战斗动作（前缀 %s）：%s" % [
+		merged.size(), str(borrow_report.get("head_to", "")), ", ".join(names)])
+	var miss: Dictionary = borrow_report.get("missing_bones", {})
+	if not miss.is_empty():
+		print("[Carrier] 目标骨架没有的骨（已删掉那些轨道）：%s" % str(miss.keys()))
+
+
 ## 载具模型整体缩放（先用 1.0，看着不对再调）
 @export var carrier_scale := 1.0
 
@@ -162,6 +226,10 @@ var _cannon_recoil := 0.0
 var _last_shot_index := 0
 ## 连发时焰尖抖动的相位
 var _cannon_phase := 0.0
+## 一次性动作还剩多少秒（> 0 时 `_process()` 不切移动动作）
+var _oneshot_left := 0.0
+## 上一帧的 `Weapon._shot_index`（判「刚开了一枪」）
+var _last_shot_index_seen := 0
 
 # ── 数值暴露给自检 / HUD ──
 var flight_speed := 0.0
@@ -284,8 +352,10 @@ func _build() -> bool:
 		_snapshot_rest()
 		_build_boost_fx()
 		_build_cannon_fx()
-		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根｜炮口焰 %d 个" % [
-			_boost_fx.size(), _found_wing_bones(), _found_cannon_bones(), cannon_fx_count])
+		_borrow_anims()
+		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根｜炮口焰 %d 个｜动作 %d 条" % [
+			_boost_fx.size(), _found_wing_bones(), _found_cannon_bones(), cannon_fx_count,
+			_ap.get_animation_list().size() if _ap != null else 0])
 	else:
 		push_warning("[Carrier] 载具模型里没找到 Skeleton3D，飞行特效不会出现")
 	return true
@@ -959,6 +1029,12 @@ func _run_cannon_flash(delta: float) -> void:
 			_cannon_recoil = 1.0
 			for fx in _cannon_fx:
 				fx["left"] = 0.085        # ≈ 两帧多一点，连发时看起来是持续闪
+			# 开火动作：只在**没有一次性动作在演的时候**起手，
+			# 否则连发会把动画一帧一帧重启（看起来像抽搐）。
+			# 连发间隔 0.075 s，动作 2.67 s / FIRE_SPEED 2.5 ≈ 1.07 s，
+			# 所以这里是「播完一轮再起手下一轮」，和本体 `AnimDriver` 的节奏一致。
+			if _oneshot_left <= 0.0:
+				_play_oneshot("Normal_Attack_Ing", FIRE_SPEED)
 	_cannon_phase += delta * 40.0
 	for fx in _cannon_fx:
 		var bi: int = fx["bone"]
@@ -1017,17 +1093,55 @@ func _process(delta: float) -> void:
 		return
 	var v := _player.velocity
 	var speed := Vector2(v.x, v.z).length()
+
+	# ── 一次性动作（开火 / 换弹 / 受击）在演的时候，不要被移动逻辑顶掉 ──
+	if _oneshot_left > 0.0:
+		_oneshot_left = maxf(_oneshot_left - delta, 0.0)
+		return
+
 	if _airborne:
-		# 飞行时也走 Walk（腿在动，看着像推进中的腾空），但倍速按「飞行速度」算
-		_play("Walk", false)
-		_ap.speed_scale = clampf(speed / FLY_WALK_REF, 0.7, WALK_SPEED_SCALE_MAX)
+		# 飞行时用 Move_Ing（有战斗移动姿势，比慢走更像「推进中」），
+		# 没借到就退回 Walk
+		if _has_clip("Move_Ing"):
+			_play("Move_Ing", false)
+			_ap.speed_scale = clampf(speed / 5.2, 0.7, 2.0)
+		else:
+			_play("Walk", false)
+			_ap.speed_scale = clampf(speed / FLY_WALK_REF, 0.7, WALK_SPEED_SCALE_MAX)
 	elif speed > WALK_SPEED:
-		_play("Walk", false)
-		# ⚠️ 上限从 1.8 放到 4.0：跑 6.8 m/s 时原来只能到 1.8，脚追不上地面 = 滑行
-		_ap.speed_scale = clampf(speed / FLY_WALK_REF, 0.8, WALK_SPEED_SCALE_MAX)
+		# 地上移动：借到 Move_Ing 就用它（战斗姿势，两只手在枪上），
+		# 否则退回载具自带的 Walk
+		if _has_clip("Move_Ing"):
+			_play("Move_Ing", false)
+			_ap.speed_scale = clampf(speed / 5.2, 0.8, 2.0)
+		else:
+			_play("Walk", false)
+			_ap.speed_scale = clampf(speed / FLY_WALK_REF, 0.8, WALK_SPEED_SCALE_MAX)
 	else:
-		_play("Idle", false)
+		if _has_clip("Normal_Idle"):
+			_play("Normal_Idle", false)
+		else:
+			_play("Idle", false)
 		_ap.speed_scale = 1.0
+
+
+func _has_clip(name_: String) -> bool:
+	return _ap != null and _ap.has_animation(name_)
+
+
+## 播一次一次性动作（开火 / 换弹 / 受击 / 必杀），播完回到移动态。
+##
+## ⚠️ 用 `_oneshot_left` 挡着 `_process()`：载具的动作是**整身**的（不像本体有
+##    上半身叠加层），所以开火动画必须独占播放，否则下一帧就被 `Move_Ing` 顶掉，
+##    看起来是「按了开枪但什么都没演」。
+func _play_oneshot(clip: String, speed: float = 1.0) -> bool:
+	if _ap == null or not _ap.has_animation(clip):
+		return false
+	_cur_anim = clip
+	_ap.speed_scale = speed
+	_ap.play(clip, 0.06, 1.0)
+	_oneshot_left = _ap.get_animation(clip).length / maxf(speed, 0.01)
+	return true
 
 
 func _play(name_: String, force: bool) -> void:

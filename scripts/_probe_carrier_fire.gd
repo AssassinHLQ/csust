@@ -85,15 +85,25 @@ func _run() -> void:
 	print("       （Muzzle 是否被使用，交给第 4 节的 muzzle_count 断言）")
 
 	print("\n===== 4. 机甲形态能不能开火 =====")
+	# ⚠️ 先把玩家放到地面上再量炮口高度：本探针不跑物理，`player.gd` 的
+	#    `_ready()` 把节点放在场景默认位置（`Arisu` 子节点还带 y=-0.035），
+	#    不抬到 0 的话「炮口世界 y」会带着父链偏移，量出来是负数 ——
+	#    那是探针没摆好场景，不是炮口真的在地下。
+	#    （本喵第一版就是没管这个，借动作后断言突然变红，白查了一轮。）
+	_player.global_position = Vector3(0.0, 0.6, 0.0)
+	await process_frame
 	# 先把炮口推一遍（正常游戏里 `_tick_flight()` 每帧都会做这件事）
 	_cf.call("_push_cannon_muzzles")
 	var muzzles: Array = _wpn.get("_carrier_muzzles")
+	print("       玩家脚下 y = %.3f" % _player.global_position.y)
 	print("       喂给 Weapon 的炮口数：%d" % muzzles.size())
 	_ok(muzzles.size() == 2, "两门炮的枪口都喂进去了（实际 %d）" % muzzles.size())
 	for i in muzzles.size():
 		var mp: Vector3 = muzzles[i]
 		print("         炮口 %d 世界坐标 %s" % [i, str(mp.snappedf(0.001))])
-		_ok(mp.y > 0.05, "炮口 %d 在地面之上（y=%.3f）" % [i, mp.y])
+		# 判据：炮口相对**角色脚下**的高度 > 0（比「世界 y」更稳，不依赖场景摆位）
+		var above := mp.y - _player.global_position.y
+		_ok(above > 0.05, "炮口 %d 在角色脚下之上 %.3f m" % [i, above])
 
 	# Muzzle 标记现在应该被 `Weapon` 的机甲路径**跳过**（`_follow_muzzle_bone` 直接 return），
 	# 所以不动它，只确认不会被用到地底下去。
