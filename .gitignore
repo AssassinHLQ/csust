@@ -111,6 +111,32 @@ __pycache__/
 # pc_wall_case 一个套路。要恢复真模型：见 CREDITS.md 里那条的还原步骤。
 /models/rocket_falcon9/
 
+# 电竞房 LOD 的**高模 / 中模**（2026-11-08）—— 334 MB 的派生档，不进仓库。
+#
+#     esports_room_high.glb  233.9 MB  减面前原始档，757 万面（0 ~ 12 m 用）
+#     esports_room_mid.glb   100.6 MB  ~280 万面（12 ~ 30 m 用）
+#     esports_room.glb        47  MB   105 万面（30 m+ 用）——**这一档已入库**，够跑
+#
+# 缺档不影响启动：`scripts/esports_lod.gd` 的规矩是「缺哪一档就退到下一档」
+# （high 缺 → 用 mid，mid 也缺 → 用当前的低模），所以别人克隆下来只是
+# 近处看不到 757 万面那版，画面照常。
+#
+# 要复现完整 LOD：本地用 `tools/build_esports_room.py` 从源 FBX 重新减面导出
+# 到这几个文件名即可（`.import` 会让 Godot 自动重建）。
+# 贴图一并排除 —— 它们是从低模那套同名贴图复制出来的，低模那份已入库。
+/models/esports_room/esports_room_high.glb
+/models/esports_room/esports_room_high.glb.import
+/models/esports_room/esports_room_high_*.jpg
+/models/esports_room/esports_room_high_*.jpg.import
+/models/esports_room/esports_room_high_*.png
+/models/esports_room/esports_room_high_*.png.import
+/models/esports_room/esports_room_mid.glb
+/models/esports_room/esports_room_mid.glb.import
+/models/esports_room/esports_room_mid_*.jpg
+/models/esports_room/esports_room_mid_*.jpg.import
+/models/esports_room/esports_room_mid_*.png
+/models/esports_room/esports_room_mid_*.png.import
+
 # 校园分块（离线切成 3×3，用 scripts/_split_sog.gd 重新生成）
 /splatdata/campus_chunks/
 
@@ -139,6 +165,12 @@ __pycache__/
 
 # 配音候选（每句 5 个 take，人工挑选用；声音版权同 shop）
 /story/voice/_audition/
+
+# 凯伊配音（GPT-SoVITS 音色模型 KaiYi-e15 / KaiYi_e18_s288，
+# 参考音频来自 D:\BaiduNetdiskDownload\凯伊 的官方语音；声音版权 NEXON / Yostar）
+# ⚠️ 只留本地演示：与 shop / _audition 同一条规矩，源码可开源、音频不进仓库。
+#    想给别人跑：让对方自己用 tools/gen_kei_voice.py 生成。
+/story/voice/kei/
 
 # 校园 10×10 分块（离线用 scripts/_split_sog.gd + _export_campus_ggs_bins10.gd 重新生成）
 # ⚠️ 这一套的尺度是错的（只有全量的 1/3），只留作对照，运行时默认用 campus_chunks10w。
