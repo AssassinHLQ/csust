@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 ; 游戏开发电竞房（2026-11-07 换壳）。
 ;
@@ -11,13 +11,41 @@
 ;      `tools/build_esports_room.py`，贴图已内嵌、Y-up、地板 y=0、原点在水平中心）
 ;   · 尺寸：10.40 × 3.60 × 16.84 m，长边沿 Z
 ;   · 原点：地板中心；「门口」在本地 +Z 那一头（朝向 = 房间中心 −→ 门）
-;   · 旧的程序化墙 / 家具 / 灯 / 5 屏 / 显卡架 / 海报 / 碰撞体全部撤掉
+;   · 旧的程序化墙 / 家具 / 灯 / 5 屏 / 显卡架 / 海报全部撤掉
 ;     （旧脚本 `scripts/_build_esports_room.gd` 留着当历史，不再生成这个文件）
 ;
 ; ⚠️ 按材质合并后没法单独隐藏某一件家具；要动某一处得回到 FBX 改。
+;
+; 2026-11-08 使用者：「为什么没有简单的墙碰撞」——
+;   GLB 里 59 个网格一个碰撞体都没有（3ds Max 导出来的，没带 -col 节点），
+;   所以人可以直接穿过墙走到窗帘前。现在由 `scripts/esports_collision.gd`
+;   在运行时按网格 AABB 生成盒子碰撞：外壳拆成地板/天花板/四面墙共 6 个，
+;   家具各一个。不用 trimesh —— 105 万面构建和查询都太贵。
+;
+; ── 2026-11-08 加的两样 ──
+; ① `Lights`（`scripts/esports_light.gd`）：使用者「给电竞房一点灯吧，里面好黑」。
+;    GLB 里**一个灯光节点都没有**（101 个 node 全是网格），场景里也没有，
+;    而这是**封闭外壳**——全局那盏太阳照不进来，所以屋里漆黑。
+;    脚本在运行时按房间实测尺寸摆 7 盏 OmniLight（补光 5 + 天花板柔光 + 门口）。
+;
+; ② `Lod`（`scripts/esports_lod.gd`）：使用者「总感觉减面后版本不好看了，
+;    试试放进去减面前版本，减面版本做lod回退」。
+;    三档（近 0~8 m 高模 / 中 8~20 m 中模 / 远 20 m+ 现有低模），
+;    用 `visibility_range` 在**引擎侧**切换，不进每帧脚本
+;    —— 原因见 `ryzen_9950x3d.gd`：引擎自动 LOD 对这批模型**实测无效**。
 
 [ext_resource type="PackedScene" path="res://models/esports_room/esports_room.glb" id="1_room"]
+[ext_resource type="Script" path="res://scripts/esports_collision.gd" id="2_col"]
+[ext_resource type="Script" path="res://scripts/esports_light.gd" id="3_light"]
+[ext_resource type="Script" path="res://scripts/esports_lod.gd" id="4_lod"]
 
 [node name="EsportsRoom" type="Node3D"]
+script = ExtResource("2_col")
+
+[node name="Lights" type="Node3D" parent="."]
+script = ExtResource("3_light")
+
+[node name="Lod" type="Node3D" parent="."]
+script = ExtResource("4_lod")
 
 [node name="Room" parent="." instance=ExtResource("1_room")]

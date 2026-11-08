@@ -1,0 +1,30 @@
+电竞房: 加室内照明（GLB 里一个灯都没有，封闭外壳里漆黑）
+
+使用者：「给电竞房一点灯吧，里面好黑」。
+
+## 为什么屋里那么黑
+· GLB 里**一个灯光节点都没有**（101 个 node 全是网格，0 个 Light）——
+  Sketchfab 那个 GLB 只导了网格和自发光材质；
+· `esports_room.tscn` 里也没有任何 OmniLight / SpotLight；
+· 全局只有一盏 `Sun`（DirectionalLight3D）+ 环境光，而这是**封闭外壳**——
+  太阳光根本照不进来。
+自发光材质只让物体「看起来亮」，**不照亮周围**，所以必须补真光源。
+
+## 改动
+· `scripts/esports_light.gd`（新）：运行时按**实测房间尺寸**摆 7 盏 OmniLight
+  （补光 5 + 天花板柔光 1 + 门口 1），全部不投影（Forward+ 里 7 盏投影灯太贵）。
+· `scenes/esports_room.tscn`：挂 `Lights` 节点。
+
+## 布局是量出来的，不是猜的
+`scripts/_probe_esports_layout.gd` / `_probe_esports_furniture.gd` 量到：
+  外壳 `M_材质_3`：x −5.20~+5.20、y 0.30~3.60、z −8.42~+8.42
+  室内地面 y = 0.00、净高 3.30 m
+  工位那批家具顶点在 y 1.5~3.0（阁楼式布局，家具本身在中高处）
+  门口在本地 +Z（人从 +Z 进来）
+
+⚠️ 本喵前两版按「门口在 -Z」「灯装 y=3.05」猜，结果灯全装到墙外面
+（墙上两个亮斑 = 灯穿墙照的）、天花板过曝成一片白。调参记录在脚本注释里。
+
+## 验证
+_probe_esports_light.gd（真窗口）：7 盏灯挂上，屋内家具、椅子、显示器可辨，
+不再是一片黑。渲染图在 _arisu_captures/_esports_light/。
