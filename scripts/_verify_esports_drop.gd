@@ -82,7 +82,14 @@ func _run() -> void:
 		return
 	_drop = drop
 
-	var base_y := 0.01
+	# ⚠️ 不能写死 0.01，也不能现读 `room.position.y` —— `_ready` 跑完时
+	#    演出已经把房子抬到 `_base_y + DROP_HEIGHT` 了，现读会拿到半空中的值。
+	#    正确做法：取演出脚本开场记下的 `_base_pos`（= 场景里的设计位置）。
+	#    使用者 2026-11-08 把 EsportsRoom 挪到了 y≈3.90 并转了个角度，
+	#    落地高度跟着节点的世界 Y 走（这是设计）。
+	var base_pos: Vector3 = drop.get("_base_pos")
+	var base_y := base_pos.y
+	print("[drop] 基准（_base_pos）= %s  y=%.4f" % [str(base_pos), base_y])
 	var cam: Camera3D = drop.get("_cam")
 	_check(cam != null, "演出相机已建")
 	if cam != null:

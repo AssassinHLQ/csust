@@ -90,6 +90,7 @@ func play(room: Node3D, center: Vector3, half_depth := 8.42,
 	_half_depth = half_depth
 	# 记下原始局部位置，收尾原样放回（别用世界坐标硬写 position.y）
 	_base_pos = room.position
+	print("[drop] play() 记录基准 position=%s（此时的设计高度）" % str(_base_pos))
 	# `floor_y` 是**世界**高度，换成本地高度才算得出正确的下降距离
 	var parent_y := 0.0
 	if room.get_parent() is Node3D:
