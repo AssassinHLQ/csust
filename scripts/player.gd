@@ -76,6 +76,35 @@ const TURN_SMOOTH := 24.0      # 14 → 24
 ## 开火/开镜时的转身速度（比平时快，否则「点了没反应」的迟滞感明显）
 const TURN_SMOOTH_FIRE := 34.0 # 26 → 34
 
+## ── 机甲（载具）飞行时另行一套水平数值 ─────────────────────────────────────
+##
+## 2026-11-08 用户两条反馈，根子是同一个：
+##   「打得到霸王龙，但是人飞不过去」
+##   「我不能同时加速前进与下降」
+##
+## ① 为什么「飞不过去」：飞行时原本整段沿用**地面**数值 —— 空中 `is_on_floor()`
+##    为 false 走 `ACCEL_AIR`，目标速度是 `SPEED_WALK = 2.4 m/s`（不按 Shift 时）。
+##    而第二关的三只霸王龙在 (-95,-96) / (-120,-115) / (-135,-140)，离出生点
+##    **137 / 168 / 197 米**；`Weapon.range_meters = 300`，所以「站着就能打中」，
+##    但要飞过去得先飞 137 m —— 按 2.4 m/s 是 **57 秒**。这就是「打得到但过不去」。
+##
+## ② 为什么「不能同时加速与下降」：`Ctrl`（crouch）是飞行的下降键，而地面上
+##    `crouching` 会把目标速度压成 `SPEED_CROUCH = 1.3 m/s`、并且
+##    `sprinting = ... and not crouching` 直接掐掉冲刺。
+##    于是「Shift 加速 + Ctrl 下降」永远只能拿到 1.3 m/s。
+##    修法：飞行期间 `crouching` 恒为 false（`Ctrl` 只当「下降」用，见
+##    `carrier_form.gd::_tick_flight()`），加速度/摩擦也换成空中那套。
+##
+## ⚠️ 这几个数只影响 `_flight_lock == true` 的分支，地面手感一个都没有动
+##    （`_verify_move_feel.gd` 那套断言照旧）。
+const SPEED_FLY := 11.0        ## 巡航（≈ 40 km/h）
+const SPEED_FLY_BOOST := 19.0  ## Shift 加力：137 m 约 7 秒到达
+## 飞行时的水平加速度。和地面同档（26）：机甲推进器不是滑翔机，要跟手。
+const ACCEL_FLY := 26.0
+## 飞行时松开方向键的减速度。比地面（30）小一半：空中要留一点惯性，
+## 不然松手的瞬间像撞在空气墙上。
+const FRICTION_FLY := 12.0
+
 ## 开火方向与角色朝向的夹角小于这个值（弧度）才算「转到位」。
 ##
 ## ⚠️ 这个容差是按 model_root.rotation.y 的角度差算的，**不能用眼睛骨去量**：
@@ -253,11 +282,31 @@ func _may_capture() -> bool:
 	return DisplayServer.window_is_focused()
 
 
+## 这个鼠标按钮是不是滚轮（上 / 下 / 左 / 右）。
+##
+## 单独拎出来是因为「按类型放行 `InputEventMouseButton`」会把**左键开火**一起放进来 ——
+## 火箭上不该开火（见 `_input()` 那段）。Godot 4 里滚轮没有专门的子类，
+## 就是 `InputEventMouseButton` 带 `BUTTON_WHEEL_*` 的 `button_index`。
+func _is_wheel(mb: InputEventMouseButton) -> bool:
+	return mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN,
+		MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]
+
+
 func _input(event: InputEvent) -> void:
 	# 火箭骑乘期间：**允许转视角**（用户 2026-11-07：「起飞不能转动视角」）。
-	# 只屏蔽开火 / 开镜 / 滚轮缩放这些操作键；鼠标移动那条分支在下面照常走。
+	# 只屏蔽开火 / 开镜这些**战斗**操作键。
+	#
+	# ⚠️ 2026-11-08 用户：「在火箭上面虽然可以自由转视角但是不能滚轮缩放了」——
+	#    这里原来写的是 `if _ride_active and not (event is InputEventMouseMotion): return`，
+	#    把所有非鼠标移动的事件一律吃掉，**滚轮也在里面**（当时那段注释还明说
+	#    「只屏蔽开火 / 开镜 / 滚轮缩放这些操作键」）。但滚轮在火箭上其实很有用：
+	#    42 m 的箭体能拉远了看全貌，也能拉近看发动机段。所以现在放行滚轮。
+	#
+	# 判据用 `button_index` 白名单而不是 `event is InputEventMouseButton`：
+	# 左键（开火）也是 InputEventMouseButton，按类型放行会连开火一起放进来。
 	if _ride_active and not (event is InputEventMouseMotion):
-		return
+		if not (event is InputEventMouseButton and _is_wheel(event as InputEventMouseButton)):
+			return
 
 	# --- 鼠标移动：转视角 ---
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -482,7 +531,10 @@ func _physics_process(delta: float) -> void:
 	if dir.length_squared() > 1.0:
 		dir = dir.normalized()
 
-	crouching = Input.is_action_pressed("crouch")
+	# ⚠️ 飞行期间**不认 crouch**：`Ctrl` 在机甲形态下是「下降」，不是「蹲」。
+	#    这里不清掉的话，`Ctrl` 会把目标速度压到 `SPEED_CROUCH`、还会掐掉冲刺 ——
+	#    用户 2026-11-08 报的「不能同时加速前进与下降」就是这一句。
+	crouching = Input.is_action_pressed("crouch") and not _flight_lock
 	# ⚠️ 这里**曾经有一句 `input.y < 0.1`**，本意是「不许倒着跑」。但用户要的正是
 	#    「往后也能跑」，而且它挡掉的不只是 Shift —— `move_back` 的 `input.y` 是 **+1**，
 	#    所以按 S 永远拿不到跑速，表现就是「往后走不能跑步」。现在四个方向一视同仁。
@@ -491,7 +543,15 @@ func _physics_process(delta: float) -> void:
 		and dir.length_squared() > 0.01
 
 	var target_speed := SPEED_WALK
-	if crouching:
+	if _flight_lock:
+		# 飞行：巡航 / 加力两档。开镜时收一半，让「边飞边瞄」不至于太快。
+		if aiming:
+			target_speed = SPEED_FLY * 0.5
+		elif sprinting:
+			target_speed = SPEED_FLY_BOOST
+		else:
+			target_speed = SPEED_FLY
+	elif crouching:
 		target_speed = SPEED_CROUCH
 	elif aiming:
 		target_speed = SPEED_AIM
@@ -500,11 +560,13 @@ func _physics_process(delta: float) -> void:
 
 	# --- 水平加速 / 摩擦 ---
 	var horiz := Vector3(velocity.x, 0.0, velocity.z)
-	var accel := ACCEL_GROUND if is_on_floor() else ACCEL_AIR
+	var accel := ACCEL_FLY if _flight_lock \
+		else (ACCEL_GROUND if is_on_floor() else ACCEL_AIR)
+	var brake := FRICTION_FLY if _flight_lock else FRICTION
 	if dir.length_squared() > 0.01:
 		horiz = horiz.move_toward(dir * target_speed, accel * delta)
 	else:
-		horiz = horiz.move_toward(Vector3.ZERO, FRICTION * delta)
+		horiz = horiz.move_toward(Vector3.ZERO, brake * delta)
 
 	velocity.x = horiz.x
 	velocity.z = horiz.z
