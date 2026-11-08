@@ -338,6 +338,12 @@ var _boost_rest: Dictionary = {}
 var _wing_rest: Dictionary = {}
 ## 肩翼 / 导弹荚上的**小喷口**（不是推进器，只是装饰性的短焰）
 var _aux_fx: Array = []
+## 推进器喷口往外 / 往后的偏移（米）。
+## 见 `_run_effects()` 里那段实测说明：推进器骨几乎在中线上，
+## 不推开的话两道焰并排从腿中间插出来，像两把刀。
+const BOOST_OUT_OFFSET := 0.10
+const BOOST_BACK_OFFSET := 0.06
+
 ## 肩翼 / 导弹荚的骨名（小喷口挂点）。
 ##
 ## ✅ 骨名是**实测**的（`_diag_carrier_bones.gd` 列了载体 191 根骨）：
@@ -641,9 +647,9 @@ func _build_boost_fx() -> void:
 		#   · 芯层：又细又长     → 负责「尖」
 		# 1:1.8 / 1:5.6 / 1:18 三种比例叠起来才有火焰的体积感。
 		var specs := [
-			{"mat": mat_outer, "r": 0.30, "len": 0.55},
-			{"mat": mat_mid, "r": 0.17, "len": 0.95},
-			{"mat": mat_core, "r": 0.075, "len": 1.40},
+			{"mat": mat_outer, "r": 0.26, "len": 0.70},
+			{"mat": mat_mid, "r": 0.17, "len": 1.05},
+			{"mat": mat_core, "r": 0.10, "len": 1.35},
 		]
 		for sp in specs:
 			var mi := MeshInstance3D.new()
@@ -696,16 +702,20 @@ func _build_boost_fx() -> void:
 		gp.draw_pass_1 = particle_mesh
 		gp.material_override = particle_mat
 		var pm := ParticleProcessMaterial.new()
+		# ⚠️ 粒子方向必须是**挂点局部**的：挂点跟着骨走，骨的 local −Y 就是朝下
+		#    （实测 `bone_gearboost_L` 的 localY·上 = +0.90 ⇒ −Y 朝下）。
+		#    本喵第二版把它写成 `(0,-1,0)` 却忘了挂点被 `Basis(RIGHT, PI)` 翻过，
+		#    粒子就朝天上跑了 —— 出图里完全看不到尾迹。
 		pm.direction = Vector3(0.0, -1.0, 0.0)
-		pm.spread = 10.0
-		pm.initial_velocity_min = 2.5
-		pm.initial_velocity_max = 7.0
-		pm.gravity = Vector3(0.0, -4.0, 0.0)
-		pm.scale_min = 0.55
-		pm.scale_max = 1.25
-		pm.color = Color(0.28, 0.55, 1.00, 0.34)
-		pm.damping_min = 2.0
-		pm.damping_max = 4.5
+		pm.spread = 8.0
+		pm.initial_velocity_min = 3.0
+		pm.initial_velocity_max = 8.0
+		pm.gravity = Vector3(0.0, -3.0, 0.0)
+		pm.scale_min = 0.30
+		pm.scale_max = 0.80
+		pm.color = Color(0.30, 0.58, 1.00, 0.30)
+		pm.damping_min = 1.5
+		pm.damping_max = 3.5
 		# 从喷口往下逐渐缩小 + 淡出（不然尾巴断得很硬）
 		var curve := Curve.new()
 		curve.add_point(Vector2(0.0, 1.0))
@@ -779,31 +789,55 @@ func _build_aux_fx() -> void:
 ##   ③ 尖朝 −Y：Godot 的 `CylinderMesh` 本来就 `top_radius`→+Y、`bottom_radius`→−Y，
 ##      所以要「向上喷」就再转 180°；但推进器是**朝下**喷的，本来就该是 −Y，
 ##      **不需要转**。上一版绕 X 转了 PI，等于让它朝上喷 —— 这就是那块「向上的一张蓝扇」。
+##
+## ── 2026-11-08：尖锥改成「喷焰形」（不再是刀）──
+## 出图（`_probe_carrier_fx.gd` 的 3_cruise）里两道焰是**细长的尖锥**，
+## 从腿下插出来像两把刀。真正的喷气火焰是：
+##   · **靠近喷口最粗**（喷口大、焰从那儿出来）
+##   · 往远处**逐渐收细但不断尖**
+##   · 末端**钝圆**（不是针尖）
+## 所以这里不再用 `CylinderMesh`（它是「底圆 + 尖点」的直锥），
+## 改成**自建一圈圈圆环**：半径按 `r(t) = (1-t)^0.55` 收（比线性收得快，
+## 前段粗、后段细），末端半径留 0.18 不归零（钝圆）。
+## 顶点数：8 段圆环 × 12 边 = 96 个顶点，很轻。
 func _make_flame_mesh() -> ArrayMesh:
-	# CylinderMesh 自身坐标：**中心在原点**，`top_radius` 在 +Y 半边，`bottom_radius` 在 −Y 半边。
-	# 我们要的火焰：**底（粗）在原点，尖朝 −Y，长度 1、底半径 1**。
-	#
-	# 于是：让「bottom_radius（粗）」成为 +Y 那一端 → 设 bottom_radius 为大、top_radius 为 0，
-	# 再把整块绕 X 翻 180°（粗端从 −Y 转到 +Y），最后下移 0.5
-	# 让「粗端的截面」正好落在原点 —— 此时尖在 y = −1。
-	#
-	# 换一个等价、更好读的写法：直接构造「尖朝 −Y」的 Basis，再把原点抬到底面。
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.0          # 尖
-	cyl.bottom_radius = 1.0       # 粗端，半径 1 ⇒ 直径 2
-	cyl.height = 1.0
-	cyl.radial_segments = 16
-	cyl.rings = 3
-	cyl.cap_bottom = false        # 底面不封口：加色混合下封口会显示成一个亮圆盘
-	cyl.cap_top = false
-
 	var st := SurfaceTool.new()
-	# 绕 X 转 180°：尖从 +Y 翻到 −Y，粗端从 −Y 翻到 +Y。
-	var flip := Basis(Vector3.RIGHT, PI)
-	# 翻转后中心仍在原点，所以粗端截面在 y = +0.5。下移 0.5 ⇒ 粗端截面落在 y = 0（原点），
-	# 尖落在 y = −1。缩放到「底半径 FLAME_RADIUS、长度 L」就靠 `MeshInstance3D.scale`。
-	var xf := Transform3D(flip, Vector3(0.0, -0.5, 0.0))
-	st.append_from(cyl, 0, xf)
+	# ⚠️ **`begin()` 不能少！** 本喵第一版自建这个网格时忘了调它，
+	#    结果 `commit()` 出来是个**空网格**（AABB = (0,0,0)）——
+	#    出图上只看得见柔光那层（它是独立节点），焰本体压根不存在。
+	#    是 `_diag_carrier_fxsize.gd` 量出来的：scale.y 明明是 1.587，
+	#    但网格自己的 AABB 是 0。
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var segs := 12          # 每圈多少边
+	var rings := 8          # 多少圈
+	var r0 := 1.0           # 根部半径（缩放前）
+	# ⚠️ 末端半径 **0.55**（不是 0.18）：0.18 太接近针尖，出图上是两根针
+	#    （`_probe_carrier_fx.gd` 的 4_side）。0.55 = 焰尾仍然有明显的粗度。
+	var r_end := 0.55       # 末端半径（**不归零** → 钝圆，不是针尖）
+	# 参数 t：0 = 根部（喷口），1 = 末端（焰尾）
+	# 半径曲线：前段粗、后段收得快
+	for ri in rings:
+		var t0 := float(ri) / float(rings)
+		var t1 := float(ri + 1) / float(rings)
+		var rr0 := lerpf(r0, r_end, pow(t0, 0.55))
+		var rr1 := lerpf(r0, r_end, pow(t1, 0.55))
+		var y0 := -t0        # 朝 −Y
+		var y1 := -t1
+		for si in segs:
+			var a0 := TAU * float(si) / float(segs)
+			var a1 := TAU * float(si + 1) / float(segs)
+			var p00 := Vector3(cos(a0) * rr0, y0, sin(a0) * rr0)
+			var p10 := Vector3(cos(a1) * rr0, y0, sin(a1) * rr0)
+			var p01 := Vector3(cos(a0) * rr1, y1, sin(a0) * rr1)
+			var p11 := Vector3(cos(a1) * rr1, y1, sin(a1) * rr1)
+			st.set_color(Color(1, 1, 1, 1))
+			st.add_vertex(p00)
+			st.add_vertex(p10)
+			st.add_vertex(p11)
+			st.add_vertex(p00)
+			st.add_vertex(p11)
+			st.add_vertex(p01)
+	st.generate_normals()
 	return st.commit()
 
 
@@ -1427,9 +1461,32 @@ func _run_effects(delta: float) -> void:
 		# 挂点跟着骨走：取骨的**全局**变换，换算回载具节点的局部空间
 		if _skel != null and bone_i >= 0:
 			var bone_xf := _skel.global_transform * _skel.get_bone_global_pose(bone_i)
-			holder.global_transform = bone_xf
-		var layers: Array = fx["layers"]
+			# ── 把喷口往**外侧**推，别挤在中线上 ──
+			# 实测（`_diag_carrier_nozzle.gd`）：两个推进器骨相对胯骨的「右」分量
+			# 只有 −0.07 / +0.10 —— 几乎在身体中线上，两道焰并排从腿中间插出来，
+			# 出图上像**两把交叉的刀**（`_probe_carrier_fx.gd` 的 3_cruise）。
+			# 真实推进器应该在腿的**外后侧**。这里按骨名判断左右，各自往外推。
+			var side := 1.0 if String(_skel.get_bone_name(bone_i)).ends_with("_R") else -1.0
+			var out_dir := _carrier.global_transform.basis.x * side
+			# 往外 0.16 m、往后 0.10 m（推进器在腿后侧，不是正外侧）
+			var back_dir := -_carrier.global_transform.basis.z
+			holder.global_transform = Transform3D(
+				bone_xf.basis,
+				bone_xf.origin + out_dir * BOOST_OUT_OFFSET + back_dir * BOOST_BACK_OFFSET)
 		var t := clampf(_thrust, 0.0, 1.2)
+		# ── 焰柱**摆动**：不能是两根死掉的锥体 ──
+		# 出图（`_probe_carrier_fx.gd`）里两道焰直挺挺地插着，像两把刀。
+		# 真实的推进器焰会随气流抖。这里给每束焰一个**相位不同**的摆动
+		# （左右两束不同相，看起来是「两台发动机」，不是「一根杆子」），
+		# 摆动量随推力增大 —— 推力越大、发动机越不稳。
+		var wobble_phase := _wing_phase * 1.9 + float(bone_i) * 0.7
+		var wob_amt: float = deg_to_rad(4.5) * t
+		var wob_axis := holder.global_transform.basis.x.normalized()
+		holder.global_transform = Transform3D(
+			Basis(wob_axis, sin(wobble_phase) * wob_amt)
+				* holder.global_transform.basis,
+			holder.global_transform.origin)
+		var layers: Array = fx["layers"]
 		# 上升时整束焰柱再长 35%（喷得猛），但**半径不变**，只拉长度
 		var len_mul := 1.0 + (0.35 if _vert_want > 0.5 else 0.0)
 		for li in layers.size():
@@ -1437,16 +1494,22 @@ func _run_effects(delta: float) -> void:
 			var br: float = float(mi.get_meta("base_radius", 0.15))
 			var bl: float = float(mi.get_meta("base_len", 0.8))
 			# 推力小时「短而钝」，推力大时「长而尖」：半径也跟着略收，不然低速像根柱子
-			var growth := lerpf(0.30, 1.0, t) * flick
+			# ⚠️ 下限 0.45：三层在加色混合下会互相加亮，下限太高就叠成一坨圆球光晕
+			#    （出图 `_probe_carrier_fx.gd` 的 2_climb 试过 0.55，就是那样）。
+			var growth := lerpf(0.45, 1.0, t) * flick
 			mi.scale = Vector3(br * lerpf(0.75, 1.0, t), FLAME_LEN * bl * growth * len_mul,
 				br * lerpf(0.75, 1.0, t))
 			mi.visible = t > 0.03
 			var m := mi.material_override as StandardMaterial3D
 			if m != null:
-				m.emission_energy_multiplier = lerpf(0.4, 6.0, t)
+				# ── 三层的亮度必须**明显不同**，否则加色混合下叠成一坨 ──
+				# 出图试过：三层亮度接近时整个焰是一个圆球光晕、没有焰形。
+				# 现在：外层最暗（它是「晕」）、中层中、芯最亮（它是「焰芯」）。
+				var emul: float = [1.0, 2.6, 6.0][li]
+				m.emission_energy_multiplier = lerpf(0.3, emul, t)
 				# 注意：加色混合下改 alpha 就是改亮度（不是改透明度），
 				# 所以这里用「亮度」的语义去写，别当成透明度理解。
-				m.albedo_color.a = clampf(0.25 + 0.75 * t, 0.0, 1.0) * [1.0, 0.85, 0.7][li]
+				m.albedo_color.a = clampf(0.18 + 0.55 * t, 0.0, 1.0) * [1.0, 0.85, 0.7][li]
 		var light := fx["light"] as OmniLight3D
 		light.light_energy = lerpf(0.0, 2.6, t) * flick
 		light.omni_range = lerpf(2.4, 5.0, t)
