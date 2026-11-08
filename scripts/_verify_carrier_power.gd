@@ -84,6 +84,31 @@ func _run() -> void:
 	_check(got >= 1, "跨过 3000 m 时攒到 1 条（实际 %d）" % int(cf.get("energy_bars")))
 
 	print("")
+	print("========== 1b. 垂直上升也要算进距离（用户：算空间的移动量）==========")
+	# 原地按住上升键：水平位移 ≈ 0，只有垂直位移。
+	# 如果代码还在用「水平速度 × dt」（本喵第一版就是），这里会是 0。
+	Input.action_release("move_forward")
+	Input.action_release("sprint")
+	cf.set("energy_bars", 0)
+	cf.set("fly_distance_m", 0.0)
+	var y0 := player.global_position.y
+	Input.action_press("jump")
+	var ticked := 0
+	for i in 90:
+		# `Time.get_ticks_msec()` 在紧循环里不前进，`HOLD_RISE_MS` 靠墙钟判定，
+		# 所以这里手动把「按下时刻」往前挪，模拟「已经按住一会儿了」。
+		cf.set("_rise_pressed_at", float(Time.get_ticks_msec()) - 500.0)
+		await physics_frame
+		ticked += 1
+	Input.action_release("jump")
+	var dy := player.global_position.y - y0
+	var dist_up := float(cf.get("fly_distance_m"))
+	print("       垂直上升 %.2f m ｜ 水平位移 ≈ %.2f m ｜ 累计距离 %.2f m" % [
+		dy, Vector2(player.velocity.x, player.velocity.z).length(), dist_up])
+	_check(dy > 2.0, "确实升上去了（%.2f m）" % dy)
+	_check(dist_up > 2.0, "垂直上升的距离也算进去了（%.2f m ≥ 2）" % dist_up)
+
+	print("")
 	print("========== 2. 上限 5 条 ==========")
 	cf.set("energy_bars", 5)
 	cf.set("fly_distance_m", 2999.0)

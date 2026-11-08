@@ -129,7 +129,16 @@ const BAR_SECONDS := 5.0
 ## 巡航者模式开着吗
 var cruise := false
 ## 本局累计飞行距离（米，不扣减；用来显示进度）
+##
+## ⚠️ 统计的是**三维空间位移量**（用户 2026-11-08：「上升下降也要算，
+##    不能只算水平的位移，算空间的移动量绝对值」）。见 `_update_power()`：
+##    取的是每帧 `global_position` 的位移长度，而不是「水平速度 × dt」——
+##    前者连上升 / 下降 / 斜着飞都算进去，而且**被墙挡住时位移是 0、不会白算**。
 var fly_distance_m := 0.0
+## 上一帧的位置（算空间位移用）。`_has_last_pos` 为假时跳过一帧，避免刚起飞那一帧
+## 拿旧位置算出一个巨大的假位移。
+var _last_pos := Vector3.ZERO
+var _has_last_pos := false
 ## 攒好的能量条数（0~5）
 var energy_bars := 0
 ## 每条**已启用**能量条各自的剩余秒数（独立计时）
@@ -1005,14 +1014,27 @@ func _update_power(delta: float) -> void:
 		#    满了根本走不到），自检打红两条：进度涨到 3008.5 不封顶，而且
 		#    「花掉一条 → 下一帧立刻用那 8.5 m 的溢出补回来」——能量条白攒。
 		#    现在满了就冻住进度，花掉一条后要**重新飞**才攒得回来。
-		if energy_bars < MAX_BARS:
-			var hs := Vector2(_player.velocity.x, _player.velocity.z).length()
-			fly_distance_m += hs * delta
-			while fly_distance_m >= ENERGY_PER_BAR_M and energy_bars < MAX_BARS:
-				fly_distance_m -= ENERGY_PER_BAR_M
-				energy_bars += 1
-				print("[Carrier] 攒满一条能量条：%d / %d" % [energy_bars, MAX_BARS])
-				Sfx.play("ui_toggle", -2.0)
+		#
+		# ⚠️ 位移口径：**每帧真实位移的长度**（三维），不是「水平速度 × dt」。
+		#    用户 2026-11-08：「上升下降也要算……算空间的移动量绝对值」。
+		#    用位移而不是速度还有个好处：**贴墙推着走的时候位移是 0**，
+		#    不会因为「速度表上很快」而白攒能量。
+		var p := _player.global_position
+		if _has_last_pos:
+			var step_len := (p - _last_pos).length()
+			# 单帧位移异常大 = 被传送 / 重生 / 场景切换，不计入
+			if step_len <= 5.0 and energy_bars < MAX_BARS:
+				fly_distance_m += step_len
+				while fly_distance_m >= ENERGY_PER_BAR_M and energy_bars < MAX_BARS:
+					fly_distance_m -= ENERGY_PER_BAR_M
+					energy_bars += 1
+					print("[Carrier] 攒满一条能量条：%d / %d" % [energy_bars, MAX_BARS])
+					Sfx.play("ui_toggle", -2.0)
+		_last_pos = p
+		_has_last_pos = true
+	else:
+		# 落地 / 变形回去：下一趟起飞重新取基准，不要跨状态算位移
+		_has_last_pos = false
 
 	# ③ 攻速倍率 = 1 + 已启用条数，喂给武器
 	rate_scale = 1.0 + float(_bar_timers.size())
