@@ -29,7 +29,7 @@ signal hit_confirmed(collider: Object, position: Vector3)
 ## 0.36 / 3 = **0.12 s**（≈ 8.3 发/秒），单发仍 171，持续 DPS 从 468 提到 ~1425。
 ## 用户给的理由是「我的游戏整体流程是 20 分钟」：机甲是这条流程里的爆发段，
 ## 不该让他在原地磨。
-@export var beam_fire_interval := 0.12
+@export var beam_fire_interval := 0.10
 ## 激光大炮的单发伤害倍率（相对 `damage`）。炮比枪疼，这是常识。
 ##
 ## ⚠️ **这个数必须按「持续 DPS」倒推，不能只看单发好不好看。**
@@ -42,7 +42,7 @@ signal hit_confirmed(collider: Object, position: Vector3)
 ## 之后射速又按用户要求乘 3（间隔 0.36 → 0.12），**伤害倍率不动**——
 ## 「伤害不变」是用户的原话，所以这里保持 9.5。
 ## 改这两个数之前先跑 `_probe_carrier_dps.gd`，它会把两边的 DPS 都打出来比对。
-@export var beam_damage_scale := 9.5
+@export var beam_damage_scale := 5.5556
 @export var auto_fire := true
 @export var magazine_size := 60
 @export var reserve_ammo := 9999
@@ -206,6 +206,9 @@ func trigger_up() -> void:
 
 
 func shoot() -> bool:
+	# 巡航者模式（`carrier_form.gd` 按 T 进）期间武器关闭，扣扳机也不出弹。
+	if disabled:
+		return false
 	if _reloading or _cooldown > 0.0:
 		return false
 	# 角色还没转向准星方向就先不开火（符合常理：不能背对着靶子把子弹打出去）。
@@ -225,7 +228,11 @@ func shoot() -> bool:
 		try_reload()
 		return false
 
-	_cooldown = maxf(beam_fire_interval if use_beam() else fire_interval, 0.0)
+	# 攻速倍率：能量条每启用一条 +1（见 `carrier_form.gd` 的能量条系统）。
+	# 倍率乘在**间隔**上（间隔 = 基础 ÷ 倍率），所以 ×2 = 快一倍。
+	# ⚠️ 上限不设死：60 fps 下最短也只能「一帧一发」，实际会被帧率自然钳住。
+	var base_cd := beam_fire_interval if use_beam() else fire_interval
+	_cooldown = maxf(base_cd / maxf(rate_scale, 0.01), 0.0)
 	if not infinite:
 		current_ammo -= 1
 		ammo_changed.emit(current_ammo, magazine_size)
@@ -416,6 +423,23 @@ var beam_mode := false
 ## `beam_mode` 是变形那一刻就置好的，没有这个空窗。
 func has_infinite_ammo() -> bool:
 	return beam_mode
+
+
+## ── 巡航者模式 / 能量条 给武器加的两个开关（`carrier_form.gd` 每帧写）──
+##
+## `disabled`：巡航者模式下**武器关闭**（用户 2026-11-08：「按 T 启动巡航者模式
+##             关闭武器能够更快飞行」）。扣扳机也不出弹、不放音效、不加后坐。
+## `rate_scale`：攻速倍率。基础 1.0；每启用一条能量条 +1 → 2 / 3 / 4 / 5 / 6。
+var disabled := false
+var rate_scale := 1.0
+
+
+func set_disabled(on: bool) -> void:
+	disabled = on
+
+
+func set_rate_scale(x: float) -> void:
+	rate_scale = maxf(x, 0.01)
 
 
 func set_beam_mode(on: bool) -> void:

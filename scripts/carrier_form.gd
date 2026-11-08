@@ -74,6 +74,41 @@ const COYOTE_MS := 110.0
 ## 悬停高度保持：往回补高度的刚度（1/秒）。越大越「黏」，越小越飘。
 const HOLD_STIFFNESS := 3.0
 
+# ── 巡航者模式 + 能量条（用户 2026-11-08）──────────────────────────────────
+#
+# 用户原话拆条：
+#   · 「按 T 启动巡航者模式，关闭武器能够更快飞行」→ 按 T 切换：武器关闭 + 飞行加速
+#   · 「累计飞行（包括巡航）3km 积攒满能量条」     → 每 3000 m 满 1 条
+#   · 「最多五条」                                 → 上限 5
+#   · 「按 R 启动一个能量条，5 秒内攻速再翻倍」     → 每条 5 秒
+#   · 「5 条可以同时用，按一次启动一条，时间独立计算，也可以分多次使用」
+#   · 「每启用一条，攻速就增加，增加量是基础攻速那么多」→ 倍率 = 1 + 已启用条数
+#        即 1 条=×2、2 条=×3、3 条=×4……第一条到点就从 ×4 掉回 ×3
+#   · 「开启期间还是可以飞行积攒能量条的」          → 攒条与加速互不阻塞
+const CRUISE_KEY := KEY_T
+const ENERGY_KEY := KEY_R
+## 巡航者模式的飞行加速倍率（乘在 `player.gd` 的飞行目标速度上）
+const CRUISE_SPEED_SCALE := 1.6
+## 每条能量条需要累计多少米飞行
+const ENERGY_PER_BAR_M := 3000.0
+const MAX_BARS := 5
+## 每条能量条的持续时间（秒）
+const BAR_SECONDS := 5.0
+
+## 巡航者模式开着吗
+var cruise := false
+## 本局累计飞行距离（米，不扣减；用来显示进度）
+var fly_distance_m := 0.0
+## 攒好的能量条数（0~5）
+var energy_bars := 0
+## 每条**已启用**能量条各自的剩余秒数（独立计时）
+var _bar_timers: Array[float] = []
+## 当前攻速倍率（= 1 + 已启用条数），暴露给 HUD / 自检
+var rate_scale := 1.0
+## HUD 上那行能量条（运行时自己建，不动 `hud.tscn`）
+var _power_layer: CanvasLayer
+var _power_label: Label
+
 # ── 飞行机身俯仰（2026-11-08 用户：「飞行姿势为什么这么奇怪，仰头，应该平视前方」）──
 #
 # ⚠️ 本喵**先量后改**，量法见 `_diag_carrier_pose.gd`：脊梁（胯→头）相对
@@ -338,6 +373,11 @@ func set_form(on: bool) -> bool:
 		if _player != null:
 			_sync_face()
 	else:
+		# 变回本体：巡航者模式必须一起关掉 —— 否则 `player.gd` 的飞行加速
+		# （`set_flight_speed_scale`）和武器的 `disabled` 会**留到本体形态**，
+		# 表现就是「变回来以后跑得飞快、而且开不了枪」。
+		if cruise:
+			set_cruise(false)
 		# 变回本体：如果还在空中，把垂直速度留给 `player.gd` 的重力去接（它自己会掉下来）；
 		# 这里只把「飞行接管」的标志清掉，不动位置。
 		_airborne = false
@@ -755,6 +795,7 @@ func _tick_flight(delta: float) -> void:
 	#    ① `_run_effects()` 开头有 `if _boost_fx.is_empty(): return`，
 	#       推进器骨找不到时整段特效都不跑 —— 俯仰不能跟着一起消失；
 	#    ② 同一帧里 `_sync_face()` 要用 `_lean`，写晚了就慢一帧、转向时看得出来。
+	_update_power(delta)
 	_update_lean(delta)
 
 	# ── 朝向（变形后仍由 `player.gd` 管移动方向；这里只在需要时对齐模型）──
@@ -881,7 +922,123 @@ func _sync_face() -> void:
 		_lean, _model.rotation.y + deg_to_rad(facing_yaw_deg), 0.0)
 
 
-## 机身俯仰角（弧度，正 = 前倾 / 机头下压）。地面时归零。
+## 巡航者模式：武器关闭 + 飞得更快。可由 `_input` 的 T 键或自检直接调。
+func set_cruise(on: bool) -> void:
+	if on == cruise:
+		return
+	cruise = on
+	if _player != null and _player.has_method("set_flight_speed_scale"):
+		_player.call("set_flight_speed_scale", CRUISE_SPEED_SCALE if on else 1.0)
+	var wpn := _weapon()
+	if wpn != null:
+		wpn.call("set_disabled", on)
+	print("[Carrier] 巡航者模式 → %s" % ("开（武器关闭 / 飞得更快）" if on else "关"))
+	Sfx.play("ui_toggle", -3.0)
+
+
+## 启用一条能量条（按 R）。成功返回 true；没有存条时返回 false。
+##
+## 「时间独立计算」= 每条各记各的剩余秒数（`_bar_timers` 里一个元素一条），
+## 所以第一条到点后攻速会从 ×4 掉回 ×3，而不是五条一起清空。
+func use_energy_bar() -> bool:
+	if energy_bars <= 0:
+		return false
+	energy_bars -= 1
+	_bar_timers.append(BAR_SECONDS)
+	print("[Carrier] 启用能量条：剩 %d 条，攻速 ×%.1f（%d 条在计时）"
+		% [energy_bars, 1.0 + float(_bar_timers.size()), _bar_timers.size()])
+	Sfx.play("ui_toggle", -1.0)
+	return true
+
+
+## 能量条 / 飞行的每帧维护。**必须在 `_tick_flight()` 里、`_sync_face()` 附近调**。
+func _update_power(delta: float) -> void:
+	# ① 已启用条数各自倒计时（独立），到点就丢
+	if not _bar_timers.is_empty():
+		var alive: Array[float] = []
+		for t in _bar_timers:
+			var left := t - delta
+			if left > 0.0:
+				alive.append(left)
+		if alive.size() != _bar_timers.size():
+			print("[Carrier] 一条能量条到期 → 剩 %d 条在计时（攻速 ×%.1f）"
+				% [alive.size(), 1.0 + float(alive.size())])
+		_bar_timers = alive
+
+	# ② 累计飞行距离 → 攒条（普通飞行和巡航**都算**；已满 5 条就不再攒）
+	if _on and _player != null and _airborne:
+		# ⚠️ **满条就停止累计，不是「继续涨再夹在 3000」**。
+		#    本喵第一版是后者（而且夹取还写在 `if energy_bars < MAX_BARS` 里面，
+		#    满了根本走不到），自检打红两条：进度涨到 3008.5 不封顶，而且
+		#    「花掉一条 → 下一帧立刻用那 8.5 m 的溢出补回来」——能量条白攒。
+		#    现在满了就冻住进度，花掉一条后要**重新飞**才攒得回来。
+		if energy_bars < MAX_BARS:
+			var hs := Vector2(_player.velocity.x, _player.velocity.z).length()
+			fly_distance_m += hs * delta
+			while fly_distance_m >= ENERGY_PER_BAR_M and energy_bars < MAX_BARS:
+				fly_distance_m -= ENERGY_PER_BAR_M
+				energy_bars += 1
+				print("[Carrier] 攒满一条能量条：%d / %d" % [energy_bars, MAX_BARS])
+				Sfx.play("ui_toggle", -2.0)
+
+	# ③ 攻速倍率 = 1 + 已启用条数，喂给武器
+	rate_scale = 1.0 + float(_bar_timers.size())
+	var wpn := _weapon()
+	if wpn != null:
+		wpn.call("set_rate_scale", rate_scale)
+		wpn.call("set_disabled", cruise)
+
+	# ④ HUD
+	_update_power_hud()
+
+
+## 能量条 HUD：**运行时自己建**一个 CanvasLayer + Label。
+##
+## 为什么不写进 `hud.tscn`：那是别的会话也在碰的场景文件，而且这里只是几行字，
+## 自己建能保证「机甲这套东西」都在本文件里，改动不外溢。
+func _ensure_power_hud() -> void:
+	if _power_layer != null and is_instance_valid(_power_layer):
+		return
+	_power_layer = CanvasLayer.new()
+	_power_layer.name = "CarrierPowerHUD"
+	_power_layer.layer = 50
+	add_child(_power_layer)
+	_power_label = Label.new()
+	_power_label.add_theme_font_size_override("font_size", 26)
+	_power_label.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
+	_power_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_power_label.add_theme_constant_override("outline_size", 6)
+	_power_label.position = Vector2(40, 0)
+	_power_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_power_label.offset_left = 40
+	_power_label.offset_top = -150
+	_power_layer.add_child(_power_label)
+
+
+func _update_power_hud() -> void:
+	if not _on:
+		if _power_layer != null and is_instance_valid(_power_layer):
+			_power_layer.visible = false
+		return
+	_ensure_power_hud()
+	_power_layer.visible = true
+	var filled := ""
+	for i in MAX_BARS:
+		filled += "◆" if i < energy_bars else "◇"
+	var active := ""
+	for i in _bar_timers.size():
+		active += "★"
+	if active == "":
+		active = "—"
+	# 满条时进度显示 100%（实际累计已冻结，见 `_update_power`）
+	var pct := 100 if energy_bars >= MAX_BARS \
+		else int(clampf(fly_distance_m / ENERGY_PER_BAR_M, 0.0, 1.0) * 100.0)
+	_power_label.text = "%s  %d/%d   进度 %d%%   攻速 ×%.1f   %s%s" % [
+		filled, energy_bars, MAX_BARS, pct,
+		rate_scale, ("巡航者模式（武器关闭） " if cruise else ""), active]
+
+
+
 ##
 ## 保留 `_lean` 这个名字与存储，是为了不要去动已经引用它的地方；
 ## 真正的行为这次才接上（见 `POSE_BACK_LEAN_DEG` 那段：旧版只写不读）。
@@ -1239,10 +1396,22 @@ func _input(event: InputEvent) -> void:
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return
-	if k.keycode != toggle_key:
-		return
 	# 对话/菜单暂停世界时不响应
 	if get_tree().paused:
+		return
+	# ── 机甲形态专属：T 切巡航者、R 启用一条能量条 ──
+	# ⚠️ 只在 `_on` 时才吃 R：本体形态下 R 是**换弹**（`player.gd` 里那段），
+	#    机甲本来就不换弹（无限子弹），所以 R 在这里是空的，正好给能量条。
+	if _on:
+		if k.keycode == CRUISE_KEY:
+			set_cruise(not cruise)
+			get_viewport().set_input_as_handled()
+			return
+		if k.keycode == ENERGY_KEY:
+			if use_energy_bar():
+				get_viewport().set_input_as_handled()
+			return
+	if k.keycode != toggle_key:
 		return
 	# 在空中按 G 变回本体 → 交给 `player.gd` 的重力（它会自己掉下来）
 	if toggle():

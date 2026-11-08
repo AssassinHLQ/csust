@@ -468,6 +468,13 @@ func is_riding() -> bool:
 # 只关掉「重力 + 跳跃」这两段（见 `_physics_process()` 里那一段），
 # 垂直速度完全由 `carrier_form.gd::_apply_flight()` 每帧平滑控制。
 var _flight_lock := false
+## 巡航者模式的飞行加速倍率（`carrier_form.gd::set_cruise()` 设置）。1.0 = 平常。
+var _fly_scale := 1.0
+
+
+## 巡航者模式：飞得更快（用户 2026-11-08：「按 T 启动巡航者模式关闭武器能够更快飞行」）。
+func set_flight_speed_scale(x: float) -> void:
+	_fly_scale = maxf(x, 0.1)
 
 
 ## 载具起落时调用：true = 由机甲接管垂直运动。
@@ -545,12 +552,14 @@ func _physics_process(delta: float) -> void:
 	var target_speed := SPEED_WALK
 	if _flight_lock:
 		# 飞行：巡航 / 加力两档。开镜时收一半，让「边飞边瞄」不至于太快。
+		# `_fly_scale` 是**巡航者模式**的加速（`carrier_form.gd` 按 T 时设成 1.6）。
 		if aiming:
 			target_speed = SPEED_FLY * 0.5
 		elif sprinting:
 			target_speed = SPEED_FLY_BOOST
 		else:
 			target_speed = SPEED_FLY
+		target_speed *= _fly_scale
 	elif crouching:
 		target_speed = SPEED_CROUCH
 	elif aiming:
