@@ -74,6 +74,29 @@ const COYOTE_MS := 110.0
 ## 悬停高度保持：往回补高度的刚度（1/秒）。越大越「黏」，越小越飘。
 const HOLD_STIFFNESS := 3.0
 
+# ── 飞行机身俯仰（2026-11-08 用户：「飞行姿势为什么这么奇怪，仰头，应该平视前方」）──
+#
+# ⚠️ 本喵**先量后改**，量法见 `_diag_carrier_pose.gd`：脊梁（胯→头）相对
+#    「正前方 / 正上方」的夹角。飞行时播的 `Move_Ing` 在载具骨架上量出来是
+#    **−7.31°**（头在胯的**后方**）—— 也就是动画自带一个后仰。
+#    顺带量了别的：载具自带 `Idle` −6.60°、`Walk` −4.32°、
+#    只有地面待机 `Normal_Idle` 是 +2.01°。
+#
+# ⚠️ 而且旧版有一段**死代码**：`_lean` 每帧算出来、存进去，却**从来没有被应用到
+#    任何地方**（全文件只写不读）。所以「前倾」这个特性从第一版起就没生效过，
+#    玩家看到的一直是动画自带的姿势。这次把它真正接上。
+#
+# 补偿量 = 把动画那个 −7.31° 压平（+7.31°），再加一点「飞行该有的」前倾。
+const POSE_BACK_LEAN_DEG := 7.31
+## 悬停时的净前倾（度）。= 压平动画后仰 + 一点点，让头真正平视前方。
+const FLY_PITCH_LEVEL_DEG := 7.31 + 1.5
+## 每 1 m/s 额外加的前倾（度）
+const FLY_PITCH_PER_SPEED := 0.40
+## 速度带来的额外前倾上限（度）。别加太多 —— 用户要的是「平视」，不是俯冲。
+## 实测（`_verify_carrier_pitch.gd`）：0.55/11.0 时加力 19 m/s 会把脊梁压到 +12.5°，
+## 对「平视」来说太狠了；0.40/9.0 大约是巡航 +5.9°、加力 +9.1°，像「前冲」而不像俯冲。
+const FLY_PITCH_EXTRA_MAX_DEG := 9.0
+
 # ── 特效数值 ───────────────────────────────────────────────────────────────
 ## 蓝色火焰的三层颜色（从芯到边），越外越淡越蓝。
 ## ⚠️ 原来外层写了 `alpha = 0.22`，配上加色混合后整体偏紫、发灰 ——
@@ -726,6 +749,14 @@ func _tick_flight(delta: float) -> void:
 			v.y = move_toward(v.y, clampf(dy * HOLD_STIFFNESS, 0.0, 2.2), VERT_ACCEL * delta)
 			_player.set("velocity", v)
 
+	# ── 机身俯仰：把动画自带的后仰压平，再按速度加一点前倾 ──
+	#
+	# ⚠️ 放在这里（`_sync_face()` 之前、`_run_effects()` 之前）有两个原因：
+	#    ① `_run_effects()` 开头有 `if _boost_fx.is_empty(): return`，
+	#       推进器骨找不到时整段特效都不跑 —— 俯仰不能跟着一起消失；
+	#    ② 同一帧里 `_sync_face()` 要用 `_lean`，写晚了就慢一帧、转向时看得出来。
+	_update_lean(delta)
+
 	# ── 朝向（变形后仍由 `player.gd` 管移动方向；这里只在需要时对齐模型）──
 	_sync_face()
 
@@ -822,7 +853,44 @@ func _apply_afterburner(_delta: float) -> void:
 func _sync_face() -> void:
 	if _carrier == null or _model == null:
 		return
-	_carrier.rotation.y = _model.rotation.y + deg_to_rad(facing_yaw_deg)
+	# 机身俯仰 + 偏航一起写。
+	#
+	# ── 为什么俯仰用**节点变换**而不是骨姿势 ──
+	# `AnimationPlayer` 默认在 **idle** 阶段写骨头，而本脚本的叠加写在
+	# **physics** 阶段 —— 一帧里 physics 在前、idle 在后，所以凡是用
+	# `set_bone_pose_rotation()` 写的叠加，都会被同一帧的动画**覆盖掉**。
+	# 节点变换没有别人抢，写进去就稳。
+	#
+	# ⚠️ 这条不是推测，是量出来的（`_diag_carrier_tracks.gd`）：
+	#    `Move_Ing` 里有 **37 条 bone_wing / 22 条 bone_gear_cannon /
+	#    4 条 bone_gearboost / 1 条 Bip001 Pelvis** 轨道，
+	#    而 `_run_effects()` 里那三处「肩翼张开 / 推进器呼吸 / 炮口后坐」
+	#    正是往这些骨上写 pose —— 所以它们**一次都没显示出来过**，是死代码。
+	#    要修得换成节点变换，或者把 AnimationPlayer 的 `process_callback`
+	#    改成 physics（本节点在 Model 之后处理，就能压住它）。
+	#
+	# ⚠️ Godot 的欧拉顺序是 **YXZ**（R = Ry·Rx·Rz），所以这里
+	#    `rotation = Vector3(pitch, yaw, 0)` 的语义正是
+	#    「先按 yaw 转过去，再在**机身自己的坐标系**里低头/抬头」——
+	#    而不是在世界 X 轴上翻。这正是要的效果。
+	#
+	# 符号：模型正面是节点 **+Z**（`facing_yaw_deg` 那段推出的约定）。
+	#   绕 X 轴转 +θ 会把 +Z 送到 (0, −sinθ, cosθ)，即**机头下压 = 前倾**。
+	#   所以要补偿「动画的 −7.31° 后仰」，这里是**正的**。
+	_carrier.rotation = Vector3(
+		_lean, _model.rotation.y + deg_to_rad(facing_yaw_deg), 0.0)
+
+
+## 机身俯仰角（弧度，正 = 前倾 / 机头下压）。地面时归零。
+##
+## 保留 `_lean` 这个名字与存储，是为了不要去动已经引用它的地方；
+## 真正的行为这次才接上（见 `POSE_BACK_LEAN_DEG` 那段：旧版只写不读）。
+func _update_lean(delta: float) -> void:
+	var want := 0.0
+	if _airborne:
+		want = deg_to_rad(FLY_PITCH_LEVEL_DEG
+			+ minf(flight_speed * FLY_PITCH_PER_SPEED, FLY_PITCH_EXTRA_MAX_DEG))
+	_lean = lerpf(_lean, want, clampf(6.0 * delta, 0.0, 1.0))
 
 
 ## 每帧：推力 → 火焰长度 / 亮度 / 粒子 / 骨姿态
@@ -847,11 +915,9 @@ func _run_effects(delta: float) -> void:
 	_thrust = move_toward(_thrust, target, 3.2 * delta)
 	flight_speed = Vector2(_player.velocity.x, _player.velocity.z).length()
 
-	# ── 前倾：飞得越快头越低（弧度）。地面姿态永远是 0 ──
-	var want_lean := 0.0
-	if _airborne:
-		want_lean = deg_to_rad(clampf(flight_speed * 2.4, 0.0, 26.0))
-	_lean = lerpf(_lean, want_lean, clampf(6.0 * delta, 0.0, 1.0))
+	# ── 前倾：已经搬到 `_update_lean()` 里了（在 `_sync_face()` 之前算）──
+	# ⚠️ 别把这段搬回来：`_run_effects()` 开头有 `if _boost_fx.is_empty(): return`，
+	#    推进器骨找不到时整段都不跑，俯仰会跟着一起失效。见 `_update_lean()`。
 
 	# ── 相位 ──
 	_wing_phase += delta * lerpf(1.4, 4.2, clampf(_thrust, 0.0, 1.0))
