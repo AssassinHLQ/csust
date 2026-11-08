@@ -107,30 +107,40 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 @export var box_door_center := 0.0
 @export var auto_start := true
 
-## ── 出房间就释放 GPU 显存（2026-11-06）──
+## ── 出房间就释放 GPU 显存（2026-11-06，2026-11-08 改成「门框判据」）──
 ##
-## 用户原话：「只在609内部开，出去直接释放显存，设置可以开关这个选项，默认关闭，
+## 用户原话：「只在609内部开，出去直接释放显存，设置可以开关这个选项，
 ##           如果打开就是显存很友好，但是每次进入609要加载」。
+## 2026-11-08 追加：「换个思路，之前不是出门就隐藏高斯泼溅吗，
+##                   把隐藏改成关闭就行了，进门再开」+「跨出门框就释放，零延迟」。
 ##
-## 由设置项 `splat_unload_outside` 控制（默认 false = 现在的行为：常驻不还）。
+## 由设置项 `splat_unload_outside` 控制（2026-11-08 起**默认开启**）。
 ##
-## 判据用**水平范围（XZ）+ 高自由度**，不用 `content_world_aabb` 的 y：
+## 判据用**水平范围（XZ）**，不用 `content_world_aabb` 的 y：
 ## 那个盒是 8.29 m 高（含屋顶与地板下方），拿它判 y 会让「站在楼下/屋顶上」都算室内。
-## 水平范围取点云包围盒的 XZ，再外扩 `unload_pad` 米留余量。
+##
+## ⚠️ 2026-11-08 实测教训：旧判据拿 `splat_aabb`（**点云整体**的源空间盒）算水平范围，
+##    画室609 得到 x −18.0~16.4 / z −14.6~22.5（外扩 2 m 之后），
+##    而真实房间的墙只到 x −5.85~4.86 / z −6.78~13.86 —— 范围大了三倍多。
+##    人被墙挡着**永远走不到**那个边界，所以开关打开也从来不触发，看起来像「没释放」。
+##    现在改成：优先用 `RoomCollision` 里**墙碰撞盒**的世界 AABB 当房间边界（那才是
+##    玩家真的能走到的范围），没有墙碰撞盒时才退回点云范围。
 ##
 ## ⚠️ 这里必须**真的把节点释放掉**：`visible = false` 不还显存。
 ##    只有让 `GaussianSplatNode._exit_tree()` 走到
 ##    `unregister_splat_node()`，注册表才会在「一个泼溅节点都不剩」时返回
 ##    `request_cleanup`，`GaussianGpuStateCache.cleanup_all()` 才会把那一整套
 ##    1.28 GB 缓冲还掉（splats 665 + culled 177 + sort_keys/values 各 221 MB）。
-@export var unload_outside_room := false
-## 水平外扩余量（米）：站在门口来回晃不该反复触发「释放 → 重载」。
+@export var unload_outside_room := true
+## 水平外扩余量（米）。**现在只作用于「退回点云范围」那条兜底路径**；
+## 用墙碰撞盒时余量恒为 0 —— 用户要的是「跨出门框就释放」，多留余量就变成「走出去好几米才释放」。
 @export var unload_pad := 2.0
-## 走出范围多久之后才真的释放（秒）。给「跑出去马上又跑回来」留一点余地 ——
-## 重解码要 2.3 s（缓存命中），来回蹭一下就掉一次画面太亏。
-@export var unload_delay := 1.5
-## 盒内之后多久才重载（秒）。同理，反方向给一点余量。
-@export var reload_delay := 0.4
+## 走出范围多久之后才真的释放（秒）。2026-11-08 改为 0（零延迟），
+## 因为判据已经收到门框内沿，再叠延迟会让「刚出门还挂着」看得很明显。
+## 留一个极小的防抖量（见 `_UNLOAD_DEBOUNCE`），只在**同一帧内反复横跳**时兜底。
+@export var unload_delay := 0.0
+## 回到范围内之后多久才重载（秒）。同样归零：进门立刻开始后台解码。
+@export var reload_delay := 0.0
 
 @export_group("Collapse")
 ## 动态 3DGS「坍缩」：所有高斯同时等比变小，并向锚点收敛，最终在一点上塌掉。
@@ -243,9 +253,14 @@ var _start_ms := 0
 ## ── 出房间释放（见 `unload_outside_room`）──
 ## 缓存的水平范围（点云释放之后 `content_world_aabb()` 就没了，所以必须存下来）
 var _room_xz := Rect2()
+## `_room_xz` 是不是由**墙碰撞盒**算出来的（true 时不允许被点云兜底覆盖）
+var _room_xz_is_walls := false
 ## 玩家在范围内的累计秒数 / 在范围外的累计秒数（去抖用）
 var _inside_clock := 0.0
 var _outside_clock := 0.0
+## 连续在范围外 / 内的帧数（门框防抖，见 `_EDGE_FRAMES`）
+var _inside_streak := 0
+var _outside_streak := 0
 ## 被「出房间释放」卸掉过（用来区分「从没加载」和「加载过又被释放」）
 var _unloaded_by_room_exit := false
 
@@ -382,16 +397,32 @@ func _apply_unload_setting() -> void:
 
 ## 记住「房间」的水平范围，供 `_update_room_exit_unload()` 判内外用。
 ##
-## ⚠️ 必须用 `splat_aabb`（**点云整体**的源空间盒），**不能**用
-##    `content_world_aabb()` —— 后者是 `crop` 之后的**内容**盒。
-##    实测画室609：点云整体 23.9 × 8.3 × 27.2 m，裁剪后的内容盒只有 9.3 × 7.9 m。
-##    拿内容盒当房间边界，玩家站在房间角落就会被判成「在外面」。
-## ⚠️ 变换要用 `_local_basis()` + `_resolve_offset()` —— 也就是
-##    `apply_transform()` 给 `splat_node.transform` 设的那一套，
-##    **不是** `global_transform`（本节点的缩放由 `_local_basis` 自己带，
-##    再用 `global_transform` 会乘两遍，算出来只有实际的一半）。
-##    实测乘两遍得到 x −5.1~5.2 / z −4.5~4.7，正好是真实的 1/4.25 倍。
+## 两条路，优先第一条：
+##
+## **① 墙碰撞盒（首选，2026-11-08 起）**：读 `RoomCollision` 下所有
+##    `CollisionShape3D` 的世界 AABB，取它们围成的外框，再往里收 `_WALL_INSET`。
+##    这才是**玩家真的能走到的范围** —— 用户要的「跨出门框就释放」，门框就在这儿。
+##    实测画室609：框是 x −5.85~4.86 / z −6.78~13.86，和「一出门就释放」对得上。
+##
+## **② 点云范围（兜底）**：没有墙碰撞盒时退回 `splat_aabb`（点云整体）+ `unload_pad`。
+##    ⚠️ 这个盒比真实房间大得多（609：x −16~14.4 / z −12.6~20.5），
+##       拿它当判据会「永远走不出去」，只在没有手摆墙的场地里当粗略兜底。
+##
+## ⚠️ 变换要用 `_local_basis()` + `_resolve_offset()` —— 这是给**源空间**点云盒
+##    换算世界坐标用的。碰撞盒已经在世界空间了，**不要**再过一遍，否则会缩放两次。
 func _remember_room_xz() -> void:
+	var wall_rect := _room_xz_from_walls()
+	if wall_rect.size != Vector2.ZERO:
+		_room_xz = wall_rect
+		_room_xz_is_walls = true
+		print("[SplatScene] 房间水平范围（墙碰撞盒内沿）：x %.2f~%.2f，z %.2f~%.2f" % [
+			_room_xz.position.x, _room_xz.position.x + _room_xz.size.x,
+			_room_xz.position.y, _room_xz.position.y + _room_xz.size.y])
+		return
+	# 墙框已经算出来过就**不要**被兜底路径覆盖：手摆的墙在某些时机
+	# （比如 reload 时节点还没挂回树）可能读不到，这时候退回大盒会让判据失效。
+	if _room_xz_is_walls and _room_xz.size != Vector2.ZERO:
+		return
 	var a: AABB = splat_aabb
 	if a.size == Vector3.ZERO:
 		return
@@ -409,10 +440,45 @@ func _remember_room_xz() -> void:
 		hi = hi.max(w)
 	_room_xz = Rect2(lo.x - unload_pad, lo.z - unload_pad,
 		(hi.x - lo.x) + unload_pad * 2.0, (hi.z - lo.z) + unload_pad * 2.0)
-	print("[SplatScene] 房间水平范围（含 %.1f m 余量）：x %.1f~%.1f，z %.1f~%.1f" % [
+	print("[SplatScene] 房间水平范围（点云整体 + %.1f m 余量，无墙碰撞盒兜底）：x %.1f~%.1f，z %.1f~%.1f" % [
 		unload_pad,
 		_room_xz.position.x, _room_xz.position.x + _room_xz.size.x,
 		_room_xz.position.y, _room_xz.position.y + _room_xz.size.y])
+
+
+## 墙碰撞盒往里收多少米当作「房间内沿」。
+## 墙有厚度（609 是 0.30 m），玩家的胶囊半径约 0.3 m，站在门口时中心点
+## 仍在墙的 AABB 内。收 0.05 m 让「跨出门框」比「贴住墙」早一点点触发。
+const _WALL_INSET := 0.05
+## 门槛防抖：范围判定每帧都跑，脚踩在门框线上会左右横跳。
+## 只有**连续两帧**都在同一侧才认账 —— 相当于 ~33 ms（60 fps），人感觉不到，
+## 但能挡住一帧抖动引起的「释放→重载」循环。
+const _EDGE_FRAMES := 2
+
+
+## 从 `RoomCollision` 的墙碰撞盒算出房间水平矩形（世界空间）。
+## 没有墙碰撞盒 / 尺寸为 0 时返回空 `Rect2()`，让调用方走兜底。
+func _room_xz_from_walls() -> Rect2:
+	var col := get_node_or_null("RoomCollision")
+	if col == null:
+		return Rect2()
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var found := false
+	for c in col.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var xs := (cs.shape as BoxShape3D).size * 0.5 * cs.global_transform.basis.get_scale()
+		var ctr := cs.global_transform.origin
+		lo = lo.min(Vector2(ctr.x - xs.x, ctr.z - xs.z))
+		hi = hi.max(Vector2(ctr.x + xs.x, ctr.z + xs.z))
+		found = true
+	if not found or hi.x <= lo.x or hi.y <= lo.y:
+		return Rect2()
+	var inset := _WALL_INSET
+	return Rect2(lo.x + inset, lo.y + inset,
+		(hi.x - lo.x) - inset * 2.0, (hi.y - lo.y) - inset * 2.0)
 
 
 ## 节点离开场景树：反注册设置监听（否则静态 `_listeners` 会越积越多，
@@ -442,14 +508,20 @@ func _reload_after_unload() -> void:
 	start()
 
 
-## 删掉上一次 `_finish()` 建出来的碰撞体（重载时用）。
+## 删掉上一次 `_finish()` **自己建出来**的碰撞体（重载时用）。
 ##
-## ⚠️ 只有 `SplatScene` 自己持有的那份需要清：`_build_box_collision()` 建的
-##    `RoomCollision`（盒墙）。`_build_collision()` 建的 `SplatCollision` 是挂在
-##    `splat_node` 下面的，跟着泼溅节点一起没了，不用管。
-## ⚠️ 这两份碰撞都**不依赖泼溅数据**，所以「出房间释放」的路径里**不要**删它们 ——
-##    玩家还得能站在房间里。只有重载时才需要清，免得叠出第二份盒墙。
+## ⚠️ 只有 `build_box_collision = true` 的场地才该走这里 —— 那种场地的
+##    `RoomCollision` 是 `_build_box_collision()` 在 `_finish()` 里 new 出来的，
+##    重载会叠出第二份，必须清。
+## ⚠️ 2026-11-08 修的 bug：以前这里**无条件**删 `RoomCollision`，但画室609 的
+##    `RoomCollision` 是 `game.tscn` 里**手摆的静态节点**（`build_box_collision = false`），
+##    删掉之后 `_room_xz_from_walls()` 找不到墙，判据悄悄退回「点云整体 + 2 m」，
+##    人进门后就再也不触发了 —— 表现就是「开关开着却不释放」。
+##    现在只清自己建的那份；手摆的墙绝不碰。
 func _clear_built_collision() -> void:
+	if not build_box_collision:
+		# 手摆的墙：删了玩家就掉出房间，而且门框判据也跟着失效。
+		return
 	var n := get_node_or_null("RoomCollision")
 	if n != null:
 		remove_child(n)
@@ -467,8 +539,14 @@ func _player_node() -> Node3D:
 
 
 ## 出房间 → 真的释放泼溅节点（连带 GPU 缓冲）；回房间 → 后台重解码。
+##
+## 2026-11-08 改成「门框判据 + 零延迟」：只要判定玩家在房间墙框外，
+## **同一帧就开始释放**（不再等 `unload_delay`），进门同理立刻重载。
+## 唯一的缓冲是 `_EDGE_FRAMES` 那两帧防抖 —— 防止脚踩门框线上反复横跳。
 func _update_room_exit_unload(delta: float) -> void:
 	if not unload_outside_room:
+		_outside_streak = 0
+		_inside_streak = 0
 		if _unloaded_by_room_exit and splat_node == null and not loading:
 			# 刚在设置里关掉，但人已经在房间外：照样装回来，别让人看不到画面。
 			_reload_after_unload()
@@ -483,23 +561,26 @@ func _update_room_exit_unload(delta: float) -> void:
 	var pos := p.global_position
 	var inside := _room_xz.has_point(Vector2(pos.x, pos.z))
 	if inside:
-		_outside_clock = 0.0
+		_inside_streak += 1
+		_outside_streak = 0
 		if splat_node != null:
 			_inside_clock = 0.0
 			return
-		# 缺泼溅（从没载过 / 刚被卸掉）：等满 reload_delay 再装
+		# 缺泼溅（从没载过 / 刚被卸掉）：进门就走重载
 		_inside_clock += delta
-		if _inside_clock >= reload_delay and not loading:
+		if _inside_streak >= _EDGE_FRAMES and _inside_clock >= reload_delay and not loading:
 			if _unloaded_by_room_exit:
 				_reload_after_unload()
 			else:
 				start()
 		return
+	_outside_streak += 1
+	_inside_streak = 0
 	_inside_clock = 0.0
 	if splat_node == null:
 		return
 	_outside_clock += delta
-	if _outside_clock >= unload_delay:
+	if _outside_streak >= _EDGE_FRAMES and _outside_clock >= unload_delay:
 		_unload_for_vram()
 
 
@@ -513,7 +594,10 @@ func _unload_for_vram() -> void:
 	if loading or _thread != null:
 		return
 	_outside_clock = 0.0
-	_remember_room_xz()
+	# ⚠️ 这里**不要**再调 `_remember_room_xz()`：墙碰撞盒是静态的，
+	#    加载完成时已经记过；而这里每帧都会进（人还在外面），
+	#    重复调用会把同一行日志刷屏、还白算一遍 8 个角点。
+	#    兜底路径（`splat_aabb`）也不需要重算 —— 点云一放掉就没了。
 	# 碰撞是照点云建的，但**要留着**：卸的只是显示，玩家还能站在房间里。
 	# （`build_collision` 用 GLB、`build_box_collision` 用盒子，两者都不依赖
 	#   泼溅节点的存在，所以这里什么都不用做。）

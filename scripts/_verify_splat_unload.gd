@@ -54,15 +54,17 @@ func _run() -> void:
 	# ⚠️ 先显式写回默认再读：这个探针自己会把开关打开（第 ③ 步），
 	#    而 `set_value()` 是**落盘**的 —— 不清掉的话第二次跑会读到上次留下的 true，
 	#    看起来像「默认不是关」（本喵第一版就踩了）。
-	GameSettings.set_value("splat_unload_outside", false)
+	# ⚠️ 2026-11-08：用户要求默认改成**开启**（「出门就释放，进门再开」）。
+	#    这里写回 `true` 再读，验证默认值确实是新的。
+	GameSettings.set_value("splat_unload_outside", true)
 	await process_frame
 	var dflt := bool(GameSettings.value("splat_unload_outside"))
-	_log("① 设置默认值 = %s（要求 false）" % str(dflt))
-	if dflt:
+	_log("① 设置默认值 = %s（要求 true）" % str(dflt))
+	if not dflt:
 		_fails += 1
-		_log("   ✗ 默认不是关！")
+		_log("   ✗ 默认不是开！")
 	else:
-		_log("   ✓ 默认关闭")
+		_log("   ✓ 默认开启")
 
 	# 人先站进 609 里，等点云就位
 	_player.global_position = Vector3(0.0, 0.5, 4.0)
@@ -75,6 +77,10 @@ func _run() -> void:
 	_log("   点云就位，显存 %.0f MiB" % vram_in)
 
 	# ── 2. 关着的时候出门：不许释放 ──
+	# 默认是开的，所以这里要先**显式关掉**，测的才是「开关关着」这条分支。
+	GameSettings.set_value("splat_unload_outside", false)
+	await process_frame
+	await process_frame
 	_go_outside()
 	await _wait_seconds(3.0)
 	var still := _room.get("splat_node") != null
@@ -84,6 +90,62 @@ func _run() -> void:
 	else:
 		_fails += 1
 		_log("   ✗ 关着也释放了！")
+
+	# ── 2.5 跨门框判据（2026-11-08 用户：「跨出门框就释放，进门再开」）──
+	# 先确认判据真的是**墙框**，不是点云大盒（后者永远走不出去）。
+	var room_xz: Rect2 = _room.get("_room_xz")
+	var x0 := room_xz.position.x
+	var z0 := room_xz.position.y
+	var x1 := x0 + room_xz.size.x
+	var z1 := z0 + room_xz.size.y
+	_log("②.5 房间判据 x %.2f~%.2f，z %.2f~%.2f（要求贴近墙框 −5.95~6.10 / −6.93~14.02）" % [
+		x0, x1, z0, z1])
+	if z0 < -10.0 or z1 > 18.0:
+		_fails += 1
+		_log("   ✗ 判据还是点云大盒（门框失效，人根本走不出去）")
+	else:
+		_log("   ✓ 判据是墙框")
+
+	GameSettings.set_value("splat_unload_outside", true)
+	await process_frame
+	await process_frame
+
+	# 门里侧：先把点云等回来，再断言「站着不动不会被释放」。
+	# ⚠️ 不能只等两帧：上一步（②）结束时人在 z=40 门外，点云早被释放掉了，
+	#    进门重载要 1~2 s。只等两帧就断言，测到的是「还没加载完」而不是「被释放」
+	#    （本喵第一版就是这么误报的）。
+	_stand_just_inside_the_door()
+	var back_in := await _wait_splat(true, 90000)
+	if not back_in:
+		_fails += 1
+		_log("   ✗ 门里侧点云没加载回来，后面的门框用例没法做")
+	else:
+		# 再站 1.5 s，确认「在门里侧待着」不会触发释放
+		await _wait_seconds(1.5)
+		if _room.get("splat_node") != null:
+			_log("   ✓ 门里侧（z=−6.0）站 1.5 s 仍有点云")
+		else:
+			_fails += 1
+			_log("   ✗ 门里侧就把点云释放了，进出门会闪")
+
+	# 刚跨出门框：应当立刻释放
+	_go_just_outside_the_door()
+	var t_door := Time.get_ticks_msec()
+	var rel_door := await _wait_splat(false, 10000)
+	var door_s := float(Time.get_ticks_msec() - t_door) / 1000.0
+	_log("   %s 跨出门框（z=−7.2）0.0x 秒内释放（实测 %.2f s）" % [
+		"✓" if rel_door else "✗", door_s])
+	if not rel_door:
+		_fails += 1
+
+	# 回到门里侧：应当自动重载
+	_stand_just_inside_the_door()
+	var t_back := Time.get_ticks_msec()
+	var rel_back := await _wait_splat(true, 90000)
+	_log("   %s 跨回门框内自动重载（%.2f s）" % [
+		"✓" if rel_back else "✗", float(Time.get_ticks_msec() - t_back) / 1000.0])
+	if not rel_back:
+		_fails += 1
 
 	# ── 3. 打开开关，出门 → 释放 + 显存下降 ──
 	GameSettings.set_value("splat_unload_outside", true)
@@ -157,6 +219,19 @@ func _go_outside() -> void:
 	# 这个验收只关心泼溅的释放逻辑，不需要玩家真的会走路，所以关掉物理最干净。
 	_player.set_physics_process(false)
 	_player.global_position = Vector3(0.0, 0.5, 40.0)
+
+
+## 走到**门框线上**再往外一点（2026-11-08 新需求：「跨出门框就释放」）。
+## 609 的墙框实测 z −6.93~14.02，门在 z− 面，所以 z = −7.2 正好刚出门。
+func _go_just_outside_the_door() -> void:
+	_player.set_physics_process(false)
+	_player.global_position = Vector3(0.0, 0.5, -7.2)
+
+
+## 站在**门里侧**（应算房内，不许释放）。
+func _stand_just_inside_the_door() -> void:
+	_player.set_physics_process(false)
+	_player.global_position = Vector3(0.0, 0.5, -6.0)
 
 
 ## 等到「有泼溅 / 没泼溅」。返回是否达成。

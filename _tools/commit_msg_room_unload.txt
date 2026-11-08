@@ -1,0 +1,26 @@
+泼溅: 跨出 609 门框就释放 GPU 显存，进门自动重载
+
+之前 `splat_unload_outside` 打开也不释放，原因是判据失准：
+`_remember_room_xz()` 拿 `splat_aabb`（点云整体 30.5 x 33.1 m）当房间范围
+再外扩 2 m，得到 x -18.0~16.4 / z -14.6~22.5；而真实墙只到
+x -5.85~4.86 / z -6.78~13.86 —— 人被墙挡着**永远走不到**那个边界。
+
+改动：
+· 判据改为墙碰撞盒内沿（RoomCollision 下所有 BoxShape3D 的世界 AABB，
+  内收 0.05 m），没有墙时退回点云范围兜底。
+· 零延迟：unload_delay / reload_delay 归零，只留 2 帧门框防抖
+  （_EDGE_FRAMES），防止脚踩门框线反复释放/重载。
+· `splat_unload_outside` 默认改 true（用户要求「出门就释放，进门再开」）。
+· 修 `_clear_built_collision()`：以前无条件删 RoomCollision，而 609 那份是
+  game.tscn 手摆的静态节点（build_box_collision=false），删掉后重载时
+  判据悄悄退回点云大盒。现在只清自己建的那份。
+· `_unload_for_vram()` 不再每帧重算范围（刷屏 + 白算 8 个角点）。
+
+验证（真窗口，_verify_splat_unload 全过）：
+· 判据 x -5.95~6.10 / z -6.93~14.02（= 墙框）
+· 门里侧 z=-6.0 站 1.5 s 仍有点云
+· 跨出门框 z=-7.2 后 0.28 s 释放
+· 跨回门框内 1.21 s 自动重载
+· 显存 2355 -> 1022 MiB（省 1333 MiB），回来 2355 MiB
+· _verify_settings 0 失败；_verify_room 仍是 7 项失败（stash 对比确认是
+  仓库历史遗留，与本次改动无关）
