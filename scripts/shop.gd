@@ -454,7 +454,10 @@ func _build_shell_from_glb() -> bool:
 		front_z + t * 0.5), Vector3(wall_w, shop_height, t))
 
 	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
-	_build_sign(front_z)
+	# 传**真实屋顶高度**而不是 `shop_height`：见 `_build_sign()` 上面那段（浮空 0.36 m 的根因）。
+	# 实测外壳包围盒 pos.y = −0.17、size.y = 5.99 → 屋顶实高 **5.82**，不是 5.99。
+	var roof_local_y := inst.position.y + box.size.y * s
+	_build_sign(front_z, roof_local_y)
 
 	_fix_glb_materials(inst)
 
@@ -521,10 +524,31 @@ func _fix_glb_materials(inst: Node3D) -> void:
 
 
 ## 门正上方一块发光板 + `Label3D`。原来是 `_build_shell()` 末尾那段，抽出来两条路共用。
-func _build_sign(front_z: float) -> void:
+##
+## ⚠️ `roof_y` 是**屋顶的真实世界高度**，不是 `shop_height`。
+##
+## 2026-11-08 用户：「柴关电脑城招牌怎么浮空了，放墙上对齐」。
+## 实测（`scripts/_probe_shop_sign.gd`）：新屋壳的包围盒是
+##     pos.y = −0.17、size.y = 5.99
+## 也就是屋顶实际落在 **y = 5.82**，而 `shop_height` 记的是 **5.99** —— 差 0.17 m。
+## 为什么会差：`_build_shell_from_glb()` 里用
+##     `inst.position.y = -box.position.y`
+## 把模型底面挪到 y=0，但 `box` 是**合并后**的包围盒，而模型里各网格的
+## `position.y` 基准不一致（实测外壳比基准低了 0.17），所以"底面到 y=0"只对
+## 基准那一层成立，整体仍沉下去 0.17 m。
+## 招牌又在这个数上叠了 `+0.55`（板心）和板高 0.72，于是整块悬在屋顶上方 0.36 m。
+##
+## 修法：**不再拿 `shop_height` 算招牌**，改传量出来的真实屋顶高度。
+func _build_sign(front_z: float, roof_y: float = -1.0) -> void:
+	# 没传就退回旧行为（程序化壳那条路屋顶确实等于 shop_height）
+	if roof_y < 0.0:
+		roof_y = shop_height
+	# 招牌**底边**贴着屋顶：板高 0.72 → 板心在 roof_y + 0.36
+	var board_h := 0.72
+	var board_y := roof_y + board_h * 0.5
 	# 2026-11-02 用户：「白色发光板子要碰撞」——从装饰改成带碰撞的箱子
-	_box("SignBoard", Vector3(0.0, shop_height + 0.55, front_z + 0.06),
-		Vector3(3.4, 0.72, 0.08), _mat["sign"])
+	_box("SignBoard", Vector3(0.0, board_y, front_z + 0.06),
+		Vector3(3.4, board_h, 0.08), _mat["sign"])
 	var lb := Label3D.new()
 	lb.name = "SignText"
 	lb.text = sign_text
@@ -533,7 +557,7 @@ func _build_sign(front_z: float) -> void:
 	lb.outline_size = 18
 	lb.modulate = Color(0.06, 0.10, 0.16)
 	lb.outline_modulate = Color(0.85, 0.95, 1.0, 0.9)
-	lb.position = Vector3(0.0, shop_height + 0.55, front_z + 0.11)
+	lb.position = Vector3(0.0, board_y, front_z + 0.11)
 	lb.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	_decor.add_child(lb)
 	decor_count += 1
