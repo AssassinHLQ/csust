@@ -55,6 +55,12 @@ var _base_y := 0.0
 var _door_dir := Vector3.FORWARD
 var _center := Vector3.ZERO
 var _half_depth := 8.42
+## 开演前房间的**局部** position，收尾时原样放回。
+## ⚠️ 不能记世界 Y 再写回 `position.y`：`position` 是相对父节点的，父节点一旦
+## 不在原点（`EsportsRoom` 现在挂在 game 根下还好，以后嵌进别的节点就会下沉）。
+## 使用者 2026-11-08：「游戏开发部怎么变成滚木了」——实测落地后 Y 变成 -0.054，
+## 就是世界/局部混用的症状。
+var _base_pos := Vector3.ZERO
 var _shake := 0.0
 var _hitstop := 0.0
 
@@ -82,7 +88,13 @@ func play(room: Node3D, center: Vector3, half_depth := 8.42,
 	_room = room
 	_center = center
 	_half_depth = half_depth
-	_base_y = floor_y if floor_y == -1.0 else floor_y
+	# 记下原始局部位置，收尾原样放回（别用世界坐标硬写 position.y）
+	_base_pos = room.position
+	# `floor_y` 是**世界**高度，换成本地高度才算得出正确的下降距离
+	var parent_y := 0.0
+	if room.get_parent() is Node3D:
+		parent_y = (room.get_parent() as Node3D).global_position.y
+	_base_y = floor_y - parent_y if floor_y != -1.0 else _base_pos.y
 	_door_dir = door_dir.normalized()
 	if _door_dir.length_squared() < 0.0001:
 		_door_dir = Vector3.FORWARD
@@ -277,7 +289,8 @@ func _finish() -> void:
 	_done = true
 	set_process(false)
 	if _room != null:
-		_room.position.y = _base_y
+		# 原样放回开演前记下的局部位置（不是世界坐标）
+		_room.position = _base_pos
 	if _prev_cam != null and is_instance_valid(_prev_cam):
 		_prev_cam.current = true
 	Input.mouse_mode = _prev_mouse

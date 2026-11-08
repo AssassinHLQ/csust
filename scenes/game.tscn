@@ -190,11 +190,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
 [node name="Shop" parent="." unique_id=1996334488 instance=ExtResource("15_shopbaked")]
 
 [node name="LotEast" parent="." instance=ExtResource("19_lot_east")]
-visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52, 0, 0)
 
 [node name="GameDevRoom" parent="." instance=ExtResource("20_gamedev_room")]
-visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52, 0.01, 0)
 
 [node name="EsportsRoom" parent="." instance=ExtResource("21_esports_room")]

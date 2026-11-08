@@ -8,15 +8,19 @@ const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
 ## （`LotEast` / `GameDevRoom` 两个实例），编辑器里能选中拖动。
 ##
 ## ⚠️ 2026-11-07 用户：「游戏开发部电竞房不要一开始就出来，要等在芹香那儿买完才出来」
-##    → 东侧地块 + 部室 + 电竞房三块**默认 `visible = false`**（写在 `game.tscn` 里，
-##    编辑器里照样能选中拖动），由本脚本盯着 `ShopClerk.is_bought()` 翻成 `true`。
-##    为什么是「藏」而不是「先不 add_child」：`RenderDistance` 只给 `is_visible_in_tree()`
-##    的网格算包围盒（见 `render_distance.gd::_subtree_aabb`），藏着的簇根本没进切簇，
-##    本来就一个 draw call 都不提交 —— 所以不缺性能，还省了「啥时候实例化」的时序坑
-##    （`PC5090Rig` 等好几个节点都在等 `is_bought()`，异步建会被它们扑空）。
+## ⚠️ 2026-11-08 用户更正：「游戏开发部及其地面**一直都要在**！！只有电竞房是买的」
+##    → 所以这里只剩电竞房一块：地块 `LotEast` 和部室 `GameDevRoom` **常驻可见**，
+##      写在 `game.tscn` 里就是 `visible = true`，本脚本不再管它们。
+##      只有 `EsportsRoom` 默认 `visible = false`，由本脚本盯着 `ShopClerk.is_bought()`。
+##
+##    为什么电竞房是「藏」而不是「先不 add_child」：`RenderDistance` 只给
+##    `is_visible_in_tree()` 的网格算包围盒（见 `render_distance.gd::_subtree_aabb`），
+##    藏着的簇根本没进切簇，本来就一个 draw call 都不提交 —— 所以不缺性能。
 ##    买完打开时顺手 `_rebuild_render_distance()`：切簇按「当时的可见几何」算的，
 ##    藏在里面时才冒出来的玩家/同伴刚好补进新簇。
-const EAST_ROOMS := ["LotEast", "GameDevRoom", "EsportsRoom"]
+const EAST_ROOMS := ["EsportsRoom"]
+## 曾经在 `EAST_ROOMS` 里、2026-11-08 起改为常驻可见的两块（留作对照/回退用）
+const EAST_ROOMS_ALWAYS_ON := ["LotEast", "GameDevRoom"]
 
 ## 掉到这个高度以下就判定「掉出悬浮平台」，送回出生点（护栏之外的保险）
 const FALL_LIMIT := -60.0
@@ -564,7 +568,7 @@ func _ready() -> void:
 	# 这里不再调 build()。改了 shop.gd 的尺寸常量后要重新烘焙，见
 	# `scripts/_bake_buildings.gd`。
 
-	# 东侧的开发部三块房子：等芹香那边成交才露出来（见 `EAST_ROOMS` 上面那段）。
+	# 电竞房等芹香那边成交才露出来（见 `EAST_ROOMS` 上面那段）。地块与部室常驻。
 	# 位置放在准备「切簇」之前 —— 成交过的话这里就把它们打开，切簇会把它们切进去；
 	# 没成交就留个心跳盯着 `ShopClerk.is_bought()`，成交那一刻自己打开并重切簇。
 	_setup_east_rooms()
@@ -846,7 +850,7 @@ func _splats_ready() -> bool:
 func _process(delta: float) -> void:
 	_update_room_swap()
 	_tick_perf_overlay(delta)
-	# 东侧开发部三块等芹香那边成交才现身（见 `_setup_east_rooms`）；露出来之后就自动关掉
+	# 电竞房等芹香那边成交才现身（见 `_setup_east_rooms`）；露出来之后就自动关掉
 	if not _east_rooms_done and ShopClerk.is_bought():
 		_reveal_east_rooms()
 	if _player and _player.global_position.y < FALL_LIMIT:
@@ -1021,22 +1025,38 @@ func _setup_render_distance() -> void:
 ## 成交后补一句：「播放电竞房从天而降落地炸出大量灰尘动画视角要广一点，包括游戏开发部，
 ## 摄像机旋转环绕体现电竞房的震撼」。
 ##
-## 所以这里分两步：
-##   · 地块 `LotEast` 与部室 `GameDevRoom` —— 直接翻 `visible`（用户没要求它们也演）；
+## 所以这里只有一步：
 ##   · 电竞房 `EsportsRoom` —— **连同整件事的演出交给 `scripts/esports_drop.gd`**：
 ##     那栋房子从天而降、砸地起灰、镜头绕一圈，演完把相机交还玩家。
+##   · 地块 `LotEast` 与部室 `GameDevRoom` —— **一直可见**（`game.tscn` 里没写
+##     `visible = false`），本函数不管它们。
 ##
-## `game.tscn` 里三块都写着 `visible = false`，本函数在 `_ready` 里看一眼：
+## `game.tscn` 里只有电竞房写着 `visible = false`，本函数在 `_ready` 里看一眼：
 ##   · 已经成交（自检 / 探针会直接写 `ShopClerk._bought = true`）→ 当场开演；
 ##   · 还没成交 → 只开一个心跳（`_process`），成交那一刻再开演。
 func _setup_east_rooms() -> void:
 	_east_rooms_done = false
 	set_process(true)
+	_assert_always_on_visible()
 	if ShopClerk.is_bought():
 		_reveal_east_rooms()
 
 
-## 把东侧三块露出来。**幂等**：已经打开过的节点不再动。
+## 自检护栏：部室和地块必须一直是可见的。
+## 万一 `game.tscn` 被谁改回了 `visible = false`，这里当场纠正并报警 ——
+## 2026-11-08 用户：「游戏开发部及其地面一直都要在！！只有电竞房是买的」。
+func _assert_always_on_visible() -> void:
+	for nm in EAST_ROOMS_ALWAYS_ON:
+		var node := get_node_or_null(nm) as Node3D
+		if node == null:
+			push_warning("[Game] 场景里没有常驻节点 `%s`（部室/地块应该在）" % nm)
+			continue
+		if not node.visible:
+			push_warning("[Game] `%s` 被藏起来了，但它是常驻的 —— 当场改回可见" % nm)
+			node.visible = true
+
+
+## 把电竞房露出来。**幂等**：已经打开过的节点不再动。
 ##
 ## ⚠️ 必须**先打开再切簇**：`RenderDistance` 只收 `is_visible_in_tree()` 的网格
 ## （`render_distance.gd::_subtree_aabb`），藏着的时候它们根本不进簇表。
@@ -1051,12 +1071,15 @@ func _reveal_east_rooms() -> void:
 	for nm in EAST_ROOMS:
 		var node := get_node_or_null(nm) as Node3D
 		if node == null:
-			push_warning("[Game] 场景里没有 `%s`，开发部三块露不全" % nm)
+			push_warning("[Game] 场景里没有 `%s`，电竞房露不出来" % nm)
 			continue
 		node.visible = true
+		# 自检用：到底现没现身、在哪个位置，出问题时一眼能看出来
+		print("[Game] 东侧现身 %-14s visible=%s pos=%s children=%d"
+			% [nm, str(node.visible), str(node.global_position), node.get_child_count()])
 	if _rd != null:
 		_rd.rebuild()
-	print("[Game] 已成交 → 东侧开发部三块现身：%s" % ", ".join(EAST_ROOMS))
+	print("[Game] 已成交 → 电竞房现身：%s" % ", ".join(EAST_ROOMS))
 	_play_esports_drop()
 
 
