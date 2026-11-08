@@ -200,6 +200,19 @@ def pack_textures(cap):
 
 # ---------------------------------------------------------------- ⑤ 减面
 
+## 窗帘这类「一片薄布」的判据：某一维 < 8 cm，另一维 > 1.5 m，面数够多。
+## 这种网格**一律不减面** —— COLLAPSE 会把褶皱的顶点合并掉，法线跟着碎成一片。
+##
+## ⚠️ 阈值为什么是 8 cm 而不是 25 cm（2026-11-08 实测）：
+##    25 cm 会把「柜子背板 / 桌腿薄板」也算成窗帘，一口气保护了 10 个网格，
+##    面数从 105 万飙到 236 万、文件 47 MB → 88 MB，性能代价太大。
+##    真正怕减的是**只有几厘米厚的布料**（实测窗帘是 0.02~0.05 m）。
+def is_sheet(o):
+    s = o.dimensions
+    dims = sorted([s.x, s.y, s.z])
+    return dims[0] < 0.08 and dims[2] > 1.5 and tri_count(o) >= 500
+
+
 def decimate(meshes, target):
     total = sum(tri_count(o) for o in meshes)
     if total <= target:
@@ -218,10 +231,17 @@ def decimate(meshes, target):
     else:
         h_ratio = ratio
     log("大件（≥2 万面，合计 %d）单独 ×%.3f，其余 ×%.3f" % (heavy, h_ratio, ratio))
+    skipped_sheets = 0
     for o in meshes:
         t = tri_count(o)
         if t < 400:
             continue  # 太小的别减，减了只会变形
+        # ⚠️ 薄片（窗帘 / 纱帘 / 幕布）不减：COLLAPSE 会把相邻褶皱的顶点并掉，
+        #    自定义法线跟着错位，Godot 里就是一地碎条（2026-11-08 实测：
+        #    M_集简空间h06_m21090330 面料内法线夹角 >30° 占 34.2%）。
+        if is_sheet(o):
+            skipped_sheets += 1
+            continue
         r = h_ratio if t >= 20000 else max(ratio, 0.35)
         if r >= 0.999:
             continue
@@ -234,7 +254,54 @@ def decimate(meshes, target):
         bpy.ops.object.modifier_apply(modifier=m.name)
         o.select_set(False)
     after = sum(tri_count(o) for o in bpy.context.scene.objects if o.type == "MESH")
-    log("减面后 %d 三角面" % after)
+    log("减面后 %d 三角面（跳过 %d 片窗帘/薄布）" % (after, skipped_sheets))
+
+
+# ---------------------------------------------------------------- ⑤b 重算法线
+#
+# ⚠️ 2026-11-08 必做，否则 Godot 里窗帘碎成一条条：
+#   `import_scene.fbx(use_custom_normals=True)` 把法线**钉死**在原始顶点上；
+#   DECIMATE(COLLAPSE) 重排三角面之后，这些钉子就和几何对不上了 ——
+#   实测 M_集简空间h06_m21090330 面内顶点法线夹角 >30° 的占 34.2%、
+#   邻面夹角 >30° 的占 32.4%（原始 FBX 是 0.1% / 0.0%）。
+#   所以减面之后必须**重算法线**：先清掉自定义法线，再按角度平滑。
+def recalc_normals(meshes, angle_deg=40.0):
+    import math as _math
+    bpy.ops.object.select_all(action="DESELECT")
+    n_done = 0
+    for o in meshes:
+        if o.type != "MESH" or tri_count(o) == 0:
+            continue
+        bpy.context.view_layer.objects.active = o
+        o.select_set(True)
+        # 清掉 FBX 带进来的自定义法线，让 Blender 自己算
+        try:
+            o.data.free_normals_split()
+        except AttributeError:
+            pass  # 4.x 已经没有这个 API，custom normals 随 attribute 一起清
+        try:
+            o.data.normals_split_custom_set([])
+        except (AttributeError, RuntimeError):
+            pass
+        # 进入编辑模式，全选，按角度平滑（保持硬边）
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        try:
+            bpy.ops.mesh.normals_make_consistent(inside=False)  # 朝外
+        except RuntimeError as e:
+            log("  normals_make_consistent 失败 %s: %s" % (o.name, e))
+        bpy.ops.object.mode_set(mode="OBJECT")
+        # 用自动平滑修改器（4.1+ 的 shade_smooth_by_angle 等价物）
+        try:
+            bpy.ops.object.shade_smooth_by_angle(angle=_math.radians(angle_deg))
+        except (AttributeError, RuntimeError, TypeError):
+            try:
+                bpy.ops.object.shade_smooth()
+            except RuntimeError:
+                pass
+        o.select_set(False)
+        n_done += 1
+    log("法线重算：%d 个网格（平滑角 %.0f°）" % (n_done, angle_deg))
 
 
 # ---------------------------------------------------------------- ⑥ 按材质合并
@@ -309,6 +376,9 @@ def main():
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     pack_textures(a.tex)
     decimate(meshes, a.target_tris)
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    # ⚠️ 减面之后必须重算法线（自定义法线已被 COLLAPSE 打乱，见 recalc_normals 注释）
+    recalc_normals(meshes)
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not a.keep_parts:
         meshes = merge_by_material(meshes)
