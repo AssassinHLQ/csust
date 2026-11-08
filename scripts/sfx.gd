@@ -40,6 +40,8 @@ const MAX_3D := 8
 ##   files    随机挑一条：同一种声音多条候选能避免「连发听起来像复读机」
 ##   db       基准音量分贝（负数是变小）。**再叠加 GameSettings 的主音量**
 ##   pitch    音高随机范围 ±，0.08 ≈ 起落 8%，人的耳朵听不出音高、只觉得「不重复」
+##   pitch_base 基准音高倍率（默认 1.0）。`< 1` = 整体压低变沉。
+##           用于「同一批素材，大炮要听起来比小枪重」的场合（见 `fire_beam`）。
 ##   gap_ms   同一个逻辑名两次播放的最小间隔；防同帧重复触发，也是「空仓」那种
 ##            「按住不放会一直响」的场合的节流阀
 ##
@@ -59,6 +61,25 @@ const SPEC := {
 		"db": -6.0, "pitch": 0.06, "gap_ms": 25,
 	},
 	"empty": {"files": ["click_001.ogg"], "db": -5.0, "pitch": 0.20, "gap_ms": 150},
+	# ── 机甲激光大炮（用户 2026-11-08：「炮是激光大炮」）──
+	# 用的就是上面注释里提到的那批 Kenney `laserSmall_*.ogg`。
+	# ⚠️ 这批文件**当初正是被「不像枪」换掉的**（见 `fire` 那条的注释）——
+	#    现在它们回到了正确的岗位：激光大炮本来就不该是枪声。
+	#    那批是**扫频正弦**（低频≈0、1 ms 级瞬态、没有宽带爆响），
+	#    正好是「光束」该有的声音。
+	#
+	# 参数为什么这么定：
+	#   db = −2.0        比步枪的 −6 大一截：炮比枪响，这是「一发有分量」的一半
+	#   pitch = 0.10     机械炮偶尔音高抖一点，避免每发一模一样
+	#   pitch_base 0.78  整体压低 22%：同一批「小激光」素材，压沉了才像**大炮**
+	#                    （`laserSmall` 原声偏尖细，不压就是「小手枪激光」）
+	#   gap_ms = 0       不节流：射速由 `Weapon.beam_fire_interval`（0.42 s）控制，
+	#                    再叠一层 gap 只会把连发吃成单发
+	"fire_beam": {
+		"files": ["laserSmall_000.ogg", "laserSmall_001.ogg", "laserSmall_002.ogg",
+			"laserSmall_003.ogg", "laserSmall_004.ogg"],
+		"db": -2.0, "pitch": 0.10, "pitch_base": 0.78, "gap_ms": 0,
+	},
 	"reload_out": {"files": ["metalLatch.ogg"], "db": -4.0, "pitch": 0.04, "gap_ms": 0},
 	"reload_in": {"files": ["metalClick.ogg"], "db": -4.0, "pitch": 0.04, "gap_ms": 0},
 	# ── 界面（音量压得比武器低一截：界面音该是「垫底」的）──
@@ -196,6 +217,7 @@ static func _emit(name: String, pos: Vector3, spatial: bool, extra_db: float) ->
 		return false
 
 	var pitch := 1.0 + randf_range(-float(sp.get("pitch", 0.0)), float(sp.get("pitch", 0.0)))
+	pitch *= float(sp.get("pitch_base", 1.0))
 	var db := float(sp.get("db", 0.0)) + extra_db
 	if spatial:
 		var p := _take3d()

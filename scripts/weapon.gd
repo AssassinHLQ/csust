@@ -217,7 +217,19 @@ func shoot() -> bool:
 
 	_fire_raycast()
 	# 枪声走**非定位**（2D）：玩家自己的枪永远「在耳边」，用 3D 定位会随镜头左右漂。
-	Sfx.play("fire")
+	#
+	# 机甲形态换成了**激光音**（用户 2026-11-08：「炮是激光大炮」）——
+	# 用的是 Kenney 那批 `laserSmall_*.ogg`，`sfx.gd` 里那条注释写着它们当初
+	# 正是「不像枪」被换掉的；现在回到正确岗位（见 `fire_beam` 里的说明）。
+	#
+	# ⚠️ 这两个名字必须写成**字符串字面量**、分成两个 `Sfx.play()` 调用，
+	#    不能写成 `Sfx.play("fire_beam" if use_beam() else "fire")` ——
+	#    `_verify_sfx.gd` 是**静态扫源码里的字面量**来核对「库表里每个名字都有调用点」，
+	#    拼出来的名字它扫不到，会报「没人用的：fire, fire_beam」。
+	if use_beam():
+		Sfx.play("fire_beam")
+	else:
+		Sfx.play("fire")
 
 	if _player:
 		var sign_x := 1.0 if randf() < 0.5 else -1.0
