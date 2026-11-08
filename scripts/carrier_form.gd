@@ -298,6 +298,9 @@ func set_form(on: bool) -> bool:
 		_airborne = false
 		_vert_want = 0.0
 		_last_shot_index = int(_weapon().get("_shot_index")) if _weapon() != null else 0
+		# **激光大炮**：机甲形态下 `Weapon` 走光束路径（不是飞行子弹）
+		if _weapon() != null:
+			_weapon().call("set_beam_mode", true)
 		if _player != null:
 			_sync_face()
 	else:
@@ -317,6 +320,7 @@ func set_form(on: bool) -> bool:
 		var wpn := _weapon()
 		if wpn != null:
 			wpn.call("set_carrier_muzzles", [] as Array[Vector3])
+			wpn.call("set_beam_mode", false)
 		_restore_bones()
 	print("[Carrier] 变形 → %s" % ("阿比·埃舒（载具）" if on else "爱丽丝本体"))
 	return _on

@@ -182,6 +182,19 @@ func _run() -> void:
 		await _settle(2)
 		await _shot("8_fire_top")
 
+		# ── 9. 激光大炮：从侧后方看整条光束（用户 2026-11-08：「炮是激光大炮」）──
+		# 相机拉远到 9 m、抬到 3 m，让机甲和光束同框。
+		_player.global_position = Vector3(0, 0.6, 2.0)
+		_cf.call("_sync_face")
+		await _settle(4)
+		wpn.set("_cooldown", 0.0)
+		wpn.current_ammo = wpn.magazine_size
+		wpn.shoot()
+		await _settle(1)
+		_aim(Vector3(7.0, 3.2, 6.5), Vector3(0, 1.0, -8.0))
+		await process_frame
+		await _shot("9_beam")
+
 	MechState.set_carrier_for_test(false)
 	print("[Shot] 出图完成 → %s" % OUT_DIR)
 	quit(0)

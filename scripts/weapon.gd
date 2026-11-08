@@ -22,6 +22,12 @@ signal hit_confirmed(collider: Object, position: Vector3)
 # --- 数值 ---
 @export var damage := 18.0
 @export var fire_interval := 0.075      # 连发间隔（约 13 发/秒）
+## **激光大炮**的连发间隔（秒）。用户 2026-11-08：「炮是激光大炮」。
+## 机甲那两门炮不能沿用步枪的 0.075 s —— 13 发/秒的光束叠在一起会糊成一片，
+## 而且「炮」的手感应该是**一发一发**的。0.42 s ≈ 2.4 发/秒，单发有分量。
+@export var beam_fire_interval := 0.42
+## 激光大炮的单发伤害倍率（相对 `damage`）。炮比枪疼，这是常识。
+@export var beam_damage_scale := 3.2
 @export var auto_fire := true
 @export var magazine_size := 60
 @export var reserve_ammo := 9999
@@ -201,7 +207,7 @@ func shoot() -> bool:
 		try_reload()
 		return false
 
-	_cooldown = maxf(fire_interval, 0.0)
+	_cooldown = maxf(beam_fire_interval if use_beam() else fire_interval, 0.0)
 	current_ammo -= 1
 	ammo_changed.emit(current_ammo, magazine_size)
 	_shot_index += 1
@@ -293,11 +299,12 @@ func _fire_raycast() -> void:
 ## 结算命中（单枪口 / 双炮共用）。抽出来是为了别让两种路径各写一遍伤害逻辑
 ## —— 那种「两处相似代码」正是以后改伤害时漏改一半的地方。
 func _apply_hit(collider: Object, impact: Vector3, dir: Vector3) -> void:
+	var dmg := damage * (beam_damage_scale if use_beam() else 1.0)
 	if collider and collider.has_method("take_damage"):
-		collider.take_damage(damage, impact, -dir)
+		collider.take_damage(dmg, impact, -dir)
 		hit_confirmed.emit(collider, impact)
 	elif collider is Node and collider.get_parent() and collider.get_parent().has_method("take_damage"):
-		collider.get_parent().take_damage(damage, impact, -dir)
+		collider.get_parent().take_damage(dmg, impact, -dir)
 		hit_confirmed.emit(collider.get_parent(), impact)
 
 
@@ -360,7 +367,191 @@ func reload_progress() -> float:
 
 # --- 弹丸 ---
 
+## 现在是不是「激光大炮」模式（机甲形态）。
+## 由 `carrier_form.gd` 在变形 / 变回时通过 `set_beam_mode()` 置位。
+var beam_mode := false
+
+
+func set_beam_mode(on: bool) -> void:
+	beam_mode = on
+
+
+## 现在是不是「激光大炮」模式（机甲形态）。
+func use_beam() -> bool:
+	return beam_mode and _carrier_muzzles.size() > 0
+
+
+## 激光光束：从炮口到命中点画一条**立刻出现、0.12 s 淡出**的粗光柱。
+##
+## ── 和「飞行曳光」的区别（为什么不能复用）──
+## 老那条 `_spawn_tracer()` 是一颗**以 260 m/s 飞行的短光柱**，适合步枪子弹；
+## 激光大炮要的是「扣扳机的一瞬间，一条光柱直接连到靶子上」。
+## 所以这里是**一次性**生成的静态光柱 + Tween 淡出，不进 `_in_flight` 队列。
+##
+## ── 三层（复用机甲蓝焰那套配色）──
+## 外层粗而淡（辉光）、中层、内层细而亮（芯）。加色混合叠起来就是发光的激光。
+const BEAM_CORE := Color(0.92, 0.99, 1.00, 0.95)
+const BEAM_MID := Color(0.40, 0.78, 1.00, 0.55)
+const BEAM_GLOW := Color(0.16, 0.42, 1.00, 0.22)
+## 光束存活时间（秒）。0.12 够玩家看清，又不会糊住画面。
+const BEAM_LIFE := 0.12
+## 三层半径（米）：芯 / 中 / 辉光
+const BEAM_RADII := [0.035, 0.085, 0.170]
+## 光束的**视觉**最长距离（米）。
+## ⚠️ `range_meters` 是 300（命中判定要考虑远距离狙击），但一条 300 m 的亮光柱
+##    会把整个画面劈成两半 —— 本喵实测没打中任何东西时长度就是 295.6 m。
+##    超出这个值的光束**只画到这么长**就收尾（命中判定照旧到 300 m，
+##    远距离照样打得中，只是视觉上不再拖一条无限长线）。
+const BEAM_MAX_VISUAL := 60.0
+
+## 光束存活节点（每帧不推进，靠 Tween 自己收）
+var _beams: Array = []
+
+
+func _spawn_beam(from: Vector3, to: Vector3) -> void:
+	var total := from.distance_to(to)
+	if total < 0.05:
+		return
+	var dir := (to - from).normalized()
+	# 视觉长度封顶（见 `BEAM_MAX_VISUAL`）
+	var vis_len := minf(total, BEAM_MAX_VISUAL)
+	var vis_end := from + dir * vis_len
+	var mid := from + dir * (vis_len * 0.5)
+	var colors := [BEAM_CORE, BEAM_MID, BEAM_GLOW]
+
+	# 一根圆柱当「光柱」。用现成的 `_tracer_mesh`（半径 0.015、长度 TRACER_LEN），
+	# 按 `BEAM_RADII` 和 `total` 缩放 —— 不新建网格资源，省一次分配。
+	var holder := Node3D.new()
+	_fx_root.add_child(holder)
+	holder.global_position = mid
+
+	var mats: Array = []
+	for li in colors.size():
+		var mi := MeshInstance3D.new()
+		mi.mesh = _tracer_mesh
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		# ⚠️ 加色混合：叠起来才亮。用 ALPHA 混合的话三层会互相遮成一条实心灰柱。
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.albedo_color = colors[li]
+		mat.emission_enabled = true
+		mat.emission = colors[li]
+		mat.emission_energy_multiplier = [6.0, 3.2, 1.4][li]
+		mi.material_override = mat
+		holder.add_child(mi)
+		mats.append(mat)
+		# 轴向对准：`_orient_tracer()` 让局部 +Y 对到 dir
+		_orient_tracer(mi, dir)
+		var r: float = BEAM_RADII[li] / 0.015           # 相对 `_tracer_mesh` 的半径
+		mi.scale = Vector3(r, vis_len / TRACER_LEN, r)
+
+	# 炮口那一点爆亮（激光「出膛」的闪）
+	_muzzle_flash_beam(from)
+	# 命中点爆闪：只有**真的打到了**才炸（没打中时 `total` 会顶到 300，
+	# 在 300 m 外放一个爆闪没意义，玩家也看不见）
+	if total <= BEAM_MAX_VISUAL:
+		_spawn_beam_impact(vis_end, -dir)
+
+	# 淡出：三层材质 alpha 一起收到 0，然后整组删掉
+	var tw := holder.create_tween()
+	tw.set_parallel(true)
+	for li in mats.size():
+		var a0: float = colors[li].a
+		tw.tween_property(mats[li], "albedo_color:a", 0.0, BEAM_LIFE)
+	tw.chain().tween_callback(holder.queue_free)
+	_beams.append(holder)
+
+
+## 激光炮口的闪光：蓝色、比子弹那版更亮更大
+func _muzzle_flash_beam(at: Vector3) -> void:
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.55, 0.82, 1.0)
+	# ⚠️ 出膛闪从 6.0 收到 3.0：6.0 配 5 m 范围会把**机甲整个罩白**
+	#    （`9_beam.png` 第一版里人变成一团白），激光的光应该是「一条线」，
+	#    炮口只是点缀，亮度不能压过光束本身。
+	light.light_energy = 3.0
+	light.omni_range = 3.2
+	light.shadow_enabled = false
+	_fx_root.add_child(light)
+	light.global_position = at
+
+	var flash := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.09
+	sm.height = 0.18
+	sm.radial_segments = 10
+	sm.rings = 6
+	flash.mesh = sm
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_color = Color(0.8, 0.95, 1.0, 0.95)
+	mat.emission_enabled = true
+	mat.emission = Color(0.55, 0.85, 1.0)
+	mat.emission_energy_multiplier = 4.0
+	flash.material_override = mat
+	_fx_root.add_child(flash)
+	flash.global_position = at
+
+	var tw := flash.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(light, "light_energy", 0.0, 0.09)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.09)
+	tw.chain().tween_callback(flash.queue_free)
+	tw.chain().tween_callback(light.queue_free)
+
+
+## 激光命中点的爆闪：一圈快速膨胀的球 + 一盏灯
+func _spawn_beam_impact(at: Vector3, _normal: Vector3) -> void:
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.6, 0.85, 1.0)
+	light.light_energy = 5.0
+	light.omni_range = 4.5
+	light.shadow_enabled = false
+	_fx_root.add_child(light)
+	light.global_position = at
+
+	var burst := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.18
+	sm.height = 0.36
+	sm.radial_segments = 10
+	sm.rings = 6
+	burst.mesh = sm
+	burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_color = Color(0.7, 0.92, 1.0, 0.8)
+	mat.emission_enabled = true
+	mat.emission = Color(0.5, 0.82, 1.0)
+	mat.emission_energy_multiplier = 3.0
+	burst.material_override = mat
+	_fx_root.add_child(burst)
+	burst.global_position = at
+
+	var tw := burst.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(burst, "scale", Vector3.ONE * 2.4, 0.16)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.16)
+	tw.tween_property(light, "light_energy", 0.0, 0.16)
+	tw.chain().tween_callback(burst.queue_free)
+	tw.chain().tween_callback(light.queue_free)
+
+
 func _spawn_tracer(from: Vector3, to: Vector3) -> void:
+	# ── 激光大炮：不走「飞行弹丸」，直接画一条**瞬时可见的光束** ──
+	# 用户 2026-11-08：「炮是激光大炮」。
+	# 机甲形态下 `_carrier_muzzles` 非空就切到这条路径（见 `use_beam()`）。
+	if use_beam():
+		_spawn_beam(from, to)
+		return
 	var total := from.distance_to(to)
 	if total < 0.05:
 		return
