@@ -454,10 +454,10 @@ func _build_shell_from_glb() -> bool:
 		front_z + t * 0.5), Vector3(wall_w, shop_height, t))
 
 	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
-	# 传**真实屋顶高度**而不是 `shop_height`：见 `_build_sign()` 上面那段（浮空 0.36 m 的根因）。
-	# 实测外壳包围盒 pos.y = −0.17、size.y = 5.99 → 屋顶实高 **5.82**，不是 5.99。
-	var roof_local_y := inst.position.y + box.size.y * s
-	_build_sign(front_z, roof_local_y)
+	# 传**墙顶**高度而不是 `shop_height`：见 `_build_sign()` 上面那段。
+	# `shop_height`(5.99) 比墙顶(5.817) 高 0.17，用它算招牌会越出墙顶 → 浮空。
+	var wall_top_y := inst.position.y + box.size.y * s
+	_build_sign(front_z, wall_top_y)
 
 	_fix_glb_materials(inst)
 
@@ -525,27 +525,33 @@ func _fix_glb_materials(inst: Node3D) -> void:
 
 ## 门正上方一块发光板 + `Label3D`。原来是 `_build_shell()` 末尾那段，抽出来两条路共用。
 ##
-## ⚠️ `roof_y` 是**屋顶的真实世界高度**，不是 `shop_height`。
+## ⚠️ `roof_y` 是**墙顶的真实世界高度**（不是 `shop_height`，也不是"屋顶"）。
 ##
-## 2026-11-08 用户：「柴关电脑城招牌怎么浮空了，放墙上对齐」。
-## 实测（`scripts/_probe_shop_sign.gd`）：新屋壳的包围盒是
-##     pos.y = −0.17、size.y = 5.99
-## 也就是屋顶实际落在 **y = 5.82**，而 `shop_height` 记的是 **5.99** —— 差 0.17 m。
-## 为什么会差：`_build_shell_from_glb()` 里用
-##     `inst.position.y = -box.position.y`
-## 把模型底面挪到 y=0，但 `box` 是**合并后**的包围盒，而模型里各网格的
-## `position.y` 基准不一致（实测外壳比基准低了 0.17），所以"底面到 y=0"只对
-## 基准那一层成立，整体仍沉下去 0.17 m。
-## 招牌又在这个数上叠了 `+0.55`（板心）和板高 0.72，于是整块悬在屋顶上方 0.36 m。
+## 2026-11-08 用户两轮反馈：
+##   ① 「怎么浮空了，放墙上对齐」—— 招牌悬空 0.36 m；
+##   ② 「啊还是浮空」+「是水平没对齐上」—— 降下来之后仍不对。
 ##
-## 修法：**不再拿 `shop_height` 算招牌**，改传量出来的真实屋顶高度。
-func _build_sign(front_z: float, roof_y: float = -1.0) -> void:
-	# 没传就退回旧行为（程序化壳那条路屋顶确实等于 shop_height）
-	if roof_y < 0.0:
-		roof_y = shop_height
-	# 招牌**底边**贴着屋顶：板高 0.72 → 板心在 roof_y + 0.36
+## 实测（`scripts/_probe_shop_sign2.gd`，逐个网格列世界 Z 范围）：
+##     正面墙 PLASTIK_W  z=[−23.426, −12.743]  y=[0.020, 5.817]
+##     玻璃   glass      z=[−23.426, −12.776]  y=[0.214, 5.267]
+##     **建筑最高点 y = 5.817**
+##
+## 第一版修法错在：把招牌底边对齐到 y = 5.82（= 最高点）。
+## 那个高度上**已经没有任何墙面**了 —— 招牌等于站在屋顶棱上，所以还是浮着。
+## 正解是让招牌**整块压在正立面墙上**：板顶留在墙顶以内。
+##
+## 现在：板心 y = wall_top − 0.10 − 板高/2，板面 z 凸出墙面 0.10 m（背面离墙 0.02 m）。
+##
+## ⚠️ 注意坐标基准：`shop_baked.tscn` 的根节点自己带 `(27.3, 0, −15.5)` 偏移，
+##    子节点写的是**局部**坐标。改的时候要减去根的 z（本会话第一版就漏了这一步，
+##    写成了世界坐标，招牌整体偏了 15.5 m）。
+func _build_sign(front_z: float, wall_top_y: float = -1.0) -> void:
+	# 没传就退回旧行为（程序化壳那条路墙顶确实等于 shop_height）
+	if wall_top_y < 0.0:
+		wall_top_y = shop_height
 	var board_h := 0.72
-	var board_y := roof_y + board_h * 0.5
+	# 板顶留 0.10 m 余量，整块压在墙面上，不越出墙顶
+	var board_y := wall_top_y - 0.10 - board_h * 0.5
 	# 2026-11-02 用户：「白色发光板子要碰撞」——从装饰改成带碰撞的箱子
 	_box("SignBoard", Vector3(0.0, board_y, front_z + 0.06),
 		Vector3(3.4, board_h, 0.08), _mat["sign"])
