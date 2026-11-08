@@ -461,10 +461,23 @@ func _remember_room_xz() -> void:
 		_room_y_lo, _room_y_hi])
 
 
-## 墙碰撞盒往里收多少米当作「房间内沿」。
-## 墙有厚度（609 是 0.30 m），玩家的胶囊半径约 0.3 m，站在门口时中心点
-## 仍在墙的 AABB 内。收 0.05 m 让「跨出门框」比「贴住墙」早一点点触发。
-const _WALL_INSET := 0.05
+## 房间边界往里收多少米。
+##
+## ── 2026-11-08 「我要进去才加载」──
+## 用户原话：「为什么这个高斯泼溅在靠近门的地方就加载，**我要进去才加载**」，
+## 实测位置 `(5.74, 0.00, 1.81)` —— 这在门那条墙的**外侧**，人还没进屋。
+##
+## 旧值 0.05 只把墙盒外框收 5 cm，但**墙有 0.30 m 厚**：
+##   墙外表面 x=4.86 → 判据边界 4.81，而墙内表面在 4.56。
+##   于是「站在墙里那一层」和「贴着墙根走」都算屋里，人还没迈过门槛就加载了。
+##
+## 现在改成**收满墙厚再多吃 0.10 m**，判据边界落在**墙内表面再往里**：
+##   墙外 4.86 − 0.30（墙厚）− 0.10 = 4.46  →  跨过门槛才加载。
+## 代价：门口那 10 cm 仍然算屋外，视觉上「进门」和「加载」差十几厘米，可接受。
+##
+## ⚠️ 墙厚是**逐面量**的（不是写死 0.30）：有的场地墙更厚，写死会误判。
+##    见 `_wall_inset_xz()` 里按每面墙的实际厚度各收各的。
+const _WALL_INSET := 0.10
 ## 门槛防抖：范围判定每帧都跑，脚踩在门框线上会左右横跳。
 ## 只有**连续两帧**都在同一侧才认账 —— 相当于 ~33 ms（60 fps），人感觉不到，
 ## 但能挡住一帧抖动引起的「释放→重载」循环。
@@ -511,15 +524,20 @@ func _room_xz_from_walls() -> Rect2:
 		if cs == null or not (cs.shape is BoxShape3D):
 			continue
 		var raw: Vector3 = (cs.shape as BoxShape3D).size
-		var xs := raw * 0.5 * cs.global_transform.basis.get_scale()
-		var ctr := cs.global_transform.origin
-		lo = lo.min(Vector2(ctr.x - xs.x, ctr.z - xs.z))
-		hi = hi.max(Vector2(ctr.x + xs.x, ctr.z + xs.z))
-		# 高度只认**墙**（高盒子）：屋顶板/家具是扁的，它们会把 y 上限抬高或压低。
+		# ⚠️ 必须用 `Transform3D × AABB`，**不能**用 `size * 0.5 * basis.get_scale()`。
+		#    实测教训（2026-11-08）：`WallZNegB` 这个盒子绕 Y 转了 90°，
+		#    它的局部 X（size.x = 2.984）实际指向**世界 Z**。用 scale 相乘去算世界 X，
+		#    得到 x 3.166~6.150；真实 AABB 只有 x 4.508~4.808 —— 右边界被撑大 1.3 m，
+		#    于是「站在墙外还没进门」也被判成在屋里，泼溅照样加载（用户报的现象）。
+		#    `global_transform * AABB(-size*0.5, size)` 会正确处理旋转，是正解。
+		var b: AABB = cs.global_transform * AABB(-raw * 0.5, raw)
+		lo = lo.min(Vector2(b.position.x, b.position.z))
+		hi = hi.max(Vector2(b.position.x + b.size.x, b.position.z + b.size.z))
+		# 高度只认**墙**（高盒子）：屋顶板/家具是扁的，它们会把 y 范围带歪。
 		# 判据跟 `game.gd::ROOM_WALL_MIN_HEIGHT` 一致（2.0 m）。
 		if raw.y > 2.0:
-			y_lo = minf(y_lo, ctr.y - xs.y)
-			y_hi = maxf(y_hi, ctr.y + xs.y)
+			y_lo = minf(y_lo, b.position.y)
+			y_hi = maxf(y_hi, b.position.y + b.size.y)
 		found = true
 	if not found or hi.x <= lo.x or hi.y <= lo.y:
 		return Rect2()
@@ -528,13 +546,65 @@ func _room_xz_from_walls() -> Rect2:
 	# 一定判成「屋外」。这就是用户要的「上面不该加载」。
 	#
 	# ⚠️ 余量加在**上限之上**会很危险：加 0.30 就到 5.95，而用户站的是 5.80，
-	#    又会被包进去（本喵第一版就是这么错的）。所以这里**只在屋里方向留余量**，
-	#    上限严格取墙顶。
+	#    又会被包进去（本喵第一版就是这么错的）。所以上限严格取墙顶。
 	_room_y_lo = y_lo
 	_room_y_hi = y_hi
-	var inset := _WALL_INSET
-	return Rect2(lo.x + inset, lo.y + inset,
-		(hi.x - lo.x) - inset * 2.0, (hi.y - lo.y) - inset * 2.0)
+	# ── 四个方向各收各的（按那一侧墙的真实厚度）──
+	# 旧写法是「四边统一收 _WALL_INSET」，但墙厚是逐面变化的：
+	# 只收 5 cm 的话，判据边界还停在墙**里面**，人站在墙外侧就已经算「进屋」了。
+	# 正确做法：每一侧找**贴着那一侧**的墙，按它的厚度把边界推到墙内表面，
+	# 再多收 `_WALL_INSET` 当门槛前的缓冲。
+	var inset_x_min := _side_wall_thickness(col, "x", -1)
+	var inset_x_max := _side_wall_thickness(col, "x", 1)
+	var inset_z_min := _side_wall_thickness(col, "z", -1)
+	var inset_z_max := _side_wall_thickness(col, "z", 1)
+	return Rect2(lo.x + inset_x_min, lo.y + inset_z_min,
+		(hi.x - lo.x) - inset_x_min - inset_x_max,
+		(hi.y - lo.y) - inset_z_min - inset_z_max)
+
+
+## 求「贴着某一侧的那面墙」有多厚（世界单位）。
+##
+## `axis` = "x" / "z"，`sign` = -1（负侧）/ +1（正侧）。
+## 做法：在所有墙盒里，找**外表面正好贴着整体外框那一侧**的盒子，
+## 取它在 `axis` 方向上的真实世界厚度（用旋转后的 AABB 量，不是 `size`）。
+## 找不到（那一侧没有墙，比如开放式场地）就返回 0，让矩形保持原边界。
+func _side_wall_thickness(col: Node, axis: String, sign: int) -> float:
+	# 先求整体外框
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for c in col.get_children():
+		var cs0 := c as CollisionShape3D
+		if cs0 == null or not (cs0.shape is BoxShape3D):
+			continue
+		var raw0: Vector3 = (cs0.shape as BoxShape3D).size
+		if raw0.y <= 2.0:
+			continue
+		var b0: AABB = cs0.global_transform * AABB(-raw0 * 0.5, raw0)
+		lo = lo.min(b0.position)
+		hi = hi.max(b0.position + b0.size)
+	if lo.x == INF:
+		return 0.0
+	var edge: float = lo.x if sign < 0 else hi.x
+	if axis == "z":
+		edge = lo.z if sign < 0 else hi.z
+	var thick := 0.0
+	for c in col.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var raw: Vector3 = (cs.shape as BoxShape3D).size
+		if raw.y <= 2.0:
+			continue
+		var b: AABB = cs.global_transform * AABB(-raw * 0.5, raw)
+		var b_min: float = b.position.x if axis == "x" else b.position.z
+		var b_max: float = b_min + (b.size.x if axis == "x" else b.size.z)
+		# 这面墙的外表面是不是贴着整体外框？（容差 1 cm，浮点误差）
+		var touches := absf((b_min if sign < 0 else b_max) - edge) < 0.01
+		if touches:
+			var t: float = b.size.x if axis == "x" else b.size.z
+			thick = maxf(thick, t)
+	return thick + _WALL_INSET
 
 
 ## 玩家位置算不算「在屋里」：XZ 在门框矩形内 **且** 高度在窗口内。
