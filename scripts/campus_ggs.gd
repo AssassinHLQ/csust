@@ -126,6 +126,23 @@ var _coarse_off := false
 ## 静止帧复用（见 `gaussian_splatting_rasterizer.gd` 顶部）：相机没动的那一帧
 ## 整条 compute 链直接不跑。`--ggs-idle-skip=off` 可关掉做对照。
 var _idle_skip := true
+## 椭球（协方差）缩放。由 `--ggs-cov=` 覆盖，见下面的参数解析。
+##
+## ── 为什么默认不是 1.0（2026-11-08，用户：「校园泼溅一片白 / 完全糊掉」）──
+## 本喵先排掉了数据侧：三份 bin（细层 1.47 GB / 粗层 / 运行时窗口切片）的
+## opacity 全在 [0,1]、协方差对角全为正、布局与 shader 结构体逐字节一致、
+## `time` 字段全为 0 —— **数据是合规的**。剩下的只能是「椭球的世界单位」。
+## 于是给 GGS 加了这个只作用于协方差的旋钮，然后出图扫描（`_probe_campus_cov_shot.gd`）：
+##
+##   cov = 1.0（原值）→ 巨大糊块，相机钻进去就是**整屏全白**（用户看到的样子）
+##   cov = 0.3        → 拖出大片白色条纹，比 0.1 还糟
+##   cov = 0.1        → **几何清清楚楚**：地面、楼、树、天空都认得出
+##
+## 所以默认取 0.1。⚠️ 但这不是终态：0.1 下画面仍是**稀疏点云**而不是连续表面，
+##    说明还有一部分是「个别 splat 的协方差是离群值」（实测最大 19 ⇒ σ≈4.4 m，
+##    在 0.3 时就是那些拉成条带的家伙）。真要修干净得做**逐点协方差钳制**
+##    （限制特征值上限），而不是一个全局系数。
+var _cov_scale := 0.1
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -154,6 +171,10 @@ func _ready() -> void:
 		# 关掉「静止帧复用」做对照（量它到底省了多少）
 		if a == "--ggs-idle-skip=off" or a == "--no-ggs-idle-skip":
 			_idle_skip = false
+		# 椭球（协方差）缩放：本喵 2026-11-08 排「校园泼溅糊成一片/全白」用的扫描旋钮。
+		# 只作用于椭球大小，不动位置（见 GGS shader 里 `cov_scale` 那段）。
+		if a.begins_with("--ggs-cov="):
+			_cov_scale = clampf(float(a.substr(10)), 0.0001, 100.0)
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
@@ -372,6 +393,7 @@ func _make_bundle() -> bool:
 	rasterizer = Rasterizer.new(ply, get_viewport().get_size(), tex, cam)
 	rasterizer.bin_path = _bin_path
 	rasterizer.model_scale[0] = 1.0
+	rasterizer.cov_scale[0] = _cov_scale
 	rasterizer.idle_skip = _idle_skip
 
 	# 粗层：和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换。
@@ -388,6 +410,7 @@ func _make_bundle() -> bool:
 		coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
 		coarse_rasterizer.bin_path = _coarse_path
 		coarse_rasterizer.model_scale[0] = 1.0
+		coarse_rasterizer.cov_scale[0] = _cov_scale
 		coarse_rasterizer.idle_skip = _idle_skip
 		var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
 		coarse_rasterizer.render_scale = [sc2]

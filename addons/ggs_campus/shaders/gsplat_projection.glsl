@@ -77,6 +77,20 @@ layout (std140, set = 0, binding = 6) restrict uniform Uniforms {
 	float model_scale;
 	ivec2 dims; // Texture size
 	float time;
+	// ── 椭球（协方差）的**额外**缩放，和位置无关 ──
+	//
+	// 用户 2026-11-08：「校园泼溅一片白 / 完全糊掉」。
+	// 本喵量过：bin 的数据是合规的（opacity 全在 [0,1]、协方差对角全为正、
+	// 位置 Y 朝上、`time` 全为 0），两个插件的 `Splat` 结构体也逐字节一致。
+	// 所以嫌疑落在**协方差的世界单位**上：椭球整体太大 → 一个个糊成大片，
+	// 相机钻进去就是全屏白。
+	//
+	// ⚠️ 不能拿 `model_scale` 顶替：它同时乘**位置**（`splat_pos = position*model_scale`），
+	//    调它会把整个校园缩走、位置全错。所以单独开一个只作用于协方差的量。
+	//
+	// std140 下 `{vec3, float, ivec2, float}` = 28 字节、补齐到 32，
+	// 这第 8 个 float 正好是原来空着的那 4 字节（GDScript 侧原本只填了 7 个）。
+	float cov_scale;
 };
 
 layout(push_constant) restrict readonly uniform PushConstants {
@@ -166,12 +180,21 @@ void main() {
 	}
 	
 	// --- GAUSSIAN PROJECTION ---
-	float splat_time = time - splat.time;
-	float time_factor = ease_out_cubic(clamp(splat_time, 0, 1));
-	float time_factor_late = ease_out_cubic(clamp(splat_time - 0.35, 0, 1));
+	// ── 入场动画：**关掉**（2026-11-08）──
+	//
+	// 原代码是 `splat_time = time - splat.time`。`splat.time` 由导出器写入，
+	// 本喵量过：三份校园 bin（细层 / 粗层 / 运行时窗口切片）里全都是 **0.0**，
+	// 而 `time` 是「开游戏至今秒数」—— 于是**开机后第 1 秒内**，所有椭球会被
+	// 放大到 2 倍、透明度按 t² 淡入、还在屏幕上偏移一整屏。
+	//
+	// 玩家其实是开机几十秒后才走进校园的，所以这条**不是白屏的原因**
+	// （本喵验过，如实说明）。但它是颗定时炸弹：任何往 `splat.time` 写别的值
+	// 的导出器（或运行时的分帧上传）都会让画面瞬间错位。这里直接钉死为「已入场」。
+	float time_factor = 1.0;
+	float time_factor_late = 1.0;
 
 	float splat_opacity = splat.opacity * time_factor_late*time_factor_late;
-	float splat_scale = model_scale * mix(2.0, 1.0, time_factor_late);
+	float splat_scale = model_scale * cov_scale * mix(2.0, 1.0, time_factor_late);
 
 	const vec3 covariance = project_covariance(DECODE_COVARIANCE(splat.covariance), splat_scale, view_pos.xyz, dims);
 	float det = covariance.x*covariance.z - covariance.y*covariance.y;

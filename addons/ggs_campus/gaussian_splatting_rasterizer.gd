@@ -64,6 +64,12 @@ var is_loaded = false
 var should_enable_heatmap = [false]
 var render_scale = [1.0]
 var model_scale = [1.0]
+## 椭球（协方差）的额外缩放，**不作用于位置**（见 shader 里 `cov_scale` 那段注释）。
+##
+## 用数组是为了和 `model_scale` 一致：调用方拿到的如果是值拷贝，
+## 直接赋值改不到光栅器内部；数组是引用，改 `[0]` 就能生效。
+## 默认 1.0 = 和以前完全一样的行为。
+var cov_scale = [1.0]
 var should_terminate_thread : Array[bool] = [false]
 ## 若设置，则直接从预打包的 60-float 世界坐标 bin 上传，跳过 PLY 解析/打包。
 var bin_path := ""
@@ -384,7 +390,7 @@ func rasterize() -> void:
 		return
 	
 	var camera_pos = basis_override * camera.global_position
-	context.device.buffer_update(descriptors['uniforms'].rid, 0, 8*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3]))
+	context.device.buffer_update(descriptors['uniforms'].rid, 0, 8*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3, cov_scale[0]]))
 	context.device.buffer_clear(descriptors['histogram'].rid, 0, 4 + 4*RADIX*4) # Clear the sort buffer size and reset global histogram
 	context.device.buffer_clear(descriptors['tile_bounds'].rid, 0, tile_dims.x*tile_dims.y * 2*4) # Clear gsplat_boundaries buffer
 	#context.device.buffer_update(descriptors['grid_dimensions'].rid, 0, 3*4*2, default_block_dims)
