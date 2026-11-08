@@ -371,22 +371,109 @@ func _build_convex_hulls_collision() -> bool:
 ##    4~9 个拼起来轮廓已经有模有样（头/身体/尾巴各一个），
 ##    而且求 AABB 是 O(1)（导入时就缓存好了），载入零成本。
 func _build_box_parts_collision() -> bool:
+	# ⚠️ **蒙皮模型必须走骨骼**，不能拿 `MeshInstance3D.get_aabb()` 量。
+	#
+	# 2026-11-08 用户报「瞄准中间那只霸王龙，打到的是右下角那只」「打得到但人飞不过去」——
+	# 本喵用 `_diag_trex_aim.gd` 量出来：三只霸王龙的碰撞盒世界包围盒是
+	#   218 × 96 × 99 m / 183 × 80 × 99 m / 253 × 112 × 164 m，
+	# 而它们自己只有 24 × 10 × 8 m；盒子中心离身体 39~54 m。
+	# 也就是玩家从出生点就被「隐形大盒子」挡住了，射线也在离相机 6 m 处撞上一个盒子。
+	#
+	# 根因就是 `_mesh_box()` 上面那条警告：这个 FBX 的网格顶点在**绑定空间**，
+	# 跨度是骨架的 ~298 倍；而 `mi.global_transform` 每块网格还各自带一个
+	# 3.01 / 0.307 / 0.024 的缩放 —— `size × scale` 出来什么都不是。
+	# `visual_size` 之所以是对的，正是因为它走的是 `_bone_box()`。
+	var skel := _best_skeleton(model)
+	if skel != null and _build_bone_cluster_collision(skel):
+		return true
+	return _build_mesh_box_parts_collision()
+
+
+## 蒙皮模型：把骨骼点沿「最长的水平轴」切片，每片包一个盒子。
+##
+## 为什么切片而不是「一根骨头一个盒子」：73 根骨会变成 73 个碰撞形状，
+## 物理侧每帧都要过一遍，而且大量骨骼是重叠的躯干内部骨，纯属浪费。
+## 切片之后一只霸王龙 4~6 个盒子，轮廓已经能分清头 / 躯干 / 尾。
+##
+## 为什么 `cs.transform` 只放平移：Godot 对**带缩放的碰撞体**支持很差
+## （见 `_build_convex_hulls_collision()` 里那段「玩家贴上去卡死」），
+## 所以尺寸一律烘进 `BoxShape3D.size`，变换保持单位基。
+func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
+	var to_body := global_transform.affine_inverse()
+	var xf := to_body * skel.global_transform
+	var pts: Array[Vector3] = []
+	for i in skel.get_bone_count():
+		pts.append(xf * skel.get_bone_global_pose(i).origin)
+	if pts.size() < 6:
+		return false
+	var overall := _points_aabb(pts)
+	if overall.size.y <= 0.0001:
+		return false
+
+	# 长轴：取 x / z 里更长的那个（模型可能被旋转过，不能写死 z）
+	var axis := 0 if overall.size.x >= overall.size.z else 2
+	var ordered := pts.duplicate()
+	ordered.sort_custom(func(a: Vector3, b: Vector3) -> bool:
+		return a[axis] < b[axis])
+
+	# 每片大约「半个身高」长 → 霸王龙 25 m 长、10 m 高 ⇒ 4~5 片
+	var slices := clampi(int(round(overall.size[axis] / maxf(overall.size.y * 0.5, 0.2))), 2, 6)
+	# 骨点是**骨架中心线**，离表皮还有距离：按身高给一圈余量
+	var pad := maxf(overall.size.y * 0.055, 0.05)
+
+	var made := 0
+	for si in slices:
+		var i0 := int(floor(float(ordered.size()) * float(si) / float(slices)))
+		var i1 := int(floor(float(ordered.size()) * float(si + 1) / float(slices)))
+		if i1 <= i0:
+			continue
+		var sub: Array[Vector3] = []
+		for k in range(i0, i1):
+			sub.append(ordered[k])
+		var bb := _points_aabb(sub).grow(pad)
+		# 盒子不要探到地面以下（boss 脚底在 y = 0，地下半截纯属浪费）
+		if bb.position.y < 0.0:
+			var shrink := -bb.position.y
+			bb.position.y = 0.0
+			bb.size.y = maxf(bb.size.y - shrink, 0.1)
+		var box := BoxShape3D.new()
+		box.size = bb.size
+		var cs := CollisionShape3D.new()
+		cs.name = "Collision" if made == 0 else "Collision%d" % made
+		cs.shape = box
+		cs.transform = Transform3D(Basis.IDENTITY, bb.get_center())
+		add_child(cs)
+		_collisions.append(cs)
+		made += 1
+	if made == 0:
+		_collisions.clear()
+		return false
+	_collision = _collisions[0]
+	collision_layer = 1
+	collision_mask = 0
+	print("[Boss] 骨骼切片碰撞：%d 个盒子（骨骼 %d 根，按%s轴切）" % [
+		made, skel.get_bone_count(), "x" if axis == 0 else "z"])
+	return true
+
+
+## 非蒙皮模型的老路径：**每块网格一个盒子**。
+## 唯一改动是把世界包围盒**烘进尺寸**，不再给 `CollisionShape3D` 挂缩放。
+func _build_mesh_box_parts_collision() -> bool:
 	var to_body := global_transform.affine_inverse()
 	var made := 0
 	for m in _all(model, "MeshInstance3D"):
 		var mi := m as MeshInstance3D
 		if mi.mesh == null or not mi.is_visible_in_tree():
 			continue
-		var box := mi.get_aabb()
-		if box.size.length() < 0.01:
+		var local := to_body * (mi.global_transform * mi.get_aabb())
+		if local.size.length() < 0.01:
 			continue
 		var b := BoxShape3D.new()
-		b.size = box.size
+		b.size = local.size
 		var cs := CollisionShape3D.new()
 		cs.name = "Collision" if made == 0 else "Collision%d" % made
 		cs.shape = b
-		cs.transform = to_body * mi.global_transform \
-			* Transform3D(Basis.IDENTITY, box.get_center())
+		cs.transform = Transform3D(Basis.IDENTITY, local.get_center())
 		add_child(cs)
 		_collisions.append(cs)
 		made += 1
@@ -398,6 +485,16 @@ func _build_box_parts_collision() -> bool:
 	collision_mask = 0
 	print("[Boss] 低模碰撞：%d 个盒子（每块身体一个）" % made)
 	return true
+
+
+## 一串点的包围盒。
+func _points_aabb(pts: Array[Vector3]) -> AABB:
+	var lo := pts[0]
+	var hi := pts[0]
+	for p in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	return AABB(lo, hi - lo)
 
 
 
