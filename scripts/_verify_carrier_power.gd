@@ -3,7 +3,8 @@ extends SceneTree
 ##
 ## 需求拆条（原话见 `carrier_form.gd` 那段的注释）：
 ##   T = 巡航者模式（武器关闭 + 飞得更快）
-##   飞行累计（含巡航）每 3 km 攒 1 条，最多 5 条
+##   飞行累计（含巡航）每满一条距离攒 1 条，最多 5 条
+##   （距离是「每条 500 m」，用户 2026-11-08 定的；探针里**读常量**不写死数字）
 ##   R = 启用 1 条，5 秒；攻速倍率 = 1 + 已启用条数（1条×2 / 2条×3 / …）
 ##   时间**独立**：第一条到点，从 ×4 掉回 ×3
 ##   启用期间照样能飞、能攒条
@@ -68,9 +69,15 @@ func _run() -> void:
 	cf.set("_hold_y", 40.0)
 
 	print("")
-	print("========== 1. 攒条：飞 3 km 一条 ==========")
-	# 直接把进度顶到差一点，再飞一小段跨过去 —— 免得真飞 3 km 等半天
-	cf.set("fly_distance_m", 2990.0)
+	print("========== 1. 攒条：飞够一条距离就攒 1 条 ==========")
+	# ⚠️ **不要写死 3000 / 500 之类**：
+	#    用户 2026-11-08 把这条距离从 3 km 改成 500 m，本喵第一版探针里
+	#    写死了 2990/2999，改常量后探针全红。这里改成**读常量**，
+	#    以后再调距离，探针不用跟着改。
+	var per_bar: float = float(cf.call("energy_per_bar_m"))
+	print("       每条需要 %.0f m" % per_bar)
+	# 直接把进度顶到差一点，再飞一小段跨过去 —— 免得真飞那么远等半天
+	cf.set("fly_distance_m", per_bar - 10.0)
 	cf.set("energy_bars", 0)
 	Input.action_press("move_forward")
 	Input.action_press("sprint")
@@ -81,7 +88,7 @@ func _run() -> void:
 			break
 		await physics_frame
 	print("       飞行 %.1f m 后 energy_bars = %d" % [float(cf.get("fly_distance_m")), int(cf.get("energy_bars"))])
-	_check(got >= 1, "跨过 3000 m 时攒到 1 条（实际 %d）" % int(cf.get("energy_bars")))
+	_check(got >= 1, "跨过 %.0f m 时攒到 1 条（实际 %d）" % [per_bar, int(cf.get("energy_bars"))])
 
 	print("")
 	print("========== 1b. 垂直上升也要算进距离（用户：算空间的移动量）==========")
@@ -111,11 +118,11 @@ func _run() -> void:
 	print("")
 	print("========== 2. 上限 5 条 ==========")
 	cf.set("energy_bars", 5)
-	cf.set("fly_distance_m", 2999.0)
+	cf.set("fly_distance_m", per_bar - 1.0)
 	for i in 30:
 		await physics_frame
 	_check(int(cf.get("energy_bars")) == 5, "满了以后不再涨（还是 %d）" % int(cf.get("energy_bars")))
-	_check(float(cf.get("fly_distance_m")) <= 3000.0, "满条后进度不再溢出（%.1f m）" % float(cf.get("fly_distance_m")))
+	_check(float(cf.get("fly_distance_m")) <= per_bar, "满条后进度不再溢出（%.1f m）" % float(cf.get("fly_distance_m")))
 	Input.action_release("move_forward")
 	Input.action_release("sprint")
 
@@ -177,7 +184,7 @@ func _run() -> void:
 	_check(absf(float(player.get("_fly_scale")) - 2.6) < 0.001, "玩家的飞行速度倍率 = 2.6")
 	# 巡航期间照样攒条
 	cf.set("energy_bars", 0)
-	cf.set("fly_distance_m", 2995.0)
+	cf.set("fly_distance_m", per_bar - 5.0)
 	Input.action_press("move_forward")
 	for i in 60:
 		await physics_frame

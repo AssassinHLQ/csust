@@ -121,7 +121,14 @@ const HEAD_BONE := "Bip001 Head"
 ## —— 「关掉武器换速度」要有明显体感，不然玩家不会想按 T。
 const CRUISE_SPEED_SCALE := 2.6
 ## 每条能量条需要累计多少米飞行
-const ENERGY_PER_BAR_M := 3000.0
+##
+## ⚠️ 用户 2026-11-08 改的：3000 → **500**（「把 3km 更改 1km」→「不对,500m」）。
+##    500 m 在校园里飞一圈就到了，攒条不再需要长途跋涉。
+const ENERGY_PER_BAR_M := 500.0
+## 暴露给自检 / HUD 的「每条要多少米」。`const` 不能用 `get()` 读到，
+## 所以这里给一个函数（探针里改成读它，以后再调距离探针不用跟着改）。
+func energy_per_bar_m() -> float:
+	return ENERGY_PER_BAR_M
 const MAX_BARS := 5
 ## 每条能量条的持续时间（秒）
 const BAR_SECONDS := 5.0
@@ -183,7 +190,11 @@ const FLAME_OUTER := Color(0.10, 0.32, 0.95, 0.45)
 ## 喷气粒子颜色
 const JET_PARTICLE := Color(0.35, 0.72, 1.00, 0.75)
 ## 火焰在局部 +Y 方向的基准长度（米）—— 之后按推力伸缩
-const FLAME_LEN := 0.85
+##
+## ⚠️ 2026-11-08 提到 **1.6**：出图（`_probe_carrier_fx.gd` 的 2_climb）里焰只有
+##    腿下一小团，「粗糙」感有一半来自**太短**。配合三层新的长宽比
+##    （0.55 / 0.95 / 1.40），满推力时最长的芯焰是 1.6 × 1.40 ≈ **2.24 m**。
+const FLAME_LEN := 1.6
 
 @export var toggle_key: Key = KEY_G
 ## 起飞 / 上升键。`Space` 与 `Q` 都能用（用户报过「空格偶尔没反应」，见 `player.gd`
@@ -325,6 +336,24 @@ var _boost_fx: Array = []
 ## 推进器骨在**绑定姿势**下的局部位姿（每帧在它之上叠加，不被上次的写入污染）
 var _boost_rest: Dictionary = {}
 var _wing_rest: Dictionary = {}
+## 肩翼 / 导弹荚上的**小喷口**（不是推进器，只是装饰性的短焰）
+var _aux_fx: Array = []
+## 肩翼 / 导弹荚的骨名（小喷口挂点）。
+##
+## ✅ 骨名是**实测**的（`_diag_carrier_bones.gd` 列了载体 191 根骨）：
+##   86  bone_gear_wing_L   107 bone_gear_wing_R    ← 翼根
+##   103 bone_missilepod_L  124 bone_missilepod_R   ← 导弹荚
+##   87~94 / 108~115  bone_wing_LDL_01 … bone_wing_RUL_02  ← 8 片翼叶
+## ⚠️ `bone_gearboost_L/R` **不在这个列表里** —— 本喵上一版以为推进器叫
+##    `bone_gearboost_*`，其实它挂在别处（`BOOST_BONES` 那两根能找到，
+##    但上面的名字过滤没列出来，说明名字不完全是 gearboost）。不用纠结。
+##
+## 选**翼根**（`bone_gear_wing_*`）而不是翼叶：翼叶 8 片太碎、每片一个喷口
+## 会变成「一堆小火苗」；翼根一个喷口、导弹荚一个，正好是四个配角。
+const AUX_NOZZLE_BONES := [
+	"bone_gear_wing_L", "bone_gear_wing_R",
+	"bone_missilepod_L", "bone_missilepod_R",
+]
 
 # ── 双炮开火 ──
 ## 炮口闪光节点（每门炮一个），平时隐藏
@@ -601,10 +630,20 @@ func _build_boost_fx() -> void:
 		#    推进器挂在腿上、朝下喷，正好对上。上一版在这里又绕 X 转了 PI，
 		#    结果喷口朝上、从背后看是一张扁掉的蓝扇子（见探针出图 3_side）。
 		var layers: Array[MeshInstance3D] = []
+		# ── 三层锥体：**长宽比必须拉开**，否则叠起来还是一个硬边三角 ──
+		#
+		# 用户 2026-11-08：「飞行特效太粗糙两个三角形」。
+		# 旧值是 0.20/1.00、0.14/0.82、0.08/0.62 —— 三个锥的长宽比几乎一样
+		# （1:5、1:6、1:8），叠在一起轮廓还是**一个三角**，只是亮了一点。
+		# 现在改成三种**不同的形状**：
+		#   · 外层：又宽又短（裙摆）→ 负责轮廓的「胖」
+		#   · 中层：中等
+		#   · 芯层：又细又长     → 负责「尖」
+		# 1:1.8 / 1:5.6 / 1:18 三种比例叠起来才有火焰的体积感。
 		var specs := [
-			{"mat": mat_outer, "r": 0.20, "len": 1.00},
-			{"mat": mat_mid, "r": 0.14, "len": 0.82},
-			{"mat": mat_core, "r": 0.08, "len": 0.62},
+			{"mat": mat_outer, "r": 0.30, "len": 0.55},
+			{"mat": mat_mid, "r": 0.17, "len": 0.95},
+			{"mat": mat_core, "r": 0.075, "len": 1.40},
 		]
 		for sp in specs:
 			var mi := MeshInstance3D.new()
@@ -627,28 +666,46 @@ func _build_boost_fx() -> void:
 		light.position = Vector3(0.0, -0.18, 0.0)
 		holder.add_child(light)
 
+		# 喷口处一片**面向相机的柔光**。
+		# 硬边三角的另一半原因是「喷口只有锥体」——锥体的底边是一条直线，
+		# 从侧面看就是一条硬边。加一层软圆斑之后，喷口读起来是
+		# 「一团光往外喷」而不是「一个角」。
+		# ⚠️ **必须用带径向渐变的贴图，不能用裸 QuadMesh**：
+		#    本喵第一版直接用 `QuadMesh` + billboard 材质，出图上就是
+		#    **两个硬边蓝色方块**贴在机甲身上（`_probe_carrier_fx.gd` 的 2_climb）。
+		#    纯色 billboard 没有边缘衰减 = 一个实心方片。
+		var glow := MeshInstance3D.new()
+		glow.mesh = _make_glow_quad()
+		glow.material_override = _make_glow_mat()
+		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		glow.layers = 1
+		glow.position = Vector3(0.0, -0.10, 0.0)
+		holder.add_child(glow)
+
 		# 喷气粒子
 		var gp := GPUParticles3D.new()
-		# amount 72 + lifetime 0.34：够密、又不会拖成一条长尾巴。
-		# 原来 48 / 0.55 配上 0.26 的大方块，出图上是「一条方块瀑布」（见探针出图）。
-		gp.amount = 72
-		gp.lifetime = 0.34
+		# ── 从「一团雾」改成「一条尾迹」（用户 2026-11-08）──
+		# 原来是 amount 72 / lifetime 0.34 / 初速 1.6~4.2 / 阻尼 3~6：
+		# 粒子刚出去就被阻尼刹住，堆在喷口附近 = 一团雾，看不出「在飞」。
+		# 现在拉长寿命、提高初速、减小阻尼 —— 粒子会**拖着一条尾巴走**。
+		gp.amount = 96
+		gp.lifetime = 0.5
 		gp.local_coords = false
 		gp.emitting = false
-		gp.visibility_aabb = AABB(Vector3(-3, -6, -3), Vector3(6, 8, 6))
+		gp.visibility_aabb = AABB(Vector3(-4, -8, -4), Vector3(8, 12, 8))
 		gp.draw_pass_1 = particle_mesh
 		gp.material_override = particle_mat
 		var pm := ParticleProcessMaterial.new()
 		pm.direction = Vector3(0.0, -1.0, 0.0)
 		pm.spread = 10.0
-		pm.initial_velocity_min = 1.6
-		pm.initial_velocity_max = 4.2
+		pm.initial_velocity_min = 2.5
+		pm.initial_velocity_max = 7.0
 		pm.gravity = Vector3(0.0, -4.0, 0.0)
 		pm.scale_min = 0.55
 		pm.scale_max = 1.25
 		pm.color = Color(0.28, 0.55, 1.00, 0.34)
-		pm.damping_min = 3.0
-		pm.damping_max = 6.0
+		pm.damping_min = 2.0
+		pm.damping_max = 4.5
 		# 从喷口往下逐渐缩小 + 淡出（不然尾巴断得很硬）
 		var curve := Curve.new()
 		curve.add_point(Vector2(0.0, 1.0))
@@ -665,8 +722,50 @@ func _build_boost_fx() -> void:
 			"layers": layers,
 			"light": light,
 			"particles": gp,
+			"glow": glow,
 		})
 	boost_dot_count = _boost_fx.size()
+	_build_aux_fx()
+
+
+## 肩翼 / 导弹荚上的**小喷口**：短而小的蓝焰，只在飞行时冒一点。
+##
+## 为什么加这个（用户 2026-11-08：「飞行特效太粗糙两个三角形」）：
+## 只有腿上两个大推进器在喷，画面上就是「两团火」；肩翼和导弹荚一点动静都没有，
+## 整机看着像「屁股上装了俩喷气头」。给它们各加一个小喷口，视觉上才是
+## 「全身在推进」。
+##
+## 刻意做得**小**（半径 0.09、长度 0.35）而且只给 35% 的亮度 —— 它们是配角，
+## 抢了主推进器的戏就会变成「四个大喷口」。
+func _build_aux_fx() -> void:
+	_aux_fx.clear()
+	if _skel == null:
+		return
+	var cone := _make_flame_mesh()
+	for bn in AUX_NOZZLE_BONES:
+		var bi := _skel.find_bone(bn)
+		if bi < 0:
+			continue
+		var holder := Node3D.new()
+		holder.name = "AuxFX_%d" % bi
+		holder.visible = false
+		_carrier.add_child(holder)
+		var mi := MeshInstance3D.new()
+		mi.mesh = cone
+		mi.material_override = _make_flame_mat(FLAME_MID)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.layers = 1
+		mi.scale = Vector3(0.09, 0.35, 0.09)
+		holder.add_child(mi)
+		# 也加一片柔光，让喷口读起来是「一团小焰」而不是一根小刺
+		var aglow := MeshInstance3D.new()
+		aglow.mesh = _make_glow_quad()
+		aglow.material_override = _make_glow_mat()
+		aglow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		aglow.layers = 1
+		aglow.scale = Vector3(0.5, 0.5, 0.5)
+		holder.add_child(aglow)
+		_aux_fx.append({"bone": bi, "holder": holder, "mesh": mi, "glow": aglow})
 
 
 ## 一个「底在原点、尖朝 **−Y**、长度 1 m、底半径 1」的火焰锥。
@@ -727,10 +826,78 @@ func _make_flame_mat(c: Color) -> StandardMaterial3D:
 func _make_particle_mesh() -> QuadMesh:
 	# ⚠️ 0.26 太大、而且 `billboard_keep_scale` 一开就变成「一片片带透视的方块」，
 	#    出图上像故障贴图而不是喷气（见 `_probe_carrier_shot.gd` 的 2_hover/3_side）。
-	#    0.09 是肉眼看起来「颗粒」的大小；靠数量（amount 72）而不是靠尺寸堆出体积感。
+	#    0.09 是肉眼看起来「颗粒」的大小；靠数量（amount）而不是靠尺寸堆出体积感。
+	# ⚠️ 贴图用**软圆斑**：纯色方片在加色混合下会变成一片片硬边方块
+	#    （第一版就是这样，出图上像「方块瀑布」）。带径向渐变才像雾。
 	var q := QuadMesh.new()
-	q.size = Vector2(0.09, 0.09)
+	q.size = Vector2(0.11, 0.11)
+	# ⚠️ 这里**不挂材质**：`GPUParticles3D.material_override` 会覆盖网格自带的材质，
+	#    而真正带软圆斑贴图的是 `particle_mat`（见 `_make_particle_mat()`）。
+	#    本喵第一版两边都挂，结果生成两份材质、还多了一份没贴图的。
 	return q
+
+
+## 喷口柔光用的**软圆斑**网格（带径向渐变的贴图）。
+##
+## ⚠️ 不能用裸 `QuadMesh`：纯色 billboard 没有边缘衰减，出图就是硬边方块。
+## 这里生成一张 64×64 的径向渐变贴图（中心亮、边缘透明），贴到方片上。
+static var _glow_tex: ImageTexture = null
+
+
+func _make_glow_quad() -> QuadMesh:
+	if _glow_tex == null:
+		_glow_tex = _build_glow_texture()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.85, 0.85)
+	q.material = _make_glow_mat()
+	return q
+
+
+## 径向渐变贴图：中心 1.0 → 边缘 0.0，**带一点陡度**（不是线性，
+## 否则边缘还是能看出方片的轮廓）。
+func _build_glow_texture() -> ImageTexture:
+	var n := 64
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	for y in n:
+		for x in n:
+			var u := (float(x) + 0.5) / float(n) * 2.0 - 1.0
+			var v := (float(y) + 0.5) / float(n) * 2.0 - 1.0
+			var d := sqrt(u * u + v * v)
+			# smoothstep(1.0 → 0.0)：中心 1、边缘 0
+			var t := clampf(1.0 - d, 0.0, 1.0)
+			t = t * t * (3.0 - 2.0 * t)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, t))
+	return ImageTexture.create_from_image(img)
+
+
+## 柔光的材质：加色混合 + 顶点色当遮罩 + billboard。
+func _make_glow_mat() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.billboard_keep_scale = false
+	# ⚠️ **不要开 `vertex_color_use_as_albedo`**。
+	#    开了之后 alpha 会被**顶点色**乘掉，而 QuadMesh 的顶点色默认是白的，
+	#    贴图里的径向衰减就被「抹平」了 —— 出图上又变回硬边方块
+	#    （`_probe_carrier_fx.gd` 的 2_climb 就是这么废的）。
+	#    现在改成：贴图负责衰减，`albedo_color` 只管颜色和整体亮度。
+	m.albedo_texture = _glow_tex_or_make()
+	m.albedo_color = Color(0.45, 0.72, 1.0, 0.75)
+	m.emission_enabled = true
+	m.emission = Color(0.40, 0.70, 1.0)
+	m.emission_energy_multiplier = 2.0
+	m.disable_receive_shadows = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+
+## 拿共享的软圆斑贴图（没有就建一张）。
+func _glow_tex_or_make() -> ImageTexture:
+	if _glow_tex == null:
+		_glow_tex = _build_glow_texture()
+	return _glow_tex
 
 
 func _make_particle_mat() -> StandardMaterial3D:
@@ -741,10 +908,18 @@ func _make_particle_mat() -> StandardMaterial3D:
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	# ⚠️ 关掉 `keep_scale`：开着的话相机的远近会放大方块，远处变成一大片白斑。
 	m.billboard_keep_scale = false
-	m.vertex_color_use_as_albedo = true
-	# 偏蓝、透明度低一点：粒子的职责是「雾」，真正的「焰」由三层锥体负责
-	m.albedo_color = Color(0.28, 0.55, 1.00, 0.34)
+	# ⚠️ 同样**不要开** `vertex_color_use_as_albedo`（理由见 `_make_glow_mat()`）。
+	#    粒子的颜色/透明度用 `ParticleProcessMaterial.color` 控制（它走顶点色，
+	#    但那是在 CPU 侧生成顶点色，和这里的开关不是一回事）。
+	m.albedo_texture = _glow_tex_or_make()
+	# 偏蓝：粒子的职责是「雾」，真正的「焰」由三层锥体负责。
+	# ⚠️ alpha 留 1.0 —— 衰减由贴图负责，这里再乘一次会把边缘压没。
+	m.albedo_color = Color(0.28, 0.55, 1.00, 1.0)
+	m.emission_enabled = true
+	m.emission = Color(0.35, 0.62, 1.0)
+	m.emission_energy_multiplier = 1.4
 	m.disable_receive_shadows = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 
@@ -1194,6 +1369,37 @@ func _run_effects(delta: float) -> void:
 		var spread := Quaternion(Vector3.FORWARD, (0.10 * wing_t) + flutter * wing_t)
 		_skel.set_bone_pose_rotation(bi, spread * r0)
 
+	# ── 肩翼 / 导弹荚的小喷口：跟着骨走，飞行时冒一点 ──
+	for aux in _aux_fx:
+		var abi: int = aux["bone"]
+		var aholder: Node3D = aux["holder"]
+		var ami: MeshInstance3D = aux["mesh"]
+		if abi < 0:
+			continue
+		# 挂点跟着骨走（世界变换 → 载具局部）
+		var bone_xf := _skel.global_transform * _skel.get_bone_global_pose(abi)
+		aholder.global_transform = bone_xf
+		# 小喷口是**朝下**的：网格尖朝 −Y，而肩翼的局部 Y 未必朝下，
+		# 所以这里按骨自己的轴摆一下 —— 取骨基的 −Y（多数情况就是朝下）。
+		var basis_fix := Basis(Vector3.RIGHT, PI)
+		aholder.global_transform = Transform3D(
+			bone_xf.basis * basis_fix, bone_xf.origin)
+		var t := clampf(_thrust, 0.0, 1.2)
+		var aflick := 0.85 + 0.15 * sin(_wing_phase * 4.1)
+		aholder.visible = t > 0.12
+		ami.scale = Vector3(0.09, 0.35, 0.09) * lerpf(0.4, 1.0, t) * aflick
+		var am := ami.material_override as StandardMaterial3D
+		if am != null:
+			am.emission_energy_multiplier = lerpf(0.3, 1.8, t)
+			am.albedo_color.a = clampf(0.15 + 0.45 * t, 0.0, 1.0)
+		var aglow := aux.get("glow") as MeshInstance3D
+		if aglow != null:
+			aglow.scale = Vector3.ONE * lerpf(0.3, 0.75, t) * aflick
+			var agm := aglow.material_override as StandardMaterial3D
+			if agm != null:
+				agm.albedo_color.a = clampf(0.08 + 0.40 * t, 0.0, 1.0)
+				agm.emission_energy_multiplier = lerpf(0.4, 2.0, t)
+
 	# ── 炮口：悬停时轻微机械呼吸；**开火时**由 `Weapon.fired` 信号触发一个后坐脉冲 ──
 	for bn in CANNON_BONES:
 		var bi := _skel.find_bone(bn)
@@ -1247,6 +1453,17 @@ func _run_effects(delta: float) -> void:
 		var gp := fx["particles"] as GPUParticles3D
 		gp.emitting = t > 0.25
 		gp.speed_scale = lerpf(0.6, 1.8, t)
+		# 喷口柔光：跟着推力长出来，中心亮、边缘散。
+		# ⚠️ 这一层是「硬边三角」变「一团喷焰」的关键：锥体底边是直线，
+		#    光晕把那条直线糊掉。
+		var glow := fx.get("glow") as MeshInstance3D
+		if glow != null:
+			var gm := glow.material_override as StandardMaterial3D
+			glow.scale = Vector3.ONE * lerpf(0.35, 1.25, t) * flick
+			glow.visible = t > 0.03
+			if gm != null:
+				gm.albedo_color.a = clampf(0.10 + 0.55 * t, 0.0, 1.0)
+				gm.emission_energy_multiplier = lerpf(0.5, 3.0, t)
 
 
 # ── 双炮开火 ───────────────────────────────────────────────────────────────
