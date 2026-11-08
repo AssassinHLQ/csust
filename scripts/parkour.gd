@@ -82,6 +82,23 @@ const PORTAL_OFFSET := Vector3(0.0, 0.0, 4.5)
 ##   · 传送台台面 3×3（z −6~−3）—— 火箭**立在台面上**是刻意的（用户要的就是这个），
 ##     台面只是块薄装饰，不挡起飞。
 const ISLAND_SPOT_OFFSET := Vector3(0.0, 0.0, 0.0)
+## 岛上**下机点**：火箭旁边那一格（相对停机位往 +X 挪 2.6 m）。
+##
+## 用户 2026-11-08：「我坐火箭过来,为什么给我送到了 bank 里面而不是火箭旁边,
+## 按理来说,下火箭就是站在火箭旁边的」。
+##
+## 原来下机点是 `shed.global_position + (0, 0.1, 0.6)` —— **结算屋里面**。
+## 那是「瞬移时代」留下的落点（见 `_on_finish_portal_body()` 里火箭造不出来时的
+## 兜底分支，还在用它）。换成火箭之后两者分家了：箭体停在传送台（z = −4.5），
+## 结算屋在 9 m 外的 z = −13.5，于是「人进了屋、火箭在外面」。
+##
+## 为什么取 2.6 m：
+##   · 箭体半径 1.5 m，胶囊半径 0.3 m → 再留 1.1 m 余量，不会卡在箭体里；
+##   · 传送台台面 3×3（x −596.45~−593.45）、Trigger 2.8 m 见方 —— 落点
+##     x = −592.35 在它们外面，**不会一落地就被送回平台**；
+##   · 岛面 16×16（x −598.95~−582.95、z −17.5~−1.5），这一点在正中偏东，四面都远。
+##   · 从这点直走结算屋（−Z 9 m）不会经过传送台。
+const ISLAND_EXIT_OFFSET := Vector3(2.6, 0.1, 0.0)
 ## 空载摆渡的巡航高度（米）。比载人那趟（`RocketRide.lift_altitude` = 45 m）
 ## 高一倍多，两枚对飞时不会在半空中撞在一起。
 const FERRY_ALTITUDE := 95.0
@@ -1226,8 +1243,9 @@ func _on_finish_portal_body(body: Node3D) -> void:
 			return
 	print("[Parkour] 传送门 → 坐火箭去结算屋（火箭 %s）" % str(rocket.global_position.snappedf(0.1)))
 	_portal_cooldown = 2.0
-	_start_ride(rocket, _island_spot(),
-		shed.global_position + Vector3(0.0, 0.1, 0.6), body, "去程", false)
+	# ⚠️ 下机点是**火箭旁边**（`_island_exit_point()`），不是结算屋里面 —— 见
+	#    `ISLAND_EXIT_OFFSET` 上的说明。人落地后自己走进结算屋去结算。
+	_start_ride(rocket, _island_spot(), _island_exit_point(), body, "去程", false)
 
 
 ## ── 两头各一个停机位 ─────────────────────────────────────────────────
@@ -1239,12 +1257,20 @@ func _home_spot() -> Vector3:
 	return launch.global_position + PORTAL_OFFSET
 
 
-## 岛上：传送台外侧 4 m（回程起飞 / 去程落地）
+## 岛上：传送台那一格（回程起飞 / 去程落地）
 func _island_spot() -> Vector3:
 	var pad := get_node_or_null("Island/Props/ReturnPad") as Node3D
 	if pad == null:
 		return Vector3.ZERO
 	return pad.global_position + ISLAND_SPOT_OFFSET
+
+
+## 岛上：**人**下火箭站的地方 —— 箭体旁边（见 `ISLAND_EXIT_OFFSET`）。
+func _island_exit_point() -> Vector3:
+	var spot := _island_spot()
+	if spot == Vector3.ZERO:
+		return Vector3.ZERO
+	return spot + ISLAND_EXIT_OFFSET
 
 
 ## 除 `r` 之外的另一枚火箭（空载摆渡要用）

@@ -90,7 +90,7 @@ func _run() -> void:
 	await physics_frame
 
 	# ── ② 去程 ──
-	print("\n---------- 2. 去程：跑道口 → 结算屋 ----------")
+	print("\n---------- 2. 去程：跑道口 → 岛上停机位（人下在火箭旁边）----------")
 	var launch := _lvl.get_node_or_null("Launch") as Node3D
 	var shed := _lvl.get_node_or_null("Island/Props/Shed") as Node3D
 	_check(launch != null and shed != null, "Launch / Shed 都在")
@@ -163,13 +163,27 @@ func _run() -> void:
 	_check(peak_y > 20.0, "中途被抬到空中：最高 y = %.1f m（地面 y ≈ 0）" % peak_y)
 	_check(not bool(_player.call("is_riding")), "落地后骑乘锁已解除")
 
-	# ── ② 续：出舱点 ──
-	var expect_exit := shed.global_position + Vector3(0.0, 0.1, 0.6)
+	# ── ② 续：出舱点 = **火箭旁边**（用户 2026-11-08）──
+	# 原来是「结算屋里面」，那是瞬移时代的落点；火箭停在传送台之后两者差 9 m，
+	# 于是「人进了屋、火箭在外面」。
+	var expect_exit: Vector3 = _lvl.call("_island_exit_point")
 	var d_exit := _player.global_position.distance_to(expect_exit)
 	_check(d_exit < 0.5,
-		"人落在结算屋出舱点：距 %.2f m（期望 < 0.5）" % d_exit)
+		"人落在**火箭旁边的出舱点** %s：距 %.2f m（期望 < 0.5）" % [
+			str(expect_exit.snappedf(0.1)), d_exit])
+	# 下机点离箭体轴线要多近才算「站在火箭旁边」—— 取 3 m（箭体半径 1.5 m）
+	var d_rocket := Vector2(_player.global_position.x - rocket.global_position.x,
+		_player.global_position.z - rocket.global_position.z).length()
+	_check(d_rocket < 3.0,
+		"下机点离火箭轴线 %.2f m（期望 < 3：箭体半径 1.5 m + 余量）" % d_rocket)
+	# 反过来的那一条：**不许**再落在结算屋里（这次修的就是它）
 	var d_shed := _player.global_position.distance_to(shed.global_position)
-	_check(d_shed < 2.0, "人离结算屋 %.2f m（期望 < 2，和改前的断言同口径）" % d_shed)
+	_check(d_shed > 3.0,
+		"人**不在**结算屋里：距屋子中心 %.2f m（期望 > 3）" % d_shed)
+	# 脚下必须有地（岛面 y=8.0，落点抬高 0.1）—— 别把人放到虚空
+	_check(absf(_player.global_position.y - (expect_exit.y)) < 1.0,
+		"落点高度 y=%.2f（期望 ≈ %.2f，站在岛面上）" % [
+			_player.global_position.y, expect_exit.y])
 
 	# ── ④ 就地停住 + 另一枚补位 ──
 	print("\n---------- 4. 落地就地停住 + 另一枚补位 ----------")
