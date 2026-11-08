@@ -40,15 +40,31 @@ func _run() -> void:
 				meshes += 1
 			elif c is CollisionShape3D:
 				shapes += 1
-		print("  Body：网格 %d、碰撞盒 %d（Deck 那 1 块单独挂在 Deck 下）" % [meshes, shapes])
-		_check(meshes == 26 and shapes == 26, "Body 里 26 对网格/碰撞盒（+ Deck 1 = 27）")
+		print("  Body：网格 %d、碰撞盒 %d（Deck 已拆到独立场景 ShopDeck）" % [meshes, shapes])
+		_check(meshes == 26 and shapes == 26, "Body 里 26 对网格/碰撞盒")
 
+	# ⚠️ 2026-11-08：Deck 已从 Shop 里拆成独立场景 `scenes/shop_deck.tscn`，
+	#    在 `game.tscn` 里是 `Shop` 的**兄弟节点** `ShopDeck`（不再挂在 Shop 下）。
+	#    所以这里要去场景根找，不能再 `shop.get_node_or_null("Deck/Deck")`。
 	var deck := shop.get_node_or_null("Deck/Deck") as MeshInstance3D
-	_check(deck != null, "半边地板 Deck 在商店场景里")
+	if deck == null:
+		var root := shop.get_parent()
+		if root != null:
+			var deck_node := root.get_node_or_null("ShopDeck")
+			if deck_node != null:
+				deck = deck_node.get_node_or_null("Deck") as MeshInstance3D
+	_check(deck != null, "半边地板 Deck 在（独立场景 ShopDeck）")
 	if deck != null and deck.mesh is BoxMesh:
 		var s := (deck.mesh as BoxMesh).size
 		print("  Deck 盒尺寸 = (%.2f, %.2f, %.2f)" % [s.x, s.y, s.z])
 		_check(absf(s.x - 19.99) < 0.05 and absf(s.z - 40.0) < 0.05, "Deck 覆盖 x 20~40、z -20~20")
+		# ⚠️ 拆出去之后**位置不能变**：Deck 盒世界坐标必须还是 x 20.01~40.00、z -20~+20。
+		var wb: AABB = deck.global_transform * deck.mesh.get_aabb()
+		print("  Deck 世界 AABB = x %.2f~%.2f、z %.2f~%.2f" % [
+			wb.position.x, wb.position.x + wb.size.x,
+			wb.position.z, wb.position.z + wb.size.z])
+		_check(absf(wb.position.x - 20.01) < 0.05 and absf(wb.position.z + 20.0) < 0.05,
+			"Deck 拆出去后世界坐标没变（x 20.01~40.00、z -20~+20）")
 
 	var zone := shop.get_node_or_null("MusicZone") as Area3D
 	_check(zone != null, "MusicZone 在")

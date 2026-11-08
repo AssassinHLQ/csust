@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[ext_resource type="Texture2D" path="res://assets/tex/lot_paver.png" id="2_el0ci"]
+[ext_resource type="Texture2D" path="res://assets/tex/lot_paver_n.png" id="3_o7wfa"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_f4t8a"]
+albedo_color = Color(0.58, 0.62, 0.68, 1)
+albedo_texture = ExtResource("2_el0ci")
+roughness = 0.95
+normal_enabled = true
+normal_scale = 0.7
+normal_texture = ExtResource("3_o7wfa")
+uv1_scale = Vector3(0.4, 0.4, 0.4)
+uv1_triplanar = true
+uv1_world_triplanar = true
+texture_filter = 5
+
+[sub_resource type="BoxMesh" id="BoxMesh_miwgs"]
+size = Vector3(19.99, 0.5, 40)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_dey76"]
+size = Vector3(19.99, 0.5, 40)
+
+[node name="ShopDeck" type="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.3, 0, -15.5)
+
+[node name="Deck" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7050009, -0.25, 15.5)
+material_override = SubResource("StandardMaterial3D_f4t8a")
+mesh = SubResource("BoxMesh_miwgs")
+
+[node name="DeckShape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7050009, -0.25, 15.5)
+shape = SubResource("BoxShape3D_dey76")

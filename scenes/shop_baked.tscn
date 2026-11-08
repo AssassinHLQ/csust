@@ -1,8 +1,6 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/shop.gd" id="1_io0bi"]
-[ext_resource type="Texture2D" path="res://assets/tex/lot_paver.png" id="2_el0ci"]
-[ext_resource type="Texture2D" path="res://assets/tex/lot_paver_n.png" id="3_o7wfa"]
 [ext_resource type="PackedScene" path="res://models/shop_building/shop.glb" id="4_el0ci"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_el0ci"]
@@ -29,24 +27,6 @@ size = Vector3(3.4, 0.72, 0.08)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_hc87v"]
 size = Vector3(3.4, 0.72, 0.08)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_f4t8a"]
-albedo_color = Color(0.58, 0.62, 0.68, 1)
-albedo_texture = ExtResource("2_el0ci")
-roughness = 0.95
-normal_enabled = true
-normal_scale = 0.7
-normal_texture = ExtResource("3_o7wfa")
-uv1_scale = Vector3(0.4, 0.4, 0.4)
-uv1_triplanar = true
-uv1_world_triplanar = true
-texture_filter = 5
-
-[sub_resource type="BoxMesh" id="BoxMesh_miwgs"]
-size = Vector3(19.99, 0.5, 40)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_dey76"]
-size = Vector3(19.99, 0.5, 40)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_61sci"]
 size = Vector3(12.599999, 11.977241, 5)
@@ -102,16 +82,19 @@ text = "柴关电脑城"
 font_size = 80
 outline_size = 18
 
-[node name="Deck" type="StaticBody3D" parent="." unique_id=1547712804]
-
-[node name="Deck" type="MeshInstance3D" parent="Deck" unique_id=180409571]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7050009, -0.25, 15.5)
-material_override = SubResource("StandardMaterial3D_f4t8a")
-mesh = SubResource("BoxMesh_miwgs")
-
-[node name="DeckShape" type="CollisionShape3D" parent="Deck" unique_id=1947256698]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7050009, -0.25, 15.5)
-shape = SubResource("BoxShape3D_dey76")
+; ── Deck 室外平台已拆走（2026-11-08）──
+; 用户要「分开商店和地板，改商店位置时不动地板」。
+; 现在 Deck 在**独立场景** `res://scenes/shop_deck.tscn`（节点名 `ShopDeck`），
+; 由 `game.tscn` 直接实例化 —— 它和 `Shop` 是**兄弟节点**，不是子节点。
+; 原来这里的两块：
+;   [node name="Deck" type="StaticBody3D" parent="."]
+;   [node name="Deck" type="MeshInstance3D" parent="Deck"]
+;   [node name="DeckShape" type="CollisionShape3D" parent="Deck"]
+; 局部坐标 (2.7050009, -0.25, 15.5) 原样搬到新场景，根节点保持 (27.3, 0, -15.5)，
+; 于是 Deck 盒世界坐标仍是 x 20.01~40.00、z −20~+20，一厘米没动。
+;
+; ⚠️ `shop.gd` 的 `deck_rect` 走**元数据**（`baked_deck_rect`），不依赖节点位置，
+;    所以拆走不影响商店自己的尺寸计算。
 
 ; ── 室内地板碰撞（2026-11-08）──
 ; **没有网格**：看得见的那块地板是屋壳 GLB 自带的 `Rectangle009__0`（白地台），

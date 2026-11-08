@@ -1,0 +1,39 @@
+场景: 把商店的室外平台拆成独立场景 ShopDeck，电竞房暂时打开
+
+用户：「我想分开商店和地板，改商店位置」+「帮我开电竞房，暂时」。
+
+**① Deck 拆出去**
+原来 `shop_baked.tscn` 里 `Deck`（室外地砖平台）挂在 `Shop` 下面，
+所以拖 Shop 会连地板一起动。现在拆成独立场景 `scenes/shop_deck.tscn`，
+在 `game.tscn` 里 `ShopDeck` 与 `Shop` 是**兄弟节点**，各自带 transform。
+
+坐标零位移的做法：`Deck` 的局部坐标是相对 Shop 根的（局部 2.705,-0.25,15.5，
+Shop 根 27.3,0,-15.5），新场景的根就摆在 **Shop 原来的世界位置**上，
+局部坐标一字不改 —— 世界坐标自然不变。
+
+· `scenes/shop_deck.tscn`（新）：根 ShopDeck@(27.3,0,-15.5)，带 Deck 网格+碰撞
+  和原来的地砖材质（StandardMaterial3D_f4t8a / BoxMesh_miwgs / BoxShape3D_dey76）
+· `scenes/shop_baked.tscn`：删掉 Deck 三个节点 + 三个变成孤儿的 sub_resource
+  + 两个没人用的地砖 ext_resource
+· `scripts/_bake_buildings.gd`：烘焙时把 Deck 从 Shop 摘出来单独烤进
+  `shop_deck.tscn`（否则下次重跑烘焙它又会回到 Shop 里）
+· `scripts/_verify_baked_buildings.gd`：Deck 改到场景根找，并新增
+  「拆出去后世界坐标没变」断言
+
+**② 电竞房打开**
+`game.tscn` 里 `EsportsRoom` 去掉 `visible = false`（门控：没买不显示）。
+⚠️ 这是**暂时**打开 —— `scripts/game.gd` 里 `EAST_ROOMS = ["EsportsRoom"]`
+仍由 `ShopClerk.is_bought()` 盯着，运行时可能会再被藏起来。
+
+验证：
+· _probe_shop_floor：命中者 { ShopDeck: 28, InteriorFloor: 14 }，
+  没有地板的格子 0 / 42；Deck 地板矩形 x 20.01~40.00、z -20.00~20.00（一厘米没变）
+· _probe_mondrian_spot：大楼 footprint 全在地板上，0 个采样点悬空
+· _verify_shop_grounded：on_floor=true 通过
+· _verify_baked_buildings：Deck 三条断言全过
+  （剩下 2 项失败「Body 里 26 对」「大楼碰撞盒 73 个」是**改动前就红**的，
+   stash 对比确认一致；前者是 GLB 换版后的过期期望值，后者是别的会话
+   把大楼碰撞从 73 简化到 37 但没更新断言 —— 与本次改动无关）
+
+另：game.tscn 里 GameDevRoom 的 x=47.89 是上一轮本喵改的（左移 4.11 m），
+z=-8.632353 是使用者自己在编辑器里拖的，一并在此说明。

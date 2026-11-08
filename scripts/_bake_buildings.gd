@@ -17,6 +17,8 @@ extends SceneTree
 const SHOP_OUT := "res://scenes/shop_baked.tscn"
 const MONDRIAN_OUT := "res://scenes/mondrian_house_baked.tscn"
 const ROOM_OUT := "res://scenes/room609_proxy_baked.tscn"
+## 商店的室外平台，**独立于** Shop（2026-11-08 用户要「分开商店和地板」）。
+const DECK_OUT := "res://scenes/shop_deck.tscn"
 
 
 func _initialize() -> void:
@@ -93,6 +95,36 @@ func _run() -> void:
 	shop.set_meta("baked_deck_rect", shop.get("deck_rect"))
 	shop.set_meta("baked_built_count", shop.get("built_count"))
 	shop.set_meta("baked_decor_count", shop.get("decor_count"))
+
+	# ── Deck 拆成独立场景（2026-11-08）──
+	# 用户要「分开商店和地板，改商店位置时地板不动」。
+	# `shop.gd::_build_deck()` 仍然在 Shop 下建 `Deck`，所以这里把它**摘出来**，
+	# 单独烤进 `scenes/shop_deck.tscn`，`game.tscn` 里两者是兄弟节点。
+	#
+	# ⚠️ 坐标**不用换算**：`Deck` 的局部坐标是相对 Shop 根的
+	#    （Deck 局部 (2.705, -0.25, 15.5)，Shop 根 (27.3, 0, -15.5)）。
+	#    新场景的根节点就摆在 **Shop 原来的世界位置**上，Deck 的局部坐标**一字不改**，
+	#    世界坐标自然一厘米不差。
+	#    实测：Deck 盒世界 x 20.01~40.00、z −20~+20（`_verify_baked_buildings.gd` 会核）。
+	var deck_node := shop.get_node_or_null("Deck") as Node3D
+	if deck_node == null:
+		print("[bake] !! Shop 下没有 Deck —— `shop.gd::_build_deck()` 没跑？")
+	else:
+		# 新根：摆在 Shop 原来的世界位置上。
+		var deck_root := Node3D.new()
+		deck_root.name = "ShopDeck"
+		deck_root.transform = shop.global_transform
+		game.get_root().add_child(deck_root)
+		# Deck 摘过来，**局部坐标不动**。
+		shop.remove_child(deck_node)
+		deck_root.add_child(deck_node)
+		print("[bake] Deck 拆出：根 %s，Deck 局部 %s" % [
+			str(deck_root.transform.origin), str(deck_node.transform.origin)])
+		if _can_write(DECK_OUT, force) and (only == "" or only == "shop" or only == "deck"):
+			_bake(deck_root, DECK_OUT)
+		else:
+			print("[bake] %s 已存在，跳过（要覆盖加 -- --force）" % DECK_OUT)
+		deck_root.queue_free()
 
 	if _can_write(SHOP_OUT, force) and (only == "" or only == "shop"):
 		_bake(shop, SHOP_OUT)
