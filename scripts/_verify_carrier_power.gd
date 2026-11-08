@@ -146,7 +146,10 @@ func _run() -> void:
 	_check(bool(wpn.get("disabled")), "武器被关闭")
 	wpn.set("_cooldown", 0.0)
 	_check(not wpn.shoot(), "巡航者模式下扣扳机打不出子弹")
-	_check(absf(float(player.get("_fly_scale")) - 1.6) < 0.001, "玩家的飞行速度倍率 = 1.6")
+	# ⚠️ 巡航倍率 2026-11-08 从 1.6 提到了 2.6（用户：「巡航者太慢了」）。
+	#    这条断言差点漏改：本喵只改了 `_verify_dev_keys`，结果这条一直是红的
+	#    （20/21）—— 探针里的旧数字和代码里的常量一样要跟着走。
+	_check(absf(float(player.get("_fly_scale")) - 2.6) < 0.001, "玩家的飞行速度倍率 = 2.6")
 	# 巡航期间照样攒条
 	cf.set("energy_bars", 0)
 	cf.set("fly_distance_m", 2995.0)
