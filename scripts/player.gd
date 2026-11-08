@@ -3,6 +3,9 @@ extends CharacterBody3D
 
 ## 上台阶辅助。用 `preload` 而不是 `class_name` 引用 —— 见 `step_climb.gd` 文件头第一条。
 const StepClimb := preload("res://scripts/step_climb.gd")
+## 开发者快捷键（F3/F4/F5/F6）用到的两个静态工具
+const DevMode := preload("res://scripts/dev_mode.gd")
+const SceneFlowDev := preload("res://scripts/scene_flow.gd")
 ## 第三人称主角控制器。
 ##
 ## 输入：
@@ -331,6 +334,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and (event as InputEventKey).pressed \
 		and not (event as InputEventKey).echo:
 		var key := (event as InputEventKey).keycode
+		# ── 开发者快捷键（用户 2026-11-08）──
+		# ⚠️ 必须放在下面 `KEY_R` 换弹之前：开发者模式下这几键要优先被吃掉。
+		if _dev_key(key):
+			get_viewport().set_input_as_handled()
+			return
 		# ⚠️ Esc **不在这里处理**：它归设置界面（scripts/settings_menu.gd）。
 		#    菜单打开时游戏是暂停的、player 收不到输入，也就没法负责「关掉菜单」——
 		#    由菜单自己监听（PROCESS_MODE_ALWAYS）才能一开一关都稳。
@@ -385,6 +393,57 @@ func _poll_mouse_buttons() -> void:
 	if _aim_held and not right:
 		_set_aiming(false)
 	_aim_held = right
+
+
+## ── 开发者快捷键（用户 2026-11-08）────────────────────────────────────────
+##
+##   F3 → 开/关**开发者模式**（帧率面板归 `game.gd`，它自己也监听 F3，两边各吃各的）
+##   F4 → 直接切到另一个场景（在 `game.tscn` 就跳 `next_level.tscn`，反之亦然）
+##   F5 → 秒杀场上所有 `bosses` 分组里的敌人
+##   F6 → 角色速度 ×3 / 恢复（调试用）
+##
+## F4/F5/F6 **只在开发者模式打开后生效**，避免正常玩的时候误触。
+## 返回 true 表示这个键被吃掉了。
+func _dev_key(key: int) -> bool:
+	match key:
+		KEY_F3:
+			var on := DevMode.toggle()
+			print("[Dev] 开发者模式 → %s（F4 下一场景 / F5 秒杀 / F6 三倍速）"
+				% ("开" if on else "关"))
+			return true
+		KEY_F4:
+			if not DevMode.is_on():
+				return false
+			var cur := ""
+			var cs := get_tree().current_scene
+			if cs != null:
+				cur = cs.scene_file_path
+			var nxt := "res://scenes/next_level.tscn" if cur.ends_with("game.tscn") \
+				else "res://scenes/game.tscn"
+			if SceneFlowDev.switching:
+				return true
+			print("[Dev] F4：%s → %s" % [cur, nxt])
+			SceneFlowDev.switch_scene(nxt, "", "DevF4", false)
+			return true
+		KEY_F5:
+			if not DevMode.is_on():
+				return false
+			var n := 0
+			for b in get_tree().get_nodes_in_group("bosses"):
+				if b.has_method("take_damage"):
+					# 给一个绝对够的伤害，走 Boss 自己的 `_die()` 流程
+					# （闪白 / 掉落 / 重生判定都在那边，不要绕过它）
+					b.call("take_damage", 1.0e9, global_position, Vector3.ZERO)
+					n += 1
+			print("[Dev] F5 秒杀：场上 %d 个敌人" % n)
+			return true
+		KEY_F6:
+			if not DevMode.is_on():
+				return false
+			_dev_speed_scale = 1.0 if _dev_speed_scale > 1.5 else 3.0
+			print("[Dev] F6 角色速度 ×%.1f" % _dev_speed_scale)
+			return true
+	return false
 
 
 func _set_aiming(on: bool) -> void:
@@ -470,6 +529,8 @@ func is_riding() -> bool:
 var _flight_lock := false
 ## 巡航者模式的飞行加速倍率（`carrier_form.gd::set_cruise()` 设置）。1.0 = 平常。
 var _fly_scale := 1.0
+## 开发者模式 F6 的整体倍速（地面 + 飞行都吃）。1.0 = 关。
+var _dev_speed_scale := 1.0
 
 
 ## 巡航者模式：飞得更快（用户 2026-11-08：「按 T 启动巡航者模式关闭武器能够更快飞行」）。
@@ -566,6 +627,9 @@ func _physics_process(delta: float) -> void:
 		target_speed = SPEED_AIM
 	elif sprinting:
 		target_speed = SPEED_RUN
+
+	# 开发者模式 F6 的整体倍速（地面和飞行一起吃）
+	target_speed *= _dev_speed_scale
 
 	# --- 水平加速 / 摩擦 ---
 	var horiz := Vector3(velocity.x, 0.0, velocity.z)

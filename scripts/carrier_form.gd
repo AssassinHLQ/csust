@@ -87,8 +87,12 @@ const HOLD_STIFFNESS := 3.0
 #   · 「开启期间还是可以飞行积攒能量条的」          → 攒条与加速互不阻塞
 const CRUISE_KEY := KEY_T
 const ENERGY_KEY := KEY_R
-## 巡航者模式的飞行加速倍率（乘在 `player.gd` 的飞行目标速度上）
-const CRUISE_SPEED_SCALE := 1.6
+## 巡航者模式的飞行加速倍率（乘在 `player.gd` 的飞行目标速度上）。
+##
+## 用户 2026-11-08：「巡航者太慢了」。原来写 1.6（巡航 11 → 17.6 m/s，
+## 加力 19 → 30.4 m/s）。提到 **2.6** 后：巡航 **28.6**、加力 **49.4 m/s**
+## —— 「关掉武器换速度」要有明显体感，不然玩家不会想按 T。
+const CRUISE_SPEED_SCALE := 2.6
 ## 每条能量条需要累计多少米飞行
 const ENERGY_PER_BAR_M := 3000.0
 const MAX_BARS := 5
