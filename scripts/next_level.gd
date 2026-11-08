@@ -346,6 +346,18 @@ func _update_scoreboard() -> void:
 	_score.text = "机关 %d / %d" % [_left, _total]
 
 
+## 给场景里的门（`scene_gate.gd`）在 HUD 上显示一行提示。
+##
+## ⚠️ 为什么需要它：2026-11-02 用户要求「浮空字去掉」，`scene_gate.gd` 于是把门上的
+##    `Title` / `Prompt` 两个 Label3D 全设成 invisible —— 结果**门上没有任何按键提示**，
+##    用户 2026-11-08 直接找不到回第一场景的门（本喵查日志才发现）。
+##    这里把那句提示挪到 HUD 的 `Message` 标签上：不违反「不要浮在场景里的字」，
+##    而且看得到。只在第一次走近时弹一次，4 秒后淡出（复用 `_show_message`）。
+func show_gate_hint(text: String) -> void:
+	if text != "":
+		_show_message(text, 4.0)
+
+
 func _show_message(text: String, seconds: float) -> void:
 	if _msg_tween != null and _msg_tween.is_valid():
 		_msg_tween.kill()

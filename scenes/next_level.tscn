@@ -405,6 +405,7 @@ target_spawn = "MondrianGate2F"
 gate_id = "ConstructivistReturn"
 title = "返回 · 蒙德里安大楼"
 prompt = "按 F 返回"
+hint = "走近这扇门，按 F 返回第一场景（蒙德里安大楼）"
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.55, 5.2)
