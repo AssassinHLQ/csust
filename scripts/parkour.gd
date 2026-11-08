@@ -891,6 +891,23 @@ var _finish_portal: Node3D
 ## 两枚每次飞完都会互换（见 `_start_ride()`），谁在哪头要用 `_rocket_at()` 现查。
 var _finish_rocket: Node3D
 var _return_rocket: Node3D
+## 跑道口那枚火箭现在**能不能被看见**。
+##
+## ⚠️ 2026-11-08 用户：「这个火箭，我没完成跑酷的时候不要出现」——
+##    原来 `_ready()` 就把两枚都造好杵在两头，玩家刚进跑酷区（甚至只是路过跑道口）
+##    就抬头看见一枚 42 m 的猎鹰 9，像预告了终点一样。现在改成：
+##
+##      · **跑道口那枚**：开局 `visible = false`，直到跑酷计时器停表
+##        （`run_finished` → `_on_run_finished()`）才显形；
+##      · **岛上那枚**：保持常驻可见（`_island_spot()` 在 570 m 外的终点岛上，
+##        玩家没通关根本走不到，藏不藏都一样；而且它是回程唯一载具，
+##        藏起来反而会在玩家好不容易登岛后凭空冒出来）。
+##
+## ⚠️ 藏的是**可见性**，不是删除节点：`_rocket_at(_home_spot())` 仍然查得到它，
+##    这样「传送门踩上去 → 坐火箭」的链路不用改，只是通关前没人看得见它。
+##    `_start_ride()` / `depart_to()` 起飞前会强制 `set_visible(true)` 兜底，
+##    免得将来有别的入口提前触发骑乘，出现「看不见的火箭把人送走」。
+var _home_rocket_revealed := false
 ## 正在飞。防止降落动画途中又踩一次触发盒，重复起飞
 var _riding := false
 ## 这次骑乘结束后要不要 `reset_run()`（回程要清检查点/计时，去程不要）
@@ -1031,6 +1048,10 @@ func _spawn_avenger(pad: Node3D) -> void:
 ## 踩上去直接送到岛上的结算屋 —— 屋里那台 SettlementPad 会自动把资产 + 保证金
 ## 转进银行卡，省得再跑一遍全程。
 func _on_run_finished(_seconds: float, _best: float) -> void:
+	# 通关这一刻，跑道口那枚火箭才显形（用户 2026-11-08「没完成跑酷的时候不要出现」）。
+	# 顺序很重要：先亮火箭再立传送门，玩家看到的是「门开了，火箭就在门口」。
+	_home_rocket_revealed = true
+	_apply_home_rocket_visibility()
 	_spawn_finish_portal()
 
 
@@ -1111,10 +1132,13 @@ func _spawn_finish_portal() -> void:
 	_finish_portal = door
 	# 火箭和门立在同一格：用户 2026-11-06「SpaceX 火箭加入跑酷尽头那个传送门」。
 	# 火箭本身在 `_ready()` 里就造好了（两头各一枚常驻），这里只兜底补造。
+	# ⚠️ 2026-11-08 起跑道口那枚默认隐藏，`_home_rocket_revealed` 已在
+	#    `_on_run_finished()` 里置 true，所以这里补造出来的那枚是可见的。
 	if _rocket_at(_home_spot()) == null:
 		var r := _spawn_ride_rocket(door.global_position)
 		if r != null:
 			_finish_rocket = r
+			_apply_home_rocket_visibility()
 	print("[Parkour] 通关：传送门立在跑道口 %s（目标 %s），火箭就位：%s" % [
 		str(door.global_position.snappedf(0.1)), PORTAL_DEST,
 		"有" if _rocket_at(_home_spot()) != null else "无"])
@@ -1192,16 +1216,38 @@ func _spawn_ride_rockets() -> void:
 		_finish_rocket = _spawn_ride_rocket(_home_spot())
 	if not is_instance_valid(_return_rocket):
 		_return_rocket = _spawn_ride_rocket(_island_spot())
+	# 跑道口那枚开局不上屏（用户 2026-11-08「没完成跑酷的时候不要出现」）。
+	# 岛上那枚保持可见 —— 它在终点岛上，没通关走不到。
+	_apply_home_rocket_visibility()
 	if _finish_rocket == null or _return_rocket == null:
 		print("[Parkour] !! 火箭没造全（跑道口 %s / 岛上 %s）→ 缺的那头会退回瞬移" % [
 			"有" if _finish_rocket != null else "无",
 			"有" if _return_rocket != null else "无"])
 		return
-	print("[Parkour] 火箭就位：跑道口 %s / 岛上 %s（各高 %.0f m，%s）" % [
+	print("[Parkour] 火箭就位：跑道口 %s / 岛上 %s（各高 %.0f m，%s；跑道口 %s）" % [
 		str(_finish_rocket.global_position.snappedf(0.1)),
 		str(_return_rocket.global_position.snappedf(0.1)),
 		float(_finish_rocket.call("height")),
-		"占位" if bool(_finish_rocket.call("is_placeholder")) else "Falcon9"])
+		"占位" if bool(_finish_rocket.call("is_placeholder")) else "Falcon9",
+		"可见" if _home_rocket_revealed else "隐藏（未通关）"])
+
+
+## 按「有没有通关」刷新跑道口那枚火箭的可见性。
+##
+## 用户 2026-11-08：「这个火箭，我没完成跑酷的时候不要出现」。
+## 判据是 `_home_rocket_revealed`，只在 `_on_run_finished()` 里置 true。
+##
+## ⚠️ 为什么遍历**所有**站位在跑道口的火箭，而不只认 `_finish_rocket`：
+##    两枚会互换位置（`_start_ride()` 的空载摆渡），跑道口站着哪一枚是不确定的，
+##    只认变量名会漏掉大半情况。
+func _apply_home_rocket_visibility() -> void:
+	for r in [_finish_rocket, _return_rocket]:
+		var n := r as Node3D
+		if n == null or not is_instance_valid(n):
+			continue
+		var at_home: bool = n.global_position.distance_to(_home_spot()) <= 3.0
+		# 跑道口那枚听 `_home_rocket_revealed`；岛上那枚一律可见
+		n.visible = (not at_home) or _home_rocket_revealed
 
 
 ## 岛上那枚。造不出来返回 null（调用方退回瞬移）。
@@ -1254,6 +1300,10 @@ func _start_ride(rocket: Node3D, land: Vector3, exit_point: Vector3,
 		body: Node3D, tag: String, reset_after: bool) -> void:
 	if _riding or rocket == null:
 		return
+	# 兜底：真要起飞了就必须看得见。跑道口那枚在通关前是隐藏的，
+	# 万一将来有别的入口提前触发骑乘，别出现「看不见的火箭把人送走」。
+	if not rocket.visible:
+		rocket.visible = true
 	_riding = true
 	_ride_reset_after = reset_after
 	if rocket.has_signal("ride_finished") and not rocket.is_connected("ride_finished", _on_ride_finished):

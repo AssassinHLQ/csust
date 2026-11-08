@@ -3,7 +3,8 @@ extends SceneTree
 ##
 ## 覆盖：
 ##   ① Falcon 9 GLB 真的载进来了、尺寸对（70 m × 5.05 m、非占位）
-##   ② 去程：通关 → 传送门 + 火箭一起立在跑道口 → 踩进去 → 起飞 → 落岛上停机位 → 出舱点对
+##   ①.5 通关前跑道口那枚**不可见**、岛上那枚可见、隐藏不影响 `_rocket_at()` 命中
+##   ② 去程：通关 → 火箭显形 + 传送门一起立在跑道口 → 踩进去 → 起飞 → 落岛上停机位 → 出舱点对
 ##   ③ 骑乘锁：飞行中玩家 `is_riding()` 为真、被抬到空中；落地后解除
 ##   ④ 落地**就地停住**（不再瞬移回起点），另一枚空载摆渡到空出来的那头补位
 ##   ⑤ 回程：传送台旁一直有一枚在等（不再懒生成）→ 飞回跑道口 → **落在传送门脚下**
@@ -94,6 +95,29 @@ func _run() -> void:
 	var shed := _lvl.get_node_or_null("Island/Props/Shed") as Node3D
 	_check(launch != null and shed != null, "Launch / Shed 都在")
 
+	# ── ①.5 通关前：跑道口那枚必须看不见（用户 2026-11-08「没完成跑酷的时候不要出现」）──
+	# ⚠️ 这一段必须放在 `_on_run_finished()` **之前** —— 一旦通关就永久可见了，测不到。
+	print("\n---------- 1.5 通关前：跑道口火箭隐藏 ----------")
+	var home_spot: Vector3 = _lvl.call("_home_spot")
+	var island_spot: Vector3 = _lvl.call("_island_spot")
+	var pre_finish := _lvl.get("_finish_rocket") as Node3D
+	var pre_return := _lvl.get("_return_rocket") as Node3D
+	_check(pre_finish != null and is_instance_valid(pre_finish),
+		"跑道口那枚已造出（藏的是可见性，不是删节点 —— 传送链路才查得到它）")
+	_check(pre_return != null and is_instance_valid(pre_return), "岛上那枚也造好了")
+	_check(not bool(_lvl.get("_home_rocket_revealed")), "开局 `_home_rocket_revealed` = false")
+	if pre_finish != null and is_instance_valid(pre_finish):
+		_check(pre_finish.global_position.distance_to(home_spot) <= 3.0,
+			"它确实站跑道口 %s" % str(pre_finish.global_position.snappedf(0.1)))
+		_check(not pre_finish.visible, "★ 通关前跑道口那枚不可见")
+	if pre_return != null and is_instance_valid(pre_return):
+		_check(pre_return.global_position.distance_to(island_spot) <= 3.0,
+			"另一枚站岛上 %s" % str(pre_return.global_position.snappedf(0.1)))
+		_check(pre_return.visible, "岛上那枚保持可见（它在终点岛，没通关走不到）")
+	# 隐藏 ≠ 消失：站在原地的节点仍然要被 `_rocket_at()` 查得到，否则传送门会退回瞬移
+	_check(_lvl.call("_rocket_at", home_spot) != null,
+		"隐藏不影响 `_rocket_at(_home_spot())` 命中")
+
 	_lvl.call("_on_run_finished", 60.0, 55.0)
 	for _i in 10:
 		await physics_frame
@@ -102,6 +126,9 @@ func _run() -> void:
 	_check(portal != null, "通关后传送门立在跑道口")
 	_check(rocket != null, "火箭随传送门一起就位")
 	if rocket != null:
+		_check(bool(_lvl.get("_home_rocket_revealed")),
+			"通关后 `_home_rocket_revealed` = true")
+		_check(rocket.visible, "★ 通关后跑道口那枚显形")
 		_check(rocket.global_position.distance_to(portal.global_position) < 0.5,
 			"火箭和门同格：火箭 %s / 门 %s" % [
 				str(rocket.global_position.snappedf(0.1)),
@@ -146,8 +173,7 @@ func _run() -> void:
 
 	# ── ④ 就地停住 + 另一枚补位 ──
 	print("\n---------- 4. 落地就地停住 + 另一枚补位 ----------")
-	var island_spot: Vector3 = _lvl.call("_island_spot")
-	var home_spot: Vector3 = _lvl.call("_home_spot")
+	# `island_spot` / `home_spot` 在 1.5 节已经取过了，这里直接复用
 	var d_land := rocket.global_position.distance_to(island_spot)
 	_check(d_land < 0.5,
 		"载人那枚落在岛上停机位 %s：偏差 %.2f m（< 0.5）" % [
