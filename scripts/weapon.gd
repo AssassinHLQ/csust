@@ -24,10 +24,19 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var fire_interval := 0.075      # 连发间隔（约 13 发/秒）
 ## **激光大炮**的连发间隔（秒）。用户 2026-11-08：「炮是激光大炮」。
 ## 机甲那两门炮不能沿用步枪的 0.075 s —— 13 发/秒的光束叠在一起会糊成一片，
-## 而且「炮」的手感应该是**一发一发**的。0.42 s ≈ 2.4 发/秒，单发有分量。
-@export var beam_fire_interval := 0.42
+## 而且「炮」的手感应该是**一发一发**的。0.36 s ≈ 2.8 发/秒，单发有分量。
+@export var beam_fire_interval := 0.36
 ## 激光大炮的单发伤害倍率（相对 `damage`）。炮比枪疼，这是常识。
-@export var beam_damage_scale := 3.2
+##
+## ⚠️ **这个数必须按「持续 DPS」倒推，不能只看单发好不好看。**
+## 用户 2026-11-08：「怎么感觉机甲还没有机枪强」—— 他是对的，本喵量过：
+##   机枪：  18      / 0.075 s = **240 DPS**
+##   旧大炮：18 × 3.2 = 57.6 / 0.42 s = **137 DPS**（只有机枪的 57%）
+## 本喵当初只顾着「炮要一发一发、有分量」，把间隔拉到 0.42 秒却没回头算总账。
+## 现在按「单发份量够重 + 总输出约为机枪两倍」定：
+##   18 × 9.5 = 171 / 0.36 s = **475 DPS ≈ 机枪的 1.98 倍**
+## 改这两个数之前先跑 `_probe_carrier_dps.gd`，它会把两边的 DPS 都打出来比对。
+@export var beam_damage_scale := 9.5
 @export var auto_fire := true
 @export var magazine_size := 60
 @export var reserve_ammo := 9999
