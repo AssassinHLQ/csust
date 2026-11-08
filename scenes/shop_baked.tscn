@@ -51,6 +51,9 @@ size = Vector3(19.99, 0.5, 40)
 [sub_resource type="BoxShape3D" id="BoxShape3D_61sci"]
 size = Vector3(12.599999, 11.977241, 5)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_shopfloor"]
+size = Vector3(13.6, 0.5, 11.0)
+
 [node name="Shop" type="Node3D" unique_id=698437412]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.3, 0, -15.5)
 script = ExtResource("1_io0bi")
@@ -110,8 +113,24 @@ mesh = SubResource("BoxMesh_miwgs")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7050009, -0.25, 15.5)
 shape = SubResource("BoxShape3D_dey76")
 
+; ── 室内地板碰撞（2026-11-08）──
+; **没有网格**：看得见的那块地板是屋壳 GLB 自带的 `Rectangle009__0`（白地台），
+; 这里只补碰撞。
+;
+; 为什么需要：屋壳换成 Sketchfab「Shop」后被放大 ×2.076，进深从 5.6 变成 10.8 m，
+; 而 Deck 地砖只铺到 z = -20（那是平台的深度），于是**商店后半截 3.7 m 底下是空的**
+; —— 地板画着、踩上去却直接掉下去（用户 2026-11-08：「电脑城的地板怎么没有碰撞」）。
+;
+; 尺寸取屋壳内沿（= GLB 地板片的范围 13.2 × 10.8），四周再往墙里塞 0.2 m 免得留缝。
+; 顶面 y = 0，和外面的 Deck 地砖同高，门口不会有台阶。
+[node name="InteriorFloor" type="StaticBody3D" parent="." unique_id=1698944210]
+
+[node name="FloorShape" type="CollisionShape3D" parent="InteriorFloor" unique_id=630112507]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, -2.6)
+shape = SubResource("BoxShape3D_shopfloor")
+
 [node name="Shell" type="Node3D" parent="." unique_id=234891893]
-transform = Transform3D(2.0763533, 0, 0, 0, 2.0763533, 0, 0, 0, 2.0763533, 0, 0, -2.599993)
+transform = Transform3D(2.0763533, 0, 0, 0, 2.0763533, 0, 0, 0, 2.0763533, 0, -0.172, -2.599993)
 
 [node name="Sketchfab_Scene" type="Node3D" parent="Shell" unique_id=2062353598 instance=ExtResource("4_el0ci")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -212.2464, 243.44884, -1.0964961)
