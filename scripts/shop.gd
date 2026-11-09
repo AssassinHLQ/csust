@@ -454,10 +454,17 @@ func _build_shell_from_glb() -> bool:
 		front_z + t * 0.5), Vector3(wall_w, shop_height, t))
 
 	# ── 招牌：只保留这一块（用户：「只保留电脑城名字牌子」）──
-	# 传**墙顶**高度而不是 `shop_height`：见 `_build_sign()` 上面那段。
-	# `shop_height`(5.99) 比墙顶(5.817) 高 0.17，用它算招牌会越出墙顶 → 浮空。
+	#
+	# ⚠️ 招牌要放在**前墙碰撞体**所在的 x 区间，不是整个立面正中。
+	#
+	# 2026-11-08 连修三轮才定位到真因：
+	#   视觉网格 `PLASTIK_W` 横跨 x=[20.71, 33.89]（整面），
+	#   但**碰撞墙** `ShellFrontWallShape` 只有 x=[28.10, 33.90]（东侧那段实墙）。
+	#   招牌原来放在正中 x≈27.3，**背后 2.5 m 是门口开口**（没有墙），所以永远"浮"。
+	#
+	# 现在招牌对齐到碰撞墙区间，按「墙区间中心」摆。
 	var wall_top_y := inst.position.y + box.size.y * s
-	_build_sign(front_z, wall_top_y)
+	_build_sign(front_z, wall_top_y, open_x + wall_w * 0.5)
 
 	_fix_glb_materials(inst)
 
@@ -545,15 +552,19 @@ func _fix_glb_materials(inst: Node3D) -> void:
 ## ⚠️ 注意坐标基准：`shop_baked.tscn` 的根节点自己带 `(27.3, 0, −15.5)` 偏移，
 ##    子节点写的是**局部**坐标。改的时候要减去根的 z（本会话第一版就漏了这一步，
 ##    写成了世界坐标，招牌整体偏了 15.5 m）。
-func _build_sign(front_z: float, wall_top_y: float = -1.0) -> void:
-	# 没传就退回旧行为（程序化壳那条路墙顶确实等于 shop_height）
+func _build_sign(front_z: float, wall_top_y: float = -1.0, wall_center_x: float = 0.0) -> void:
+	# 没传就退回旧行为（程序化壳那条路墙顶确实等于 shop_height、墙横跨整个正面）
 	if wall_top_y < 0.0:
 		wall_top_y = shop_height
 	var board_h := 0.72
 	# 板顶留 0.10 m 余量，整块压在墙面上，不越出墙顶
 	var board_y := wall_top_y - 0.10 - board_h * 0.5
 	# 2026-11-02 用户：「白色发光板子要碰撞」——从装饰改成带碰撞的箱子
-	_box("SignBoard", Vector3(0.0, board_y, front_z + 0.06),
+	#
+	# ⚠️ `wall_center_x` 是**实墙区间的中心**（程序化壳 = 0，整面墙对称）。
+	#    新 GLB 壳的正面只有东侧一段是实墙（西侧是门/玻璃），招牌必须对着那段，
+	#    否则就悬在开口上空 —— 这正是 2026-11-08 连修三轮的那个"缝"。
+	_box("SignBoard", Vector3(wall_center_x, board_y, front_z + 0.06),
 		Vector3(3.4, board_h, 0.08), _mat["sign"])
 	var lb := Label3D.new()
 	lb.name = "SignText"
@@ -563,7 +574,7 @@ func _build_sign(front_z: float, wall_top_y: float = -1.0) -> void:
 	lb.outline_size = 18
 	lb.modulate = Color(0.06, 0.10, 0.16)
 	lb.outline_modulate = Color(0.85, 0.95, 1.0, 0.9)
-	lb.position = Vector3(0.0, board_y, front_z + 0.11)
+	lb.position = Vector3(wall_center_x, board_y, front_z + 0.11)
 	lb.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	_decor.add_child(lb)
 	decor_count += 1

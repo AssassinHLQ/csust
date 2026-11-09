@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/shop.gd" id="1_io0bi"]
 [ext_resource type="PackedScene" path="res://models/shop_building/shop.glb" id="4_el0ci"]
+[ext_resource type="Script" path="res://scripts/shop_collision.gd" id="5_shellcol"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_el0ci"]
 size = Vector3(13.2, 5.9886203, 0.2)
@@ -64,18 +65,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 2.9943101, 2.8999999)
 shape = SubResource("BoxShape3D_v7o4s")
 
 [node name="SignBoard" type="MeshInstance3D" parent="Body" unique_id=39108740]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.357, 2.817)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 5.5286, 3.06)
 material_override = SubResource("StandardMaterial3D_ipn0v")
 mesh = SubResource("BoxMesh_dyvhs")
 
 [node name="SignBoardShape" type="CollisionShape3D" parent="Body" unique_id=1038800898]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.357, 2.817)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 5.5286, 3.06)
 shape = SubResource("BoxShape3D_hc87v")
 
 [node name="Decor" type="Node3D" parent="." unique_id=1883905361]
 
 [node name="SignText" type="Label3D" parent="Decor" unique_id=20076511]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.357, 2.867)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 5.5286, 3.11)
 modulate = Color(0.06, 0.1, 0.16, 1)
 outline_modulate = Color(0.85, 0.95, 1, 0.9)
 text = "柴关电脑城"
@@ -114,6 +115,17 @@ shape = SubResource("BoxShape3D_shopfloor")
 
 [node name="Shell" type="Node3D" parent="." unique_id=234891893]
 transform = Transform3D(2.0763533, 0, 0, 0, 2.0763533, 0, 0, 0, 2.0763533, 0, -0.172, -2.599993)
+
+; ── 屋壳 trimesh 碰撞（2026-11-09）──
+; 使用者：「把电脑城的墙壁、柜台加上碰撞」。
+; 屋壳 GLB 被**按材质合并**，墙/柜台/货架全在同一个网格里
+; （`PLASTIK_W_PLASTIK_W_0` 872 面横跨 x 20.71~33.89、z −23.43~−12.74），
+; 用 AABB 盒子会把整间房填成实心，所以走 trimesh。
+; 合计 1656 面、静态，查询开销可忽略。
+; ⚠️ `Body` 下已有 4 面外墙 + 招牌的盒子（烘焙时按外壳尺寸算的），保留不动 ——
+;    盒子挡外墙更快，trimesh 只补内部缺的部分。
+[node name="ShellCollision" type="Node3D" parent="." unique_id=2084156337]
+script = ExtResource("5_shellcol")
 
 [node name="Sketchfab_Scene" type="Node3D" parent="Shell" unique_id=2062353598 instance=ExtResource("4_el0ci")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -212.2464, 243.44884, -1.0964961)
