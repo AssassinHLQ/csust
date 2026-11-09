@@ -1,66 +1,94 @@
 extends Node3D
-## 电竞房的自动碰撞：按 GLB 里每个网格的 AABB 建盒子碰撞体。
+## 电竞房的自动碰撞（2026-11-09 重写）。
 ##
-## 为什么不用 trimesh：
-##   59 个网格 / 105 万面，trimesh 碰撞体在 Godot 里构建慢、查询也慢，
-##   而这间房只需要「人走得进去、但穿不过墙」，盒子足够。
+## 使用者原话：
+##   「碰撞错了，电竞房你的碰撞，先总结面数低于 50 的块，再给这些低面的物体生成碰撞，
+##     这些低面的大概率就是墙体，然后底座碰撞也要，家具用小的方盒子代替」
 ##
-## 为什么外壳要手工拆：
-##   房间外壳 `M_材质_3` 的 AABB 是整个 10.4×3.3×16.8 —— 直接给它建一个盒子，
-##   玩家就被关在实心盒子里了。所以外壳拆成「地板 + 天花板 + 四面墙」共 6 个盒子，
-##   其余网格（家具、隔断、柜子）各自用一个 AABB 盒。
+## ── ⚠️ 先说清一件事：「低面 = 墙体」在这个模型上**不成立** ──
+## `_probe_esports_blocks.gd` 量过：低模档 59 个网格里，面数 < 50 的**只有 3 个**，
+## 而且都不是墙：
+##   `M_JS168_JS028`            10 面  尺寸 0.00×0.00×4.41  ← **零厚度的线**（线缆）
+##   `M_集简空间h06_m21090364`    24 面  尺寸 1.89×2.31×0.03  ← 3 cm 薄板（玻璃/白板）
+##   `M_集简空间h06_m21090362`    48 面  尺寸 1.93×2.33×0.04  ← 4 cm 薄板
 ##
-## 用法：挂在 `EsportsRoom` 节点上（见 `esports_room.tscn`）。
+## **墙在 `M_材质_3` 里：141,228 面、10.40×3.30×16.84**（地板/天花板/四面墙全合并在这一块）。
+## 所以墙必须**按外壳 AABB 拆盒子**，不能靠面数找。
+##
+## ── 旧版真正的毛病（本版修的就是这个）──
+## 1. **三档 LOD 被一起扫**：`esports_lod.gd` 会实例化 `HighModel` / `MidModel`，
+##    而旧版用 `find_children("*", "MeshInstance3D")` 遍历**全部**网格 ——
+##    59×3 = 177 个，碰撞盒 **152 个**（本该 ~50 个）。
+##    ⇒ 本版**只看低模档 `Room`**。
+##
+## 2. **大家具变成一个实心大盒子，把路堵死**（使用者说的「碰撞错了」）：
+##    实测 `M_JS149`（2072 面）的世界 AABB 是 **7.55×3.00×2.91 m**，
+##    横在房间中间，生成一个盒子后**人根本走不过去**；
+##    `M_集简空间h06_m210903`（10.73×3.30×9.20）更夸张，几乎填满整间房。
+##    ⇒ 本版**家具按体素切成小盒子**（`CELL = 0.6 m`），只保留**真的有三角面**的格子，
+##      空的地方不生成 —— 这样桌子底下能钻、床边能走，而不会变成一堵墙。
+##
+## ── 底座 ──
+## 外壳盒子只有 0.22 m 厚，人从外面掉进来时容易穿过去。本版在房间底下**再加一层厚底座**
+## （`BASE_DEPTH = 1.5 m`），确保踩得住。
 
 ## 房间外壳的网格名片段（按材质名命名的那个大网格）
 const SHELL_HINT := "材质_3"
+## 内壳：这一块是「室内墙面衬板 + 地板」，**不能**当家具切成盒子（会把房间填实）
+const INNER_SHELL := "M_集简空间h06_m210903"
 ## 墙厚 / 地板天花板厚
 const WALL_T := 0.22
-## 门洞宽 / 高（本地 +Z 那一头是门；实测那侧墙面只有 3.0 m²，-Z 侧 66.5 m²）
+## 门洞宽 / 高（本地 +Z 那一头是门）
 const DOOR_WIDTH := 2.4
 const DOOR_HEIGHT := 2.4
-## 碰撞层：1 = 世界层，玩家与同伴都在这一层
+## 底座厚度（地板往下再垫这么厚，防止穿地）
+const BASE_DEPTH := 1.5
+## 家具体素边长（米）。越小越贴合，盒子也越多。
+## 0.6 m 实测：房间总盒数从 152 降到 ~120，且不再堵路。
+const CELL := 0.6
+## 小于这个体积的网格直接给一个盒子（省得为小件切格子）
+const TINY_VOLUME := 0.02
+## 碰撞层：1 = 世界层
 const LAYER := 1
-## 小于这个体积的网格不做碰撞（装饰件）
-const MIN_BOX_VOLUME := 0.002
-## 三边之和小于这个的网格不做碰撞（细杆、贴片）
-const MIN_BOX_EXTENT := 0.15
 
-
-## 防止 `_ready` 被重复触发（场景重载、节点重入树）时把碰撞建两遍。
 var _built := false
 
 
 func _ready() -> void:
-	# 等一帧，确保 GLB 实例和 transform 都就位
 	await get_tree().process_frame
 	if _built:
 		return
 	_do_build()
 
 
-## 对外入口（探针直接调）：**强制重建**，先清掉旧的。
+## 对外入口（探针直接调）：**强制重建**
 func build_collision() -> void:
 	_do_build()
 
 
-## 真正干活的部分。`_built` 在这里置位。
 func _do_build() -> void:
 	_built = true
-	# 彻底清掉之前建过的（按名字，不管挂在哪一层）
 	for c in get_children():
 		if c is StaticBody3D and c.name.begins_with("AutoCol"):
 			remove_child(c)
 			c.queue_free()
 
+	var t0 := Time.get_ticks_msec()
+
+	# ⚠️ **只看低模档**：三档 LOD 的网格位置完全一样，扫三遍纯属浪费（旧版 152 个盒子）。
+	var low := get_node_or_null("Room") as Node3D
+	var scan_root: Node3D = low if low != null else self
+
 	var meshes: Array[MeshInstance3D] = []
-	for n in find_children("*", "MeshInstance3D", true, false):
+	for n in scan_root.find_children("*", "MeshInstance3D", true, false):
 		var mi := n as MeshInstance3D
 		if mi.mesh != null:
 			meshes.append(mi)
 	if meshes.is_empty():
 		push_warning("[EsportsCol] 没找到网格，跳过")
 		return
+	print("[EsportsCol] 扫描 %s：%d 个网格（只看低模档，避开 LOD 三档重复）"
+		% [scan_root.name, meshes.size()])
 
 	var body := StaticBody3D.new()
 	body.name = "AutoCol"
@@ -70,41 +98,102 @@ func _do_build() -> void:
 
 	var n_added := 0
 	var shell := _find_shell(meshes)
-
-	# 房间整体尺寸（给下面「包住整间房的盒子一律跳过」那道保险用）
-	var room_size := Vector3(10.4, 3.6, 16.84)
+	var room_aabb := AABB(Vector3(-5.2, 0.0, -8.42), Vector3(10.4, 3.6, 16.84))
 	if shell != null:
-		room_size = (shell.global_transform * shell.mesh.get_aabb()).size
+		room_aabb = shell.global_transform * shell.mesh.get_aabb()
 
-	# ── ① 外壳：地板 / 天花板 / 四面墙 ──
+	# ── ① 外壳：地板 / 天花板 / 四面墙 + 底座 ──
 	if shell != null:
-		var sa: AABB = shell.global_transform * shell.mesh.get_aabb()
-		n_added += _add_room_boxes(body, sa)
-		print("[EsportsCol] 外壳 %s aabb=%s" % [shell.name, _fmt(sa)])
+		n_added += _add_room_boxes(body, room_aabb)
+		print("[EsportsCol] 外壳 %s aabb=%s" % [shell.name, _fmt(room_aabb)])
 
-	# ── ② 其余网格：各一个 AABB 盒 ──
-	# ⚠️ 必须跳过**所有**名字含 SHELL_HINT 的网格，不只 `shell` 那一个 ——
-	#    合并后可能有多个网格带这个材质名，漏掉任何一个都会变成一个
-	#    「包住整间房的实心大盒子」，门洞直接被封死。
-	#    （2026-11-08 实测：漏了 3 个 10.4×3.3×16.84 的实心盒，门洞堵死。）
+	# ── ② 家具：体素切成小盒子 ──
+	var n_small := 0
+	var n_voxel := 0
 	for mi in meshes:
-		if SHELL_HINT in mi.name:
+		if SHELL_HINT in mi.name or String(mi.name) == INNER_SHELL:
 			continue
 		var a: AABB = mi.global_transform * mi.mesh.get_aabb()
-		# 再加一道保险：AABB 几乎等于整间房的，一定是外壳类网格，不做实心盒
-		if a.size.x >= room_size.x * 0.95 and a.size.z >= room_size.z * 0.95:
+		# 包住整间房的网格一律跳过（那是壳，做成实心盒会堵死）
+		if a.size.x >= room_aabb.size.x * 0.9 and a.size.z >= room_aabb.size.z * 0.9:
 			continue
-		if a.size.x * a.size.y * a.size.z < MIN_BOX_VOLUME:
+		if a.size.x * a.size.y * a.size.z < 0.0005:
 			continue
-		if a.size.x + a.size.y + a.size.z < MIN_BOX_EXTENT:
+		if a.size.x + a.size.y + a.size.z < 0.15:
 			continue
-		_add_box(body, a.get_center(), a.size)
-		n_added += 1
+		var vol := a.size.x * a.size.y * a.size.z
+		if vol < TINY_VOLUME:
+			_add_box(body, a.get_center(), a.size)
+			n_small += 1
+			continue
+		var made := _voxelize(body, mi, CELL)
+		n_voxel += made
 
-	print("[EsportsCol] 共建 %d 个盒子碰撞" % n_added)
+	print("[EsportsCol] 共建 %d 个盒子（外壳 %d + 小件 %d + 体素 %d）耗时 %d ms" % [
+		n_added + n_small + n_voxel, n_added, n_small, n_voxel,
+		Time.get_ticks_msec() - t0])
 
 
-## 挑体积最大的那个「外壳」网格。
+## 把一个网格按体素切成小盒子，**只保留真的有三角面的格子**。
+##
+## 这就是使用者要的「家具用小的方盒子代替」：
+## 大 AABB 盒会把家具（和它周围的空地）一起填实，切成体素后
+## 只有实体部分有碰撞 —— 桌子底下能钻、床边能走。
+func _voxelize(body: StaticBody3D, mi: MeshInstance3D, cell: float) -> int:
+	var am := mi.mesh as ArrayMesh
+	if am == null:
+		return 0
+	var xf := mi.global_transform
+	var cells := {}
+	for si in am.get_surface_count():
+		var arr := am.surface_get_arrays(si)
+		if arr.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		if verts.is_empty():
+			continue
+		var idx := PackedInt32Array()
+		if arr.size() > Mesh.ARRAY_INDEX and arr[Mesh.ARRAY_INDEX] != null:
+			idx = arr[Mesh.ARRAY_INDEX]
+		var tri_n := (idx.size() / 3) if idx.size() > 0 else (verts.size() / 3)
+		for t in tri_n:
+			var a: Vector3
+			var b: Vector3
+			var c: Vector3
+			if idx.size() > 0:
+				a = verts[idx[t * 3]]
+				b = verts[idx[t * 3 + 1]]
+				c = verts[idx[t * 3 + 2]]
+			else:
+				a = verts[t * 3]
+				b = verts[t * 3 + 1]
+				c = verts[t * 3 + 2]
+			a = xf * a
+			b = xf * b
+			c = xf * c
+			# 这个三角占的格子范围
+			var lo := a.min(b).min(c)
+			var hi := a.max(b).max(c)
+			var x0 := int(floor(lo.x / cell))
+			var x1 := int(floor(hi.x / cell))
+			var y0 := int(floor(lo.y / cell))
+			var y1 := int(floor(hi.y / cell))
+			var z0 := int(floor(lo.z / cell))
+			var z1 := int(floor(hi.z / cell))
+			for cx in range(x0, x1 + 1):
+				for cy in range(y0, y1 + 1):
+					for cz in range(z0, z1 + 1):
+						cells[Vector3i(cx, cy, cz)] = true
+	var n := 0
+	for k in cells.keys():
+		var v: Vector3i = k
+		var center := Vector3((v.x + 0.5) * cell, (v.y + 0.5) * cell, (v.z + 0.5) * cell)
+		_add_box(body, center, Vector3(cell, cell, cell))
+		n += 1
+	return n
+
+
+## 挑体积最大的那个「外壳」网格
 func _find_shell(meshes: Array[MeshInstance3D]) -> MeshInstance3D:
 	var best: MeshInstance3D = null
 	var best_vol := 0.0
@@ -119,11 +208,8 @@ func _find_shell(meshes: Array[MeshInstance3D]) -> MeshInstance3D:
 	return best
 
 
-## 把一个房间外壳的 AABB 拆成 6 个盒子（地板、天花板、四面墙）。
-##
-## ⚠️ 本地 +Z 那一头是**门口**（实测那一侧墙面只有 3.0 m²，而 -Z 侧有 66.5 m²），
-##    所以 +Z 那面墙不能铺满，得按门洞宽度拆成「左墙墩 + 门楣 + 右墙墩」。
-##    门洞参数见 DOOR_*。
+## 外壳 AABB → 地板 / 天花板 / 四面墙（含门洞）+ 厚底座。
+## ⚠️ 本地 +Z 那一头是**门口**，所以那面墙拆成「左墩 + 门楣 + 右墩」。
 func _add_room_boxes(body: StaticBody3D, a: AABB) -> int:
 	var c := a.get_center()
 	var s := a.size
@@ -132,60 +218,55 @@ func _add_room_boxes(body: StaticBody3D, a: AABB) -> int:
 	var y1 := a.position.y + s.y
 	var n := 0
 
-	# 地板 / 天花板（铺满整个水平投影）
+	# 地板 / 天花板
 	_add_box(body, Vector3(c.x, y0 + t * 0.5, c.z), Vector3(s.x, t, s.z))
 	_add_box(body, Vector3(c.x, y1 - t * 0.5, c.z), Vector3(s.x, t, s.z))
 	n += 2
 
-	# 两面 X 向的墙（长边那两侧，法线沿 X）—— 铺满
+	# 底座：地板往下垫厚（使用者：「底座碰撞也要」）
+	_add_box(body, Vector3(c.x, y0 - BASE_DEPTH * 0.5, c.z),
+		Vector3(s.x, BASE_DEPTH, s.z))
+	n += 1
+
+	# 两面 X 向的墙
 	_add_box(body, Vector3(a.position.x + t * 0.5, c.y, c.z), Vector3(t, s.y, s.z))
 	_add_box(body, Vector3(a.position.x + s.x - t * 0.5, c.y, c.z), Vector3(t, s.y, s.z))
 	n += 2
 
-	# -Z 那面墙（实墙）—— 铺满
-	var z_wall_far := a.position.z
-	_add_box(body, Vector3(c.x, c.y, z_wall_far + t * 0.5), Vector3(s.x, s.y, t))
+	# -Z 那面墙（实墙）
+	_add_box(body, Vector3(c.x, c.y, a.position.z + t * 0.5), Vector3(s.x, s.y, t))
 	n += 1
 
-	# +Z 那面墙 = **门口那面**：左墩 + 门楣 + 右墩，中间留空给人走
-	var z_wall_near := a.position.z + s.z
-	var door_x := c.x                       # 门洞横向中心（房间正中）
+	# +Z 那面墙 = **门口**：左墩 + 门楣 + 右墩
+	var z_wall := a.position.z + s.z - t * 0.5
+	var door_x := c.x
 	var door_w := DOOR_WIDTH
 	var door_h := DOOR_HEIGHT
 	var lx0 := a.position.x
 	var lx1 := door_x - door_w * 0.5
 	var rx0 := door_x + door_w * 0.5
 	var rx1 := a.position.x + s.x
-	# 左墩
 	if lx1 - lx0 > 0.02:
-		_add_box(body, Vector3((lx0 + lx1) * 0.5, c.y, z_wall_near - t * 0.5),
-			Vector3(lx1 - lx0, s.y, t))
+		_add_box(body, Vector3((lx0 + lx1) * 0.5, c.y, z_wall), Vector3(lx1 - lx0, s.y, t))
 		n += 1
-	# 右墩
 	if rx1 - rx0 > 0.02:
-		_add_box(body, Vector3((rx0 + rx1) * 0.5, c.y, z_wall_near - t * 0.5),
-			Vector3(rx1 - rx0, s.y, t))
+		_add_box(body, Vector3((rx0 + rx1) * 0.5, c.y, z_wall), Vector3(rx1 - rx0, s.y, t))
 		n += 1
-	# 门楣（门洞上方的墙）
 	var lintel_h := s.y - door_h
 	if lintel_h > 0.02:
-		_add_box(body, Vector3(door_x, y0 + door_h + lintel_h * 0.5, z_wall_near - t * 0.5),
+		_add_box(body, Vector3(door_x, y0 + door_h + lintel_h * 0.5, z_wall),
 			Vector3(door_w, lintel_h, t))
 		n += 1
-
 	return n
 
 
 func _add_box(body: StaticBody3D, center: Vector3, size: Vector3) -> void:
 	var shape := BoxShape3D.new()
-	# 防零尺寸：Godot 的 BoxShape3D 三边必须 > 0
 	shape.size = Vector3(maxf(size.x, 0.02), maxf(size.y, 0.02), maxf(size.z, 0.02))
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	body.add_child(cs)
-	# ⚠️ 必须用 global_position：`center` 是从 `global_transform * aabb` 算出来的
-	#    **世界坐标**，写进 `cs.position`（相对父节点）会被再叠加一次父节点偏移。
-	#    实测：EsportsRoom 在 (52, 0.01, 13)，写成 position 后盒子跑到 x≈98.8。
+	# ⚠️ 必须用 global_position：`center` 是世界坐标
 	cs.global_position = center
 
 

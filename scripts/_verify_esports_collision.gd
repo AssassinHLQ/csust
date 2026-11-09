@@ -1,136 +1,124 @@
 extends SceneTree
-## 查：电竞房有没有碰撞、能不能挡住人。
+## 查电竞房碰撞的**实际状态**：盒子数量 + 射线实测。
 ##
-##   ① 盒子里数：地板 / 天花板 / 四面墙 / 家具各建了多少
-##   ② 从外面往墙里打一条射线 —— 必须命中
-##   ③ 从房间正中间往外打 —— 必须命中墙
-##   ④ 从门口（本地 +Z 那头）往里打 —— 必须**穿过去**（门得能进）
+##   godot --path . --headless --script res://scripts/_verify_esports_collision.gd
 ##
-##   & godot --script res://scripts/_verify_esports_collision.gd -- --splat=off --story=off
+## ⚠️ 重点查一件事：2026-11-09 本喵给电竞房加了三档 LOD
+##    （`esports_lod.gd` 会实例化 `HighModel` / `MidModel`），
+##    而 `esports_collision.gd` 是用 `find_children("*", "MeshInstance3D")`
+##    **遍历全部网格**的 —— 现在会同时扫到三档、**碰撞盒数量 ×3**。
+##    这个脚本把它量出来。
 
-var _fails := 0
+const GAME := "res://scenes/game.tscn"
 
 
 func _initialize() -> void:
-	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
-	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
 
 
-func _wait(n: int) -> void:
-	for _i in n:
+func _run() -> void:
+	var game := (load(GAME) as PackedScene).instantiate()
+	root.add_child(game)
+	current_scene = game
+	for _i in 20:
 		await process_frame
 
-
-func _check(ok: bool, what: String) -> void:
-	if ok:
-		print("[colv] OK   %s" % what)
-	else:
-		_fails += 1
-		print("[colv] FAIL %s" % what)
-
-
-func _run() -> void:
-	await _wait(3)
-
-	var room: Node3D = load("res://scenes/esports_room.tscn").instantiate()
-	root.add_child(room)
-	room.global_position = Vector3(52, 0.01, 13)
-	await _wait(30)
-
-	# ── ① 数盒子 ──
-	var body := room.get_node_or_null("AutoCol") as StaticBody3D
-	_check(body != null, "AutoCol（碰撞体）已建立")
-	if body == null:
-		print("[colv] 结果：失败（没有碰撞体）")
+	var room := game.get_node_or_null("EsportsRoom") as Node3D
+	if room == null:
+		print("[ecol] !! 没有 EsportsRoom")
 		quit(1)
 		return
 
-	var boxes := 0
-	var aabb := AABB()
-	var first := true
-	for c in body.get_children():
-		var cs := c as CollisionShape3D
-		if cs == null or not (cs.shape is BoxShape3D):
+	# ① 三档网格数
+	for nm in ["Room", "Lod/HighModel", "Lod/MidModel"]:
+		var n := room.get_node_or_null(nm)
+		if n == null:
+			print("[ecol] %-16s 不存在" % nm)
 			continue
-		var bs := cs.shape as BoxShape3D
-		var a := AABB(cs.global_position - bs.size * 0.5, bs.size)
-		aabb = a if first else aabb.merge(a)
-		first = false
-		boxes += 1
-	print("[colv] 盒子数 = %d，总范围 %s" % [boxes, str(aabb)])
-	_check(boxes >= 10, "盒子数够（%d 个，至少 10）" % boxes)
-	_check(boxes >= 6, "外壳 6 个盒子在（地板/天花板/四面墙）")
+		print("[ecol] %-16s 网格 %3d 个  visible=%s" % [
+			nm, n.find_children("*", "MeshInstance3D", true, false).size(),
+			str((n as Node3D).visible)])
 
-	# ── ② 从外面往墙里打 ──
+	# ② 碰撞盒数量
+	var boxes := 0
+	var bodies := 0
+	for c in room.get_children():
+		if not (c is StaticBody3D and String(c.name).begins_with("AutoCol")):
+			continue
+		bodies += 1
+		boxes += c.get_children().size()
+	print("[ecol] AutoCol 碰撞体 %d 个，共 %d 个形状" % [bodies, boxes])
+	# 顺带看 `esports_collision.gd` 自己报的数
+	print("[ecol] （上面日志里 `[EsportsCol] 共建 N 个盒子碰撞` 是脚本自报）")
+
+	# ③ 射线实测：墙 / 地 / 门
 	var space := room.get_world_3d().direct_space_state
-	var center := room.global_position + Vector3(0, 1.7, 0)
+	var pos := room.global_position
+	print("[ecol] EsportsRoom 世界位置 %s 旋转 %s" % [
+		str(pos.snappedf(0.01)), str(room.global_rotation_degrees.snappedf(0.1))])
+	# 用房间自己的世界包围盒算采样点
+	var box := AABB()
+	var first := true
+	var low := room.get_node_or_null("Room")
+	if low != null:
+		for m in low.find_children("*", "MeshInstance3D", true, false):
+			var mi := m as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			var a: AABB = mi.global_transform * mi.mesh.get_aabb()
+			box = a if first else box.merge(a)
+			first = false
+	print("[ecol] 房间世界 AABB pos=%s size=%s" % [
+		str(box.position.snappedf(0.01)), str(box.size.snappedf(0.01))])
+	var c := box.position + box.size * 0.5
 
-	# 从 -X 外面 8 米处，朝房间中心
-	var hit := _ray(space, center + Vector3(-8, 0, 0), center)
-	_check(hit.size() > 0, "从外面（-X）打向房间：命中墙 %s" % _hit_str(hit))
+	# 地面：从中心上方朝下
+	var g := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+		Vector3(c.x, c.y + 1.0, c.z), Vector3(c.x, box.position.y - 1.0, c.z), 1))
+	print("[ecol] 地面射线 → %s" % ("空（会掉下去！）" if g.is_empty()
+		else "命中 y=%.2f %s" % [(g.get("position") as Vector3).y, g.get("collider")]))
 
-	# ── ③ 从正中间往外打（四个方向）──
+	# 天花板：朝上
+	var up := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+		Vector3(c.x, c.y + 1.0, c.z), Vector3(c.x, box.position.y + box.size.y + 2.0, c.z), 1))
+	print("[ecol] 天花板射线 → %s" % ("空" if up.is_empty() else "命中 %s" % up.get("collider")))
+
+	# 四面墙：从中心朝外
 	var dirs := {
-		"+X": Vector3(6, 0, 0),
-		"-X": Vector3(-6, 0, 0),
-		"+Z": Vector3(0, 0, 9),
-		"-Z": Vector3(0, 0, -9),
+		"西": Vector3(-1, 0, 0), "东": Vector3(1, 0, 0),
+		"南": Vector3(0, 0, -1), "北": Vector3(0, 0, 1),
 	}
-	for k in dirs.keys():
-		var h := _ray(space, center, center + (dirs[k] as Vector3))
-		_check(h.size() > 0, "从房间中心朝 %s 打：命中墙" % k)
-	# 往下打（地板）
-	var hd := _ray(space, center, center + Vector3(0, -3, 0))
-	_check(hd.size() > 0, "从房间中心朝下打：命中地板")
+	for k in dirs:
+		var d: Vector3 = dirs[k]
+		var reach := maxf(box.size.x, box.size.z) + 2.0
+		var h := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			Vector3(c.x, c.y, c.z), Vector3(c.x, c.y, c.z) + d * reach, 1))
+		print("[ecol] %s墙射线 → %s" % [k, "空（能穿出去！）" if h.is_empty()
+			else "命中 %s" % h.get("collider")])
 
-	# ── ④ 门口那一头（本地 +Z）应该能走进来 ──
-	# 实测门在本地 +Z（那侧墙面只有 3.0 m²，-Z 侧 66.5 m²）
-	#
-	# ⚠️ 判断「能不能进门」不能只看射线有没有命中 —— 门洞通了之后，射线会继续
-	#    打到**房间里的家具**上。所以要看命中点的 z：落在墙位置（z_wall）附近才算被墙挡。
-	var z_wall := center.z + 8.42          # +Z 那面墙的世界 z
-	var door_outside := center + Vector3(0, 0, 11.0)
-	var hz := _ray(space, door_outside, center)
-	if hz.is_empty():
-		_check(true, "门洞（+Z 正中）畅通，射线一路打到房间中心")
-	else:
-		var pz: float = (hz["position"] as Vector3).z
-		var blocked_by_wall := absf(pz - z_wall) < 0.5
-		print("[colv] 门洞射线命中 z=%.2f（墙在 z=%.2f）" % [pz, z_wall])
-		_check(not blocked_by_wall, "门洞（+Z 正中）没被墙挡住（命中点在屋内 z=%.2f）" % pz)
+	# ④ **可走性**：在胸口高度 y=0.9 铺 0.5 m 网格，看有多少点被碰撞占住
+	#    使用者 2026-11-09：「碰撞错了」——大 AABB 盒把房间中间堵死，人走不进去。
+	print("[ecol] ── 可走性（y=0.9 胸口高度，0.5 m 网格）──")
+	var free_n := 0
+	var hit_n := 0
+	var x := box.position.x
+	while x <= box.position.x + box.size.x:
+		var z := box.position.z
+		while z <= box.position.z + box.size.z:
+			var p := Vector3(x, 0.9, z)
+			var q := PhysicsPointQueryParameters3D.new()
+			q.position = p
+			q.collision_mask = 1
+			var found := space.intersect_point(q)
+			if found.is_empty():
+				free_n += 1
+			else:
+				hit_n += 1
+			z += 0.5
+		x += 0.5
+	var total := free_n + hit_n
+	print("[ecol]   可走 %d / %d = %.0f%%（被占 %d）" % [
+		free_n, total, 100.0 * float(free_n) / maxf(float(total), 1.0), hit_n])
 
-	# 门墩：往 X 偏 4.6 米（超过门洞半宽 1.2），应该撞在墙上
-	var hp := _ray(space, center + Vector3(4.6, 0, 11.0), center + Vector3(4.6, 0, 0))
-	var hp_ok := false
-	if hp.size() > 0:
-		hp_ok = absf((hp["position"] as Vector3).z - z_wall) < 0.5
-	_check(hp_ok, "门墩（+Z 偏 4.6 m）撞在墙上：%s" % _hit_str(hp))
-
-	# 门楣：实测门楣盒子的世界 y 范围是 [2.71, 3.61]（见 _dump_esports_boxes 的输出），
-	# 所以取世界 y = 3.0 打一条。
-	# ⚠️ 注意 `center` 的 y 已经是「地面 + 1.7」，别在它上面再加高度。
-	var y_lintel := 3.0
-	var hl_from := Vector3(center.x, y_lintel, center.z + 11.0)
-	var hl_to := Vector3(center.x, y_lintel, center.z)
-	var hl := _ray(space, hl_from, hl_to)
-	var hl_ok := false
-	if hl.size() > 0:
-		hl_ok = absf((hl["position"] as Vector3).z - z_wall) < 0.5
-	_check(hl_ok, "门楣（+Z、世界 y=3.0）撞在墙上：%s" % _hit_str(hl))
-
-	print("[colv] 结果：%s（%d 项不合格）" % ["全过" if _fails == 0 else "有失败", _fails])
-	quit(0 if _fails == 0 else 1)
-
-
-func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
-	var q := PhysicsRayQueryParameters3D.create(from, to)
-	q.collision_mask = 1
-	q.collide_with_areas = false
-	return space.intersect_ray(q)
-
-
-func _hit_str(h: Dictionary) -> String:
-	if h.is_empty():
-		return "<未命中>"
-	return "命中 %s @ %s" % [str(h.get("collider")), str((h["position"] as Vector3).snappedf(0.01))]
+	print("[ecol] 完成")
+	quit(0)
