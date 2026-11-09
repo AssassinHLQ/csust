@@ -231,7 +231,7 @@ func shoot() -> bool:
 	# 攻速倍率：能量条每启用一条 +1（见 `carrier_form.gd` 的能量条系统）。
 	# 倍率乘在**间隔**上（间隔 = 基础 ÷ 倍率），所以 ×2 = 快一倍。
 	# ⚠️ 上限不设死：60 fps 下最短也只能「一帧一发」，实际会被帧率自然钳住。
-	var base_cd := beam_fire_interval if use_beam() else fire_interval
+	var base_cd := beam_fire_interval if uses_beam_visual() else fire_interval
 	_cooldown = maxf(base_cd / maxf(rate_scale, 0.01), 0.0)
 	if not infinite:
 		current_ammo -= 1
@@ -252,7 +252,7 @@ func shoot() -> bool:
 	#    不能写成 `Sfx.play("fire_beam" if use_beam() else "fire")` ——
 	#    `_verify_sfx.gd` 是**静态扫源码里的字面量**来核对「库表里每个名字都有调用点」，
 	#    拼出来的名字它扫不到，会报「没人用的：fire, fire_beam」。
-	if use_beam():
+	if uses_beam_visual():
 		Sfx.play("fire_beam")
 	else:
 		Sfx.play("fire")
@@ -327,9 +327,17 @@ func _fire_raycast() -> void:
 	if fx_on_aim_line:
 		fx_from = origin + dir * clampf((muzzle_pos - origin).dot(dir), 0.0, 0.25) \
 			+ dir * fx_forward
-	_spawn_tracer(fx_from, impact)
 
 	_apply_hit(collider, impact, dir)
+
+	# ── 普通状态的激光机枪（2026-11-09）──
+	# 和机甲那条路走同一个 `_spawn_beam()`，区别只是**单枪口**、且不额外扣无限弹。
+	# 激光是「一瞬间到靶子上」的，所以不要 `_schedule_impact` 那个按飞行时间延迟的爆闪。
+	if laser_gun:
+		_spawn_beam(fx_from, impact)
+		return
+
+	_spawn_tracer(fx_from, impact)
 	_muzzle_flash(fx_from)
 	_schedule_impact(impact, normal, fx_from.distance_to(impact) / maxf(tracer_speed, 1.0))
 
@@ -337,7 +345,7 @@ func _fire_raycast() -> void:
 ## 结算命中（单枪口 / 双炮共用）。抽出来是为了别让两种路径各写一遍伤害逻辑
 ## —— 那种「两处相似代码」正是以后改伤害时漏改一半的地方。
 func _apply_hit(collider: Object, impact: Vector3, dir: Vector3) -> void:
-	var dmg := damage * (beam_damage_scale if use_beam() else 1.0)
+	var dmg := damage * (beam_damage_scale if has_infinite_ammo() else 1.0)
 	if collider and collider.has_method("take_damage"):
 		collider.take_damage(dmg, impact, -dir)
 		hit_confirmed.emit(collider, impact)
@@ -464,6 +472,27 @@ func use_beam() -> bool:
 	return beam_mode and _carrier_muzzles.size() > 0
 
 
+## ── 普通状态也用激光（2026-11-09，用户：「爱丽丝普通状态,攻击从机枪变成激光机枪」）──
+##
+## 和机甲形态的区别：
+##   · 机甲：`beam_mode = true` → **两门肩炮**齐射、无限弹、`beam_fire_interval` 0.10
+##   · 普通：`laser_gun = true` → **单枪口**一条激光、照常扣弹匣、用 `fire_interval`
+##
+## 为什么不做成同一个 `beam_mode`：那条路会顺手把弹匣变成无限（`has_infinite_ammo()`
+## 直接读 `beam_mode`），普通状态要是也无限子弹，整个弹药/换弹玩法就废了。
+var laser_gun := false
+
+
+func set_laser_gun(on: bool) -> void:
+	laser_gun = on
+
+
+## 这一发该不该画激光（而不是飞行曳光）。
+## 普通状态看 `laser_gun`，机甲状态看 `use_beam()`（要炮口就位）。
+func uses_beam_visual() -> bool:
+	return use_beam() or laser_gun
+
+
 ## 激光光束：从炮口到命中点画一条**立刻出现、0.12 s 淡出**的粗光柱。
 ##
 ## ── 和「飞行曳光」的区别（为什么不能复用）──
@@ -477,9 +506,31 @@ const BEAM_CORE := Color(0.92, 0.99, 1.00, 0.95)
 const BEAM_MID := Color(0.40, 0.78, 1.00, 0.55)
 const BEAM_GLOW := Color(0.16, 0.42, 1.00, 0.22)
 ## 光束存活时间（秒）。0.12 够玩家看清，又不会糊住画面。
+## ── 2026-11-09 重做 ──
+##
+## 用户：「爱丽丝机甲特效不好看,不够细致,参考游戏本体的做法」。
+##
+## 原来这条光束就是**三层同心圆柱**（`BEAM_RADII` 三个半径 + 加色混合），
+## 观感是"三根一样粗的管子套在一起"，因为：
+##   · 圆柱的侧壁亮度是**均匀**的 —— 没有"中心亮、边缘散"的衰减；
+##   · 三层又都是同一个 `_tracer_mesh`（12 面圆柱），叠起来才勉强有雾感；
+##   · 而且 `BEAM_LIFE` 期间只做 alpha 线性淡出，**没有横向收缩**，看着像贴图淡掉。
+##
+## 现在改成 5 层，从内到外半径按几何级数拉开（0.018 / 0.045 / 0.10 / 0.20 / 0.38），
+## 亮度和透明度也拉开梯度；再加：
+##   · **两端收尖**：用 ConeMesh 的短锥接在两端，消掉圆柱的硬切面；
+##   · **首尾闪核**：炮口和命中点各一个高亮小核；
+##   · **横向收缩**：淡出时半径同时收到 60%，观感是"光收束"而不是"图变透明"。
+## 五层：(半径 m, alpha 系数, 发光强度)。由内到外。
+const BEAM_LAYERS := [
+	{"r": 0.018, "a": 1.00, "e": 7.0, "c": Color(0.96, 1.00, 1.00, 0.98)},  # 芯
+	{"r": 0.045, "a": 0.72, "e": 4.6, "c": Color(0.62, 0.90, 1.00, 0.78)},  # 内
+	{"r": 0.100, "a": 0.46, "e": 2.8, "c": Color(0.34, 0.72, 1.00, 0.52)},  # 中
+	{"r": 0.200, "a": 0.26, "e": 1.6, "c": Color(0.18, 0.48, 1.00, 0.30)},  # 外
+	{"r": 0.380, "a": 0.13, "e": 0.9, "c": Color(0.10, 0.30, 0.95, 0.16)},  # 辉光
+]
+## beam_life 仍是总时长
 const BEAM_LIFE := 0.12
-## 三层半径（米）：芯 / 中 / 辉光
-const BEAM_RADII := [0.035, 0.085, 0.170]
 ## 光束的**视觉**最长距离（米）。
 ## ⚠️ `range_meters` 是 300（命中判定要考虑远距离狙击），但一条 300 m 的亮光柱
 ##    会把整个画面劈成两半 —— 本喵实测没打中任何东西时长度就是 295.6 m。
@@ -500,36 +551,59 @@ func _spawn_beam(from: Vector3, to: Vector3) -> void:
 	var vis_len := minf(total, BEAM_MAX_VISUAL)
 	var vis_end := from + dir * vis_len
 	var mid := from + dir * (vis_len * 0.5)
-	var colors := [BEAM_CORE, BEAM_MID, BEAM_GLOW]
 
-	# 一根圆柱当「光柱」。用现成的 `_tracer_mesh`（半径 0.015、长度 TRACER_LEN），
-	# 按 `BEAM_RADII` 和 `total` 缩放 —— 不新建网格资源，省一次分配。
 	var holder := Node3D.new()
 	_fx_root.add_child(holder)
 	holder.global_position = mid
+	# 让 holder 的局部 +Y 对准 beam 方向：内部所有圆柱/锥都沿 +Y 建，省去逐个定向
+	_orient_tracer(holder, dir)
 
 	var mats: Array = []
-	for li in colors.size():
+	var radii: Array = []
+	for li in BEAM_LAYERS.size():
+		var spec: Dictionary = BEAM_LAYERS[li]
+		var base: Color = spec["c"]
+		var r: float = spec["r"]
 		var mi := MeshInstance3D.new()
 		mi.mesh = _tracer_mesh
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		# ⚠️ 加色混合：叠起来才亮。用 ALPHA 混合的话三层会互相遮成一条实心灰柱。
+		# ⚠️ 加色混合：叠起来才亮。用 ALPHA 混合的话多层会互相遮成一条实心灰柱。
 		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		mat.albedo_color = colors[li]
+		mat.albedo_color = base
 		mat.emission_enabled = true
-		mat.emission = colors[li]
-		mat.emission_energy_multiplier = [6.0, 3.2, 1.4][li]
+		mat.emission = Color(base.r, base.g, base.b)
+		mat.emission_energy_multiplier = float(spec["e"])
 		mi.material_override = mat
+		# 圆柱本体：沿局部 Y 从 -半长 到 +半长
+		mi.scale = Vector3(r / 0.015, vis_len / TRACER_LEN, r / 0.015)
 		holder.add_child(mi)
 		mats.append(mat)
-		# 轴向对准：`_orient_tracer()` 让局部 +Y 对到 dir
-		_orient_tracer(mi, dir)
-		var r: float = BEAM_RADII[li] / 0.015           # 相对 `_tracer_mesh` 的半径
-		mi.scale = Vector3(r, vis_len / TRACER_LEN, r)
+		radii.append(r)
+
+		# ── 两端收尖：短锥消掉圆柱的硬切面 ──
+		# 只给最外两层加（内层被外层包住，加了也看不见，白费顶点）。
+		if li >= 3:
+			for sh in [-1.0, 1.0]:
+				var cap := MeshInstance3D.new()
+				var cone := CylinderMesh.new()
+				cone.top_radius = 0.0
+				cone.bottom_radius = r
+				cone.height = minf(vis_len * 0.22, r * 6.0)
+				cone.radial_segments = 12
+				cone.rings = 1
+				cap.mesh = cone
+				cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				cap.material_override = mat
+				holder.add_child(cap)
+				# 锥尖朝外：sh=+1 放在 +Y 端且尖端朝 +Y
+				var cape_half := cone.height * 0.5
+				cap.position = Vector3(0.0, sh * (vis_len * 0.5 + cape_half * 0.5), 0.0)
+				cap.rotation.x = 0.0 if sh > 0.0 else PI
+				cap.scale = Vector3(1.0, 1.0, 1.0)
 
 	# 炮口那一点爆亮（激光「出膛」的闪）
 	_muzzle_flash_beam(from)
@@ -538,12 +612,16 @@ func _spawn_beam(from: Vector3, to: Vector3) -> void:
 	if total <= BEAM_MAX_VISUAL:
 		_spawn_beam_impact(vis_end, -dir)
 
-	# 淡出：三层材质 alpha 一起收到 0，然后整组删掉
+	# 淡出：alpha 收到 0，同时半径缩到 60%（"光收束"而不是"图变透明"）
 	var tw := holder.create_tween()
 	tw.set_parallel(true)
 	for li in mats.size():
-		var a0: float = colors[li].a
 		tw.tween_property(mats[li], "albedo_color:a", 0.0, BEAM_LIFE)
+	for c in holder.get_children():
+		if c is MeshInstance3D:
+			var mi2 := c as MeshInstance3D
+			var s0 := mi2.scale
+			tw.tween_property(mi2, "scale", Vector3(s0.x * 0.6, s0.y, s0.z * 0.6), BEAM_LIFE)
 	tw.chain().tween_callback(holder.queue_free)
 	_beams.append(holder)
 
@@ -657,14 +735,19 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 ## 让圆柱的**轴向（局部 +Y）**对准飞行方向。
 ## ⚠️ 别用 `look_at()` + `rotate_object_local(RIGHT, PI/2)` 那一对：
 ##    它们合起来会把轴向转到**反方向**去（老版本的另一半 bug）。
-func _orient_tracer(mi: MeshInstance3D, dir: Vector3) -> void:
+## 让物体的局部 +Y 对准 dir。
+## `node` 收 `Node3D` 而不是 `MeshInstance3D`：激光光束的 holder 是个空 `Node3D`
+## （里面挂多层圆柱 + 两端锥），曳光弹那边才是 `MeshInstance3D`。
+## 放宽到这里免得为两种节点各写一份（曾经因为签名是 MeshInstance3D，
+## 传 holder 直接报 "not a subclass of the expected argument class"，光束一个都不出来）。
+func _orient_tracer(node: Node3D, dir: Vector3) -> void:
 	var ref := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
 	var x := ref.cross(dir)
 	if x.length() < 0.001:
 		x = Vector3.RIGHT
 	x = x.normalized()
 	var z := x.cross(dir).normalized()
-	mi.basis = Basis(x, dir, z)
+	node.basis = Basis(x, dir, z)
 
 
 func _advance_tracers(delta: float) -> void:

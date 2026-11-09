@@ -101,10 +101,17 @@ func _run() -> void:
 		Vector3(c.x, c.y + 1.2, c.z), Vector3(c.x, box.position.y + box.size.y + 2.0, c.z), 1))
 	print("[ecol] %s 天花板" % ("[PASS]" if not up.is_empty() else "[FAIL]"))
 
-	# ③ 四面墙 + 门洞（房间转 90°，长轴沿世界 X；门在 +Z 那侧）
+	# ③ 实墙（⚠️ 2026-11-09 更正：门在**世界 −X** 那侧）
+	#
+	# 房间节点在 `game.tscn` 里带旋转，把**局部 +Z 映射到世界 −X**；
+	# 而门洞正是开在局部 +Z 那面墙上的（见 `_bake_esports_parts.gd::NO_COLLIDE`）。
+	# 所以「西(−X)」是**门**，不该要求它挡人 —— 原来把它列进「必须挡住」，
+	# 门一封死这条就 PASS、门一开就对不上了（本喵修门洞时被它误报过一次）。
+	# 现在换成正对着局部 −Z（世界 +X）那面实墙。
 	var probes := {
-		"西(−X)": Vector3(-1, 0, 0), "东(+X)": Vector3(1, 0, 0),
+		"东(+X)": Vector3(1, 0, 0),
 		"南(−Z)": Vector3(0, 0, -1),
+		"北(+Z)": Vector3(0, 0, 1),
 	}
 	for k in probes:
 		var d: Vector3 = probes[k]

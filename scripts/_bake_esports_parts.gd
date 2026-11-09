@@ -31,6 +31,30 @@ const MIN_EXTENT := 0.10
 ## 大于这个体积的**外墙件**要按门洞切开（否则门被封死）
 const WALL_VOLUME := 20.0
 
+## ── 不做碰撞的物件（按名字精确匹配）── 2026-11-09
+##
+## 用户：「电竞房进不去门,挡住了」「优化电竞房碰撞」。
+##
+## 本喵从 `esports_parts.json` 量出：门洞在**局部 +Z 那面墙**上，
+## x 从 −2.55 到 1.00（宽 3.55 m），z 2.70..2.91，可通行高度 y 0.30..3.30
+## （地板顶面 y=0.30，墙从 0.30 起）。
+##
+## 但门洞里塞满了这些东西：
+##   · `JJKJ209 / 211 / 213 / 214` —— 四块**门板/玻璃**，各自 18~22 万三角面，
+##     y 0.58..3.30，x 合起来盖住 −3.79..1.08 ⇒ **整个门洞被填满**
+##   · `物件_6` —— y 0.30..0.60、x 恰好 −2.55..1.00，是门洞正下方那根**门槛条**
+##     （30 cm 高，踩不上去）
+##
+## 把它们的碰撞去掉：**画面里门板/门槛照旧在**（只是不再挡人），
+## 玩家能从门洞走进去。这是本项目一贯的口径「碰撞只为玩法服务，
+## 不为「这扇门看起来是关的」服务」。
+##
+## ⚠️ 只影响碰撞生成，不动模型、不动贴图。
+const NO_COLLIDE := [
+	"JJKJ209", "JJKJ211", "JJKJ213", "JJKJ214",
+	"物件_6",
+]
+
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -72,8 +96,14 @@ func _run() -> void:
 	var n_one := 0
 	var n_skip := 0
 	var n_multi := 0
+	var n_nocol := 0
 	for i in parts.size():
 		var p: Dictionary = parts[i]
+		# 门板 / 门槛：不做碰撞（否则门被封死，见 `NO_COLLIDE` 的说明）
+		if NO_COLLIDE.has(str(p.get("name", ""))):
+			n_nocol += 1
+			print("[bake] 跳过碰撞：%s（门洞要让路）" % str(p.get("name")))
+			continue
 		var boxes: Array = p.get("boxes", [])
 		if boxes.is_empty():
 			# 老格式（只有 min/max）→ 退回单盒子
@@ -100,8 +130,8 @@ func _run() -> void:
 			k += 1
 		n_one += k
 
-	print("[bake] 盒子 %d 个（%d 件被拆成多块以排掉空气）、跳过 %d 个碎片"
-		% [n_one, n_multi, n_skip])
+	print("[bake] 盒子 %d 个（%d 件被拆成多块以排掉空气）、跳过 %d 个碎片、%d 件门板不建碰撞"
+		% [n_one, n_multi, n_skip, n_nocol])
 	print("[bake] StaticBody 下共 %d 个形状" % body.get_child_count())
 
 	var ps := PackedScene.new()

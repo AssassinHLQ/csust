@@ -232,6 +232,12 @@ func _ready() -> void:
 	_apply_settings()
 	_setup_face_fill()
 
+	# 用户 2026-11-09：「爱丽丝普通状态,攻击从机枪变成激光机枪」。
+	# 普通状态默认就是激光枪（单枪口、照常扣弹匣）；机甲形态另有 `beam_mode`
+	# 走两门肩炮 + 无限弹，两条路互不影响（见 `weapon.gd::set_laser_gun`）。
+	if weapon != null and weapon.has_method("set_laser_gun"):
+		weapon.call("set_laser_gun", true)
+
 
 ## ── 贴脸补光只照角色 ──
 ##
