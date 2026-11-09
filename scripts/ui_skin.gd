@@ -460,6 +460,86 @@ static func solid_texture(size: int, color: Color) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+# ── 说话人名字牌的颜色 ─────────────────────────────────────────────────────
+#
+# ⚠️ 这是一张**「说话人 → 色号」表**，不是照抄原作的「角色 → 色号」表。
+#    但**本喵手上没有「爱丽丝/优香/小桃… 各对应哪种色」的原始资料**，
+#    所以下面这张表是**本喵按角色气质自己配的**，不许当成官方设定。
+#    要改颜色只改这个字典，不用动别处。
+#
+# 键是剧情里 `who:` 后面写的名字（见 `story/设定.md` 的角色表）。
+const SPEAKER_COLORS := {
+	"爱丽丝": Color("#4ec3f5"),    # 主角：accent 青蓝（和标题/按钮同色）
+	"优香": Color("#ff8fa3"),      # 粉
+	"诺亚": Color("#a8b8d8"),      # 冷灰蓝（诺亚是白毛，压成偏冷的）
+	"小雪": Color("#ffffff"),      # 白（底色会压暗，见 `_tag_text_color`）
+	"小桃": Color("#ffc95c"),      # 橙黄（BA 的 orangeGradient 亮端）
+	"小绿": Color("#7fd6a0"),      # 绿
+	"柚子": Color("#ffd76e"),      # 暖黄
+	"凯伊": Color("#9b8cff"),      # 紫
+	"芹香": Color("#ff9f6b"),      # 橘
+	"老师": Color("#e6eef8"),      # 近白
+	"霸王龙优香": Color("#ff8fa3"),
+	"飞猪优香": Color("#ff8fa3"),
+	"倭瓜优香": Color("#ff8fa3"),
+	"霍德": Color("#8fa0ff"),
+	"佩洛洛斯拉": Color("#ffb3d9"),
+	"比纳": Color("#a0e8e0"),
+	"哥利亚": Color("#c9a0ff"),
+}
+
+## 名字牌默认色（表里没有的说话人用它：accent 青蓝）
+static func speaker_color(skin: Dictionary, who: String) -> Color:
+	if not is_procedural(skin):
+		return skin["accent"] if skin.has("accent") else skin["fill"]
+	return SPEAKER_COLORS.get(who, skin["accent"])
+
+
+## 名牌上的字色：底够亮就写深藏蓝，底够暗就写白。
+## 拿「相对亮度」判断，不用肉眼看 —— 白底（小雪）和近白底（老师）都得走深色字。
+static func _tag_text_color(bg: Color) -> Color:
+	var lum := 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b
+	return Color("#003153") if lum > 0.62 else Color(1, 1, 1, 1)
+
+
+## 名牌样式（**按说话人换色**）。
+##
+## ⚠️ 为什么要有这个重载：名牌原来固定用 `accent` 一种颜色，所有角色长得一样，
+##    在 BA 观感里差别很大 —— 那边每个人名有自己的颜色。
+static func name_tag_style_for(skin: Dictionary, who: String) -> StyleBox:
+	if not is_procedural(skin):
+		return name_tag_style(skin)
+	var c := speaker_color(skin, who)
+	var sb := flat_button(skin, c, c)
+	sb.set_corner_radius_all(0)
+	sb.corner_detail = 0
+	sb.anti_aliasing = false
+	sb.content_margin_left = 22.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_top = 4.0
+	sb.content_margin_bottom = 4.0
+	return sb
+
+
+## 名牌文字颜色（跟着 `name_tag_style_for` 的底色走）
+static func name_tag_text(skin: Dictionary, who: String) -> Color:
+	if not is_procedural(skin):
+		return skin["dialogue_name"]
+	return _tag_text_color(speaker_color(skin, who))
+
+
+## 斜切量：名字牌比按钮矮，同样比例看不清，所以放大一点（BA 那个项目也是这么做的）
+const NAME_TAG_SKEW_SCALE := 1.6
+
+
+## 名字牌用的斜切样式的**几何**。`StyleBoxFlat` 的 `skew` 是相对高度的比例，
+## 名字牌高度固定 46 px，这里乘一个放大系数。
+static func name_tag_skew(skin: Dictionary) -> float:
+	if not is_procedural(skin):
+		return 0.0
+	return float(skin["btn_skew"]) * NAME_TAG_SKEW_SCALE
+
+
 ## 圆角小方块纹理。逐像素判「四角圆」：把坐标夹到「内缩 r 的矩形」上，
 ## 夹出来的偏移超出半径就透明。
 static func rounded_texture(size: int, radius: int, color: Color) -> ImageTexture:

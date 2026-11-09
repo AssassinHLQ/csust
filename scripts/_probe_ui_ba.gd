@@ -184,6 +184,42 @@ func _run() -> void:
 	await _shot("dialogue")
 	box.queue_free()
 
+	# ── ②b 说话人配色一览（每个人一个名牌，验证 SPEAKER_COLORS 真的用上了）──
+	_clean()
+	_probe = _stage()
+	var tag_label := Label.new()
+	tag_label.text = "SPEAKER_COLORS —— 说话人名牌配色（本喵配的，不是官方设定，见 ui_skin.gd 头注）"
+	tag_label.position = Vector2(70, 70)
+	if _font != null:
+		tag_label.add_theme_font_override("font", _font)
+	tag_label.add_theme_font_size_override("font_size", 16)
+	tag_label.add_theme_color_override("font_color", Color(0.72, 0.82, 0.92))
+	_probe.add_child(tag_label)
+	var names: Array = UiSkinRef.SPEAKER_COLORS.keys()
+	for i in names.size():
+		var who := String(names[i])
+		var col := i % 4
+		var row := i / 4
+		var p := Panel.new()
+		p.position = Vector2(70.0 + float(col) * 290.0, 110.0 + float(row) * 78.0)
+		p.size = Vector2(180.0, 46.0)
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_theme_stylebox_override("panel", UiSkinRef.name_tag_style_for(_skin, who))
+		_probe.add_child(p)
+		var l2 := Label.new()
+		l2.text = who
+		l2.set_anchors_preset(Control.PRESET_FULL_RECT)
+		l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l2.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		if _font != null:
+			l2.add_theme_font_override("font", _font)
+		l2.add_theme_font_size_override("font_size", 22)
+		l2.add_theme_color_override("font_color", UiSkinRef.name_tag_text(_skin, who))
+		p.add_child(l2)
+	for _i in 6:
+		await process_frame
+	await _shot("speakers")
+
 	# ── ③ HUD ──────────────────────────────────────────────────────────────
 	_clean()
 	_probe = _stage()

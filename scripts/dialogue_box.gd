@@ -1165,6 +1165,13 @@ func _layout_name_plate(who: String) -> void:
 
 func _set_line(who: String, text: String, voice_name := "") -> void:
 	_name_label.text = who
+	# 名牌颜色**跟着说话人走**（BA 那边每个人名一种色）。表在 `ui_skin.gd` 的
+	# `SPEAKER_COLORS`；表里没有的人回退到 accent 青蓝。
+	if _name_plate != null:
+		_name_plate.add_theme_stylebox_override("panel",
+			UiSkin.name_tag_style_for(_skin, who))
+		_name_label.add_theme_color_override("font_color",
+			UiSkin.name_tag_text(_skin, who))
 	_layout_name_plate(who)
 	_body_text = text
 	_shown = 0.0
