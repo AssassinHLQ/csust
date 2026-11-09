@@ -8,6 +8,10 @@ extends SceneTree
 ## **完全看不到枪** —— 素材 `Cafe_Walk` 会把武器骨缩到 ≈0.038 藏起来。
 
 func _initialize() -> void:
+	# 不抢用户前台（AGENTS.md 硬要求，2026-11-09）：取消最大化 + 禁止聚焦 + 挪出屏幕
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
 
 

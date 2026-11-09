@@ -2,6 +2,10 @@ extends SceneTree
 ## 判图：① 走近显示「按 F 说话」 ② 按 F 弹出对话「你配电脑吗?」
 ##   godot --path . --script res://scripts/_probe_clerk_talk_shot.gd -- --splat=off
 func _initialize() -> void:
+	# 不抢用户前台（AGENTS.md 硬要求，2026-11-09）：取消最大化 + 禁止聚焦 + 挪出屏幕
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
 
 

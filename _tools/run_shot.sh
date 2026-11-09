@@ -29,5 +29,29 @@ export APPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Roaming'
 export LOCALAPPDATA='C:\Users\WY157\Desktop\GODOT\_godot_editor_data\Local'
 SCRIPT="${1:?用法: run_shot.sh res://scripts/_probe_x_shot.gd [-- 额外参数]}"
 shift
-cd "$(dirname "$0")/.." || exit 1
-"$GODOT" --path . --position -4000,-4000 --resolution 1280x720 --windowed --audio-driver Dummy --script "$SCRIPT" -- --no-capture "$@"
+TOOLS="$(cd "$(dirname "$0")" && pwd)"
+cd "$TOOLS/.." || exit 1
+
+# ── 焦点归还（2026-11-09 实测补上）──────────────────────────────────────
+# 上面那些命令行参数救不了焦点：Godot 创建窗口时会**抢一次系统前台**，
+# 而运行时 API 撤不回来（`window_set_flag(NO_FOCUS)` 设得太晚，
+# `override.cfg` 在 --path 模式下 Godot 根本不读，`--feature` 参数不存在）。
+#
+# 所以：启动前记下用户的前台窗口 → Godot 起来 0.7s 后把焦点还回去。
+# 实现见 _focus.ps1。没有 PowerShell 时退回原样（至少窗口在屏幕外）。
+PS="powershell.exe"
+run_godot() {
+  "$GODOT" --path . --position -4000,-4000 --resolution 1280x720 --windowed \
+    --audio-driver Dummy --script "$SCRIPT" -- --no-capture "$@"
+}
+
+if command -v "$PS" >/dev/null 2>&1; then
+  "$PS" -NoProfile -ExecutionPolicy Bypass -File "$TOOLS/_focus.ps1" save >/dev/null 2>&1 || true
+  run_godot "$@" &
+  GODOT_PID=$!
+  sleep 0.7
+  "$PS" -NoProfile -ExecutionPolicy Bypass -File "$TOOLS/_focus.ps1" restore >/dev/null 2>&1 || true
+  wait "$GODOT_PID"
+else
+  run_godot "$@"
+fi

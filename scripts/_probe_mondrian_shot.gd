@@ -6,6 +6,10 @@ extends SceneTree
 ## 同时驱真玩家走一遍：从商店门口 → 进大门 → 走到楼梯 → 爬到二层，
 ## 沿途打印 y，证明楼梯真的能上去、脚踩在踏面上。
 func _initialize() -> void:
+	# 不抢用户前台（AGENTS.md 硬要求，2026-11-09）：取消最大化 + 禁止聚焦 + 挪出屏幕
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
 
 

@@ -44,6 +44,10 @@ var _story_path := "res://story/开场.txt"
 
 
 func _initialize() -> void:
+	# 不抢用户前台（AGENTS.md 硬要求，2026-11-09）：取消最大化 + 禁止聚焦 + 挪出屏幕
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tag="):
 			_tag = a.substr(6)
