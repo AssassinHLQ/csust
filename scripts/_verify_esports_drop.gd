@@ -25,10 +25,23 @@ var _fails := 0
 var _drop: Node = null
 
 
+## 屏幕外窗口：`project.godot` 里 `window/size/mode=2`（最大化）会顶掉命令行参数，
+## 所以必须在**脚本运行时**再改一次，否则窗口会开在用户屏幕上抢前台。
+## 见 `scripts/offscreen_window.gd` 顶部的实测记录。
+const OffWin := preload("res://scripts/offscreen_window.gd")
+
+
 func _initialize() -> void:
-	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
 	DisplayServer.window_set_position(Vector2i(-4000, -4000))
 	_run.call_deferred()
+
+
+func _run() -> void:
+	# 第一件事：把窗口丢出屏幕（必须在跑测试之前）
+	await OffWin.apply(self)
+	var safe := OffWin.is_safe()
+	print("[drop] 窗口自检：%s" % safe[1])
+	await _run_body()
 
 
 func _wait(n: int) -> void:
@@ -64,7 +77,7 @@ func _snap(tag: String) -> void:
 	print("[drop] 图 %-18s 亮度 %.3f" % [tag, _brightness()])
 
 
-func _run() -> void:
+func _run_body() -> void:
 	root.size = Vector2i(1280, 720)
 	# 先置成交，再加载场景 —— 这样 `_ready` 里就走「已成交 → 开演」
 	ShopClerk._bought = true
