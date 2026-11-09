@@ -140,7 +140,7 @@ const CAMERA_FORWARD_OFFSET := PI
 @export var hip_distance := 4.2
 ## 滚轮能拉到的最近 / 最远距离（米）。**这一条以前只在 README 和 HUD 提示里写着，
 ## 代码里根本没实现** —— 用户报「滚轮的摄像头远近没有生效」就是这个。
-@export var zoom_min := 1.8
+@export var zoom_min := 1.1
 @export var zoom_max := 9.0
 ## 滚轮每格改变多少米
 @export var zoom_step := 0.35
@@ -158,6 +158,35 @@ const CAMERA_FORWARD_OFFSET := PI
 ## 「腰射 / 开镜」的观感关系搞乱。
 const AIM_FOV_RATIO := 0.55
 @export var cam_lerp := 12.0
+
+## ── 近景：滚轮推近时**把相机支点降下来**（用户 2026-11-09）──
+##
+## 用户原话：「滚轮推进拉远视角，推进视角还不够近，而且推进方向还得偏一点，
+## 要能够欣赏完整爱丽丝」。
+##
+## 真因（`_probe_body_extent.gd` 实测骨骼）：**爱丽丝是 Q 版，不是真人身高** ——
+##   脚趾骨 y = −0.041、头骨 y = 0.570、光环顶 y = 1.024
+## 也就是说她整个人只有 1.0 m 出头（含光环），而 `hip_height` = 1.62 ——
+## **支点在她头顶上方 0.6 m**。相机在 1.62 m 平视，她就只能缩在画面下半截：
+## `_probe_zoom_fit.gd` 量出来最贴近（当时被公式卡在 3.00 m）时，
+## 头顶在画面 67%、脚底 95%，上面 2/3 全是空墙 —— 又不够近、又偏。
+##
+## 修法：滚轮越近，支点从 `hip_height` 平滑降到 `zoom_look_height`（她的身体中心），
+## 肩偏移同时收到 `zoom_shoulder_close`（否则 0.42 m 的肩偏移在 1 m 距离上
+## 会把她整个推出画面中线）。这样 1.1 m 就能把她**整只**装进画幅正中。
+##
+## 数值来源：`_probe_body_extent.gd` 量骨骼 → `body_bottom` / `body_top`；
+##          之后任何距离的「至少多远才看得见全身」由 `min_zoom_for_full_body()` 按这两条算，
+##          所以把 FOV 调小（视野变窄）时最近距离会**自动**跟着退，不会再切脚。
+@export var body_bottom := -0.05
+@export var body_top := 1.05
+@export var zoom_look_height := 0.52
+@export var zoom_shoulder_close := 0.10
+## 超过这个距离就完全回到原来的平视取景（`hip_height` / `hip_shoulder`）。
+## 取 3.2：腰射默认 4.2 m、往里滚两格左右还在原来的构图里，再往里才开始「降支点」。
+@export var zoom_close_full := 3.2
+## 全身刚好装进画幅之后再多留一点余量（米），免得她贴着上下边缘。
+@export var zoom_fit_margin := 0.12
 
 ## ── 上台阶的相机缓冲（用户 2026-10-26：「上楼梯生硬」）──
 ##
@@ -201,6 +230,14 @@ var _lock_left := 0.0
 @onready var anim: Node = $Arisu/Model/AnimDriver
 @onready var weapon: Node = $Weapon
 
+## ── EX 必杀系统（2026-11-09）──
+## 用户：「按 EX 连按释放必杀技能：普通状态是蓄力激光球，机甲状态是蓄力激光巨型连续轨道炮。
+##        EX 充能是随着时间增加的」
+## 由本脚本在 `_ready()` 里**动态创建**（不写进 player.tscn：
+## 那个场景文件会被很多会话同时改，加节点容易冲突）。
+const ExSystem := preload("res://scripts/ex_system.gd")
+var ex: Node3D = null
+
 
 func _ready() -> void:
 	add_to_group("player")
@@ -237,6 +274,20 @@ func _ready() -> void:
 	# 走两门肩炮 + 无限弹，两条路互不影响（见 `weapon.gd::set_laser_gun`）。
 	if weapon != null and weapon.has_method("set_laser_gun"):
 		weapon.call("set_laser_gun", true)
+
+	_setup_ex()
+
+
+## 建 EX 系统（见文件头 `ExSystem` 那段说明）。
+## 放在玩家自己身上，跟着玩家走；`carrier` 需要拿来做形态判定。
+func _setup_ex() -> void:
+	ex = ExSystem.new() as Node3D
+	if ex == null:
+		push_warning("[EX] 建不出 ex_system，必杀不可用")
+		return
+	ex.name = "ExSystem"
+	add_child(ex)
+	ex.call("setup", self, weapon, get_node_or_null("Arisu/CarrierForm"))
 
 
 ## ── 贴脸补光只照角色 ──
@@ -301,6 +352,17 @@ func _is_wheel(mb: InputEventMouseButton) -> bool:
 		MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]
 
 
+## 滚轮一格：`dir` = −1 拉近 / +1 拉远，夹在 `zoom_min` … `zoom_max` 之间。
+##
+## 单独拎成方法是为了让自检**不依赖鼠标捕获**也能真测它：headless 下
+## `Input.mouse_mode` 赋值成 CAPTURED 读回来还是 VISIBLE（`_probe_ride_zoom.gd`
+## 文件头量过），于是 `_input()` 那条滚轮分支永远进不去 ——
+## `_verify_facing.gd` 里「下滚没有改变距离 / zoom_max / zoom_min / 拉近没生效」
+## 四条因此一直红，红的不是功能而是测法。现在自检改调这个方法，四条能真跑。
+func wheel_zoom(dir: int) -> void:
+	_zoom_distance = clampf(_zoom_distance + float(dir) * zoom_step, zoom_min, zoom_max)
+
+
 func _input(event: InputEvent) -> void:
 	# 火箭骑乘期间：**允许转视角**（用户 2026-11-07：「起飞不能转动视角」）。
 	# 只屏蔽开火 / 开镜这些**战斗**操作键。
@@ -330,13 +392,21 @@ func _input(event: InputEvent) -> void:
 		and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_zoom_distance = clampf(_zoom_distance - zoom_step, zoom_min, zoom_max)
+			wheel_zoom(-1)
 			return
 		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_zoom_distance = clampf(_zoom_distance + zoom_step, zoom_min, zoom_max)
+			wheel_zoom(1)
 			return
 
 	# --- 键盘 ---
+	# ⚠️ 必须先处理**松开**：EX 是「按下蓄力、松手放出」，
+	#    如果只写在 pressed 分支里，松开那一刻永远等不到（会一直蓄在那儿）。
+	if event is InputEventKey and not (event as InputEventKey).pressed:
+		if (event as InputEventKey).keycode == KEY_Q and ex != null:
+			if bool(ex.call("release_ex")):
+				get_viewport().set_input_as_handled()
+				return
+
 	if event is InputEventKey and (event as InputEventKey).pressed \
 		and not (event as InputEventKey).echo:
 		var key := (event as InputEventKey).keycode
@@ -351,6 +421,13 @@ func _input(event: InputEvent) -> void:
 		if key == KEY_R and weapon:
 			weapon.try_reload()
 			return
+		# ── EX 必杀（2026-11-09）──
+		# 用户说「按 EX 释放」。键盘上没有叫 EX 的键，取 **Q**：
+		# 不撞现有键位（WASD/Space/Ctrl/Shift/T/R/G/F/F3–F6/Esc 都被占了）。
+		# 按下开始蓄力，**松手才放**；点一下就松也能放（最短 0.18 s，见 ex_system.gd）。
+		if key == KEY_Q and ex != null:
+			if bool(ex.call("press_ex")):
+				return
 
 	# --- 鼠标按键：只处理「按下」这一沿，松开用 poll ---
 	if event is InputEventMouseButton:
@@ -784,12 +861,17 @@ func _apply_camera(delta: float) -> void:
 	# 上台阶缓冲（见 `_physics_process` 里记 `_step_lag` 那段）：指数衰减，
 	# 帧率无关。它**加在** rig 的基准高度上，所以不干扰蹲/开镜的高度插值。
 	_step_lag = lerpf(_step_lag, 0.0, 1.0 - exp(-delta / STEP_LAG_TAU))
+	# 近景取景：滚轮越近，支点越低、肩偏移越小（见 `zoom_look_height` 那段注释）。
+	# 开镜是另一套固定取景，不参与这段插值。
+	var near_k := _zoom_near_k()
+	var look := lerpf(zoom_look_height, hip_height, near_k)
+	var shoulder := lerpf(zoom_shoulder_close, hip_shoulder, near_k)
 	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
 	#    见 `min_zoom_for_full_body()`。
-	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body())
+	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body(look))
 	spring.spring_length = lerpf(spring.spring_length, want, t)
-	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else hip_shoulder), t)
-	rig.position.y = lerpf(rig.position.y, aim_height if aiming else hip_height, t) + _step_lag
+	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else shoulder), t)
+	rig.position.y = lerpf(rig.position.y, aim_height if aiming else look, t) + _step_lag
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)
 
 	_recoil_pitch = lerpf(_recoil_pitch, 0.0, clampf(9.0 * delta, 0.0, 1.0))
@@ -802,15 +884,39 @@ func _apply_camera(delta: float) -> void:
 
 ## 滚轮能拉到多近，还能看见**全身**。
 ##
-## 相机在 `hip_height`（1.62 m）高度平视，脚在它正下方 1.62 m 处；
-## 要在垂直半视角 θ = fov/2 里看见脚，水平距离至少 `hip_height / tan(θ)`。
-## fov 62° → 2.70 m（再加 0.30 m 余量 = 3.0 m）。用户把 FOV 调小（视野拉近）时
-## 这个数会变大，所以最近距离**必须跟着 FOV 走** —— 固定 1.8 m 时相机已经贴到
-## 后背，画面只剩头发和肩膀（用户 2026-10-20：「fov 拉近就看不见爱丽丝全身了，
-## 要能够看见全身的」）。
-func min_zoom_for_full_body() -> float:
+## 判据不是「脚在支点下方多远」这一条了（那是老的、按真人身高写的算法）：
+## 支点近景会降到 `zoom_look_height`（她的身体中心），所以**上下两侧**都要量：
+##   上：`body_top - look`（含光环顶）      下：`look - body_bottom`（脚底）
+## 谁大按谁算，垂直半视角 θ = fov/2，需要水平距离 `max(上, 下) / tan(θ)`。
+##
+## 实测（fov 62°、支点 0.52 m）→ 约 1.07 m，再加 `zoom_fit_margin` 就是最近距离；
+## 用户把 FOV 调小（视野变窄）时 tan(θ) 变小，这个数会**自动**变大，
+## 所以「fov 拉近就看不见爱丽丝全身」那条老毛病不会再回来。
+##
+## `look` 由调用方传（`_apply_camera()` 用它算出的那一个，保证和实际支点一致）；
+## 不传就按当前滚轮距离自己算一遍。
+func min_zoom_for_full_body(look := -1.0) -> float:
+	if look < 0.0:
+		look = _look_height_for(_zoom_distance)
 	var half := deg_to_rad(clampf(hip_fov, 20.0, 120.0) * 0.5)
-	return hip_height / tan(half) + 0.30
+	var up := body_top - look
+	var down := look - body_bottom
+	return maxf(up, down) / maxf(tan(half), 0.01) + zoom_fit_margin
+
+
+## 滚轮距离 → 「离得有多近」的 0…1（0 = 最贴近，1 = 已经是原来的平视取景）。
+func _zoom_near_k() -> float:
+	return _zoom_near_k_at(_zoom_distance)
+
+
+func _zoom_near_k_at(d: float) -> float:
+	var span := maxf(zoom_close_full - zoom_min, 0.01)
+	return clampf((d - zoom_min) / span, 0.0, 1.0)
+
+
+## 某个滚轮距离下的支点高度（米）。近景降下来看她，远景回到平视高度。
+func _look_height_for(d: float) -> float:
+	return lerpf(zoom_look_height, hip_height, _zoom_near_k_at(d))
 
 
 ## 剧情演出：**强制镜头看向某个物体**（默认 1 秒），期间鼠标转不动。

@@ -143,14 +143,16 @@ func _run() -> void:
 	# 但代码里**从来没实现过**（用户报「滚轮的摄像头远近没有生效」）。
 	# 现在 player.gd 的 _input 处理滚轮，改的是 _zoom_distance（腰射距离），
 	# 开镜时仍然走 aim_distance。
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	#
+	# ⚠️ 2026-11-09：这里原来是**自己造一个 InputEventMouseButton 喂给 `_input()`**，
+	#    而那四条断言一直红。真因不是功能坏了，是 headless 下 `Input.mouse_mode`
+	#    赋值成 CAPTURED 读回来还是 VISIBLE（`_probe_ride_zoom.gd` 文件头量过），
+	#    `_input()` 的滚轮分支压根进不去。现在改调 `player.wheel_zoom(dir)` ——
+	#    滚轮真正的实现，且不依赖鼠标捕获。
 	if player.aiming:
 		player._set_aiming(false)
 	var base := player.spring.spring_length
-	var wheel_down := InputEventMouseButton.new()
-	wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
-	wheel_down.pressed = true
-	player._input(wheel_down)
+	player.wheel_zoom(1)
 	await _wait(60)
 	print("  下滚一格：_zoom_distance = %.2f  spring_length = %.2f（原 %.2f）" % [
 		player._zoom_distance, player.spring.spring_length, base])
@@ -164,7 +166,7 @@ func _run() -> void:
 		print("  [FAIL] 相机长度没变（%.2f → %.2f）" % [base, player.spring.spring_length]); fail += 1
 
 	for _i in 60:
-		player._input(wheel_down)
+		player.wheel_zoom(1)
 	await _wait(80)
 	print("  连滚到底：_zoom_distance = %.2f（zoom_max = %.2f）" % [
 		player._zoom_distance, player.zoom_max])
@@ -173,11 +175,8 @@ func _run() -> void:
 	else:
 		print("  [FAIL] 没被 zoom_max 卡住（%.2f）" % player._zoom_distance); fail += 1
 
-	var wheel_up := InputEventMouseButton.new()
-	wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
-	wheel_up.pressed = true
 	for _i in 120:
-		player._input(wheel_up)
+		player.wheel_zoom(-1)
 	await _wait(120)
 	print("  连滚到顶：_zoom_distance = %.2f（zoom_min = %.2f）  spring_length = %.2f" % [
 		player._zoom_distance, player.zoom_min, player.spring.spring_length])
@@ -189,6 +188,16 @@ func _run() -> void:
 		print("  [PASS] 拉近后相机确实更近了（%.2f < %.2f）" % [player.spring.spring_length, base])
 	else:
 		print("  [FAIL] 拉近没生效（%.2f）" % player.spring.spring_length); fail += 1
+
+	# 最近那一档必须**看得见全身**：`min_zoom_for_full_body()` 就是这条规矩的执行者。
+	# 判据用公式本身（头顶 / 脚底都落在垂直 FOV 里），不是拍脑袋的固定米数。
+	var closest := maxf(player.zoom_min, float(player.call("min_zoom_for_full_body")))
+	print("  最近可到 %.2f m（全身取景下限 %.2f m，模型 身高 %.2f m）" % [
+		closest, float(player.call("min_zoom_for_full_body")), player.body_top - player.body_bottom])
+	if player.body_top - player.body_bottom > 0.1 and closest <= 1.6:
+		print("  [PASS] 最近一档能拉到 1.6 m 以内（画面里装得下全身）")
+	else:
+		print("  [FAIL] 最近一档还是太远（%.2f m）—— 又看不清全身了" % closest); fail += 1
 
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % fail)
