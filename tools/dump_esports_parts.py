@@ -71,6 +71,110 @@ def parse_args():
     return ap.parse_args(argv)
 
 
+def _vertices_world(o):
+    """物体所有顶点 → 世界坐标（numpy 向量化）"""
+    import numpy as np
+    me = o.data
+    n = len(me.vertices)
+    if n == 0:
+        return None
+    co = np.empty(n * 3, dtype=np.float64)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(n, 3)
+    M = np.array(o.matrix_world, dtype=np.float64)
+    return co @ M[:3, :3].T + M[:3, 3]
+
+
+def _occupancy(o, lo, hi, cell):
+    """把物体落进一张**自己的**体素网格，返回 bool 数组。
+
+    ⚠️ 为什么不能只用顶点：低面数的平板（一面墙只有 44 个三角）顶点稀疏，
+    只标顶点会漏掉整块面。所以**顶点 + 三角形 AABB** 都标：
+      · 顶点：向量化，快，密网格够用
+      · 三角形 AABB：只对**稀疏**物体（三角数 ≤ 3000）做，循环开销可控
+    """
+    import numpy as np
+    dims = np.maximum(np.ceil((hi - lo) / cell).astype(np.int64), 1)
+    # 上限：单轴最多 40 格，免得细长件把内存吃爆
+    while dims.max() > 40:
+        cell *= 1.5
+        dims = np.maximum(np.ceil((hi - lo) / cell).astype(np.int64), 1)
+    grid = np.zeros(tuple(dims), dtype=bool)
+
+    w = _vertices_world(o)
+    if w is None:
+        return grid, cell
+    idx = np.clip(np.floor((w - lo) / cell).astype(np.int64), 0, dims - 1)
+    grid[idx[:, 0], idx[:, 1], idx[:, 2]] = True
+
+    me = o.data
+    me.calc_loop_triangles()
+    nt = len(me.loop_triangles)
+    if 0 < nt <= 3000:
+        import numpy as np2
+        tris = np2.empty(nt * 3, dtype=np.int32)
+        me.loop_triangles.foreach_get("vertices", tris)
+        tris = tris.reshape(nt, 3)
+        for t in range(nt):
+            pts = w[tris[t]]
+            a = np.clip(np.floor((pts.min(axis=0) - lo) / cell).astype(np.int64), 0, dims - 1)
+            b = np.clip(np.floor((pts.max(axis=0) - lo) / cell).astype(np.int64), 0, dims - 1)
+            grid[a[0]:b[0] + 1, a[1]:b[1] + 1, a[2]:b[2] + 1] = True
+    return grid, cell
+
+
+def decompose(o, lo, hi, cell, min_fill=0.80, max_depth=3):
+    """把一个物体拆成**若干个贴着它形状的轴对齐盒子**（递归二分）。
+
+    2026-11-09 使用者：「这一面墙的碰撞偏了很多」——
+    单给一个 AABB 盒时，L 形墙 / 空心衣柜会把**空气**也算成碰撞，
+    玩家撞到看不见的墙。这里按体素占用率递归切，直到每块的占用率够高。
+
+    返回 [(center, size), …]（世界坐标）。
+    """
+    import numpy as np
+    grid, cell = _occupancy(o, lo, hi, cell)
+    out = []
+
+    def rec(g, base, size, depth):
+        tot = g.size
+        if tot == 0:
+            return
+        occ = int(g.sum())
+        if occ == 0:
+            return
+        if depth >= max_depth or occ / tot >= min_fill or tot <= 8:
+            out.append((base + size * 0.5, size))
+            return
+        axis = int(np.argmax(size))
+        if g.shape[axis] <= 1:
+            out.append((base + size * 0.5, size))
+            return
+        mid = g.shape[axis] // 2
+        slices0 = [slice(None)] * 3
+        slices1 = [slice(None)] * 3
+        slices0[axis] = slice(0, mid)
+        slices1[axis] = slice(mid, None)
+        g0 = g[tuple(slices0)]
+        g1 = g[tuple(slices1)]
+        b0 = base.copy()
+        s0 = size.copy()
+        s0[axis] = mid * cell
+        b1 = base.copy()
+        b1[axis] = base[axis] + mid * cell
+        s1 = size.copy()
+        s1[axis] = size[axis] - mid * cell
+        rec(g0, b0, s0, depth + 1)
+        rec(g1, b1, s1, depth + 1)
+
+    base = np.array([lo.x, lo.y, lo.z], dtype=np.float64)
+    size = np.array([hi.x - lo.x, hi.y - lo.y, hi.z - lo.z], dtype=np.float64)
+    # 把 size 对齐到整数格，免得最后一格越界
+    size = np.maximum(size, cell * 0.5)
+    rec(grid, base, size, 0)
+    return out
+
+
 def make_single_user(meshes):
     """把**共用网格数据**的对象拆成各自独立的一份。
 
@@ -170,8 +274,9 @@ def main():
     center_and_floor(meshes)
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
-    # 逐件量 AABB。名字用能读懂的（材质名 + 原名）
+    # 逐件量 AABB，并**拆成贴着形状的小盒子**
     parts = []
+    n_box_total = 0
     for o in meshes:
         t = tri_count(o)
         if t < a.min_tris:
@@ -180,22 +285,43 @@ def main():
         mat = ""
         if o.material_slots and o.material_slots[0].material:
             mat = o.material_slots[0].material.name
+        sz = hi - lo
+        vol = sz.x * sz.y * sz.z
+        # 自适应格子：长边约 16 格，夹在 0.12~0.40 m
+        cell = min(0.40, max(0.12, max(sz.x, sz.y, sz.z) / 16.0))
+        # 大件（墙/地板/天花板）要拆得**更狠**：
+        # 带门洞的那面墙，占用率约 85%，用默认的 0.80 阈值就**不拆**了 → 门被封死。
+        # 所以大件提到 0.96 + 深度 5，让门洞那块空气被单独切出来丢掉。
+        if vol >= 5.0:
+            boxes = decompose(o, lo, hi, cell, min_fill=0.96, max_depth=5)
+        else:
+            boxes = decompose(o, lo, hi, cell, min_fill=0.80, max_depth=3)
+        n_box_total += len(boxes)
         parts.append({
             "name": o.name,
             "mat": mat,
             "tris": t,
             "min": [round(lo.x, 5), round(lo.y, 5), round(lo.z, 5)],
             "max": [round(hi.x, 5), round(hi.y, 5), round(hi.z, 5)],
+            "vol": round(vol, 5),
+            "cell": round(cell, 4),
+            # [中心x,y,z, 尺寸x,y,z] × N —— 贴着形状的盒子
+            "boxes": [[round(c[0], 4), round(c[1], 4), round(c[2], 4),
+                       round(s[0], 4), round(s[1], 4), round(s[2], 4)]
+                      for c, s in boxes],
         })
+    log("拆分后共 %d 个盒子（原来一件一个 AABB 只有 %d 个）"
+        % (n_box_total, len(parts)))
 
     os.makedirs(os.path.dirname(os.path.abspath(a.dst)), exist_ok=True)
     with open(a.dst, "w", encoding="utf-8") as f:
         json.dump({
             "source": os.path.basename(a.src),
             "count": len(parts),
+            "box_count": n_box_total,
             "parts": parts,
         }, f, ensure_ascii=False, indent=1)
-    log("写出 %s：%d 件物体" % (a.dst, len(parts)))
+    log("写出 %s：%d 件物体 / %d 个盒子" % (a.dst, len(parts), n_box_total))
 
     # 收尾报告：整间房的包围盒（和 GLB 对一下）
     lo = Vector((1e9, 1e9, 1e9))

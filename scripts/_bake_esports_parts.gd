@@ -70,25 +70,38 @@ func _run() -> void:
 		str(room.position.snappedf(0.01)), str(room.size.snappedf(0.01))])
 
 	var n_one := 0
-	var n_wall := 0
 	var n_skip := 0
+	var n_multi := 0
 	for i in parts.size():
 		var p: Dictionary = parts[i]
-		var b := _box_of(p)
-		var s := b.size
-		var vol := s.x * s.y * s.z
-		if vol < MIN_VOLUME or (s.x + s.y + s.z) < MIN_EXTENT:
-			n_skip += 1
-			continue
-		if vol >= WALL_VOLUME:
-			# 大件（外墙 / 地板 / 天花板）：要按门洞切，否则门被封死
-			n_wall += _emit_wall(body, root, b, room, i)
-		else:
-			# 小件（家具、书、椅子…）：**一件一个盒子**，这就是使用者要的
-			_add_shape(body, root, b.get_center(), s, "Part_%04d" % i)
+		var boxes: Array = p.get("boxes", [])
+		if boxes.is_empty():
+			# 老格式（只有 min/max）→ 退回单盒子
+			var b := _box_of(p)
+			var s0 := b.size
+			if s0.x * s0.y * s0.z < MIN_VOLUME or (s0.x + s0.y + s0.z) < MIN_EXTENT:
+				n_skip += 1
+				continue
+			_add_shape(body, root, b.get_center(), s0, "Part_%04d" % i)
 			n_one += 1
+			continue
+		if boxes.size() > 1:
+			n_multi += 1
+		# ★ 一件物体可能拆成多个**贴着它形状**的盒子（空气已被排掉）
+		var k := 0
+		for bx in boxes:
+			var arr: Array = bx
+			var c := Vector3(arr[0], arr[1], arr[2])
+			var s := Vector3(arr[3], arr[4], arr[5])
+			if s.x * s.y * s.z < MIN_VOLUME or (s.x + s.y + s.z) < MIN_EXTENT:
+				n_skip += 1
+				continue
+			_add_shape(body, root, c, s, "P%04d_%d" % [i, k])
+			k += 1
+		n_one += k
 
-	print("[bake] 小件盒子 %d 个、大件切开 %d 个、跳过 %d 个" % [n_one, n_wall, n_skip])
+	print("[bake] 盒子 %d 个（%d 件被拆成多块以排掉空气）、跳过 %d 个碎片"
+		% [n_one, n_multi, n_skip])
 	print("[bake] StaticBody 下共 %d 个形状" % body.get_child_count())
 
 	var ps := PackedScene.new()
