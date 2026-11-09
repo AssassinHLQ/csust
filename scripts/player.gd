@@ -548,6 +548,31 @@ func is_flight_locked() -> bool:
 	return _flight_lock
 
 
+## 机甲形态标志（`carrier_form.gd::set_form()` 置位）。
+##
+## ⚠️ **和 `_flight_lock` 是两件事**，别合并：
+##   · `_flight_lock` = 「**此刻**在飞」—— 落地就清掉（`_land()`）；
+##   · `_carrier_on`  = 「**这局**是机甲形态」—— 从变形到变回一直为真。
+##
+## 用户 2026-11-09：「在地上怎么飞这么慢，不应该也是飞吗，为什么不和天上一个速度」。
+## 病根就是这两件事被混用了：机甲一落地 `_land()` 把 `_flight_lock` 清掉，
+## 速度立刻从 `SPEED_FLY 11` 掉回 `SPEED_WALK 2.4`（慢 4.6 倍），
+## 而玩家看到的还是一台机甲 —— 它凭什么要按步兵速度挪。
+##
+## 所以速度判据改成 **`_flight_lock or _carrier_on`**：机甲形态不论地上空中都吃
+## 飞行那一档（11 / 19）。垂直方向仍由 `_flight_lock` 管，落地抬升/重力照旧。
+var _carrier_on := false
+
+
+func set_carrier_form(on: bool) -> void:
+	_carrier_on = on
+
+
+## 现在是不是机甲形态（自检用）
+func is_carrier_form() -> bool:
+	return _carrier_on
+
+
 func _physics_process(delta: float) -> void:
 	if _ride_active:
 		# 人挂在火箭上：不落重力、不吃移动输入、不做 move_and_slide。
@@ -602,7 +627,8 @@ func _physics_process(delta: float) -> void:
 	# ⚠️ 飞行期间**不认 crouch**：`Ctrl` 在机甲形态下是「下降」，不是「蹲」。
 	#    这里不清掉的话，`Ctrl` 会把目标速度压到 `SPEED_CROUCH`、还会掐掉冲刺 ——
 	#    用户 2026-11-08 报的「不能同时加速前进与下降」就是这一句。
-	crouching = Input.is_action_pressed("crouch") and not _flight_lock
+	# ⚠️ 机甲形态（`_carrier_on`）同样不认 crouch：它落地了也不该蹲下去。
+	crouching = Input.is_action_pressed("crouch") and not _flight_lock and not _carrier_on
 	# ⚠️ 这里**曾经有一句 `input.y < 0.1`**，本意是「不许倒着跑」。但用户要的正是
 	#    「往后也能跑」，而且它挡掉的不只是 Shift —— `move_back` 的 `input.y` 是 **+1**，
 	#    所以按 S 永远拿不到跑速，表现就是「往后走不能跑步」。现在四个方向一视同仁。
@@ -611,9 +637,12 @@ func _physics_process(delta: float) -> void:
 		and dir.length_squared() > 0.01
 
 	var target_speed := SPEED_WALK
-	if _flight_lock:
+	# ⚠️ 判据是 `_flight_lock or _carrier_on`，**不是**只看 `_flight_lock`：
+	#    机甲落地后 `_land()` 会清掉 `_flight_lock`，只看它速度就掉回步兵档。
+	#    `_carrier_on` 保证「只要是机甲形态」，地上也吃飞行那一档（用户 2026-11-09）。
+	if _flight_lock or _carrier_on:
 		# 飞行：巡航 / 加力两档。开镜时收一半，让「边飞边瞄」不至于太快。
-		# `_fly_scale` 是**巡航者模式**的加速（`carrier_form.gd` 按 T 时设成 1.6）。
+		# `_fly_scale` 是**巡航者模式**的加速（`carrier_form.gd` 按 T 时设成 2.6）。
 		if aiming:
 			target_speed = SPEED_FLY * 0.5
 		elif sprinting:

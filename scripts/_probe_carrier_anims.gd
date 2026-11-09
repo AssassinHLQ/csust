@@ -9,7 +9,7 @@ extends SceneTree
 ##   ② 轨道前缀被正确改写（不是「加载成功但一根骨不动」）
 ##   ③ 每条动作在机甲骨架上**真正能驱动骨骼**（对比播放前后骨姿态）
 ##   ④ 循环动作是 LOOP_LINEAR，一次性动作是 LOOP_NONE
-##   ⑤ 开火会触发 `Normal_Attack_Ing`
+##   ⑤ 开火会触发 `Normal_Attack_Ing`（2026-11-09 起走**上半身叠加层** `_upper`）
 
 const PlayerScene := preload("res://scenes/player.tscn")
 const MechState := preload("res://scripts/mech_state.gd")
@@ -144,8 +144,24 @@ func _run() -> void:
 	cf.call("_run_effects", 1.0 / 60.0)
 	var cur := String(ap.current_animation)
 	var left := float(cf.get("_oneshot_left"))
-	print("       开火后 current_animation = %s，_oneshot_left = %.2f" % [cur, left])
+	# ⚠️ 2026-11-09：开火改成**只叠上半身**（方案 A），动作不再落在基础层 `_ap`，
+	#    而是落在叠加层 `_upper`；基础层这时**应该继续播移动动作**（腿不能冻）。
+	#    叠加层没建出来时（载具 glb 缺失）才退回基础层 —— 两条路都要认，
+	#    否则这条断言会站在旧设计那一边，以后谁改回去都不报警。
+	var upper := cf.get("_upper") as AnimationPlayer
+	var layer: AnimationPlayer = ap
+	var layer_name := "基础层"
+	if upper != null and upper.has_animation("Normal_Attack_Ing"):
+		layer = upper
+		layer_name = "叠加层"
+	cur = String(layer.current_animation)
+	print("       开火后 %s.current_animation = %s，_oneshot_left = %.2f（叠加层存在=%s）" % [
+		layer_name, cur, left, str(upper != null)])
 	_ok(cur == "Normal_Attack_Ing", "开火触发了 Normal_Attack_Ing（实际 %s）" % cur)
+	if layer == upper:
+		# 走叠加层时基础层不该被切成开火动作 —— 那就是「腿冻住」的旧症状
+		_ok(String(ap.current_animation) != "Normal_Attack_Ing",
+			"基础层没被切成开火动作（仍是 %s，腿继续动）" % ap.current_animation)
 	_ok(left > 0.0, "一次性动作锁生效（%.2f s）" % left)
 
 	MechState.set_carrier_for_test(false)

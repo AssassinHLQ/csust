@@ -249,6 +249,16 @@ const BORROW_LOOP := ["Normal_Idle", "Move_Ing", "Cafe_Idle", "Cafe_Walk"]
 ## 开火动作的播放倍速（和本体 `AnimDriver.FIRE_SPEED` 同一个数：
 ## `Normal_Attack_Ing` 原长 2.67 s，原速播「一次射击要演 2.67 秒」，手感卡）
 const FIRE_SPEED := 2.5
+## 开火动作的名字（要叠上半身的就是这一条）
+const ATTACK_CLIP := "Normal_Attack_Ing"
+## 「下半身」的判据 —— 和 `anim_driver.gd` 的 `LOWER_KEYWORDS` 同一套
+## （两边是同一个 145 骨 BA 骨架，骨名一致）。
+const LOWER_KEYWORDS := ["thigh", "calf", "foot", "toe", "leg", "pelvis", "hip",
+	"root", "skirt"]
+## 「躯干」的判据。开火动作的躯干是按**站桩**摆的，而飞行时基础层是 `Move_Ing`
+## （前倾）—— 不滤会在开火那一瞬间把躯干弹成站姿。
+## `anim_driver.gd` 那边实测这个差值是 **65°**（`_probe_fire_lean.gd`）。
+const TRUNK_KEYWORDS := ["spine", "chest", "neck", "head"]
 ## 借动作的报告（自检 / 控制台用）
 var borrow_report := {}
 ## 从 `BORROW_GLB` 借战斗 / 受击 / 必杀动作，搬进机甲自己的 `AnimationPlayer`。
@@ -283,6 +293,84 @@ func _borrow_anims() -> void:
 		print("[Carrier] 目标骨架没有的骨（已删掉那些轨道）：%s" % str(miss.keys()))
 
 
+## ── 开火动作：只叠**上半身**（用户 2026-11-09 选定方案 A）──
+##
+## 病根（用户：「爱丽丝机甲攻击动画为什么僵硬」）：
+##   `Normal_Attack_Ing` 是**整身**动作（从人体 glb 借来的），而载具**没有叠加层**，
+##   所以它只能独占播放 —— `_process()` 在 `_oneshot_left` 期间直接 `return`，
+##   移动 / 飞行动画停止刷新，人被锁成一个姿势 **1.07 s**。
+##   再叠上 0.10 s 一发的射速（`beam_fire_interval`）：
+##   **10 发里 9 发只有炮口闪光、身体一动不动** —— 这就是「僵硬」的来源。
+##
+## 做法照 `anim_driver.gd::_setup_upper_layer()`（同一个骨架构、同一套关键字）：
+##   · 另建一个 `AnimationPlayer` 当**兄弟节点**，`root_node` 指同一个根；
+##   · 里面装一份**滤掉下半身 + 躯干**的副本；
+##   · `process_priority` 比基础层大 1 ⇒ 同一帧后写赢 ⇒ 腿归基础层、上半身归这层。
+##
+## ⚠️ 为什么连**躯干**一起滤：开火动作的脊椎是按「站桩」摆的，飞行时基础层是
+##    `Move_Ing`（前倾）。不滤的话开火那一瞬间躯干会弹成站姿 —— `anim_driver`
+##    那边实测差 **65°**，是「一开枪就像被掰直」的元凶。
+##    所以本层只让**手臂 / 武器 / 头发 / 挂饰**随开火动。
+func _setup_upper_layer() -> void:
+	if _ap == null:
+		return
+	var host := _ap.get_parent()
+	if host == null:
+		push_warning("[Carrier] AnimationPlayer 没有父节点，叠加层做不了")
+		return
+	if not _ap.has_animation(ATTACK_CLIP):
+		push_warning("[Carrier] 没有 %s，开火动作退回整身独占" % ATTACK_CLIP)
+		return
+	var ov := AnimationPlayer.new()
+	ov.name = "UpperAttack"
+	# 轨道路径相对 `root_node`，两层必须指向同一个根
+	ov.root_node = _ap.root_node
+	# 比基础层大 1 ⇒ 后写赢（本节点自己是 10，仍然在两层之后跑）
+	ov.process_priority = _ap.process_priority + 1
+	var lib := AnimationLibrary.new()
+	var a: Animation = _ap.get_animation(ATTACK_CLIP).duplicate(true)
+	var removed := 0
+	for t in range(a.get_track_count() - 1, -1, -1):
+		var path_s := String(a.track_get_path(t))
+		# ⚠️ **节点轨道**（路径里没有 `:`）= 模型根节点自己的 position / rotation。
+		#    它们会把整个模型按开火姿势再转一遍（基础层已经管了），必须丢。
+		if not path_s.contains(":"):
+			a.remove_track(t)
+			removed += 1
+			continue
+		var bone := _bone_of_track(path_s)
+		if _in_kw(bone, LOWER_KEYWORDS) or _in_kw(bone, TRUNK_KEYWORDS):
+			a.remove_track(t)
+			removed += 1
+	lib.add_animation(ATTACK_CLIP, a)
+	ov.add_animation_library(&"", lib)
+	# ⚠️ **必须延后一帧加进树**：`_build()` 期间父节点还在装自己的孩子，
+	#    直接 `add_child()` 会失败，而且失败是**静默的**（不在树里 ⇒ 一帧都不更新
+	#    ⇒ 上半身根本没叠上去）。这个坑 `anim_driver.gd` 里记过一次。
+	host.add_child.call_deferred(ov)
+	_upper = ov
+	upper_tracks_removed = removed
+	print("[Carrier] 开火叠加层就位：%s 滤掉 %d 条轨道（剩 %d 条：上半身）｜优先级 %d > 基础层 %d" % [
+		ATTACK_CLIP, upper_tracks_removed, a.get_track_count(),
+		ov.process_priority, _ap.process_priority])
+
+
+## 轨道路径（`Node/Path:bone_name`）取出骨名；节点轨道返回空串
+func _bone_of_track(path: String) -> String:
+	var i := path.rfind(":")
+	return path.substr(i + 1) if i >= 0 else ""
+
+
+func _in_kw(bone: String, kws: Array) -> bool:
+	if bone.is_empty():
+		return false
+	var low := bone.to_lower()
+	for k in kws:
+		if low.contains(String(k)):
+			return true
+	return false
+
+
 ## 载具模型整体缩放（先用 1.0，看着不对再调）
 @export var carrier_scale := 1.0
 
@@ -293,6 +381,13 @@ var _ap: AnimationPlayer
 var _skel: Skeleton3D
 var _on := false
 var _cur_anim := ""
+## 上半身叠加层（开火用）。见 `_setup_upper_layer()`。
+var _upper: AnimationPlayer
+## 这一发是「只叠上半身」还是「整身独占」。
+## 开火 = 叠加（`false`，腿继续飞）；其余一次性动作 = 整身（`true`，挡住移动动画）。
+var _oneshot_full := true
+## 叠加层滤掉了多少条轨道（自检 / 控制台用）
+var upper_tracks_removed := 0
 
 # ── 飞行状态 ──
 var _airborne := false
@@ -433,6 +528,10 @@ func set_form(on: bool) -> bool:
 		if _carrier == null and not _build():
 			return false
 	_on = on
+	# 告诉 `player.gd`「现在是机甲形态」——它据此决定**地上也走飞行速度那一档**
+	# （用户 2026-11-09：「在地上怎么飞这么慢，不应该也是飞吗」）。见 `_carrier_on`。
+	if _player != null and _player.has_method("set_carrier_form"):
+		_player.call("set_carrier_form", on)
 	if _model != null:
 		_model.visible = not on
 	if _carrier != null:
@@ -462,6 +561,11 @@ func set_form(on: bool) -> bool:
 		_hold_y = -9000.0
 		_thrust = 0.0
 		_lean = 0.0
+		# 变回本体：把开火叠加层停掉（留着会继续写那几根上半身骨）
+		if _upper != null:
+			_upper.stop()
+		_oneshot_left = 0.0
+		_oneshot_full = true
 		# 变回本体：**务必交还垂直方向**，否则 `player.gd` 的重力一直是关的，
 		# 人会像灯神一样永远浮在原地。
 		if _player != null and _player.has_method("set_flight_lock"):
@@ -508,6 +612,7 @@ func _build() -> bool:
 		_build_boost_fx()
 		_build_cannon_fx()
 		_borrow_anims()
+		_setup_upper_layer()
 		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根｜炮口焰 %d 个｜动作 %d 条" % [
 			_boost_fx.size(), _found_wing_bones(), _found_cannon_bones(), cannon_fx_count,
 			_ap.get_animation_list().size() if _ap != null else 0])
@@ -1093,10 +1198,13 @@ func _apply_flight(delta: float, _on_floor: bool) -> void:
 		want_v = -HOVER_SINK
 	v.y = move_toward(v.y, want_v, VERT_ACCEL * delta)
 
-	# 水平：**不在这里动**。`player.gd` 的加速 / 摩擦 / 跑速判定每帧照常跑，
-	# 所以飞起来仍能按 Shift 冲到 6.8 m/s、仍能贴着墙调整落点。
-	# 唯一要做的额外事是「空中没有地面摩擦那么大的刹车」——那由 `player.gd`
-	# 的 `ACCEL_AIR` 管，这里不重复实现（重复实现会和它互相覆盖）。
+	# 水平：**不在这里动**。`player.gd` 的加速 / 摩擦 / 速度判定每帧照常跑，
+	# 所以飞起来仍能按 Shift 加力、仍能贴着墙调整落点。
+	# ⚠️ 速度档在 `player.gd`：飞行是 `SPEED_FLY 11` / `SPEED_FLY_BOOST 19`；
+	#    （这里原来写着「仍能按 Shift 冲到 6.8 m/s」，那是加 `_flight_lock` 分支之前的注释，
+	#      早就不是这个数了。）
+	# 唯一要做的额外事是「空中刹车比地面软」——那由 `player.gd` 的 `FRICTION_FLY` 管，
+	# 这里不重复实现（重复实现会和它互相覆盖）。
 	_player.set("velocity", v)
 
 	# 触底 → 落地（`player.gd` 会把它压回地面）
@@ -1714,10 +1822,14 @@ func _process(delta: float) -> void:
 	var v := _player.velocity
 	var speed := Vector2(v.x, v.z).length()
 
-	# ── 一次性动作（开火 / 换弹 / 受击）在演的时候，不要被移动逻辑顶掉 ──
+	# ── 一次性动作在演的时候 ──
+	# ⚠️ 只有**整身**的（`_oneshot_full`，即换弹 / 受击 / 必杀）才让路；
+	#    开火走叠加层，腿必须继续由下面的移动逻辑刷新，否则又变成「锁成站桩」
+	#    —— 那正是用户 2026-11-09 报的「攻击动画僵硬」。
 	if _oneshot_left > 0.0:
 		_oneshot_left = maxf(_oneshot_left - delta, 0.0)
-		return
+		if _oneshot_full:
+			return
 
 	if _airborne:
 		# 飞行时用 Move_Ing（有战斗移动姿势，比慢走更像「推进中」），
@@ -1751,16 +1863,27 @@ func _has_clip(name_: String) -> bool:
 
 ## 播一次一次性动作（开火 / 换弹 / 受击 / 必杀），播完回到移动态。
 ##
-## ⚠️ 用 `_oneshot_left` 挡着 `_process()`：载具的动作是**整身**的（不像本体有
-##    上半身叠加层），所以开火动画必须独占播放，否则下一帧就被 `Move_Ing` 顶掉，
-##    看起来是「按了开枪但什么都没演」。
+## ⚠️ 分两类：
+##   · **开火** → 走「叠加层」`_upper`（只含上半身轨道），**基础层的移动动画照常刷**
+##     —— 腿继续飞、身体不再被锁成站桩 1.07 s（用户 2026-11-09 选定的方案 A）；
+##   · **其余**（换弹 / 受击 / 必杀）→ 仍然整身独占，因为那些动作本身就是全身的，
+##     叠一半反而怪。`_oneshot_full` 决定 `_process()` 要不要让路。
 func _play_oneshot(clip: String, speed: float = 1.0) -> bool:
 	if _ap == null or not _ap.has_animation(clip):
 		return false
 	_cur_anim = clip
+	# ── 开火：叠上半身 ──
+	if clip == ATTACK_CLIP and _upper != null and _upper.has_animation(clip):
+		_upper.speed_scale = speed
+		_upper.play(clip, 0.06, 1.0)
+		_oneshot_left = _upper.get_animation(clip).length / maxf(speed, 0.01)
+		_oneshot_full = false          # ← 别挡住移动动画
+		return true
+	# ── 其余：整身独占 ──
 	_ap.speed_scale = speed
 	_ap.play(clip, 0.06, 1.0)
 	_oneshot_left = _ap.get_animation(clip).length / maxf(speed, 0.01)
+	_oneshot_full = true
 	return true
 
 

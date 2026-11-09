@@ -127,7 +127,49 @@ func _run() -> void:
 	_check(v_stop < 1.0, "松开方向键会停下来（%.2f m/s）" % v_stop)
 
 	print("")
-	print("========== 3. 地面手感没被改坏 ==========")
+	print("========== 3. 机甲形态**在地面**也要用飞行速度 ==========")
+	# 用户 2026-11-09：「在地上怎么飞这么慢，不应该也是飞吗，为什么不和天上一个速度」
+	# 病根：落地时 `_apply_flight()` 末会调 `_land()` → `set_flight_lock(false)`，
+	# 于是速度从 SPEED_FLY 11 掉回 SPEED_WALK 2.4（慢 4.6 倍）。
+	# 修法：`player.gd` 的速度判据改成 `_flight_lock or _carrier_on`。
+	# ── 先真的落地：清掉飞行锁，**保持机甲形态** ──
+	cf.call("_land")
+	player.global_position = Vector3(0, 0.6, 0)
+	player.set("velocity", Vector3.ZERO)
+	for i in 30:
+		await physics_frame
+	_check(not player.is_flight_locked(), "落地后飞行锁已清（垂直方向交还 player）")
+	_check(player.is_carrier_form(), "但**仍然是机甲形态**（carrier_form 为真）")
+
+	Input.action_press("move_forward")
+	for i in 90:
+		await physics_frame
+	var v_ground := Vector2(player.velocity.x, player.velocity.z).length()
+	print("       机甲**站在地上**走：%.2f m/s" % v_ground)
+	_check(v_ground >= 10.0,
+		"地上也是飞行巡航速，不再是步兵 2.4（%.2f ≥ 10.0 m/s）" % v_ground)
+
+	Input.action_press("sprint")
+	for i in 90:
+		await physics_frame
+	var v_ground_boost := Vector2(player.velocity.x, player.velocity.z).length()
+	print("       机甲站在地上按 Shift：%.2f m/s" % v_ground_boost)
+	_check(v_ground_boost >= 17.0,
+		"地上加力也到飞行档（%.2f ≥ 17.0 m/s）" % v_ground_boost)
+	Input.action_release("sprint")
+
+	# 机甲形态下 Ctrl 不该被当成蹲（它落地了也不蹲）
+	Input.action_press("crouch")
+	for i in 45:
+		await physics_frame
+	print("       机甲站在地上按 Ctrl：crouching=%s 速度 %.2f m/s" % [
+		str(player.crouching), Vector2(player.velocity.x, player.velocity.z).length()])
+	_check(not player.crouching, "机甲形态下 Ctrl 不触发「蹲」")
+	Input.action_release("crouch")
+	Input.action_release("move_forward")
+
+	print("")
+	print("========== 4. 变回本体后地面手感没被改坏 ==========")
 	# 变回本体、落地，按 Ctrl 仍然应该走蹲速
 	cf.set_form(false)
 	await process_frame
@@ -136,6 +178,7 @@ func _run() -> void:
 	for i in 20:
 		await physics_frame
 	_check(not player.is_flight_locked(), "变回本体后垂直方向交还给 player")
+	_check(not player.is_carrier_form(), "变回本体后 carrier_form 也清掉了")
 	Input.action_press("move_forward")
 	Input.action_press("crouch")
 	for i in 60:
