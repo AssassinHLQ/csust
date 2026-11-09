@@ -33,11 +33,20 @@
 ;    三档（近 0~8 m 高模 / 中 8~20 m 中模 / 远 20 m+ 现有低模），
 ;    用 `visibility_range` 在**引擎侧**切换，不进每帧脚本
 ;    —— 原因见 `ryzen_9950x3d.gd`：引擎自动 LOD 对这批模型**实测无效**。
+;
+; ── 2026-11-09 换掉碰撞 ──
+; 使用者：「你总是做大了碰撞，书本桌子本来是两个不同的碰撞，结果你只做一个大的碰撞」。
+; 旧版在运行时把「按材质合并的 59 个网格」切体素 —— 书和桌子同材质就分不开，糊成一坨。
+; 现在改成**离线烘好的「一件物体一个盒子」**：
+;   `models/esports_room/esports_parts.json`（728 件，由 tools/dump_esports_parts.py 生成）
+;   → `scenes/esports_collision_baked.tscn`（335 个 BoxShape3D，由 _bake_esports_parts.gd 生成）
+; 下面 `BakedCollision` 就是它。运行时**零计算**（旧版建盒子要 575 ms）。
 
 [ext_resource type="PackedScene" path="res://models/esports_room/esports_room.glb" id="1_room"]
 [ext_resource type="Script" path="res://scripts/esports_collision.gd" id="2_col"]
 [ext_resource type="Script" path="res://scripts/esports_light.gd" id="3_light"]
 [ext_resource type="Script" path="res://scripts/esports_lod.gd" id="4_lod"]
+[ext_resource type="PackedScene" path="res://scenes/esports_collision_baked.tscn" id="5_bakedcol"]
 
 [node name="EsportsRoom" type="Node3D"]
 script = ExtResource("2_col")
@@ -47,5 +56,8 @@ script = ExtResource("3_light")
 
 [node name="Lod" type="Node3D" parent="."]
 script = ExtResource("4_lod")
+
+; 一件物体一个盒子的碰撞（离线烘好）
+[node name="BakedCollision" parent="." instance=ExtResource("5_bakedcol")]
 
 [node name="Room" parent="." instance=ExtResource("1_room")]
