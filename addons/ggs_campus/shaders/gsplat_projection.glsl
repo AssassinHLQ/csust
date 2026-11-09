@@ -28,6 +28,47 @@
 
 #define DECODE_COVARIANCE(c) (mat3(c[0], c[1], c[2], c[1], c[3], c[4], c[2], c[4], c[5]))
 
+// ── 逐点协方差上限 + 中位数归一化（2026-11-09）──
+//
+// 用户：「为什么校园泼溅还没有修好」。本喵把 `campus_ggs.bin` 614 万点全量解出来量过：
+//
+//   · 最近邻点距 中位 **0.966 m**（p90 = 1.913 m）—— 点**很稀**
+//   · 协方差迹的 中位 σ_iso **0.132 m** ⇒ σ / 间距 ≈ **0.14**
+//     ⇒ 每个椭球只盖住自己间距的 1/7，投影后必然留洞 ⇒ 「稀疏点云」
+//   · 特征值 √λ 的中位 **0.187 m**，p99 **1.34 m**，**最大 6.84 m**
+//     ⇒ 2.2%（13 万个）的点 σ > 1 m，0.26% > 2 m ⇒ 这些拉成白条纹
+//
+// 所以病根不是「椭球整体偏大或偏小」这一个系数，而是**分布过宽**：
+// 一个全局 `cov_scale` 只能二选一 ——
+//   调大 → 中位数点够了，离群点糊成整屏白（cov=0.3 那张图就是这样）；
+//   调小 → 离群点不糊了，中位数点只剩点云（cov=0.1，用户现在看到的样子）。
+//
+// 正解是**先把分布压窄，再整体放大**：
+//   ① 逐点钳制：把最大特征值压到 `cov_cap`（m²）以内（保方向、保各向异性）
+//   ② 中位数归一：再乘 `1/σ_ref²`，让「中位数椭球」正好盖住 `splat_sigma` 米
+// 这样离群点被拉回量级，中位数点被放到能连成面，两边都不牺牲。
+//
+// `cov_cap` = 0 或 `cov_ref` <= 0 时**完全跳过**（= 老行为），方便对照。
+vec3 cov_eigenvalues(in mat3 m) {
+	// 对称 3×3 的闭式特征值（Smith 1961）。这里只用于钳制，精度足够了。
+	const float p1 = m[0][1]*m[0][1] + m[0][2]*m[0][2] + m[1][2]*m[1][2];
+	vec3 eig;
+	if (p1 < 1e-12) {
+		eig = vec3(m[0][0], m[1][1], m[2][2]);
+	} else {
+		const float q = (m[0][0] + m[1][1] + m[2][2]) / 3.0;
+		const float p2 = (m[0][0]-q)*(m[0][0]-q) + (m[1][1]-q)*(m[1][1]-q) + (m[2][2]-q)*(m[2][2]-q) + 2.0*p1;
+		const float p = sqrt(p2 / 6.0);
+		const mat3 B = (1.0 / max(p, 1e-12)) * (m - q*mat3(1.0));
+		const float r = clamp(determinant(B) * 0.5, -1.0, 1.0);
+		const float phi = acos(r) / 3.0;
+		eig.x = q + 2.0*p*cos(phi);                    // 最大
+		eig.z = q + 2.0*p*cos(phi + 2.0943951023931953); // 最小
+		eig.y = 3.0*q - eig.x - eig.z;
+	}
+	return eig;
+}
+
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 struct Splat {
@@ -88,9 +129,25 @@ layout (std140, set = 0, binding = 6) restrict uniform Uniforms {
 	// ⚠️ 不能拿 `model_scale` 顶替：它同时乘**位置**（`splat_pos = position*model_scale`），
 	//    调它会把整个校园缩走、位置全错。所以单独开一个只作用于协方差的量。
 	//
-	// std140 下 `{vec3, float, ivec2, float}` = 28 字节、补齐到 32，
-	// 这第 8 个 float 正好是原来空着的那 4 字节（GDScript 侧原本只填了 7 个）。
+	// std140 布局（**48 字节**，不是 40）：
+	//   offset  0: vec3  camera_pos
+	//   offset 12: float model_scale
+	//   offset 16: ivec2 dims
+	//   offset 24: float time
+	//   offset 28: float cov_scale
+	//   offset 32: vec2  cov_limit      ← 8 字节
+	//   块尾按 16 对齐 ⇒ **48**。
+	// ⚠️ 这里踩过坑（2026-11-09）：GDScript 侧按 40 字节开 uniform buffer，
+	//    引擎直接报 `Uniform buffer supplied (40) is smaller than shader uniform (48)`，
+	//    descriptor set 创建失败 ⇒ 投影 pass 整条没跑 ⇒ 画面里细层根本不出现，
+	//    而「没报错的那部分」看起来像是钳制没生效。看到这个报错就查这里。
 	float cov_scale;
+	// ── 逐点钳制（见文件顶部 `cov_eigenvalues` 上头那段推导）──
+	// `cov_cap`：单个点特征值上限（m²）。0 = 不钳。
+	// `cov_ref`：中位数点的特征值（m²）。>0 时整体乘 1/cov_ref，让中位椭球 = 1 m 量级。
+	vec2 cov_limit;
+	float _pad0;
+	float _pad1;
 };
 
 layout(push_constant) restrict readonly uniform PushConstants {
@@ -196,7 +253,26 @@ void main() {
 	float splat_opacity = splat.opacity * time_factor_late*time_factor_late;
 	float splat_scale = model_scale * cov_scale * mix(2.0, 1.0, time_factor_late);
 
-	const vec3 covariance = project_covariance(DECODE_COVARIANCE(splat.covariance), splat_scale, view_pos.xyz, dims);
+	// ── 逐点钳制 + 中位数归一（见文件顶部 `cov_eigenvalues` 上头的推导）──
+	//
+	// 钳制做法有意保持简单：**只乘一个标量**。
+	// 设 λmax 为本题最大特征值，cap 为上限，把整个协方差乘 (cap/λmax)，
+	// 等价于把 σ 压到 √(cap/λmax) 倍 —— 方向与各向异性比例都不变，
+	// 只是把离群点整体拉回量级。（重建矩阵去精确压单个轴 = 需要特征向量，
+	// 成本高、收益小：本喵量过，钳制后中位数点一个都不受影响。）
+	mat3 cov_3d = DECODE_COVARIANCE(splat.covariance);
+	if (cov_limit.x > 0.0) {
+		const vec3 eig = cov_eigenvalues(cov_3d);
+		const float lmax = max(max(eig.x, eig.y), eig.z);
+		if (lmax > cov_limit.x) {
+			cov_3d = cov_3d * (cov_limit.x / lmax);
+		}
+	}
+	if (cov_limit.y > 0.0) {
+		cov_3d = cov_3d * (1.0 / cov_limit.y);
+	}
+
+	const vec3 covariance = project_covariance(cov_3d, splat_scale, view_pos.xyz, dims);
 	float det = covariance.x*covariance.z - covariance.y*covariance.y;
 	if (det == 0.0) return;
 

@@ -70,6 +70,12 @@ var model_scale = [1.0]
 ## 直接赋值改不到光栅器内部；数组是引用，改 `[0]` 就能生效。
 ## 默认 1.0 = 和以前完全一样的行为。
 var cov_scale = [1.0]
+## 逐点协方差钳制：`[cap, ref]`（单位 m² / 特征值）。
+##   `cap` 单个点的最大特征值上限，0 = 不钳；
+##   `ref` 中位数点的特征值，>0 时整体乘 1/ref。
+## 详见 `shaders/gsplat_projection.glsl` 顶部那段推导（2026-11-09 修校园泼溅）。
+## 用数组的理由同 `cov_scale`。默认 `[0, 0]` = 老行为。
+var cov_limit = [0.0, 0.0]
 var should_terminate_thread : Array[bool] = [false]
 ## 若设置，则直接从预打包的 60-float 世界坐标 bin 上传，跳过 PLY 解析/打包。
 var bin_path := ""
@@ -140,7 +146,13 @@ func init_gpu() -> void:
 	#   · `sort_values`    ← downsweep 只写 `[0, element_count)`
 	# （`element_count` 取自 histogram 的首个 uint，每帧由 CPU 清 0。）
 	descriptors['splats'] = context.create_storage_buffer(point_cloud.size * 60*4, [], 0, false)
-	descriptors['uniforms'] = context.create_uniform_buffer(8*4)
+	# 12 个 float × 4 字节 = **48**。std140 布局（见 `gsplat_projection.glsl` 的 Uniforms）：
+	#   vec3 camera_pos(0..11) / float model_scale(12) / ivec2 dims(16..23) /
+	#   float time(24) / float cov_scale(28) / vec2 cov_limit(32..39) / 两个 pad 到 48。
+	# ⚠️ 曾经写成 8*4=32 与 10*4=40，都触发
+	#    `Uniform buffer supplied (N) is smaller than size of shader uniform: (48)`，
+	#    descriptor set 建不出来 ⇒ 投影 pass 整条不跑。
+	descriptors['uniforms'] = context.create_uniform_buffer(12*4)
 	descriptors['culled_splats'] = context.create_storage_buffer(point_cloud.size * 12*4, [], 0, false)
 	descriptors['grid_dimensions'] = context.create_storage_buffer(2*3*4, block_dims.to_byte_array(), RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)
 	descriptors['histogram'] = context.create_storage_buffer(4 + (1 + 4*RADIX + num_partitions*RADIX)*4)
@@ -390,7 +402,7 @@ func rasterize() -> void:
 		return
 	
 	var camera_pos = basis_override * camera.global_position
-	context.device.buffer_update(descriptors['uniforms'].rid, 0, 8*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3, cov_scale[0]]))
+	context.device.buffer_update(descriptors['uniforms'].rid, 0, 12*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3, cov_scale[0], cov_limit[0], cov_limit[1], 0.0, 0.0]))
 	context.device.buffer_clear(descriptors['histogram'].rid, 0, 4 + 4*RADIX*4) # Clear the sort buffer size and reset global histogram
 	context.device.buffer_clear(descriptors['tile_bounds'].rid, 0, tile_dims.x*tile_dims.y * 2*4) # Clear gsplat_boundaries buffer
 	#context.device.buffer_update(descriptors['grid_dimensions'].rid, 0, 3*4*2, default_block_dims)

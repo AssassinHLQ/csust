@@ -44,6 +44,22 @@ var _attack_index := 0
 var _busy := false
 var _telegraph_mat: StandardMaterial3D
 
+## ── 血量（2026-11-09 用户：「霸王龙增强血量，两倍」）──
+##
+## 原来这三只走 `Boss.max_health` 的默认值 **3000**（`boss.gd:65`），
+## 场景 `next_level.tscn` 里**没有**任何覆盖。×2 ⇒ **6000**。
+##
+## 写在 `_init()` 而不是 `_ready()`：`_init` 在场景属性之前跑，所以
+## `next_level.tscn` / `game.tscn` 里若某一只想单独微调，仍以场景为准
+## （和 `trex_boss.gd` / `pig_boss.gd` 的写法保持一致）。
+##
+## ⚠️ 只动血量，**不动** `ATTACKS` 里的伤害 —— 用户只说了「血量两倍」。
+const BASE_HEALTH := 6000.0
+
+
+func _init() -> void:
+	max_health = BASE_HEALTH
+
 
 func _boot() -> void:
 	super._boot()

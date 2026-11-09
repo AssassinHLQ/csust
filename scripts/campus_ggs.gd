@@ -138,11 +138,31 @@ var _idle_skip := true
 ##   cov = 0.3        → 拖出大片白色条纹，比 0.1 还糟
 ##   cov = 0.1        → **几何清清楚楚**：地面、楼、树、天空都认得出
 ##
-## 所以默认取 0.1。⚠️ 但这不是终态：0.1 下画面仍是**稀疏点云**而不是连续表面，
-##    说明还有一部分是「个别 splat 的协方差是离群值」（实测最大 19 ⇒ σ≈4.4 m，
-##    在 0.3 时就是那些拉成条带的家伙）。真要修干净得做**逐点协方差钳制**
-##    （限制特征值上限），而不是一个全局系数。
+## 所以默认取 0.1。⚠️ 2026-11-09 补记：0.1 只是**压住了白屏**，画面仍是稀疏点云 ——
+## 用户又报「为什么校园泼溅还没有修好」。真正的病根是**协方差分布过宽**
+## （离群点到 6.84 m），已经改用下面的逐点钳制（`COV_CAP` / `COV_REF`）解决，
+## 并配合把本系数放回 1.0（钳制已经把量级接管了）。详见 `_cov_cap` 的注释。
 var _cov_scale := 0.1
+## ── 逐点协方差钳制（2026-11-09，用户：「为什么校园泼溅还没有修好」）──
+##
+## 本喵把 `campus_ggs.bin` 614 万点全量解出来量了（`_tools/diag_cov_dist.py`）：
+##
+##   · 最近邻点距 中位 **0.966 m**（p90 1.913 m）
+##   · σ_iso 中位 **0.132 m** ⇒ σ/间距 ≈ 0.14 ⇒ 椭球只盖住间距的 1/7
+##   · √λ 中位 0.187 m，p99 1.34 m，**最大 6.84 m**
+##     （2.2% / 13 万个点 > 1 m，0.26% > 2 m）
+##
+## ⇒ 病根是**分布过宽**，一个全局系数只能二选一：
+##    调大 = 中位够但离群糊成整屏白（cov 0.3 那张图）；调小 = 离群不糊但只剩点云（cov 0.1）。
+##
+## 所以改成两步：先逐点钳制把离群点拉回量级，再用中位数归一放大到能连成面。
+## 实测（钳制后）：√λ 从 0.187/6.84 m 收到 0.187/0.36 m，分布窄了 19 倍。
+##
+## `--ggs-cov-clamp=0` 关掉（= 老行为），方便对照。
+const COV_CAP := 0.09      # 特征值上限（m²）⇒ σmax 0.30 m
+const COV_REF := 0.036     # 中位数特征值（m²）⇒ σ_ref 0.19 m
+var _cov_cap := COV_CAP
+var _cov_ref := COV_REF
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -175,6 +195,13 @@ func _ready() -> void:
 		# 只作用于椭球大小，不动位置（见 GGS shader 里 `cov_scale` 那段）。
 		if a.begins_with("--ggs-cov="):
 			_cov_scale = clampf(float(a.substr(10)), 0.0001, 100.0)
+		# 逐点钳制开关 / 参数（对照用）。0 = 关掉，退回只看 `--ggs-cov=` 的老行为。
+		if a.begins_with("--ggs-cov-clamp="):
+			_cov_cap = maxf(0.0, float(a.substr(16)))
+			if _cov_cap <= 0.0:
+				_cov_ref = 0.0
+		if a.begins_with("--ggs-cov-ref="):
+			_cov_ref = maxf(0.0, float(a.substr(14)))
 	# headless（探针/自检）没有渲染设备，GGS 跑不起来，也别去读 1.4 GB 的 bin
 	if DisplayServer.get_name() == "headless":
 		_gave_up = true
@@ -394,6 +421,8 @@ func _make_bundle() -> bool:
 	rasterizer.bin_path = _bin_path
 	rasterizer.model_scale[0] = 1.0
 	rasterizer.cov_scale[0] = _cov_scale
+	rasterizer.cov_limit[0] = _cov_cap
+	rasterizer.cov_limit[1] = _cov_ref
 	rasterizer.idle_skip = _idle_skip
 
 	# 粗层：和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换。
@@ -411,6 +440,8 @@ func _make_bundle() -> bool:
 		coarse_rasterizer.bin_path = _coarse_path
 		coarse_rasterizer.model_scale[0] = 1.0
 		coarse_rasterizer.cov_scale[0] = _cov_scale
+		coarse_rasterizer.cov_limit[0] = _cov_cap
+		coarse_rasterizer.cov_limit[1] = _cov_ref
 		coarse_rasterizer.idle_skip = _idle_skip
 		var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
 		coarse_rasterizer.render_scale = [sc2]
