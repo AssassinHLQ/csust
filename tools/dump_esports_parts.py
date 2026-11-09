@@ -192,11 +192,19 @@ def make_single_user(meshes):
     log("单用户化：%d 个对象复制了网格数据（原来是共用的）" % n)
 
 
-def dedupe(meshes, eps):
+def dedupe(meshes, eps, near_eps=0.10):
     """同尺寸 + 同面数 + 中心很近 = 重复，留名字短的那份。
 
     ⚠️ `mathutils.Vector` 是**可变**的，不能当字典键（会报
     "Vector is not frozen (mutable), call freeze first"），所以这里存元组。
+
+    ⚠️ 2026-11-09 使用者：「为什么碰撞重复了」——
+    实测碰撞里有 **77 组**「尺寸一模一样、中心只差 3 cm」的盒子，例如
+      P0056_0 @(51.36,1.53,13.46) == P0057_0 @(51.36,1.53,13.43)  尺寸 0.06×0.14×0.22
+    说明**原始 FBX 里就有镜像/复制件**（3ds Max 常见），而原来 `eps` 只有 0.02 m，
+    差 0.03 m 就漏过去了 → 碰撞盒成对出现，看起来「重复」。
+    所以尺寸判据仍用 `eps`（严格），**中心判据放宽到 `near_eps`（默认 0.10 m）**：
+    尺寸完全一样、又只差几厘米的两件，实际就是同一件东西的两份拷贝。
     """
     seen = []
     removed = 0
@@ -208,19 +216,28 @@ def dedupe(meshes, eps):
         t = tri_count(o)
         dup = False
         for ks, kc, kt in seen:
-            if (kt == t
-                    and abs(ks[0] - size.x) < eps and abs(ks[1] - size.y) < eps
+            # ⚠️ **不再要求面数相同**（2026-11-09）：
+            #    对**碰撞**来说，只要「包围盒一样 + 位置几乎一样」，
+            #    两个盒子就是冗余的 —— 面数差几个不影响。
+            #    实测模型里有 50 组这样的小件（0.06×0.14×0.22，中心差 3 cm），
+            #    因为面数不同被漏掉，碰撞盒成对出现，使用者看到就是「重复」。
+            if (abs(ks[0] - size.x) < eps and abs(ks[1] - size.y) < eps
                     and abs(ks[2] - size.z) < eps
-                    and abs(kc[0] - center.x) < eps and abs(kc[1] - center.y) < eps
-                    and abs(kc[2] - center.z) < eps):
+                    and abs(kc[0] - center.x) < near_eps
+                    and abs(kc[1] - center.y) < near_eps
+                    and abs(kc[2] - center.z) < near_eps):
                 dup = True
                 break
         if dup:
             removed += 1
+            # ⚠️ 必须**真的从场景里删掉**！只过滤 Python 列表没用 ——
+            #    后面 `meshes = [o for o in bpy.context.scene.objects …]`
+            #    会把"删掉"的对象又枚举回来（实测：删 35 个，结果还是 728 件）。
+            bpy.data.objects.remove(o, do_unlink=True)
             continue
         seen.append(((size.x, size.y, size.z), (center.x, center.y, center.z), t))
         keep.append(o)
-    log("去重：删 %d 个对象" % removed)
+    log("去重：删 %d 个对象（尺寸容差 %.3f、中心容差 %.3f）" % (removed, eps, near_eps))
     return keep
 
 
