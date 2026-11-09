@@ -16,11 +16,15 @@ extends SceneTree
 ##       -- --ggs-cov=0.3 --ggs-cov-clamp=0.09 --ggs-cov-ref=0.036 --no-capture
 ##
 ## ⚠️ 按 AGENTS.md「跑测试 / 弹窗口：绝对不许抢用户前台」：
-##    `--position -4000,-4000` + `--resolution` + `--audio-driver Dummy` + `--no-capture`
-##    **四个一个都不能少**。开头脚本会自己检查，漏了就直接拒绝运行（见 `_check_window_args`）。
+##    `--position` / `--resolution` / `--audio-driver Dummy` / `--no-capture` 四个都要加，
+##    但**光加命令行不够** —— `project.godot` 里 `window/size/mode=2`（最大化）会在启动时
+##    把 `--windowed` / `--position` 全顶掉。所以脚本运行时还要自己调
+##    `OffscreenWindow.apply(self)`（见 `_run()` 第一行）。
 ##
 ## 出图 → `_arisu_learn/_log/_cov_<值>.png`
 
+## 用 preload 而不是全局类名：`--script` 模式下解析不到 `class_name`。
+const OffWin := preload("res://scripts/offscreen_window.gd")
 const LEVEL := "res://scenes/next_level.tscn"
 const OUT_DIR := "C:/Users/WY157/Desktop/GODOT/_arisu_learn/_log"
 
@@ -55,6 +59,9 @@ func _cov_tag() -> String:
 
 
 func _run() -> void:
+	# ⚠️ 第一步就把窗口挪到屏幕外、取消最大化、缩到 960×540。
+	#    命令行参数**顶不住** project.godot 里的 window/size/mode=2，必须运行时代码改。
+	await OffWin.apply(self)
 	var ps := load(LEVEL) as PackedScene
 	if ps == null:
 		push_error("[cov] 加载不了关卡")
@@ -106,4 +113,11 @@ func _run() -> void:
 	var path := "%s/_cov_%s.png" % [OUT_DIR, _cov_tag()]
 	var err := img.save_png(path)
 	print("[cov] 出图 → %s err=%d" % [path, err])
+
+	# 出图完自报「有没有抢前台」，让这件事可核实而不是口头保证。
+	var safe: Array = OffWin.is_safe()
+	print("[cov] 窗口自检：%s（位置 %s / 尺寸 %s / 焦点 %s / mouse_mode %d）" % [
+		"✓ 没抢前台" if bool(safe[0]) else "✗ " + str(safe[1]),
+		str(DisplayServer.window_get_position()), str(DisplayServer.window_get_size()),
+		str(DisplayServer.window_is_focused()), Input.mouse_mode])
 	quit(0)
