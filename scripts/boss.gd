@@ -595,6 +595,16 @@ func _flash() -> void:
 		tw.tween_property(mat, "albedo_color", tint, 0.18)
 
 
+## 打倒后往 HUD 上弹一行「银行卡 +¥1.0 万」。
+## 没有 HUD（探针 / 无界面的测试场景）时静默跳过。
+func _float_reward(yuan: int) -> void:
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud == null or not hud.has_method("show_float_text"):
+		return
+	hud.call("show_float_text",
+		"%s 打倒！银行卡 +%s" % [display_name, BankCard.format_yuan(yuan)])
+
+
 func _die(by_damage: float) -> void:
 	_dead = true
 	if drop_yuan > 0:
@@ -607,10 +617,27 @@ func _die(by_damage: float) -> void:
 			fut.call("add_loot", drop_yuan, "%s 掉落" % display_name)
 			print("[Boss %s] 打倒 → 本轮资产 +%s（结算后进银行卡）" % [display_name,
 				BankCard.format_yuan(drop_yuan)])
-		else:
-			BankCard.add(drop_yuan)
-			print("[Boss %s] 打倒 → 直接进银行卡 %s（余额 %s）" % [display_name,
+		elif fut != null and fut.has_method("add_bank"):
+			# ⚠️ 2026-11-09 修「飞猪优香打完不掉钱了」：
+			#
+			# 原来这里只调 `BankCard.add()`。卡里确实加了钱，但 `parkour_futures.gd`
+			# 自己还维护一份 `bank_yuan`（结算时 `BankCard.set_balance(bank_yuan)` 回写）。
+			# 那份没跟着涨 ⇒ 只要进一次跑酷结算，飞猪这 1w 就被旧值**盖掉**。
+			# 实测（`_verify_pig_bank_leak.gd`）：打死后 card=10000 / futures=0，
+			# 模拟结算后 card 又变回 **0**。
+			#
+			# `add_bank()` 是期货那边专门给「直接进卡的钱」准备的入口，它会同时
+			# 更新 `bank_yuan` 并刷 HUD 的「银行卡」列（见 `parkour_futures.gd:945`）。
+			fut.call("add_bank", drop_yuan, "%s 打倒掉落" % display_name)
+			print("[Boss %s] 打倒 → 直接进银行卡 %s（余额 %s，已同步期货账本）" % [display_name,
 				BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
+			_float_reward(drop_yuan)
+		else:
+			# 没有 futures 节点（比如单独跑探针/测试场景）：只能直接写卡。
+			BankCard.add(drop_yuan)
+			print("[Boss %s] 打倒 → 直接进银行卡 %s（余额 %s，无期货节点未同步）" % [display_name,
+				BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
+			_float_reward(drop_yuan)
 	died.emit(by_damage)
 	for c in _collisions:
 		c.set_deferred("disabled", true)

@@ -162,6 +162,10 @@ const SPLAT_PHASE := {
 
 
 func _ready() -> void:
+	# 进 `hud` 组：`boss.gd::_float_reward()` 靠它找 HUD 弹掉落飘字。
+	# 以前 HUD 不在任何组里，`game.gd` 是直接 `$HUD` 拿的引用；
+	# 但 Boss 是动态实例化/可能的独立场景，拿不到那个引用，只能用组。
+	add_to_group("hud")
 	_skin = UiSkin.pick()
 	_style_ammo_panel()
 	_build_player_health()
@@ -646,6 +650,46 @@ func bind(player: Player, weapon: Weapon) -> void:
 	if not player.health_changed.is_connected(_on_player_health):
 		player.health_changed.connect(_on_player_health)
 	_on_player_health(player.health, player.max_health)
+
+
+## ── 掉落飘字（2026-11-09，用户：「为什么飞猪优香打完不掉钱了」）──
+##
+## 根因之一是**完全没有反馈**：钱进了银行卡（当时代码确实加了），但第一场景里
+## 既没有银行卡 HUD，也没有任何飘字，玩家只能看到 Boss 倒了、什么都没有。
+##
+## 这里在屏幕中偏上弹一行字，1.8 s 内上浮淡出，然后自己 `queue_free()`。
+## 用 `CanvasLayer` 的绝对定位（同 `_place()` 那套尺子），不依赖容器排版。
+var _floaters: Array[Control] = []
+
+func show_float_text(text: String, color := Color(1.0, 0.86, 0.42)) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 34)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.04, 0.92))
+	lbl.add_theme_constant_override("outline_size", 10)
+	lbl.modulate.a = 0.0
+	add_child(lbl)
+	_floaters.append(lbl)
+
+	# 屏幕中央偏上：横跨整幅，靠 horizontal_alignment 居中
+	var vp := get_viewport().get_visible_rect().size
+	var w := vp.x * 0.9
+	var h := 48.0
+	lbl.position = Vector2((vp.x - w) * 0.5, vp.y * 0.32)
+	lbl.size = Vector2(w, h)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "modulate:a", 1.0, 0.18)
+	tw.tween_property(lbl, "position:y", lbl.position.y - 46.0, 1.8) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_property(lbl, "modulate:a", 0.0, 0.4)
+	tw.chain().tween_callback(func() -> void:
+		_floaters.erase(lbl)
+		if is_instance_valid(lbl):
+			lbl.queue_free())
 
 
 func _on_ammo(current: int, maximum: int) -> void:
