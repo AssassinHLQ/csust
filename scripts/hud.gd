@@ -87,6 +87,12 @@ var _arm_alpha := 1.0
 @onready var reload_trough: Panel = $Panel/Margin/VBox/ReloadTrough
 @onready var reload_bar: ProgressBar = $Panel/Margin/VBox/ReloadTrough/Reload
 
+## COST 条的三件（运行时建，见 `_build_cost_row()`）。
+## 名字固定成 `Cost` / `CostTrough` / `CostBar` —— 自检按名字取。
+var cost_label: Label
+var cost_trough: Panel
+var cost_bar: ProgressBar
+
 # --- 左上角玩家血量面板 ---
 const HP_PANEL_POS := Vector2(24.0, 20.0)   ## 左上角留出的边距
 const HP_PANEL_SIZE := Vector2(344.0, 92.0)
@@ -101,6 +107,13 @@ const HP_TITLE_FONT_SIZE := 18.0
 # --- 右下角弹药面板 ---
 const AMMO_FONT_SIZE := 34
 const RELOAD_BAR_HEIGHT := 12.0
+
+# --- 右下角 COST（费用）量 ----------------------------------------------------
+# 规则与数值全在 `scripts/cost_gauge.gd`（上限 10 / 每秒 1 / 开局 0 / 只爱丽丝花）。
+# 这里只负责「画出来」+「每帧喂时间」。
+const CostGauge := preload("res://scripts/cost_gauge.gd")
+const COST_FONT_SIZE := 34
+const COST_BAR_HEIGHT := 12.0
 
 # --- 顶部 Boss 血条组（Minecraft 风格）---
 ## **一个 Boss 一行**，自上而下按索引排。
@@ -168,6 +181,7 @@ func _ready() -> void:
 	add_to_group("hud")
 	_skin = UiSkin.pick()
 	_style_ammo_panel()
+	_build_cost_row()
 	_build_player_health()
 	# 泼溅状态行不在这里建：见 bind_splats()，要按场上实际有几份场地来排行数。
 	# （校园 615 万点首次要解码约 50 s，不给状态行玩家会以为卡死了。）
@@ -310,6 +324,68 @@ func _style_ammo_panel() -> void:
 
 	reload_bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
 	reload_bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, 1.0))
+
+
+# --- 右下角：COST（费用）量 ----------------------------------------------------
+
+## 建费用条（用户 2026-11-09：「新增功能,cost,每秒可以积攒cost」）。
+##
+## 摆位：塞进右下角那块弹药面板 `VBox` 的**最上面一行**（用户挑的「挨着弹药」）。
+## ⚠️ 为什么不另起一块面板：那块 `PanelContainer` 的锚点在右下角、`grow_vertical = 0`
+##    （**向上长**），往 `VBox` 里插行会自动把整块面板往上撑开 —— 一行坐标都不用算。
+##
+## 视觉走和弹药同一套 `UiSkin`（米色九宫格底板 + 同一条 trough/fill），
+## 所以它看起来就是那块面板自己长出来的一行。
+func _build_cost_row() -> void:
+	var vbox := $Panel/Margin/VBox as VBoxContainer
+	if vbox == null:
+		push_warning("[HUD] 找不到 $Panel/Margin/VBox，COST 条不显示")
+		return
+
+	cost_label = Label.new()
+	cost_label.name = "Cost"
+	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	cost_label.add_theme_font_override("font", UiSkin.hud_number_font(_skin))
+	cost_label.add_theme_font_size_override("font_size", COST_FONT_SIZE)
+	cost_label.add_theme_color_override("font_color", _skin["text"])
+	vbox.add_child(cost_label)
+
+	cost_trough = Panel.new()
+	cost_trough.name = "CostTrough"
+	cost_trough.custom_minimum_size = Vector2(0.0, COST_BAR_HEIGHT)
+	cost_trough.add_theme_stylebox_override("panel", UiSkin.bar_trough(_skin))
+	vbox.add_child(cost_trough)
+
+	cost_bar = ProgressBar.new()
+	cost_bar.name = "CostBar"
+	cost_bar.show_percentage = false
+	cost_bar.max_value = float(CostGauge.MAX_COST)
+	# 和 .tscn 里那条换弹条同一套摆法：铺满 trough、内缩 2 px
+	cost_bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cost_bar.offset_left = 2.0
+	cost_bar.offset_top = 2.0
+	cost_bar.offset_right = -2.0
+	cost_bar.offset_bottom = -2.0
+	cost_bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+	cost_bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, 1.0))
+	cost_trough.add_child(cost_bar)
+
+	# 插到最上面：弹药 / 换弹条往下让一行
+	vbox.move_child(cost_label, 0)
+	vbox.move_child(cost_trough, 1)
+	_refresh_cost()
+
+
+## 把当前费用刷到那一行上。每帧调（数字和条都要跟着涨）。
+##
+## ⚠️ 条喂的是 `CostGauge.cost`（**小数**），不是 `display()` ——
+##    原作那条是连续填的，只在显示数字时取整。喂整数会变成一顿一顿地跳。
+func _refresh_cost() -> void:
+	if cost_label == null:
+		return
+	cost_label.text = "COST %d / %d" % [CostGauge.display(), CostGauge.MAX_COST]
+	if cost_bar != null:
+		cost_bar.value = CostGauge.cost
 
 
 # --- 顶部：Boss 血条组 --------------------------------------------------------
@@ -897,7 +973,15 @@ func crosshair_config() -> Dictionary:
 	return out
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# ⚠️ COST 的 tick 必须在 `_player == null` 的提前 return **之前**：
+	#    否则「玩家还没绑上」的那几帧费用不涨（自检里 `_player` 常常是空的）。
+	# ⚠️ 顺带一个**正确**行为：HUD 的 `process_mode` 是默认的「继承」，
+	#    暂停（对话 / 菜单 / 设置界面）时 `_process` 根本不跑 ⇒ 费用跟着停，
+	#    和原作一致（暂停不掉费用）。
+	CostGauge.tick(delta)
+	_refresh_cost()
+
 	if _player == null:
 		return
 
