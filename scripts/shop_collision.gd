@@ -36,18 +36,11 @@ const SHELL_PATH := ^"../Shell"
 ## 小于这个体积的网格不做碰撞（纯装饰件：灯带碎片、贴图片）
 const MIN_VOLUME := 0.001
 
-## 天花板单独用**盒子**补，不走 trimesh。
-##
-## ⚠️ 2026-11-09 实测：GLB 的天花板 `Object002_PLASTIK_W_0` 是**空心的方框** ——
-##    56 顶点 / 24 三角形，`tri0` 横跨整个 x 20.79~33.81 但 z 只有 −13.46~−12.82
-##    （一条**细边**），`tri5`/`tri7` 是另一条边。**中间整块是空的**。
-##    所以从房间正中朝上打射线，会直接从中间穿出去（实测 9 个采样点只中 1 个）。
-##
-##    这既是碰撞缺陷（人能跳到屋外），也让 trimesh 在这里完全没用 ——
-##    所以天花板**单独补一个盒子**。尺寸取外壳内沿，顶面在 y=5.22。
-const CEIL_Y := 5.22
-## 天花板盒子厚度（往上一层层叠，够厚就行）
-const CEIL_T := 0.4
+## ── 只跟网格走，不凭空补 ──
+## 使用者 2026-11-09：「为什么上面没有网格，空的地方也搞碰撞？去掉！我只要网格做的碰撞。」
+## 所以这里**不再**给天花板补盒子 —— 一切碰撞都严格来自 GLB 网格的三角面。
+## （GLB 的天花板 `Object002_PLASTIK_W_0` 本身是空心的方框，中间没有网格；
+##   既然网格没有，碰撞也不该有。上空开放，跳出去也没东西挡。）
 
 var _built := false
 
@@ -143,44 +136,3 @@ func build_collision() -> void:
 
 	print("[ShopCol] 屋壳 trimesh：%d 个网格 → %d 个碰撞形状（%d 三角面；跳过 %d 个装饰件）"
 		% [n_shape, n_shape, n_face, skipped])
-
-	_add_ceiling_box(body)
-
-
-## 天花板单独补盒子（GLB 那块是空心方框，见 `CEIL_Y` 的注释）。
-##
-## 尺寸从**屋壳网格的世界包围盒**量，而不是写死 —— 屋壳缩放改了也能跟上。
-func _add_ceiling_box(body: StaticBody3D) -> void:
-	var shell := get_node_or_null(SHELL_PATH) as Node3D
-	if shell == null:
-		return
-	# 用 `PLASTIK_W_PLASTIK_W_0`（墙+柜台那块，覆盖整个房间）的世界 AABB 当内沿
-	var lo := Vector3(INF, INF, INF)
-	var hi := Vector3(-INF, -INF, -INF)
-	var found := false
-	for n in shell.find_children("*", "MeshInstance3D", true, false):
-		var mi := n as MeshInstance3D
-		if mi.mesh == null:
-			continue
-		var wb: AABB = mi.global_transform * mi.mesh.get_aabb()
-		lo = lo.min(wb.position)
-		hi = hi.max(wb.position + wb.size)
-		found = true
-	if not found:
-		return
-	# 局部坐标（本节点 = Shop 的子节点，和 Shell 同级，所以世界→局部要换算）
-	var w_lo := Vector3(lo.x, CEIL_Y, lo.z)
-	var w_hi := Vector3(hi.x, CEIL_Y + CEIL_T, hi.z)
-	var l_lo := to_local(w_lo)
-	var l_hi := to_local(w_hi)
-
-	var shape := BoxShape3D.new()
-	shape.size = (l_hi - l_lo).abs()
-	var cs := CollisionShape3D.new()
-	cs.name = "CeilBox"
-	cs.shape = shape
-	# `CollisionShape3D` 的 transform 是相对父节点的：盒子中心
-	cs.position = (l_lo + l_hi) * 0.5
-	body.add_child(cs)
-	print("[ShopCol] 天花板盒子：世界 x %.2f~%.2f  z %.2f~%.2f  y %.2f~%.2f" % [
-		lo.x, hi.x, lo.z, hi.z, CEIL_Y, CEIL_Y + CEIL_T])

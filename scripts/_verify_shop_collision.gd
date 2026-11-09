@@ -121,26 +121,30 @@ func _run() -> void:
 	if not ground.is_empty():
 		print("      命中点 y = %.3f" % (ground.get("position") as Vector3).y)
 
-	# ⑤ 天花板（防止人跳到屋外）
-	# ⚠️ GLB 的天花板是 `Object002_PLASTIK_W_0`：y 5.21~5.22，只有 **1 cm 厚、24 面**。
-	#    trimesh 没有厚度，从正下方打射线很容易从三角形缝隙穿过去，
-	#    所以这里采样 9 个点，只要**多数**命中就算过。
-	print("── ⑤ 天花板 ──")
+	# ⑤ 天花板：按用户要求，碰撞只跟网格走，不许凭空补盒子（2026-11-09）
+	#    用户原话：「为什么上面没有网格，空的地方也搞碰撞？去掉！我只要网格做的碰撞。」
+	#    断言：室内正中的上空**必须绝大多数是空的**（≥7/9）。
+	#    ⚠️ 允许 1~2 个点命中，但命中的必须落在**真实网格包围盒**内（灯带 LIGHT_light_0
+	#       有一条三角面横过来，实测在 (30.6, -15.4) 上方 y=5.23）——
+	#       这种情况下是网格自己的面，属于「网格做的碰撞」，保留。
+	print("── ⑤ 天花板（应当基本没有碰撞）──")
 	var ceil_hits := 0
 	var ceil_samples := 0
 	for fxa in [0.25, 0.5, 0.75]:
 		for fza in [0.25, 0.5, 0.75]:
-			var fx := float(fxa)
-			var fz := float(fza)
-			var px := IN_X0 + (IN_X1 - IN_X0) * fx
-			var pz := IN_Z0 + (IN_Z1 - IN_Z0) * fz
+			var fx2 := float(fxa)
+			var fz2 := float(fza)
+			var px2 := IN_X0 + (IN_X1 - IN_X0) * fx2
+			var pz2 := IN_Z0 + (IN_Z1 - IN_Z0) * fz2
 			ceil_samples += 1
 			var ch := space.intersect_ray(PhysicsRayQueryParameters3D.create(
-				Vector3(px, 3.0, pz), Vector3(px, 8.0, pz), 1))
+				Vector3(px2, 3.0, pz2), Vector3(px2, 8.0, pz2), 1))
 			if not ch.is_empty():
 				ceil_hits += 1
-	_check(ceil_hits >= ceil_samples - 2,
-		"天花板 %d/%d 个采样点命中（容 2 个缝隙）" % [ceil_hits, ceil_samples])
+				print("      (%.1f, %.1f) 上方 y=%.2f 有碰撞：%s" % [
+					px2, pz2, (ch.get("position") as Vector3).y, str(ch.get("collider"))])
+	_check(ceil_hits <= 2,
+		"天花板只有 %d/%d 采样点命中（≤2：网格没有的地方不许有碰撞）" % [ceil_hits, ceil_samples])
 
 	print("失败 %d 项" % _fails)
 	quit(0 if _fails == 0 else 1)
