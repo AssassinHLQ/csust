@@ -16,6 +16,8 @@ extends SceneTree
 ##      —— 这一条是这次最容易写错的地方（原来 `_process` 开头就 return 了）
 
 const CostGauge := preload("res://scripts/cost_gauge.gd")
+## BA 风格自绘条（三层斜切）。用它当类型标注，自检才能直接读那几个几何常量。
+const CostBarView := preload("res://scripts/cost_bar.gd")
 const HUD_SCENE := "res://scenes/hud.tscn"
 
 var _pass := 0
@@ -42,6 +44,11 @@ func _run() -> void:
 		"开局 = 0（实际 %.2f）" % CostGauge.START_COST)
 	_check(is_equal_approx(CostGauge.PER_SECOND, 1.0),
 		"每秒回复 = 1.0（实际 %.2f）" % CostGauge.PER_SECOND)
+	# 爱丽丝 EX 的消耗 —— wiki 查证值（见 `cost_gauge.gd` 里那条注释的出处）
+	_check(CostGauge.ARISU_EX_COST == 6,
+		"爱丽丝 EX 消耗 = 6（wiki 查证值，实际 %d）" % CostGauge.ARISU_EX_COST)
+	_check(CostGauge.ARISU_EX_COST <= CostGauge.MAX_COST,
+		"EX 消耗不超过上限（%d ≤ %d）" % [CostGauge.ARISU_EX_COST, CostGauge.MAX_COST])
 
 	print("")
 	print("========== 2. 攒：按秒累加 + 封顶 ==========")
@@ -94,23 +101,50 @@ func _run() -> void:
 
 	var vbox := hud.get_node_or_null("Panel/Margin/VBox") as VBoxContainer
 	var label := hud.get_node_or_null("Panel/Margin/VBox/Cost") as Label
-	var trough := hud.get_node_or_null("Panel/Margin/VBox/CostTrough") as Panel
-	var bar := hud.get_node_or_null("Panel/Margin/VBox/CostTrough/CostBar") as ProgressBar
+	var bar := hud.get_node_or_null("Panel/Margin/VBox/CostBar") as CostBarView
 	_check(vbox != null, "拿到弹药面板的 VBox")
 	_check(label != null, "COST 数字行 `Cost` 建出来了")
-	_check(trough != null, "COST 槽 `CostTrough` 建出来了")
-	_check(bar != null, "COST 条 `CostBar` 建出来了")
+	_check(bar != null, "COST 条 `CostBar` 建出来了（`cost_bar.gd` 自绘条）")
 	if bar != null:
 		_check(is_equal_approx(bar.max_value, 10.0),
 			"条的 max_value = 10（实际 %.1f）" % bar.max_value)
-		_check(not bar.show_percentage, "条不显示百分比（那是给进度条用的）")
+		_check(bar.has_method("set_cost"), "条有 `set_cost()`（喂值入口，内部会重画）")
+		_check(bar.show_ticks, "条默认画 10 格刻度线")
+		# 自绘条必须真的占到地方，否则 `_draw()` 第一行就 return 了、什么都不画
+		_check(bar.size.x > 40.0 and bar.size.y >= 8.0,
+			"条拿到了实际尺寸（%.0f×%.0f）" % [bar.size.x, bar.size.y])
+		# 喂一个值 → 比例跟着走（证明 `set_cost` 真的写进去了）
+		bar.set_cost(2.5)
+		_check(is_equal_approx(bar.ratio(), 0.25), "喂 2.5 → 比例 0.25")
+		bar.set_cost(50.0)
+		_check(is_equal_approx(bar.ratio(), 1.0), "喂超上限 → 比例夹在 1.0")
 	if label != null and vbox != null:
 		_check(label.get_index() == 0, "COST 排在 VBox 第 0 位（最上面）")
 		var ammo := hud.get_node_or_null("Panel/Margin/VBox/Ammo")
 		if ammo != null:
 			_check(label.get_index() < ammo.get_index(), "弹药在 COST 下面（挨着弹药那块）")
-	if trough != null and vbox != null:
-		_check(trough.get_index() == 1, "槽紧跟数字行（第 1 位）")
+	if bar != null and vbox != null:
+		_check(bar.get_index() == 1, "条紧跟数字行（第 1 位）")
+
+	print("")
+	print("========== 4b. 自绘条的三层几何 = 社区还原项目量到的官方值 ==========")
+	# 出处：`ywhdzrb/BlueArchiveUI`（MIT）`src/ba_progress_bar.cpp` 按官方
+	#      `Common_Bg_Raius5px` 量出的规格。这几个数**不是本喵调的**，改之前先去看那个文件。
+	_check(is_equal_approx(CostBarView.BASE_H, 31.0), "官方基准高 31 px")
+	_check(is_equal_approx(CostBarView.SLOPE, 0.42), "端部斜切量 = 层高 × 0.42")
+	_check(is_equal_approx(CostBarView.CORNER, 0.18), "转角圆角 = 层高 × 0.18")
+	_check(is_equal_approx(CostBarView.INSET_X, 4.5)
+		and is_equal_approx(CostBarView.INSET_Y, 3.0), "外底→内槽：左右 4.5k / 上下 3.0k")
+	_check(is_equal_approx(CostBarView.FORE_PAD, 3.5), "内槽→填充：再各内缩 3.5k")
+	# 官方内槽色 (0.19, 0.27, 0.40)
+	var tr: Color = CostBarView.C_TROUGH
+	_check(absf(tr.r - 0.19) < 0.005 and absf(tr.g - 0.27) < 0.005
+		and absf(tr.b - 0.40) < 0.005,
+		"内槽深蓝 = (0.19, 0.27, 0.40)（实际 %.2f, %.2f, %.2f）" % [tr.r, tr.g, tr.b])
+	# 自绘条**不许**引用任何贴图（官方《二创指引》禁止直接用游戏原始素材）
+	var src := FileAccess.get_file_as_string("res://scripts/cost_bar.gd")
+	_check(not src.contains("load(\"res://assets"),
+		"自绘条不引用 `assets/` 下的贴图（不搬游戏原始素材）")
 
 	print("")
 	print("========== 5. HUD 真的在喂时间 ==========")

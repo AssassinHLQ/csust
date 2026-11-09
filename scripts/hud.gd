@@ -87,11 +87,12 @@ var _arm_alpha := 1.0
 @onready var reload_trough: Panel = $Panel/Margin/VBox/ReloadTrough
 @onready var reload_bar: ProgressBar = $Panel/Margin/VBox/ReloadTrough/Reload
 
-## COST 条的三件（运行时建，见 `_build_cost_row()`）。
-## 名字固定成 `Cost` / `CostTrough` / `CostBar` —— 自检按名字取。
+## COST 那两件（运行时建，见 `_build_cost_row()`）。
+## 名字固定成 `Cost` / `CostBar` —— 自检按名字取。
 var cost_label: Label
-var cost_trough: Panel
-var cost_bar: ProgressBar
+## 实际类型是 `cost_bar.gd`。**类型写成 `preload` 那个常量**，不写全局类名 ——
+## `--script` 自检模式下解析不到 `class_name`（AGENTS.md 里记过这条）。
+var cost_bar: CostBarView
 
 # --- 左上角玩家血量面板 ---
 const HP_PANEL_POS := Vector2(24.0, 20.0)   ## 左上角留出的边距
@@ -112,8 +113,11 @@ const RELOAD_BAR_HEIGHT := 12.0
 # 规则与数值全在 `scripts/cost_gauge.gd`（上限 10 / 每秒 1 / 开局 0 / 只爱丽丝花）。
 # 这里只负责「画出来」+「每帧喂时间」。
 const CostGauge := preload("res://scripts/cost_gauge.gd")
+## BA 风格的自绘条（三层斜切：白外底 / 深蓝内槽 / 青蓝填充，规格见那个文件头）
+const CostBarView := preload("res://scripts/cost_bar.gd")
 const COST_FONT_SIZE := 34
-const COST_BAR_HEIGHT := 12.0
+## BA 官方那条的基准高就是 31 px，直接照用（自绘条会按它算 k）
+const COST_BAR_HEIGHT := 31.0
 
 # --- 顶部 Boss 血条组（Minecraft 风格）---
 ## **一个 Boss 一行**，自上而下按索引排。
@@ -334,8 +338,12 @@ func _style_ammo_panel() -> void:
 ## ⚠️ 为什么不另起一块面板：那块 `PanelContainer` 的锚点在右下角、`grow_vertical = 0`
 ##    （**向上长**），往 `VBox` 里插行会自动把整块面板往上撑开 —— 一行坐标都不用算。
 ##
-## 视觉走和弹药同一套 `UiSkin`（米色九宫格底板 + 同一条 trough/fill），
-## 所以它看起来就是那块面板自己长出来的一行。
+## ⚠️ 2026-11-09 改版：条**不再是 `UiSkin` 那条 `ProgressBar`**，换成 `cost_bar.gd`
+##    的 BA 自绘条（白外底 / 深蓝内槽 / 青蓝填充、三层斜切）。原因见那个文件的头注：
+##    官方《二创指引》禁止直接使用游戏原始素材，所以照**比例**自己画。
+##
+## 只留两件：`Cost`（数字，Label）和 `CostBar`（自绘条）。原来中间那层
+## `CostTrough`（Panel）去掉了 —— 自绘条自己就带外底和内槽，再套一层是重复描边。
 func _build_cost_row() -> void:
 	var vbox := $Panel/Margin/VBox as VBoxContainer
 	if vbox == null:
@@ -350,29 +358,16 @@ func _build_cost_row() -> void:
 	cost_label.add_theme_color_override("font_color", _skin["text"])
 	vbox.add_child(cost_label)
 
-	cost_trough = Panel.new()
-	cost_trough.name = "CostTrough"
-	cost_trough.custom_minimum_size = Vector2(0.0, COST_BAR_HEIGHT)
-	cost_trough.add_theme_stylebox_override("panel", UiSkin.bar_trough(_skin))
-	vbox.add_child(cost_trough)
-
-	cost_bar = ProgressBar.new()
+	cost_bar = CostBarView.new()
 	cost_bar.name = "CostBar"
-	cost_bar.show_percentage = false
 	cost_bar.max_value = float(CostGauge.MAX_COST)
-	# 和 .tscn 里那条换弹条同一套摆法：铺满 trough、内缩 2 px
-	cost_bar.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cost_bar.offset_left = 2.0
-	cost_bar.offset_top = 2.0
-	cost_bar.offset_right = -2.0
-	cost_bar.offset_bottom = -2.0
-	cost_bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
-	cost_bar.add_theme_stylebox_override("fill", UiSkin.bar_fill(_skin, 1.0))
-	cost_trough.add_child(cost_bar)
+	# 宽度给足（VBox 的宽由最宽的子项决定，条太窄就看不出斜切和刻度）
+	cost_bar.custom_minimum_size = Vector2(248.0, COST_BAR_HEIGHT)
+	vbox.add_child(cost_bar)
 
 	# 插到最上面：弹药 / 换弹条往下让一行
 	vbox.move_child(cost_label, 0)
-	vbox.move_child(cost_trough, 1)
+	vbox.move_child(cost_bar, 1)
 	_refresh_cost()
 
 
@@ -380,12 +375,13 @@ func _build_cost_row() -> void:
 ##
 ## ⚠️ 条喂的是 `CostGauge.cost`（**小数**），不是 `display()` ——
 ##    原作那条是连续填的，只在显示数字时取整。喂整数会变成一顿一顿地跳。
+##    `set_cost()` 内部会 `queue_redraw()`；直接写 `.value` 不会重画。
 func _refresh_cost() -> void:
 	if cost_label == null:
 		return
 	cost_label.text = "COST %d / %d" % [CostGauge.display(), CostGauge.MAX_COST]
 	if cost_bar != null:
-		cost_bar.value = CostGauge.cost
+		cost_bar.set_cost(CostGauge.cost)
 
 
 # --- 顶部：Boss 血条组 --------------------------------------------------------
