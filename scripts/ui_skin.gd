@@ -17,7 +17,104 @@ extends RefCounted
 ## ⚠️ Sprout 的 `panel.png` 是 106×122、圆角比 Kenney 的 32×32 大得多，两套的
 ##    九宫格边距必须分别给（`margin` 字段），不然小图会被拉伸成糊的。
 
+# ── BA（蔚蓝档案）皮肤用的官方取色 ───────────────────────────────────────────
+#
+# 出处：社区还原项目 `ywhdzrb/BlueArchiveUI`（C++/Qt，**代码部分 MIT**）的
+#      `include/blue_archive_ui/ba_style.h` —— 它的注释写着这些是「BA 官方 UI 取色」，
+#      取色参考 BA-AD 解包素材与社区还原项目。**色值本身是规格，不是素材**，
+#      所以可以直接用（原图/解包贴图不能进仓库，见 `README` §13.11）。
+#
+#   accent   #4EC3F5  青蓝高亮：滑块填充 / 图标 / 选中态
+#   sky      #77DEFF  亮青：主按钮底色
+#   deep     #003153  深藏蓝：标题 / 正文主色
+#   yellow   #FFE433  装饰黄：标题底划线
+#   light    #CDE8FD  浅蓝：侧栏 tab 背景
+#   muted    #6B7F8D  灰蓝：次级文字
+#   track    #DFE6EA  滑块轨道 / 进度条底
+#   edge     #A9C6E4  信息卡边缘浅蓝描边
+#   chip     #252F41  「数值消耗片」深蓝黑底
+#   halflight #EDF3F9 卡片顶部浅蓝信息区（#FFFFFF → 这个）
+const BA_ACCENT := Color("#4ec3f5")
+const BA_SKY := Color("#77deff")
+const BA_DEEP := Color("#003153")
+const BA_YELLOW := Color("#ffe433")
+const BA_LIGHT := Color("#cde8fd")
+const BA_MUTED := Color("#6b7f8d")
+const BA_TRACK := Color("#dfe6ea")
+const BA_EDGE := Color("#a9c6e4")
+const BA_CHIP := Color("#252f41")
+const BA_HALFLIGHT := Color("#edf3f9")
+
+## BA 面板圆角（`baButtonPath` 的 radius 默认 6、信息卡圆角写死 8）
+const BA_PANEL_RADIUS := 8
+const BA_BUTTON_RADIUS := 6
+
+## BA 按钮的**左倾**斜量。
+##
+## ⚠️ `StyleBoxFlat.skew` 是 `Vector2`（Godot 4.7 实测 `ClassDB` 读出来的），
+##    数值是**相对尺寸的比例**、不是像素：`skew.x = -0.3` 时顶端相对底端平移
+##    `0.3 × 高度`。BA 那个平行四边形是 -10°，`tan(10°) ≈ 0.176` ——
+##    但那个项目自己注释说「细长条上按 -16° 算出来的斜量只有几像素、看不清，
+##    所以调用方按各层高度 × 0.42 放大斜量」。按钮高度不小，取 -0.22 就够看得出倾。
+const BA_BUTTON_SKEW := -0.22
+
 const SKINS := [
+	# ── ① BA（蔚蓝档案）—— **程序化皮肤，不用任何贴图** ──────────────────────
+	#
+	# 面板 / 按钮全部由 `StyleBoxFlat` 现画（`"procedural": true`），所以它**永远可用**、
+	# 不会像另外两套那样「素材没放进来就整块界面空白」。
+	#
+	# ⚠️ 为什么不像另外两套那样给一张 `panel.png`：
+	#    官方《二创指引》「禁止的事项」第 1 条不许直接使用游戏原始素材（README §13.11），
+	#    而**几何比例与配色是规格、不是素材**。所以这里只抄规格。
+	#
+	# 配色出处见上面那组 `BA_*` 常量（社区还原项目 `ba_style.h`）。
+	{
+		"label": "Blue Archive（蔚蓝档案）",
+		"dir": "",                        # 没有素材目录 —— 全部代码画
+		"procedural": true,
+		"margin": 12.0,                   # 内容内缩，取另外两套里较大的那个，版式偏移最小
+		"panel_tint": Color(1, 1, 1, 1),
+		"button_tint": Color(1, 1, 1, 1),
+		# 面板上的正文：BA 的深藏蓝
+		"text": BA_DEEP,
+		"subtext": BA_MUTED,
+		"trough": BA_TRACK,
+		"fill": BA_ACCENT,
+		"grabber": Color(1, 1, 1, 1),
+		# 弹窗背后的遮罩：深藏蓝加暗，比纯黑更「BA」
+		"dim": Color(0.0, 0.09, 0.20, 0.66),
+		# 量条：槽用 BA 的 progressTrackDark(#40454F→#23272E)，填充用 progressFill(#96DCFA)
+		"bar_trough": Color("#23272e"),
+		"bar_edge": Color("#40454f"),
+		"bar_fill": Color("#96dcfa"),
+		"bar_fill_low": Color("#ff5a4d"),   # ⚠️ 这个红是本喵配的（见 §13.12）
+		# 说话人名字：压在斜切名牌上，白字
+		"dialogue_name": Color(1, 1, 1, 1),
+		# ── 程序化专用 ──
+		"panel_bg": Color(1, 1, 1, 1),
+		"panel_edge": BA_EDGE,
+		"panel_radius": BA_PANEL_RADIUS,
+		"btn_bg": BA_SKY,
+		"btn_bg_hover": Color("#9fe7fb"),      # accentGradient 亮端
+		"btn_bg_pressed": Color("#5fc6f2"),    # accentGradient 暗端
+		"btn_edge": BA_ACCENT,
+		"btn_text": BA_DEEP,
+		"btn_radius": BA_BUTTON_RADIUS,
+		"btn_skew": BA_BUTTON_SKEW,
+		"flat_radius": 5,                 # 滑块/开关的圆角（BA 是圆角，不是像素块）
+		"accent": BA_ACCENT,
+		"yellow": BA_YELLOW,
+		"chip_bg": BA_CHIP,
+		"chip_text": Color(1, 1, 1, 1),
+		# 剧情对话框：BA 那个是**深藏蓝半透明**，不是白面板
+		"story_bg": Color(0.02, 0.13, 0.28, 0.88),
+		"story_edge": Color(0.31, 0.76, 0.96, 0.55),
+		"story_text": Color(1, 1, 1, 1),
+		"story_subtext": Color(0.76, 0.86, 0.96, 1),
+		"choice_dim": Color(0.82, 0.87, 0.94, 1),
+		"choice_dim_disabled": Color(0.62, 0.68, 0.76, 1),
+	},
 	{
 		"label": "Sprout Lands",
 		"dir": "res://assets/ui_sprout/",
@@ -124,6 +221,9 @@ const BAR_LOW_RATIO := 0.25
 ## 按钮缺 `button_hover.png` 时会退回 normal + 提亮（见 `button_style`）。
 static func pick() -> Dictionary:
 	for skin in SKINS:
+		# 程序化皮肤（BA）不依赖任何素材文件，所以**永远可用**、永远排在最前
+		if skin.get("procedural", false):
+			return skin
 		var dir: String = skin["dir"]
 		if ResourceLoader.exists(dir + "panel.png") \
 				and ResourceLoader.exists(dir + "font.ttf"):
@@ -137,6 +237,10 @@ static func tex(skin: Dictionary, name: String) -> String:
 
 
 static func font(skin: Dictionary) -> FontFile:
+	# 程序化皮肤没有素材目录，字体只能走界面字体；`ui_font()` 也是 null 时返回 null，
+	# 交给 Godot 的系统字体回退（能看，但换台机器就换一副字）。
+	if skin.get("procedural", false):
+		return ui_font()
 	return load(tex(skin, "font.ttf")) as FontFile
 
 
@@ -168,13 +272,145 @@ static func make_style(skin: Dictionary, tex_path: String, tint: Color) -> Style
 	return sb
 
 
-static func panel_style(skin: Dictionary) -> StyleBoxTexture:
+# ── 程序化皮肤（BA）：面板 / 按钮 / 名牌全部用 `StyleBoxFlat` 现画 ────────────
+
+## 是不是程序化皮肤（没有素材目录、靠代码画）
+static func is_procedural(skin: Dictionary) -> bool:
+	return bool(skin.get("procedural", false))
+
+
+## 浅色圆角面板：BA 的菜单 / 信息卡都是「白底 + 浅蓝描边 + 圆角 8 + 一点点投影」。
+## 为什么不用 `StyleBoxTexture` 做渐变：BA 那块是 `#FFFFFF → #EDF3F9` 的竖直微渐变，
+## 而 `StyleBoxFlat` 只吃平色。本喵选了**平色白**——差异肉眼几乎看不出，
+## 换来的是一张不用生成的贴图（见 §13.12「没做的」）。
+static func flat_panel(skin: Dictionary, bg: Color, edge: Color, radius: int,
+		pad: float = -1.0) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = edge
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(radius)
+	sb.corner_detail = 8
+	sb.anti_aliasing = true
+	if pad >= 0.0:
+		sb.content_margin_left = pad
+		sb.content_margin_right = pad
+		sb.content_margin_top = pad * 0.6
+		sb.content_margin_bottom = pad * 0.6
+	return sb
+
+
+## 斜切按钮底：BA 的招牌形状（平行四边形）。`skew` 是**相对高度**的比例，不是像素。
+static func flat_button(skin: Dictionary, bg: Color, edge: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = edge
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(int(skin["btn_radius"]))
+	sb.corner_detail = 8
+	sb.anti_aliasing = true
+	sb.skew = Vector2(float(skin["btn_skew"]), 0.0)
+	# 斜切会让两端「切掉一块」，左右各多留一点，字才不会顶到斜边
+	sb.content_margin_left = 20.0
+	sb.content_margin_right = 20.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	return sb
+
+
+static func panel_style(skin: Dictionary) -> StyleBox:
+	if is_procedural(skin):
+		var sb := flat_panel(skin, skin["panel_bg"], skin["panel_edge"],
+			int(skin["panel_radius"]), float(skin["margin"]))
+		# 一点点投影：白面板压在亮场景上也要看得出边界
+		sb.shadow_color = Color(0.0, 0.19, 0.33, 0.22)
+		sb.shadow_size = 6
+		sb.shadow_offset = Vector2(0.0, 3.0)
+		return sb
 	return make_style(skin, tex(skin, "panel.png"), skin["panel_tint"])
 
 
-## 按钮三态。`button_hover.png` 是**可选**的：没有就用 normal 的图 + 提亮 tint，
+## 剧情对话框：BA 那个是**深藏蓝半透明**，和菜单的白面板不是一套。
+static func story_panel_style(skin: Dictionary) -> StyleBox:
+	if is_procedural(skin):
+		var sb := flat_panel(skin, skin["story_bg"], skin["story_edge"],
+			int(skin["panel_radius"]), float(skin["margin"]))
+		sb.shadow_color = Color(0.0, 0.05, 0.12, 0.45)
+		sb.shadow_size = 8
+		sb.shadow_offset = Vector2(0.0, 4.0)
+		return sb
+	return panel_style(skin)
+
+
+## 说话人名牌：BA 那块是**斜切彩色小牌**，白字。
+## ⚠️ 本喵这里统一用 accent 青蓝，没有按角色分色 —— 那个项目的 `roleColor()`
+##    有六种角色色（Sky / Green / Purple / Yellow / Red / Deep），要分色得先有
+##    「这个说话人属于哪个角色」的表。见 §13.12「没做的」。
+static func name_tag_style(skin: Dictionary) -> StyleBox:
+	if is_procedural(skin):
+		var sb := flat_button(skin, skin["accent"], skin["accent"])
+		sb.set_corner_radius_all(0)
+		sb.corner_detail = 0
+		sb.anti_aliasing = false
+		sb.content_margin_left = 22.0
+		sb.content_margin_right = 14.0
+		sb.content_margin_top = 4.0
+		sb.content_margin_bottom = 4.0
+		return sb
+	return button_style(skin, "normal")
+
+
+## 「数值片」：BA 里数值/消耗都用一块**深蓝黑底**压着（`chipBlack() = #252F41`）。
+static func chip_style(skin: Dictionary) -> StyleBox:
+	if is_procedural(skin):
+		var sb := flat_panel(skin, skin["chip_bg"], skin["chip_bg"], 4, 10.0)
+		sb.set_border_width_all(0)
+		return sb
+	return panel_style(skin)
+
+
+## 剧情对话框上的**正文色**。
+## ⚠️ 必须单独一个入口：BA 那个框是**深藏蓝底**，正文得是白的；
+##    而 `skin["text"]` 是「浅色面板上的正文色」（BA 是深藏蓝）—— 直接复用会写成白底白字。
+##    贴图那两套对话框是浅底，所以没有这个键，回退到 `text` 行为不变。
+static func story_text(skin: Dictionary) -> Color:
+	return skin.get("story_text", skin["text"])
+
+
+static func story_subtext(skin: Dictionary) -> Color:
+	return skin.get("story_subtext", skin["subtext"])
+
+
+## 选项行**未选中**时的压暗色。
+## ⚠️ 贴图那两套是**暖灰**（压在米色木板上正好）；BA 那套压在**亮青**按钮上，
+##    暖灰一乘就变成浑褐色 —— 所以 BA 给一个偏冷的压暗值。
+static func choice_dim(skin: Dictionary) -> Color:
+	return skin.get("choice_dim", Color(0.80, 0.78, 0.75, 1.0))
+
+
+static func choice_dim_disabled(skin: Dictionary) -> Color:
+	return skin.get("choice_dim_disabled", Color(0.62, 0.60, 0.58, 1.0))
+
+
+## 按钮三态。程序化皮肤走 BA 的「亮青底 + 深藏蓝字 + 斜切」。
+static func button_style(skin: Dictionary, kind: String) -> StyleBox:
+	if is_procedural(skin):
+		var bg: Color = skin["btn_bg"]
+		match kind:
+			"hover":
+				bg = skin["btn_bg_hover"]
+			"pressed":
+				bg = skin["btn_bg_pressed"]
+		return flat_button(skin, bg, skin["btn_edge"])
+	return _texture_button_style(skin, kind)
+
+
+## 贴图皮肤的按钮三态。`button_hover.png` 是**可选**的：没有就用 normal 的图 + 提亮 tint，
 ## 这样换一套只给 normal/pressed 的皮肤（比如这里裁出来的 Sprout）也不用改代码。
-static func button_style(skin: Dictionary, kind: String) -> StyleBoxTexture:
+##
+## ⚠️ 2026-11-09：改名加了下划线 —— 对外的三态入口现在是上面的 `button_style()`，
+##    它按皮肤分派（程序化走 BA 的斜切块、贴图皮肤走这里）。
+static func _texture_button_style(skin: Dictionary, kind: String) -> StyleBoxTexture:
 	var base: Color = skin["button_tint"]
 	match kind:
 		"hover":
@@ -222,6 +458,31 @@ static func solid_texture(size: int, color: Color) -> ImageTexture:
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	img.fill(color)
 	return ImageTexture.create_from_image(img)
+
+
+## 圆角小方块纹理。逐像素判「四角圆」：把坐标夹到「内缩 r 的矩形」上，
+## 夹出来的偏移超出半径就透明。
+static func rounded_texture(size: int, radius: int, color: Color) -> ImageTexture:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var r := clampi(radius, 0, size / 2)
+	var rr := float(r * r)
+	for y in size:
+		for x in size:
+			var dx := float(x - clampi(x, r, size - 1 - r))
+			var dy := float(y - clampi(y, r, size - 1 - r))
+			if dx * dx + dy * dy <= rr:
+				img.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(img)
+
+
+## 滑块抓手 / 开关指示块用的纹理。
+## ⚠️ 贴图那两套是**像素风**，抓手指的是直角方块（保持观感）；
+##    BA 是圆角 UI，直角方块抓手压在圆角滑槽上会显得毛刺 —— 所以分派。
+static func knob_texture(skin: Dictionary, size: int, color: Color) -> ImageTexture:
+	if is_procedural(skin):
+		return rounded_texture(size, maxi(size / 3, 1), color)
+	return solid_texture(size, color)
 
 
 # ── Minecraft 风格的 Boss 血条 ────────────────────────────────────────────────

@@ -642,7 +642,7 @@ func _build_choice_rows() -> void:
 		_choice_styles.append(sb)
 		_choice_hot_styles.append(sb_hot)
 		if bool(opt.get("disabled", false)):
-			row.modulate = Color(0.62, 0.60, 0.58, 1.0)
+			row.modulate = UiSkin.choice_dim_disabled(_skin)
 
 
 ## 把「谁被选中」画出来：箭头只在当前项出现，边框做呼吸闪烁。
@@ -654,7 +654,7 @@ func _refresh_choices() -> void:
 		# 选中项换皮肤的 hover 木板，未选中压暗一档（不用半透明，字才看得清）
 		_choice_rows[i].add_theme_stylebox_override("panel",
 			_choice_hot_styles[i] if sel else _choice_styles[i])
-		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else Color(0.80, 0.78, 0.75, 1.0)
+		_choice_rows[i].modulate = Color(1, 1, 1, 1) if sel else UiSkin.choice_dim(_skin)
 		_choice_arrows[i].modulate.a = 1.0 if sel else 0.0
 	if _choice_notice != null:
 		var sel_opt: Dictionary = _choice_options[_choice_index] if _choice_index < _choice_options.size() else {}
@@ -955,7 +955,9 @@ func _build() -> void:
 	_box = Panel.new()
 	_box.name = "Box"
 	_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_box.add_theme_stylebox_override("panel", UiSkin.panel_style(_skin))
+	# ⚠️ 用 `story_panel_style` 不用 `panel_style`：BA 的对话框是**深藏蓝半透明**，
+	#    和菜单/HUD 的白面板不是一套（正文色也跟着走 `story_text`，见下面几处）。
+	_box.add_theme_stylebox_override("panel", UiSkin.story_panel_style(_skin))
 	_pin_bottom_center(_box, BOX_WIDTH, BOX_HEIGHT, BOX_BOTTOM)
 	_root.add_child(_box)
 
@@ -964,7 +966,7 @@ func _build() -> void:
 	_name_plate = Panel.new()
 	_name_plate.name = "NamePlate"
 	_name_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_name_plate.add_theme_stylebox_override("panel", UiSkin.button_style(_skin, "normal"))
+	_name_plate.add_theme_stylebox_override("panel", UiSkin.name_tag_style(_skin))
 	_box.add_child(_name_plate)
 
 	_name_label = Label.new()
@@ -974,7 +976,7 @@ func _build() -> void:
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
-	_name_label.add_theme_color_override("font_color", _skin["text"])
+	_name_label.add_theme_color_override("font_color", _skin["dialogue_name"])
 	_name_plate.add_child(_name_label)
 
 	_body = Label.new()
@@ -994,7 +996,7 @@ func _build() -> void:
 	_body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_body.clip_text = true
 	_body.add_theme_font_size_override("font_size", BODY_FONT_SIZE)
-	_body.add_theme_color_override("font_color", _skin["text"])
+	_body.add_theme_color_override("font_color", UiSkin.story_text(_skin))
 	_box.add_child(_body)
 
 	_hint = Label.new()
@@ -1012,7 +1014,7 @@ func _build() -> void:
 	_hint.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_hint.text = HINT_TEXT
 	_hint.add_theme_font_size_override("font_size", HINT_FONT_SIZE)
-	_hint.add_theme_color_override("font_color", _skin["subtext"])
+	_hint.add_theme_color_override("font_color", UiSkin.story_subtext(_skin))
 	_box.add_child(_hint)
 	_layout_name_plate("")
 

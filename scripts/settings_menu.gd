@@ -471,44 +471,57 @@ func _make_button(text: String, handler: Callable) -> Button:
 
 
 ## 按钮三态由 `UiSkin.button_style` 给，HUD 想画按钮时也是同一份实现。
-func _button_style(kind: String) -> StyleBoxTexture:
+## ⚠️ 返回类型是 `StyleBox` 不是 `StyleBoxTexture`：BA 那套是**程序化皮肤**，
+##    给的是 `StyleBoxFlat`（斜切块），贴图皮肤才给 `StyleBoxTexture`。
+func _button_style(kind: String) -> StyleBox:
 	return UiSkin.button_style(_skin, kind)
+
+
+## 滑块 / 开关 / 方块的圆角。贴图那两套是**像素风 → 0**；
+## BA 是圆角 UI → 用皮肤给的 `flat_radius`。取不到就退回 0（老皮肤行为不变）。
+func _flat_radius() -> int:
+	return int(_skin.get("flat_radius", 0))
 
 
 ## 滑块：**刻意不用九宫格素材** —— 槽只有约 8 px 高，而九宫格的边距有 8~12 px，
 ## 一拉伸就直接错位。这里改用与皮肤同色系的平色块，grabber 用代码生成的方块，
 ## 既统一配色又保持像素感（Godot 默认那颗圆点和整套 UI 不搭）。
 func _style_slider(slider: HSlider) -> void:
+	var r := _flat_radius()
 	var trough := StyleBoxFlat.new()
 	trough.bg_color = _skin["trough"]
 	trough.border_color = _skin["text"]
 	trough.border_color.a = 0.45
 	trough.set_border_width_all(2)
-	trough.set_corner_radius_all(0)
+	trough.set_corner_radius_all(r)
 	slider.add_theme_stylebox_override("slider", trough)
 
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = _skin["fill"]
-	fill.set_corner_radius_all(0)
+	fill.set_corner_radius_all(r)
 	slider.add_theme_stylebox_override("grabber_area", fill)
 	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
 
 	var grab: Color = _skin["grabber"]
-	slider.add_theme_icon_override("grabber", _solid_texture(12, grab))
-	slider.add_theme_icon_override("grabber_highlight", _solid_texture(12, grab.lightened(0.15)))
+	# ⚠️ 抓手大小也跟着皮肤：BA 是圆角 UI，直角小方块抓手会毛刺（见 UiSkin.knob_texture）
+	var gs := 16 if UiSkin.is_procedural(_skin) else 12
+	slider.add_theme_icon_override("grabber", UiSkin.knob_texture(_skin, gs, grab))
+	slider.add_theme_icon_override("grabber_highlight",
+		UiSkin.knob_texture(_skin, gs, grab.lightened(0.15)))
 	slider.add_theme_icon_override("grabber_disabled",
-		_solid_texture(12, grab.darkened(0.35)))
+		UiSkin.knob_texture(_skin, gs, grab.darkened(0.35)))
 
 
 ## 开关（CheckButton）。默认那颗深色椭圆胶囊和米色面板对比太冲，改成
 ## 「凹槽 + 方块指示」：关=米色槽+深色方块，开=草绿槽+米白方块，都是像素块。
 func _style_check(check: CheckButton) -> void:
+	var r := _flat_radius()
 	var off := StyleBoxFlat.new()
 	off.bg_color = _skin["trough"]
 	off.border_color = _skin["text"]
 	off.border_color.a = 0.55
 	off.set_border_width_all(2)
-	off.set_corner_radius_all(0)
+	off.set_corner_radius_all(r)
 	check.add_theme_stylebox_override("normal", off)
 	check.add_theme_stylebox_override("hover", off)
 
@@ -517,16 +530,17 @@ func _style_check(check: CheckButton) -> void:
 	on.border_color = _skin["text"]
 	on.border_color.a = 0.55
 	on.set_border_width_all(2)
-	on.set_corner_radius_all(0)
+	on.set_corner_radius_all(r)
 	check.add_theme_stylebox_override("pressed", on)
 	check.add_theme_stylebox_override("hover_pressed", on)
 
-	check.add_theme_icon_override("checked", _solid_texture(14, _skin["grabber"]))
-	check.add_theme_icon_override("unchecked", _solid_texture(14, _skin["subtext"]))
+	var ks := 16 if UiSkin.is_procedural(_skin) else 14
+	check.add_theme_icon_override("checked", UiSkin.knob_texture(_skin, ks, _skin["grabber"]))
+	check.add_theme_icon_override("unchecked", UiSkin.knob_texture(_skin, ks, _skin["subtext"]))
 	check.add_theme_icon_override("checked_disabled",
-		_solid_texture(14, _skin["grabber"].darkened(0.3)))
+		UiSkin.knob_texture(_skin, ks, _skin["grabber"].darkened(0.3)))
 	check.add_theme_icon_override("unchecked_disabled",
-		_solid_texture(14, _skin["subtext"].darkened(0.3)))
+		UiSkin.knob_texture(_skin, ks, _skin["subtext"].darkened(0.3)))
 
 
 ## 纯色小方块纹理（给 grabber 用）。像素风不需要渐变和圆角。
@@ -534,7 +548,14 @@ static func _solid_texture(size: int, color: Color) -> ImageTexture:
 	return UiSkin.solid_texture(size, color)
 
 
-func _make_style(tex_path: String, tint: Color) -> StyleBoxTexture:
+## 九宫格贴图样式。
+## ⚠️ **程序化皮肤（BA）没有贴图目录** —— `_tex("panel.png")` 会拼出 `res://panel.png`
+##    然后 `load()` 报 "Resource file not found"，样式盒拿到空贴图 ⇒ 面板**全透明**，
+##    深藏蓝的字压在深藏蓝的遮罩上直接看不见（实测就是这样）。
+##    所以程序化皮肤一律退回同色系的平色面板。
+func _make_style(tex_path: String, tint: Color) -> StyleBox:
+	if UiSkin.is_procedural(_skin):
+		return UiSkin.panel_style(_skin)
 	return UiSkin.make_style(_skin, tex_path, tint)
 
 
