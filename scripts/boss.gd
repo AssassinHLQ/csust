@@ -67,6 +67,14 @@ enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
 ## ⚠️ 倭瓜优香那 20 万**不走这里** —— 它由 `parkour.gd::_on_avenger_died()` 发，
 ##    两边都写会重复掉钱。
 @export var drop_yuan := 0
+## 掉落是**直接进银行卡**（true）还是**先进本轮资产、等跑酷结算再转卡**（false）。
+##
+## ⚠️ 默认 false 是**故意的**：用户 2026-11「为什么我还没有结算就 40w 了」
+##    —— 那时候所有掉落都直接进卡，跑酷的资产结算形同虚设。
+##
+## 但用户 2026-11-09 单独要求飞猪优香：「把击败奖励从 1w 资产变成直接 1w 进银行卡」。
+## 所以做成**按 Boss 开关**，飞猪在 `pig_boss.gd` 里打开它，别的 Boss 行为不变。
+@export var drop_to_bank := false
 @export var respawn_time := 6.0
 ## 倒下后要不要站起来。默认 true（练枪木桩 / 比纳以外的那几位）；
 ## 2026-10-20 的剧情 Boss 倭瓜优香设成 false —— 用户：「倭瓜优香不能复活」，
@@ -590,16 +598,18 @@ func _flash() -> void:
 func _die(by_damage: float) -> void:
 	_dead = true
 	if drop_yuan > 0:
-		# 掉落先进本轮资产（跑酷的结算台再转银行卡），
-		# 不能直接进卡 —— 用户 2026-11「为什么我还没有结算就 40w 了」。
+		# ⚠️ 两种走法，由 `drop_to_bank` 决定（见那个字段的注释）：
+		#   · false（默认）：先进本轮资产（跑酷的结算台再转银行卡）——
+		#     不能直接进卡，用户 2026-11 报过「为什么我还没有结算就 40w 了」。
+		#   · true：直接进银行卡（用户 2026-11-09 对飞猪优香的要求）。
 		var fut := get_tree().get_first_node_in_group("futures")
-		if fut != null and fut.has_method("add_loot"):
+		if not drop_to_bank and fut != null and fut.has_method("add_loot"):
 			fut.call("add_loot", drop_yuan, "%s 掉落" % display_name)
 			print("[Boss %s] 打倒 → 本轮资产 +%s（结算后进银行卡）" % [display_name,
 				BankCard.format_yuan(drop_yuan)])
 		else:
 			BankCard.add(drop_yuan)
-			print("[Boss %s] 打倒 → 掉进银行卡 %s（余额 %s）" % [display_name,
+			print("[Boss %s] 打倒 → 直接进银行卡 %s（余额 %s）" % [display_name,
 				BankCard.format_yuan(drop_yuan), BankCard.format_yuan(BankCard.balance())])
 	died.emit(by_damage)
 	for c in _collisions:

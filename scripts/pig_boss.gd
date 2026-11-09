@@ -13,6 +13,11 @@ var _base_model_y := 0.0
 func _init() -> void:
 	# 用户 2026-11：「击败飞猪优香一次获得 1w」
 	drop_yuan = 10000
+	# 用户 2026-11-09：「把飞猪优香的击败奖励从 1w 资产变成**直接 1w 进银行卡**」。
+	# ⚠️ 别的 Boss 不走这条路（`drop_to_bank` 默认 false）：
+	#    2026-11 用户报过「为什么我还没有结算就 40w 了」，所以全局默认是「先进本轮资产」。
+	#    只有飞猪这个是单独开口。
+	drop_to_bank = true
 	attack_interval = 3.0              # 比霸王龙勤快
 	attack_start_delay = 3.5           # 但它更懒得起手
 	windup_time = 0.7
