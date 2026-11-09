@@ -13,7 +13,11 @@ extends SceneTree
 ## 用法（**要真窗口**）：
 ##   & <mono godot> --path . --position -4000,-4000 --resolution 1280x720 --windowed \
 ##       --audio-driver Dummy --script res://scripts/_probe_campus_cov_shot.gd \
-##       -- --ggs-cov=0.3
+##       -- --ggs-cov=0.3 --ggs-cov-clamp=0.09 --ggs-cov-ref=0.036 --no-capture
+##
+## ⚠️ 按 AGENTS.md「跑测试 / 弹窗口：绝对不许抢用户前台」：
+##    `--position -4000,-4000` + `--resolution` + `--audio-driver Dummy` + `--no-capture`
+##    **四个一个都不能少**。开头脚本会自己检查，漏了就直接拒绝运行（见 `_check_window_args`）。
 ##
 ## 出图 → `_arisu_learn/_log/_cov_<值>.png`
 
@@ -22,7 +26,25 @@ const OUT_DIR := "C:/Users/WY157/Desktop/GODOT/_arisu_learn/_log"
 
 
 func _initialize() -> void:
+	_check_window_args()
 	_run.call_deferred()
+
+
+## 硬闸：这条探针必须开真窗口，所以必须满足 AGENTS.md 的「不抢前台」四条。
+## 漏一条就**直接退出**，不出图 —— 宁可本喵自己失败，也不要弹个窗口抢用户的鼠标。
+func _check_window_args() -> void:
+	var args := OS.get_cmdline_args()
+	var has_pos := false
+	for a in args:
+		if a == "--position":
+			has_pos = true
+	if not has_pos:
+		push_error("[cov] 缺 --position -4000,-4000（会把窗口弹到用户屏幕上），拒绝运行")
+		quit(2)
+		return
+	if not OS.get_cmdline_user_args().has("--no-capture"):
+		push_error("[cov] 缺 --no-capture（窗口拿到焦点就会抢鼠标），拒绝运行")
+		quit(2)
 
 
 func _cov_tag() -> String:
