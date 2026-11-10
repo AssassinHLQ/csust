@@ -170,6 +170,17 @@ const CAM_OUT_TAU := 0.14
 ## 目标长度比当前值变化不到这个量（米）时**完全不动** —— 死区。
 ## 墙的边缘在射线命中临界点上抖动时，这一条直接把微小的来回翻转吃掉。
 const CAM_DEAD_ZONE := 0.02
+## **测量值**的时间平滑常数（秒）。见 `_collide_camera_arm()` 里的 `_cam_blocked`。
+##
+## ⚠️ 为什么必须平滑"测量值"而不是只平滑输出（用户 2026-11-10 第四轮：
+##    「还不对，初始609就抽动」）：
+##    相机扫过桌子/椅子这种**薄盒子**的边缘时，射线会在「命中 ↔ 未命中」之间
+##    逐帧翻。探针实测（`_probe_cam_609.gd` 第 E 段：在 609 里走 6 m）：
+##    臂长区间宽 2.44 m、11 帧单帧跳变 > 0.25 m —— 就是肉眼看到的"抽动"。
+##    只平滑输出没用：目标本身在 4.2 和 1.1 之间来回跳，阻尼只是在追一个
+##    来回跳的目标。把**测出来的距离**先低通，单帧翻转被平均掉，
+##    持续翻转则稳定在中值附近 —— 目标不再跳，输出自然不会抽。
+const CAM_MEASURE_TAU := 0.06
 ## 相机臂长每帧的**绝对位移上限**（米/秒）。指数阻尼在 `want` 和目标差很大时
 ## 单帧位移会很凶（9.0 → 2.0 差 7 m，一帧能走 2 m），低帧时直接跨过一堵墙。
 ## 32 m/s 对 60 fps 是每帧 0.53 m，对 30 fps 是 1.07 m —— 都小于常见墙厚，
@@ -184,6 +195,9 @@ const CAM_MAX_STEP_SPEED := 32.0
 ## `_collide_camera_arm()` 接管（原因见那个函数上面的注释）。
 @export_flags_3d_physics var cam_wall_mask := 1
 var _wall_mask := 1
+## 低通后的"墙允许的最大臂长"（米）。见 `_collide_camera_arm()`。
+## 0 表示还没初始化（首帧直接同步测量值，避免从 0 慢慢爬上来）。
+var _cam_blocked := 0.0
 
 ## ── 近景：滚轮推近时**把相机支点降下来**（用户 2026-11-09）──
 ##
@@ -1024,6 +1038,20 @@ func _collide_camera_arm(want: float, delta: float) -> float:
 	if best < INF:
 		# 扣掉探测球半径和贴墙余量；走廊再窄也不低于 zoom_min —— 不让镜头穿进角色脑袋。
 		blocked = maxf(best - cam_probe_radius - cam_wall_margin, zoom_min)
+
+	# ── 先对"测出来的距离"做**非对称**平滑（原因见 CAM_MEASURE_TAU 那段注释）──
+	#   收窄（有明显更近的东西）**立即生效** —— 慢一拍就会露墙；
+	#   放长（墙没了/变远）才低通 —— 薄的盒子边缘会让"未命中"帧突然冒出来，
+	#   低通把它平均掉，目标就不会在 4.2 和 1.1 之间来回跳。
+	#   ⚠️ 之前是对称低通，探针实测抬头缩窄会滞后 1~2 帧 → 那两帧穿墙。
+	if _cam_blocked <= 0.0:
+		_cam_blocked = blocked                       # 首帧直接同步，别从 0 爬上来
+	elif blocked < _cam_blocked:
+		_cam_blocked = blocked                       # 收窄：立刻
+	else:
+		_cam_blocked = lerpf(_cam_blocked, blocked,
+				1.0 - exp(-delta / maxf(CAM_MEASURE_TAU, 0.001)))
+	blocked = _cam_blocked
 
 	# 目标：墙允许的更短就听墙的，否则就是想要的长度。
 	var target := minf(want, blocked)
