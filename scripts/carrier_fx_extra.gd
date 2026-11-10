@@ -56,6 +56,23 @@ const BOOST_BONES := ["bone_gearboost_L", "bone_gearboost_R"]
 
 ## 建全部装饰。`carrier` 是载具节点，`skel` 是它的骨架，`player` 是玩家根。
 ## 找不到骨头的项**静默跳过**（换模型时不至于崩）。
+##
+## ── 2026-11-10 删掉三样（用户看了实机截图后明确要求）──
+##
+## 用户：「机甲特效圆环不要,飞行特效向后的线条也不要,飞行特效角色身前射出的光也不要」
+##
+## 对照截图逐一确认后删掉：
+##   「机甲特效圆环」        → `_rings`（能量环阵列，3 圈大蓝环绕机体转）
+##   「向后的线条」          → `_speed_lines`（18 条细长方块往后飞）
+##   「角色身前射出的光」    → `_ribbons`（等离子光带，挂在推进器骨下但读作身前射出）
+##
+## ⚠️ 保留的两样（用户没提，而且确实是"机甲该有的"）：
+##   · 翼尖光点（`_tips`）—— 肩翼端点的小脉动光，很轻，不糊画面
+##   · 加力尾焰（`_burners`）—— 高速时主焰后那层白尖焰，属于推进器本身
+##
+## 被删的三个 `_build_*()` 函数**保留在文件里但不调用**：
+## 万一以后想改回来（换个尺寸/透明度），不用重写；但绝不能再默认开 ——
+## 用户已经明确说了不要，这属于"审美口径"，不是可以商量的性能取舍。
 func build(carrier: Node3D, skel: Skeleton3D, player: Node3D) -> void:
 	if _built:
 		return
@@ -64,14 +81,12 @@ func build(carrier: Node3D, skel: Skeleton3D, player: Node3D) -> void:
 	_player = player
 	if _carrier == null:
 		return
-	_build_ribbons()
-	_build_rings()
-	_build_speed_lines()
+	# 已按用户要求关掉：_build_ribbons() / _build_rings() / _build_speed_lines()
 	_build_wing_tips()
 	_build_afterburners()
 	_built = true
-	print("[FX+] 装饰特效就位：光带 %d / 能量环 %d / 气流线 %d / 翼尖 %d / 加力焰 %d" % [
-		_ribbons.size(), _rings.size(), _speed_lines.size(), _tips.size(), _burners.size()])
+	print("[FX+] 装饰特效就位：翼尖 %d / 加力焰 %d（光带/能量环/气流线已按用户要求关闭）" % [
+		_tips.size(), _burners.size()])
 
 
 func is_built() -> bool:
@@ -340,14 +355,10 @@ func tick(delta: float) -> void:
 		return
 	_time += delta
 	var t := clampf(thrust, 0.0, 1.2)
-	# 机体中心（环和气流线都围着它转）
-	var center := _carrier.global_position
-	if _player != null:
-		center = _player.global_position + Vector3.UP * 1.0
 
-	_drive_ribbons(t, delta)
-	_drive_rings(t, center)
-	_drive_speed_lines(delta)
+	# 已按用户要求关掉三样（见 `build()` 的说明）：
+	#   _drive_ribbons / _drive_rings / _drive_speed_lines
+	# 连驱动都不调用 —— 数组本来就是空的，调了也只是白跑循环。
 	_drive_wing_tips(t)
 	_drive_burners(t)
 

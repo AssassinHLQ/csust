@@ -157,9 +157,18 @@ func _run() -> void:
 	_check(extra != null, "装饰特效层 _fx_extra 已创建")
 	if extra != null:
 		_check(bool(extra.call("is_built")), "ExtraFx 完成 build()")
-		for pair in [["_ribbons", "等离子光带"], ["_rings", "能量环"],
-				["_speed_lines", "速度气流线"], ["_tips", "翼尖光点"],
-				["_burners", "加力尾焰"]]:
+		# ── 2026-11-10 用户明确要求删掉三样 ──
+		# 「机甲特效圆环不要,飞行特效向后的线条也不要,
+		#   飞行特效角色身前射出的光也不要」
+		# 所以断言**反过来**：这三样必须是 0，留着才是 bug。
+		for pair in [["_ribbons", "等离子光带（身前射出的光）"],
+				["_rings", "能量环（机甲特效圆环）"],
+				["_speed_lines", "速度气流线（向后的线条）"]]:
+			var arr0: Array = extra.get(pair[0])
+			print("  %s = %d 个（应为 0）" % [pair[1], arr0.size()])
+			_check(arr0.size() == 0, "%s **已移除**（%d 个）" % [pair[1], arr0.size()])
+		# 保留的两样
+		for pair in [["_tips", "翼尖光点"], ["_burners", "加力尾焰"]]:
 			var arr: Array = extra.get(pair[0])
 			print("  %s = %d 个" % [pair[1], arr.size()])
 			_check(arr.size() > 0, "%s 建出来了（%d 个）" % [pair[1], arr.size()])
