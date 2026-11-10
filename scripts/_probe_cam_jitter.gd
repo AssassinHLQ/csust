@@ -80,13 +80,17 @@ func _run() -> void:
 	var fail := 0
 
 	# ── ① 完全静止，墙在"几乎擦边"的距离 ──
-	# 弹簧臂朝 +Z 伸（探针实测）。把墙放在 +Z 侧，让边缘射线刚好擦到墙的一条棱，
-	# 这是最容易被"打中/打不中"来回翻的位置。
+	# ⚠️ 墙必须沿**相机真实所在的方向**摆：`SpringArm3D` 把子节点放在局部
+	#    `(0,0,+spring_length)`，即世界方向 `basis.z`。
+	#    曾经按 `-basis.z` 摆，结果射线和相机在相反两侧，测试"通过"得毫无意义。
 	print("[cj] ---- ① 静止 + 墙擦边：臂长不该抖 ----")
 	p.global_position = Vector3(0, 0.2, 0)
 	p.set("_yaw", PI)
-	wall.global_position = Vector3(2.3, 1.5, 4.2)   # 斜前方，只有边缘射线能扫到
-	wall.rotation.y = deg_to_rad(-25.0)
+	await _wait(30)
+	var arm_axis := spring.global_transform.basis.z.normalized()
+	var arm_right := spring.global_transform.basis.x.normalized()
+	# 沿臂长方向 4.2 m、横向偏 1.4 m —— 只有画面边缘的射线才扫得到
+	wall.global_position = spring.global_position + arm_axis * 4.2 + arm_right * 1.4
 	await _wait(60)                                  # 先让它收敛
 
 	var seq: Array[float] = []
@@ -102,12 +106,11 @@ func _run() -> void:
 
 	# ── ② 墙一点点挪开：不该来回摆，但应该**单调跟着变** ──
 	print("[cj] ---- ② 墙缓慢移动：臂长应该平滑跟随，不来回摆 ----")
-	var z0 := wall.global_position.z
+	var d0 := spring.global_position.distance_to(wall.global_position)
 	# [diag] 探测器方向 + 一发实际射线，看看到底探到哪里
-	var axis_now := -spring.global_transform.basis.z.normalized()
-	var dirs_now: Array = p.call("_camera_probe_dirs", axis_now, 4.2)
+	var dirs_now: Array = p.call("_camera_probe_dirs", arm_axis, 4.2)
 	print("[cj]   [diag] axis=%s  探测器 %d 条：%s"
-		% [str(axis_now.snappedf(0.01)), dirs_now.size(),
+		% [str(arm_axis.snappedf(0.01)), dirs_now.size(),
 		   str(dirs_now.slice(1).map(func(v: Vector3) -> String:
 			return str(v.snappedf(0.01))))])
 	var sp := p.get_world_3d().direct_space_state
@@ -119,19 +122,19 @@ func _run() -> void:
 			"命中 " + str(h.get("position")) if not h.is_empty() else "空"])
 	var seq2: Array[float] = []
 	for i in 80:
-		# 让墙在 +Z 方向慢慢远去（每帧 2 cm，模拟玩家向前走脱离墙角）
-		wall.global_position.z += 0.06
+		# 让墙沿臂长方向慢慢远去（每帧 6 cm，模拟玩家向前走脱离墙角）
+		wall.global_position += arm_axis * 0.06
 		await physics_frame
 		seq2.append(spring.spring_length)
 	var rev2 := _analyze("墙缓慢远离", seq2)
-	print("[cj]   [diag] 墙 z：%.2f → %.2f（移了 %.2f m）"
-		% [z0, wall.global_position.z, wall.global_position.z - z0])
+	var d1 := spring.global_position.distance_to(wall.global_position)
+	print("[cj]   [diag] 墙距离：%.2f → %.2f（移了 %.2f m）" % [d0, d1, d1 - d0])
 	if rev2 > 6:
 		print("[cj]   [FAIL] 墙单调远离时臂长反向 %d 次 —— 阻尼拉锯" % rev2)
 		fail += 1
 	elif absf(seq2[seq2.size() - 1] - seq2[0]) < 0.05:
 		print("[cj]   [FAIL] 墙移开了 %.2f m，臂长却完全没变（%.2f）—— 死区卡死或探测失效"
-			% [wall.global_position.z - z0, seq2[0]])
+			% [d1 - d0, seq2[0]])
 		fail += 1
 	else:
 		print("[cj]   [PASS] 跟随平滑且确实跟随（%.2f → %.2f）"

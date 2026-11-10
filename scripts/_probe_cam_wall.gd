@@ -89,22 +89,23 @@ func _run() -> void:
 	wall.add_child(wcs)
 	game.add_child(wall)
 
-	# 玩家站 (0, 0.2, 0)，墙放在她 **+Z** 侧 1.2 m 处。
-	# ⚠️ 实测（探针打的 diag）：`_yaw = PI` 时弹簧臂支点在 (0.42,1.62,0)、伸向 +Z。
-	#    所以墙必须放在 +Z —— 放 -Z 的话射线打空，整轮结论都是假的。
+	# ⚠️ 墙必须沿**相机真实所在方向**摆 = `spring.global_transform.basis.z`
+	#    （`SpringArm3D` 把子节点放在局部 `(0,0,+spring_length)`）。
+	#    曾经按 `-basis.z` 摆墙：射线和相机在相反两侧，测试用错误的理由"通过"了，
+	#    真机室内穿墙 139/225 帧才暴露出来（见 `_probe_cam_indoor.gd`）。
 	p.global_position = Vector3(0, 0.2, 0)
-	wall.global_position = Vector3(0, 1.5, 1.2)
 	p.set("_yaw", PI)
 	await _wait(6)
+	var arm_dir := spring.global_transform.basis.z.normalized()
+	wall.global_position = spring.global_position + arm_dir * 1.2
+	await _wait(6)
 
-	var best_dir := -Vector3.BACK  # 只是保留变量形状，后面不用
-	print("[cw]   [diag] 玩家 %s  墙 %s  collision_mask=%d"
-		% [str(p.global_position.snappedf(0.01)),
-		   str(wall.global_position), spring.collision_mask])
-	# 把弹簧臂的真实朝向和支点打出来 —— 方向搞反了整轮结论都是假的。
-	var arm_dir := -spring.global_transform.basis.z.normalized()
-	print("[cw]   [diag] 弹簧臂支点 %s  伸向 %s"
+	print("[cw]   [diag] 玩家 %s  collision_mask=%d"
+		% [str(p.global_position.snappedf(0.01)), spring.collision_mask])
+	print("[cw]   [diag] 弹簧臂支点 %s  相机在 %s 方向"
 		% [str(spring.global_position.snappedf(0.01)), str(arm_dir.snappedf(0.01))])
+	print("[cw]   [diag] 相机实际位置 %s（支点 + %.2f × 方向）"
+		% [str(cam.global_position.snappedf(0.01)), spring.spring_length])
 	# 用和 `_collide_camera_arm()` **完全相同**的参数，手动打一发，看会不会命中。
 	var q := PhysicsRayQueryParameters3D.create(
 			spring.global_position,
@@ -149,7 +150,7 @@ func _run() -> void:
 	var before := spring.spring_length
 	# ⚠️ 人别动（一挪就绕了一圈，测的不是同一条线），**把墙搬走**才对：
 	#    搬走后射线打空 → blocked = want → 应该按 CAM_OUT_TAU 慢慢伸回去。
-	wall.global_position = Vector3(0, 1.5, 200.0)
+	wall.global_position = spring.global_position + arm_dir * 200.0
 	await _wait(2)
 	prev = spring.spring_length
 	max_step = 0.0
@@ -179,7 +180,7 @@ func _run() -> void:
 	# 直接把 spring_length 手动拉到最远，再让墙把它压回来：这一步最容易出现
 	# 一帧跨过墙的情况。逐帧记录，检查没有一帧超过 CAM_MAX_STEP_SPEED*dt。
 	print("[cw] ---- ④ 从最远距离被墙压回来：单帧位移必须受限 ----")
-	wall.global_position = Vector3(0, 1.5, 1.2)
+	wall.global_position = spring.global_position + arm_dir * 1.2
 	await _wait(2)
 	spring.spring_length = 9.0
 	prev = spring.spring_length
@@ -221,7 +222,8 @@ func _run() -> void:
 	#    （2026-11-10 连试四次：wide 墙全命中、窄墙又全打空）。
 	#    而"锥体会不会跟着 FOV 变"本来就是**纯几何**问题，直接算两个方向的开角即可，
 	#    比摆墙可靠得多。墙压缩效果由 ②④ 覆盖。
-	var axis_now := -spring.global_transform.basis.z.normalized()
+	# ⚠️ 方向同样必须取 `+basis.z`（相机实际所在的那一侧）。
+	var axis_now := spring.global_transform.basis.z.normalized()
 	var basis_now := spring.global_transform.basis
 	var aspect := cam.get_viewport().get_visible_rect().size.aspect()
 

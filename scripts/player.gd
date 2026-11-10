@@ -976,8 +976,23 @@ func _collide_camera_arm(want: float, delta: float) -> float:
 
 	# 支点：就是 SpringArm3D 自己所在的位置。
 	var origin := spring.global_position
-	# 从支点指向相机的那一侧（弹簧臂的长轴）。
-	var axis := -spring.global_transform.basis.z.normalized()
+	# ⚠️⚠️ 方向必须是 **+basis.z**，不是 `-basis.z`！
+	#
+	# `SpringArm3D` 把直接子节点摆在局部 `(0, 0, +spring_length)` 处，所以相机的
+	# 实际世界位置就是 `origin + basis.z * spring_length`。
+	#
+	# 这里曾经写成 `-basis.z`（"相机朝 -Z 看，所以臂朝 -Z"的直觉），代价很大：
+	# **5 条射线全部打在相机背后的那一侧**。后果是
+	#   - 相机真正要躲的墙探不到 → 相机直接穿到墙外（室内在墙体里外闪，用户看到的就是
+	#     「一进入建筑就疯狂抖动」）；
+	#   - 背后的墙反而把臂压短 → 镜头毫无理由地怼脸。
+	# 空地两侧都没东西，所以「空地正常」——这个症状正好和用户描述一致。
+	#
+	# 抓出它的是 `_probe_cam_indoor.gd` 里那条**独立**的检查：从支点朝相机打一发，
+	# 看中间有没有隔着墙。实测穿门洞 139 / 225 帧穿墙，而 5 条射线全部指向反方向。
+	# 教训：探针自己摆的墙必须按**相机实际位置**摆（`origin + basis.z * d`），
+	#       否则会在错误的方向上"通过"。
+	var axis := spring.global_transform.basis.z.normalized()
 
 	var exclude: Array[RID] = [get_rid()]
 	# ⚠️ 探测长度用 `want`，**不是**当前 `spring_length`：
