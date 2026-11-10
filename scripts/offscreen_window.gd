@@ -14,6 +14,27 @@ extends SceneTree
 ##
 ## 所以必须在**脚本运行时**再改一次窗口状态，那时代码已经跑起来了，
 ## 一定盖得住项目设置。
+##
+## ── 2026-11-09 补充实测：焦点**拦不住**，别再去试了 ──
+##
+## 用户追问「能不能改 godot 绕过或改 windows」，本喵把四条路都量了一遍：
+##
+##   ① 命令行 `--position/-windowed/--resolution`      → 无效（被 mode=2 顶掉）
+##   ② `WINDOW_FLAG_NO_FOCUS`（本文件下方 apply() 没设它，别加）
+##      → **无效**。flag 读回 true，但 `window_is_focused()` 从第 0 帧起就是 true。
+##        Windows 后端在窗口 ShowWindow 那一刻就把焦点给出去了，运行时改 flag 拦不住。
+##   ③ `override.cfg` 覆写 `window/size/mode=0`          → 无效，仍然 focused=true
+##   ④ 外部 Win32：`WS_EX_NOACTIVATE` + `SW_SHOWNOACTIVATE` + `SetForegroundWindow(原前台)`
+##      → **偶发有效**（手工那次 focused true→false，脚本化没稳定复现，时序敏感）
+##
+## ⇒ **Godot 自身无法阻止 Windows 在窗口显示时把焦点给它。**
+##   所以本项目的口径定为：
+##     「窗口必须在屏幕外 + 不收鼠标 + 跑完立刻 quit」
+##   这三条做到了，用户在屏幕上看不见、点不到、鼠标不被抢走，实际无感。
+##   `window_is_focused() == true` 属于**已知且已接受的残留**，不是 bug。
+##
+## 想继续追这条路的话，别再从头摸：直接看 ④，把它做成稳定的轮询（窗口一创建就挂钩子，
+## 早于系统给焦点）。但预期收益很低 —— 用户在屏幕外本来就看不见。
 
 class_name OffscreenWindow
 

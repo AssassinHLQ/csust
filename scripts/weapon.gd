@@ -333,8 +333,11 @@ func _fire_raycast() -> void:
 	# ── 普通状态的激光机枪（2026-11-09）──
 	# 和机甲那条路走同一个 `_spawn_beam()`，区别只是**单枪口**、且不额外扣无限弹。
 	# 激光是「一瞬间到靶子上」的，所以不要 `_schedule_impact` 那个按飞行时间延迟的爆闪。
+	#
+	# ⚠️ 2026-11-10：普通状态**不要枪口那个球**（用户：「普通爱丽丝普通攻击不要出现
+	#    那个圆球只要激光线就可以」）。第三个参数 `false` 就是关枪口闪光的。
 	if laser_gun:
-		_spawn_beam(fx_from, impact)
+		_spawn_beam(fx_from, impact, false)
 		return
 
 	_spawn_tracer(fx_from, impact)
@@ -542,7 +545,12 @@ const BEAM_MAX_VISUAL := 60.0
 var _beams: Array = []
 
 
-func _spawn_beam(from: Vector3, to: Vector3) -> void:
+## `with_muzzle_flash`：要不要画枪口那个**发光球**。
+##
+## ⚠️ 2026-11-10 新增。用户：「普通爱丽丝普通攻击不要出现那个圆球只要激光线就可以」。
+##    普通状态的激光机枪传 `false` —— 只留一条光柱，枪口那个球去掉。
+##    机甲的双肩炮仍传默认 `true`（激光大炮的炮口闪光保留，那是它的"炮感"）。
+func _spawn_beam(from: Vector3, to: Vector3, with_muzzle_flash := true) -> void:
 	var total := from.distance_to(to)
 	if total < 0.05:
 		return
@@ -605,8 +613,11 @@ func _spawn_beam(from: Vector3, to: Vector3) -> void:
 				cap.rotation.x = 0.0 if sh > 0.0 else PI
 				cap.scale = Vector3(1.0, 1.0, 1.0)
 
-	# 炮口那一点爆亮（激光「出膛」的闪）
-	_muzzle_flash_beam(from)
+	# 炮口那一点爆亮（激光「出膛」的闪）。
+	# ⚠️ 普通激光机枪**不要这个**（`with_muzzle_flash=false`）——
+	#    用户要的是「只要激光线」。机甲双肩炮仍保留（那是炮口闪光）。
+	if with_muzzle_flash:
+		_muzzle_flash_beam(from)
 	# 命中点爆闪：只有**真的打到了**才炸（没打中时 `total` 会顶到 300，
 	# 在 300 m 外放一个爆闪没意义，玩家也看不见）
 	if total <= BEAM_MAX_VISUAL:
