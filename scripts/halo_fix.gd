@@ -49,6 +49,19 @@ static func polish(root: Node3D) -> Dictionary:
 		if not _looks_like_halo(String(mi.name)):
 			continue
 		report["meshes"] = int(report["meshes"]) + 1
+		# ── 网格细化：30 段 → 96 段（2026-11-10）──
+		#
+		# 用户：「只有柚子光环形状有问题,高处看正常,低处看丢了东西像是被减面了」。
+		# 本喵从 GLB 里数出来：光环只有 **120 顶点 / 228 三角面**，
+		# 反推约 **30 段**（每段 12°）—— 近看必然是折线多边形，不是圆环。
+		#
+		# 「高处看正常、低处看丢东西」的成因：这是个**很薄**的环（厚度只有
+		# 周围几条边），从低角度斜着看时，那些细窄的侧面在屏幕上被压到
+		# 不足一个像素，加上背面又剔掉一部分，就"缺了一块"。
+		# 面数提高后每个面片更小，这种"整块消失"会变成平滑过渡。
+		var refined := _refine_halo_mesh(mi)
+		if refined:
+			report["refined"] = int(report.get("refined", 0)) + 1
 		# 一个网格可能有多个 surface（柚子这个是 1 个），逐个来
 		var surfaces := mi.get_surface_override_material_count()
 		if mi.mesh != null:
@@ -93,11 +106,249 @@ static func _polish_material(src: Material) -> StandardMaterial3D:
 	# ⚠️ 不要设成 UNSHADED：那会让环变成一张「死平的贴纸」（渲图比过，见文件头）。
 	#    保留受光，再叠自发光，才有「有体积 + 在发亮」的观感。
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	# 自发光：贴图当 emission 贴图，颜色给白，能量 0.8 —— 颜色全靠贴图，别自己染
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 1.0, 1.0)
-	mat.emission_energy_multiplier = 0.8
+	# ── 自发光：颜色必须**乘贴图**，不能是纯白（2026-11-10 修）──
+	#
+	# 用户：「光环自发光,把本来颜色全部遮掉了!」。
+	# 原因：`emission = Color(1,1,1)` + `emission_texture = albedo`，
+	# 而 StandardMaterial3D 的自发光是**加法**叠加在 albedo 之上，于是
+	#     输出的颜色 ≈ 贴图 × (1 + 0.8) = 贴图 × 1.8
+	# 柚子的光环贴图本身是**黄色** `(255, 207, 117)`，乘 1.8 后 R 通道直接
+	# 饱和到 255、G/B 也被推高 ⇒ 看上去就是一团**白光**，黄色全丢了。
+	# 小桃/小绿那些本来就是浅色的光环没那么明显，所以只有柚子特别扎眼。
+	#
+	# 改法：`emission` 用**贴图的主色调**去染，而不是纯白。
+	# 但各家光环颜色不同（柚子黄 / 小桃粉 / 小空蓝），硬编码又会错。
+	# ⇒ 直接从 albedo 贴图**采样平均色**当 emission 颜色，
+	#   这样每一家的自发光都是"它自己的颜色在发光"，而不是一律白光。
+	var tint := _average_color(mat.albedo_texture)
 	if mat.emission_texture == null and mat.albedo_texture != null:
 		mat.emission_texture = mat.albedo_texture
+	mat.emission_enabled = true
+	mat.emission = tint
+	# 亮度也降下来：0.8 叠在自身颜色上仍然容易过曝，0.45 是"亮但不糊"的量级
+	mat.emission_energy_multiplier = 0.45
 	# 双面保持（环从下往上看也是环），但把「背光面黑」这件事彻底消掉：unshaded 已经解决
 	return mat
+
+
+## 采样贴图的**平均颜色**（跳过全透明像素）。
+##
+## 贴图只有 32×32，全量扫一遍也不到 1000 个像素，开销可以忽略。
+## 返回的是「这个光环大概是什么颜色」——柚子得到偏黄、小桃偏粉。
+##
+## ⚠️ 贴图可能是压缩格式，`get_image()` 前必须先 `get_image()`（会从 GPU 取回，
+##    headless 下也能用；万一取不到就退回白色，至少不会崩）。
+static var _tint_cache := {}
+
+
+static func _average_color(tex: Texture2D) -> Color:
+	if tex == null:
+		return Color(1.0, 1.0, 1.0)
+	var key := tex.resource_path
+	if key != "" and _tint_cache.has(key):
+		return _tint_cache[key]
+
+	# ── 两条取图路径 ──
+	#
+	# ⚠️ `tex.get_image()` 在 headless / 纹理还没上传时可能返回 null，
+	#    结果是 `_average_color` 退回白色 —— 那又会把颜色遮掉。
+	#    所以再走一条：**直接从磁盘读那张 PNG**。
+	#    素材是本地的（`models/companions/*.png`），路径就在 `tex.resource_path` 里。
+	# ⚠️ **必须优先从磁盘读 PNG**，不能先信 `tex.get_image()`。
+	#
+	# 实测（`_probe_halo_color.gd`）：headless 下 `tex.get_image()` 返回的是
+	# **格式 17（压缩纹理，BPTC/S3TC）且所有像素都是 (0,0,0,1)** ——
+	# 图"取得成功"，但内容是黑的。本喵第一版就是因为这个算出纯黑自发光，
+	# 然后又把颜色问题伪装成"已修复"。
+	# `Image.load_from_file()` 直接解 PNG，拿到的是真实像素（柚子 = 黄 205）。
+	var img: Image = null
+	var src_desc := ""
+	if key != "":
+		var loaded := Image.load_from_file(key)
+		if loaded != null and loaded.get_width() > 0:
+			img = loaded
+			src_desc = "磁盘 PNG"
+	if img == null:
+		# 退而求其次：运行时纹理（可能是未压缩的）
+		var t := tex.get_image()
+		if t != null and _has_real_pixels(t):
+			img = t
+			src_desc = "运行时纹理"
+	if img == null:
+		print("[HaloFix] 取不到可用贴图 %s ⇒ 用兜底主色" % key)
+		return _fallback_tint(key)
+	var w := img.get_width()
+	var h := img.get_height()
+	if w <= 0 or h <= 0:
+		return Color(1.0, 1.0, 1.0)
+	# ⚠️ 必须用**独立 float 累加**，不能 += 到 Color 上：
+	#    GDScript 的 Color 是**值类型**（struct），`acc.r += c.r` 改的是临时副本，
+	#    累加器永远是 (0,0,0) —— 这正是本喵第一版算出"纯黑自发光"的原因。
+	var ar := 0.0
+	var ag := 0.0
+	var ab := 0.0
+	var n := 0
+	# 最多采样 32×32（大贴图也够代表主色了）
+	var step := maxi(1, maxi(w, h) / 32)
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			var c := img.get_pixel(x, y)
+			if c.a < 0.15:
+				continue
+			ar += c.r
+			ag += c.g
+			ab += c.b
+			n += 1
+	if n == 0:
+		return _fallback_tint(key)
+	var avg := Color(ar / float(n), ag / float(n), ab / float(n), 1.0)
+	# 全黑 = 还是没解出真像素，退兜底色（绝不能返回纯黑，那会让光环不亮）
+	if avg.r < 0.02 and avg.g < 0.02 and avg.b < 0.02:
+		return _fallback_tint(key)
+	# 稍微提亮：自发光要有点"在发亮"的意思，但别把颜色压淡
+	avg = Color(minf(avg.r * 1.15, 1.0), minf(avg.g * 1.15, 1.0), minf(avg.b * 1.15, 1.0), 1.0)
+	if key != "":
+		_tint_cache[key] = avg
+	return avg
+
+
+## ── 光环网格细化：把低模环重建成高精度的 ──
+##
+## 用户 2026-11-10：「只有柚子光环形状有问题,高处看正常,低处看丢了东西像是被减面了」。
+##
+## 实测原网格：120 顶点 / 228 三角面 ⇒ 约 **30 段**（每段 12°），
+## 近看就是折线多边形。而且环很薄，低角度斜看时侧面被压到不足一像素 ⇒ 缺块。
+##
+## 做法：**按原网格的包围盒重建一个圆环**，保留原来的材质/UV 走向。
+## 不试图去"细分原网格"（原拓扑是 30 段 × 4 边的管状环，细分要先反推参数），
+## 直接按「同一个位置、同样大小、同样的管径比例」重建要稳得多。
+##
+## ⚠️ 只在**面数确实很低**的网格上做（< 400 面），否则可能把别人精心做的环改坏。
+const REFINE_MIN_TRIS := 400
+const REFINE_SEGMENTS := 96        ## 绕一圈几段（30 → 96，每段 3.75°）
+const REFINE_RING_SIDES := 6       ## 管截面几边（原 4 边 → 6 边，更圆）
+
+
+static func _refine_halo_mesh(mi: MeshInstance3D) -> bool:
+	if mi == null or mi.mesh == null:
+		return false
+	var mesh := mi.mesh
+	if mesh.get_surface_count() != 1:
+		return false
+	var arr := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var idx = arr[Mesh.ARRAY_INDEX]
+	var tris := 0
+	if idx != null and (idx as PackedInt32Array).size() > 0:
+		tris = (idx as PackedInt32Array).size() / 3
+	else:
+		tris = verts.size() / 3
+	if tris >= REFINE_MIN_TRIS:
+		return false        # 本来就不低模，别动
+
+	# 原网格的包围盒 → 决定环的外径 / 管径 / 厚度
+	var aabb := mesh.get_aabb()
+	var center := aabb.get_center()
+	var size := aabb.size
+	# 环的水平外径：取 XZ 里较大的那一维的一半
+	var outer_r := maxf(size.x, size.z) * 0.5
+	# 管径：取「竖直厚度」和「径向带宽」里较小的一半
+	var tube := minf(size.y, maxf(size.x, size.z) * 0.18) * 0.5
+	if outer_r <= 0.0 or tube <= 0.0:
+		return false
+	var ring_r := outer_r - tube       # 环中心线半径
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var segs := REFINE_SEGMENTS
+	var sides := REFINE_RING_SIDES
+	for i in segs:
+		var a0 := TAU * float(i) / float(segs)
+		var a1 := TAU * float(i + 1) / float(segs)
+		for j in sides:
+			var b0 := TAU * float(j) / float(sides)
+			var b1 := TAU * float(j + 1) / float(sides)
+			# 环面上的一点：先绕 Y 转到角度 a，再在截面圆里偏 (cos b, sin b)
+			var p00 := _ring_point(a0, b0, ring_r, tube, center)
+			var p01 := _ring_point(a0, b1, ring_r, tube, center)
+			var p10 := _ring_point(a1, b0, ring_r, tube, center)
+			var p11 := _ring_point(a1, b1, ring_r, tube, center)
+			# UV：沿环走 u，绕截面走 v（和原贴图"一圈一圈"的走向一致）
+			var u0 := float(i) / float(segs)
+			var u1 := float(i + 1) / float(segs)
+			var v0 := float(j) / float(sides)
+			var v1 := float(j + 1) / float(sides)
+			st.set_uv(Vector2(u0, v0))
+			st.add_vertex(p00)
+			st.set_uv(Vector2(u0, v1))
+			st.add_vertex(p01)
+			st.set_uv(Vector2(u1, v1))
+			st.add_vertex(p11)
+			st.set_uv(Vector2(u0, v0))
+			st.add_vertex(p00)
+			st.set_uv(Vector2(u1, v1))
+			st.add_vertex(p11)
+			st.set_uv(Vector2(u1, v0))
+			st.add_vertex(p10)
+	st.generate_normals()
+	var new_mesh := st.commit()
+	if new_mesh == null:
+		return false
+	# 原材质要带过去（`polish()` 之后会覆写，所以这里只求"有东西可读"）
+	if mesh.surface_get_material(0) != null:
+		new_mesh.surface_set_material(0, mesh.surface_get_material(0))
+	mi.mesh = new_mesh
+	return true
+
+
+static func _ring_point(a: float, b: float, ring_r: float, tube: float,
+		center: Vector3) -> Vector3:
+	# 环心圆上的一点
+	var cx := cos(a) * ring_r
+	var cz := sin(a) * ring_r
+	# 该点的径向朝外方向（水平）与竖直方向构成截面平面
+	var outward := Vector3(cos(a), 0.0, sin(a))
+	var pt := Vector3(cx, 0.0, cz) + outward * (cos(b) * tube) + Vector3.UP * (sin(b) * tube)
+	return pt + center
+
+
+## 取不到贴图时的兜底色。
+##
+## ⚠️ 绝不能返回纯白 —— 那正是「自发光遮掉本来的颜色」的成因。
+## 这里按**文件名**给一个各家光环的主色（蔚蓝档案里这些角色的光环确实是这些色），
+## 认不出来时给一个**暖白**（不是纯白，留一点温度）。
+static func _fallback_tint(path: String) -> Color:
+	var p := path.to_lower()
+	if p.contains("yuzu"):
+		return Color(1.00, 0.82, 0.46)   # 柚子：黄
+	if p.contains("momoi"):
+		return Color(1.00, 0.62, 0.78)   # 小桃：粉
+	if p.contains("midori"):
+		return Color(0.55, 0.95, 0.65)   # 小绿：绿
+	if p.contains("aris"):
+		return Color(0.70, 0.88, 1.00)   # 爱丽丝：淡蓝
+	if p.contains("yuuka"):
+		return Color(1.00, 0.72, 0.85)   # 优香：粉
+	return Color(1.00, 0.95, 0.88)       # 兜底：暖白（不是纯白）
+
+
+## 这个 Image 里有没有**真实像素**（不是全黑/全透明）。
+##
+## 用来识别「`tex.get_image()` 拿到压缩纹理但没解码」这种情况 ——
+## 那时候图尺寸正常、像素全是 0，直接拿去平均会得到纯黑。
+static func _has_real_pixels(img: Image) -> bool:
+	if img == null:
+		return false
+	var w := img.get_width()
+	var h := img.get_height()
+	if w <= 0 or h <= 0:
+		return false
+	var step := maxi(1, maxi(w, h) / 16)
+	var checked := 0
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			var c := img.get_pixel(x, y)
+			checked += 1
+			if c.r > 0.02 or c.g > 0.02 or c.b > 0.02:
+				return true
+	return false
