@@ -172,8 +172,15 @@ const AIM_FOV_RATIO := 0.55
 ## 头顶在画面 67%、脚底 95%，上面 2/3 全是空墙 —— 又不够近、又偏。
 ##
 ## 修法：滚轮越近，支点从 `hip_height` 平滑降到 `zoom_look_height`（她的身体中心），
-## 肩偏移同时收到 `zoom_shoulder_close`（否则 0.42 m 的肩偏移在 1 m 距离上
-## 会把她整个推出画面中线）。这样 1.1 m 就能把她**整只**装进画幅正中。
+## 这样 1.1 m 就能把她**整只**装进画幅。
+##
+## 肩偏移（用户 2026-11-10：「别让她压在准星正中」）：
+##   原来近景收到 0.10，等于把她摆回准星上 —— 1.1 m 时横向只偏 68 px / 1600（4.3%），
+##   准星正好落在她的头发边缘，观感是「被十字压在脸上」。
+##   现在近景保留 0.30（过肩视感）：1.1 m 偏 204 px（12.8%）、1.6 m 偏 153 px（9.5%），
+##   准星落在她身侧的空白地面上，全身照样在画幅里。
+##   数值是 `_probe_zoom_fit.gd --shoulders=0.10,0.22,0.30,0.38` 扫出来挑的：
+##   0.22 分离感不够、0.38 她贴到画面右缘还把身后的人挡住。
 ##
 ## 数值来源：`_probe_body_extent.gd` 量骨骼 → `body_bottom` / `body_top`；
 ##          之后任何距离的「至少多远才看得见全身」由 `min_zoom_for_full_body()` 按这两条算，
@@ -181,7 +188,7 @@ const AIM_FOV_RATIO := 0.55
 @export var body_bottom := -0.05
 @export var body_top := 1.05
 @export var zoom_look_height := 0.52
-@export var zoom_shoulder_close := 0.10
+@export var zoom_shoulder_close := 0.30
 ## 超过这个距离就完全回到原来的平视取景（`hip_height` / `hip_shoulder`）。
 ## 取 3.2：腰射默认 4.2 m、往里滚两格左右还在原来的构图里，再往里才开始「降支点」。
 @export var zoom_close_full := 3.2

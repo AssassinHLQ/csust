@@ -13,12 +13,18 @@ const OUT_ROOT := "res://_arisu_captures/_zoomfit"
 const DISTS := [1.1, 1.3, 1.6, 2.0, 2.4, 3.0, 3.4, 4.2, 6.0]
 
 var _tag := "shot"
+## `--shoulders=0.10,0.20,0.30` 额外做一轮「肩偏移扫描」：近景把她摆多偏才
+## 不压在准星上，一次跑完、出几张图人眼挑，不用来回改数字重跑。
+var _shoulders: Array[float] = []
 
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tag="):
 			_tag = a.substr(6)
+		elif a.begins_with("--shoulders="):
+			for s in a.substr(12).split(",", false):
+				_shoulders.append(float(s))
 	_run.call_deferred()
 
 
@@ -73,6 +79,8 @@ func _run() -> void:
 	print("[zf] 取景用身高：脚底 %.3f  头顶(含光环) %.3f  fov=%.1f°（垂直）  hip_height=%.2f" % [
 		foot_y, head_y, cam.fov, float(player.get("hip_height"))])
 	print("[zf] 公式最近距离 min_zoom_for_full_body() = %.2f m" % float(player.call("min_zoom_for_full_body")))
+	print("[zf] 现状肩偏移：近景 zoom_shoulder_close=%.2f  远景 hip_shoulder=%.2f" % [
+		float(player.get("zoom_shoulder_close")), float(player.get("hip_shoulder"))])
 
 	var out_dir := "%s/%s" % [OUT_ROOT, _tag]
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out_dir))
@@ -82,6 +90,22 @@ func _run() -> void:
 		await _wait(45)  # cam_lerp 12/s，45 帧足够收敛
 		await _shot(cam, spring, rig, model_root, foot_y, head_y, float(d), out_dir)
 
+	# 肩偏移扫描（`--shoulders=a,b,c`）：近景把她摆多偏才「不压在准星上」。
+	# 只改 `zoom_shoulder_close` 这个 export，其余全走真实代码路径。
+	if not _shoulders.is_empty():
+		print("[zf] ----- 肩偏移扫描 d=1.1 / 1.6 -----")
+		var keep_s: float = float(player.get("zoom_shoulder_close"))
+		for s in _shoulders:
+			player.set("zoom_shoulder_close", s)
+			for d in [1.1, 1.6]:
+				player.set("_zoom_distance", d)
+				await _wait(45)
+				await _shot(cam, spring, rig, model_root, foot_y, head_y, d, out_dir,
+					"sh%02d" % int(round(s * 100.0)))
+		player.set("zoom_shoulder_close", keep_s)
+		player.set("_zoom_distance", float(DISTS[0]))
+		await _wait(45)
+
 	# 正面全身：「欣赏」看的是脸。把角色转过来（走 `_facing_yaw`，否则物理帧会转回去）
 	print("[zf] ----- 转过来看正面 -----")
 	player.set("_facing_yaw", float(player.get("_facing_yaw")) + PI)
@@ -90,6 +114,19 @@ func _run() -> void:
 		player.set("_zoom_distance", float(d))
 		await _wait(45)
 		await _shot(cam, spring, rig, model_root, foot_y, head_y, float(d), out_dir, "front")
+
+	# 正面肩偏移扫描：背景那张是头发墙，判断不了构图，真正的「欣赏」视角是这张。
+	if not _shoulders.is_empty():
+		print("[zf] ----- 正面肩偏移扫描 d=1.1 / 1.6 / 2.4 -----")
+		var keep_f: float = float(player.get("zoom_shoulder_close"))
+		for s in _shoulders:
+			player.set("zoom_shoulder_close", s)
+			for d in [1.1, 1.6, 2.4]:
+				player.set("_zoom_distance", float(d))
+				await _wait(45)
+				await _shot(cam, spring, rig, model_root, foot_y, head_y, d, out_dir,
+					"fsh%02d" % int(round(s * 100.0)))
+		player.set("zoom_shoulder_close", keep_f)
 
 	print("[zf] DONE")
 	quit(0)
