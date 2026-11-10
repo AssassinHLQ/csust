@@ -162,6 +162,11 @@ const AIM_FOV_RATIO := 0.55
 ## 拉近要快（不然镜头会插进墙里看到内壁），拉远要慢（不然离开走廊时「啪」一下弹回去）。
 const CAM_IN_TAU := 0.045
 const CAM_OUT_TAU := 0.22
+## 相机臂长每帧的**绝对位移上限**（米/秒）。指数阻尼在 `want` 和目标差很大时
+## 单帧位移会很凶（9.0 → 2.0 差 7 m，一帧能走 2 m），低帧时直接跨过一堵墙。
+## 32 m/s 对 60 fps 是每帧 0.53 m，对 30 fps 是 1.07 m —— 都小于常见墙厚，
+## 而且远快于玩家跑动速度（约 6 m/s），实际观感仍然很跟手。
+const CAM_MAX_STEP_SPEED := 32.0
 ## 相机离墙至少留这么多（米）。太小会露出墙的内侧面，太大在窄走廊里怼脸更狠。
 @export var cam_wall_margin := 0.25
 ## 相机探测器用的球形半径。给一点半径，墙角/门框才不会从缝里钻过去。
@@ -911,7 +916,8 @@ func _apply_camera(delta: float) -> void:
 	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
 	#    见 `min_zoom_for_full_body()`。
 	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body(look))
-	# 先平滑出「想拉到的长度」，再让墙把它压回去（压的那一步同样带阻尼）。
+	# 先把「想拉到的长度」本身平滑掉（滚轮 / 开镜的过渡），再交给避墙逻辑。
+	# ⚠️ 顺序很重要：避墙要拿**平滑后的目标**去测，而不是拿上一帧的实际长度。
 	var want_smooth := lerpf(spring.spring_length, want, t)
 	spring.spring_length = _collide_camera_arm(want_smooth, delta)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else shoulder), t)
@@ -935,10 +941,22 @@ func _apply_camera(delta: float) -> void:
 ## ⚠️ `spring.collision_mask` 必须置 0（在 `_ready()` 里做），否则内置收缩会
 ##    抢在阻尼之前把镜头一帧怼到墙上 —— 两套机制同时生效就白改了。
 ##
-## 射线从 `CameraRig` 的支点（y≈1.35~1.62）沿弹簧臂方向打出去：
-##   - 方向取弹簧臂的局部 -Z 的反向（子节点摆在 `(0,0,+length)`）；
-##   - `exclude` 显式排掉玩家自己，避免「撞到自己胶囊」这种误判；
-##   - 用细射线再扣 `cam_probe_radius`，等价于球形探测（墙角和门框不会被钻过去）。
+## ── 只打一条中心射线为什么不够（用户 2026-11-10 第二轮反馈）──
+##
+## 用户原话：「摄像机会穿过碰撞了，这样子我把视野角拉大，滚轮缩到最大视野范围，
+##            经常会超出建筑物看不见角色」。
+##
+## 真因两条：
+##   ① **FOV 拉大后画面边缘比中心宽得多**。只沿中心轴打一条射线，中心擦过墙角
+##      就算"没挡住"，可画面左右两侧早已看穿墙外 —— 表现出来就是"相机钻进墙里"。
+##      修法：沿**近平面四角**（不是中心）各打一条，取最短的那个。
+##   ② **阻尼太快会跳过墙体**。`want` 从 9.0 掉到 2.0 时，过去按 CAM_IN_TAU
+##      一帧就走 31%（≈2 m），低帧时直接跨过一堵墙。修法：给每帧的**绝对位移**
+##      加上限（`CAM_MAX_STEP`），再快也只是一帧一小步。
+##
+## 探测器：从支点出发，沿弹簧臂方向分别在近平面四角方向上打射线。
+## 近平面大小由当前 FOV 和宽高比决定 —— 这样 FOV 越大，探测越"宽"，
+## 画面边缘也不会漏墙。
 func _collide_camera_arm(want: float, delta: float) -> float:
 	var space := get_world_3d().direct_space_state
 	if space == null:
@@ -946,31 +964,72 @@ func _collide_camera_arm(want: float, delta: float) -> float:
 
 	# 支点：就是 SpringArm3D 自己所在的位置。
 	var origin := spring.global_position
-	# 从支点指向相机的那一侧。
-	var dir := -spring.global_transform.basis.z.normalized()
+	# 从支点指向相机的那一侧（弹簧臂的长轴）。
+	var axis := -spring.global_transform.basis.z.normalized()
 
 	var exclude: Array[RID] = [get_rid()]
-	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
-			origin, origin + dir * (want + cam_probe_radius + cam_wall_margin),
-			_wall_mask, exclude))
+	# 沿长轴能走多远（多留一点，让"贴脸"也能被探到）。
+	var reach := want + cam_probe_radius + cam_wall_margin
+	var best := INF
+	for d: Vector3 in _camera_probe_dirs(axis, want):
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+				origin, origin + d * reach, _wall_mask, exclude))
+		if hit.is_empty():
+			continue
+		# 命中的**长轴投影长度**才是臂长的上限：斜着打到墙不等于臂能伸那么长。
+		var along: float = origin.distance_to(hit["position"]) * d.dot(axis)
+		best = minf(best, along)
+
 	var blocked := want
-	if not hit.is_empty():
-		var dist: float = origin.distance_to(hit["position"]) - cam_probe_radius - cam_wall_margin
-		# 走廊再窄也不低于 zoom_min —— 不让镜头穿进角色脑袋。
-		blocked = maxf(dist, zoom_min)
+	if best < INF:
+		# 扣掉探测球半径和贴墙余量；走廊再窄也不低于 zoom_min —— 不让镜头穿进角色脑袋。
+		blocked = maxf(best - cam_probe_radius - cam_wall_margin, zoom_min)
 
-	if blocked >= want:
-		# 没被压（或墙退开了）：往外走同样要慢，否则离开走廊会「啪」地弹回原距离。
-		# ⚠️ 只有「上一步被压过」才需要，否则会拖慢正常滚轮拉远 —— 用
-		#    `spring_length` 当前值判断：它比 want 短，说明刚从压缩状态回来。
-		if spring.spring_length < want - 0.01:
-			var k_out := 1.0 - exp(-(1.0 / CAM_OUT_TAU) * delta)
-			return lerpf(spring.spring_length, want, k_out)
-		return want
+	# 目标：墙允许的更短就听墙的，否则就是想要的长度。
+	var target := minf(want, blocked)
+	var now := spring.spring_length
 
-	# 被墙压：按 CAM_IN_TAU 快速靠过去（仍然是滑的，不是瞬移）。
-	var k_in := 1.0 - exp(-(1.0 / CAM_IN_TAU) * delta)
-	return lerpf(want, blocked, k_in)
+	# ── 阻尼 + 限速，一律针对**最终的 spring_length** ──
+	# ⚠️ 踩过的坑（探针 ④ 实测 9.00 → 2.06 单帧跳 1.49 m）：
+	#    之前是 `lerpf(want, blocked, k)` —— 这一支的**起点是 want**，
+	#    哪怕限了步长，`want` 本身每帧也在大幅变化（滚轮/平滑），
+	#    结果最终 spring_length 仍然一帧跨一大段。
+	#    现在改成「从当前实际长度出发，朝 target 走一步」，再对这一步限速。
+	#    拉近 / 拉远用不同的时间常数，但都从 `now` 出发。
+	var tau := CAM_IN_TAU if target < now else CAM_OUT_TAU
+	var k := 1.0 - exp(-delta / tau)
+	return _clamp_step(now, lerpf(now, target, k), delta)
+
+
+## 沿弹簧臂长轴 `axis`、按当前 FOV 展开近平面四角，返回探测方向列表。
+##
+## 中心轴也留一条（近平面中心的投影是"沿轴直走"，比四角更直观）。
+## 四角取在**近平面**上（距支点 `at` 米处），这样探测方向和实际画幅边缘一致。
+## FOV 越大、宽高比越宽，四角张得越开 —— 正是"视野拉大后画面边缘先穿墙"的情形。
+func _camera_probe_dirs(axis: Vector3, at: float) -> Array[Vector3]:
+	var out: Array[Vector3] = [axis]
+	var cam_basis := spring.global_transform.basis
+	# 近平面在 `at` 处的半宽 / 半高（Godot 的 Camera3D 是竖直 FOV）。
+	var d := maxf(at, 0.2)
+	var half_h := d * tan(deg_to_rad(maxf(cam.fov, 1.0)) * 0.5)
+	var half_w := half_h * cam.get_viewport().get_visible_rect().size.aspect()
+	# 用弹簧臂的**局部** right / up 铺开四角（不受 yaw 影响）。
+	var right := cam_basis.x.normalized()
+	var up := cam_basis.y.normalized()
+	for sx: float in [-1.0, 1.0]:
+		for sy: float in [-1.0, 1.0]:
+			var corner := (axis * d + right * (half_w * sx) + up * (half_h * sy)).normalized()
+			out.append(corner)
+	return out
+
+
+## 每帧绝对位移上限：防止阻尼太快、低帧时一帧跨过一堵墙。
+func _clamp_step(from: float, to: float, delta: float) -> float:
+	var step := to - from
+	var cap := maxf(CAM_MAX_STEP_SPEED * delta, 0.02)
+	if absf(step) > cap:
+		return from + signf(step) * cap
+	return to
 
 
 ## 滚轮能拉到多近，还能看见**全身**。
