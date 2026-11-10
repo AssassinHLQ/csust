@@ -108,10 +108,29 @@ func _apply(_dt: float, force: bool) -> void:
 	var cam_pos := cam.global_position
 	var visible_clusters := 0
 	var visible_meshes := 0
+	# ⚠️ 就地清扫：`clusters` 里存的是**节点引用**，而跑酷/商店/Boss 这些子树
+	#    会被 `queue_free()` 掉（倭瓜优香登场时 `holder.queue_free()`、
+	#    跑酷重进时整段 `parkour.tscn` 重建）。以前这里只 `continue`，
+	#    死引用就一直躺在数组里每 0.1 s 空转一次，而且 `_hidden` 里还留着
+	#    它的 instance_id —— 那个 id 一旦被引擎回收复用，
+	#    `_restore_hidden()` 就会拿它去给**毫不相干的节点**写 `visible`。
+	#    用户 2026-11-10 的 `RenderDistance._apply: Trying to assign invalid
+	#    previously freed instance.` 就是这一支。所以边走边把坏的剔掉。
+	var alive: Array = []
+	alive.resize(clusters.size())
+	var keep := 0
 	for c in clusters:
-		var node: Node3D = c["node"]
-		if not is_instance_valid(node):
+		# ⚠️ 关键：**不能**写 `var node: Node3D = c["node"]`。
+		#    带类型标注的赋值会先对已释放实例做一次类型转换，Godot 就在这里抛
+		#    `Trying to assign invalid previously freed instance.`（本探针实测
+		#    报错就在这一行）。所以先用不带类型的 `Variant` 接住，判完有效性再转。
+		var raw: Variant = c["node"]
+		if raw == null or not is_instance_valid(raw):
 			continue
+		var node := raw as Node3D
+		if node == null or not node.is_inside_tree():
+			continue
+		var id := node.get_instance_id()
 		var radius: float = c["radius"]
 		# 现算世界盒子（节点可能是会动的角色），球心取盒子中心
 		var world_aabb: AABB = node.global_transform * (c["local_aabb"] as AABB)
@@ -122,8 +141,6 @@ func _apply(_dt: float, force: bool) -> void:
 		if show:
 			visible_clusters += 1
 			visible_meshes += int(c["meshes"])
-		var id := node.get_instance_id()
-		if show:
 			# 只放回**我们自己藏的**；没藏过的簇一概不碰（它有可能是游戏自己在管）
 			if _hidden.has(id):
 				var authored: bool = bool(_hidden[id])
@@ -135,6 +152,24 @@ func _apply(_dt: float, force: bool) -> void:
 				_hidden[id] = node.visible
 			if node.visible:
 				node.visible = false
+		alive[keep] = c
+		keep += 1
+	if keep != clusters.size():
+		alive.resize(keep)
+		clusters = alive
+	# `_hidden` 里那些已经没有人认领的 id 也一并清掉：
+	#   · 节点被释放 → 该 id 可能被引擎复用，留着它就会去写别的节点（原本那个 bug）
+	#   · 簇被剔出 `clusters`（上面的 continue）→ 再也不会有人来恢复它
+	# 判据：id 对应的对象要么已失效、要么已不在树里，就扔掉。
+	if not _hidden.is_empty():
+		var stale: Array = []
+		for hid in _hidden.keys():
+			var o := instance_from_id(hid)
+			if o == null or not is_instance_valid(o) \
+					or not (o is Node) or not (o as Node).is_inside_tree():
+				stale.append(hid)
+		for hid in stale:
+			_hidden.erase(hid)
 	stats = {
 		"clusters": clusters.size(),
 		"meshes": _total_meshes(),
@@ -154,8 +189,12 @@ func _apply(_dt: float, force: bool) -> void:
 ## 把 `_hidden` 里的簇全部放回它们被压之前的样子。
 func _restore_hidden() -> void:
 	for id in _hidden.keys():
+		# ⚠️ `instance_from_id()` 拿到的不保证还是**原来那个**节点：
+		#    实例 id 在节点被 `queue_free()` 之后会被引擎回收复用，
+		#    复用后这里就能取到一个活着但毫不相干的对象（甚至不是 Node3D）。
+		#    所以除了有效性，还要确认它**真在树里**（真被释放过的必然不在）。
 		var n := instance_from_id(id) as Node3D
-		if is_instance_valid(n):
+		if is_instance_valid(n) and n.is_inside_tree():
 			n.visible = bool(_hidden[id])
 	_hidden.clear()
 
