@@ -201,7 +201,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 51.443455, 0.01, -6.920073)
 
 [node name="EsportsRoom" parent="." unique_id=562515769 instance=ExtResource("21_esports_room")]
 visible = false
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 53.26548, 0.01, 13.256798)
+transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 53.26548, 3.61, 13.256798)
 
 [node name="MondrianHouse" parent="." unique_id=2115650812 instance=ExtResource("16_mondrian_baked")]
 
