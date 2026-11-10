@@ -78,15 +78,22 @@ func _run() -> void:
 	_check(absf(aabb.size.z - 16.84) < 1.0, "Z 方向贴合房间（%.2f ≈ 16.84）" % aabb.size.z)
 
 	# ── ② 射线：四面墙 + 地板 ──
+	# ⚠️ 本地 +Z 那一头是**门**（门洞 x[-2.55, 1.35]，两侧墙板挡着），
+	#    所以「朝 +Z 正中打」本来就该穿过去 —— 不能当成墙来验。
+	#    这里测 +Z 时偏到**门墩**上（x 偏 4 m），才算打墙。
 	var space := baked.get_world_3d().direct_space_state
 	var c := aabb.get_center()
 	var mid := Vector3(c.x, aabb.position.y + 1.7, c.z)
-	for k in ["+X", "-X", "+Z", "-Z"]:
-		var d := {
-			"+X": Vector3(8, 0, 0), "-X": Vector3(-8, 0, 0),
-			"+Z": Vector3(0, 0, 11), "-Z": Vector3(0, 0, -11),
-		}[k] as Vector3
-		var h := _ray(space, mid, mid + d)
+	var dirs := {
+		"+X": [mid, mid + Vector3(8, 0, 0)],
+		"-X": [mid, mid + Vector3(-8, 0, 0)],
+		"-Z": [mid, mid + Vector3(0, 0, -11)],
+		# +Z：偏到门墩上（门洞半宽约 2 m，偏 4 m 稳撞墙）
+		"+Z(门墩)": [mid + Vector3(4.0, 0, 0), mid + Vector3(4.0, 0, 11)],
+	}
+	for k in dirs.keys():
+		var seg: Array = dirs[k]
+		var h := _ray(space, seg[0], seg[1])
 		_check(h.size() > 0, "朝 %s 打：有碰撞" % k)
 	var hd := _ray(space, mid, mid + Vector3(0, -3, 0))
 	_check(hd.size() > 0, "朝下打：有地板")

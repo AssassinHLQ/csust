@@ -33,11 +33,30 @@ const SETTLE_TIME := 0.36
 
 ## 环绕：半径 26 m、仰角 30°→15°、fov 80、扫 260°（把部室那侧也带到画面里）
 const ORBIT_TIME := 4.0
-const ORBIT_RADIUS := 26.0
+## 环绕半径。2026-11-10 实测 26 m 时房子只占画面一小块，烟看不清 —— 收到 19 m。
+## 房间对角 19.7 m，19 m 半径 + fov 80° 正好让房子占满画面 2/3。
+const ORBIT_RADIUS := 19.0
 const ORBIT_START_DEG := 168.0
-const ORBIT_SWEEP_DEG := 260.0
-const ORBIT_PITCH_0 := 30.0
-const ORBIT_PITCH_1 := 15.0
+## 环绕总扫过的角度。2026-11-10 使用者：「直接转圈圈环绕运镜，上下颠倒雷霆显现」
+## 540°（一圈半）实测下来画面**全程都在歪**，房子根本看不清 —— 收到 400°：
+## 一圈多一点，既有「转满一圈」的体感，结尾又能自然收住。
+const ORBIT_SWEEP_DEG := 400.0
+## 俯仰三段：起 30°（俯看）→ 中 -8°（**压到地平线附近仰拍**）→ 收 12°
+## ⚠️ 2026-11-10 实测：-22° 会让相机的**视平线落到平台边缘以下**，
+##    画面里只剩「一块悬空的地板」，房子被挡在外面（用户看到的那两张就是）。
+##    这个平台是**悬空**的（四周没有地面），所以相机不能低于平台。
+##    -8° 已经能读出「从下往上看」的翻转感，但不会掉出平台。
+const ORBIT_PITCH_0 := 22.0
+const ORBIT_PITCH_MID := -8.0
+const ORBIT_PITCH_1 := 12.0
+## 相机横滚：环绕中后段自转。360° 实测会让人分不清上下，
+## 收到 200° —— 转到「明显歪了」就回来，配合俯仰翻转足够「雷霆」。
+const ORBIT_ROLL_DEG := 200.0
+## 环绕半径：中途拉近一下再拉远，制造压迫感
+const ORBIT_RADIUS_MID := 15.0
+## 「翻转」的钟形包络宽度。1.0 = 整个环绕期间都带翻转；0.55 = 只在**中途**翻，
+## 开头结尾都是稳的。使用者要的是「中间视角翻转」，所以收窄。
+const FLIP_BELL_WIDTH := 0.55
 const ORBIT_LOOK_HEIGHT := 0.75
 const CAM_FOV := 80.0
 
@@ -63,6 +82,8 @@ var _half_depth := 8.42
 var _base_pos := Vector3.ZERO
 var _shake := 0.0
 var _hitstop := 0.0
+## 落地抖动的横滚分量（弧度）。由 `_process` 算，`_place_camera` 叠到 basis 上。
+var _roll_jitter := 0.0
 
 var _dust: Array[GPUParticles3D] = []
 var _rocks: GPUParticles3D
@@ -99,6 +120,14 @@ func play(room: Node3D, center: Vector3, half_depth := 8.42,
 	_door_dir = door_dir.normalized()
 	if _door_dir.length_squared() < 0.0001:
 		_door_dir = Vector3.FORWARD
+
+	# ⚠️ 2026-11-10 严重 bug：所有特效（尘毯 / 冲击环 / 碎石 / 拖尾 / 光柱）
+	#    都是按 `Vector3(0, y, 0)` 这种**局部坐标**摆的，而这个演出节点挂在
+	#    `game` 根下、原点在 (0,0,0) —— 房间却在 (48~53, 0, 5~13)。
+	#    结果：**特效生成在世界的原点，房子在 48 米外**，玩家看到地上一块
+	#    莫名其妙的平板，房子孤零零在最边上（使用者截图里那张就是）。
+	#    修法：把这个节点整体搬到房间中心，之后所有局部坐标就都对上了。
+	global_position = Vector3(_center.x, floor_y if floor_y != -1.0 else 0.0, _center.z)
 
 	_build_camera()
 	_build_flash()
@@ -158,16 +187,28 @@ func _process(delta: float) -> void:
 	# ③ 镜头
 	_place_camera(_t)
 
-	# ④ 抖动衰减：前 0.35 s 满幅，之后按平方衰减
+	# ④ 抖动衰减：前段满幅，之后按平方衰减
+	# ⚠️ 2026-11-10 使用者「还要加入镜头抖动」——
+	#    旧版振幅 0.75 / 旋转 0.012 rad 实测几乎看不出来。现在：
+	#      · 位置振幅 0.75 → 2.2 m
+	#      · 横滚抖动 0.012 → 0.055 rad（3.2°）
+	#      · 衰减时间 0.9 s → 1.6 s（抖得久一点）
+	#      · 加一条同频率的「呼吸」正弦，纯随机会像噪点，叠上正弦才像「震」
+	#
+	# ⚠️ 横滚不能写 `_cam.rotation.z` —— `_place_camera()` 每帧都把整个 basis 重设一遍，
+	#    再写 rotation.z 会互相打架（表现为抖动时有时无）。这里统一在 `_place_camera()`
+	#    里把 `_roll_jitter` 叠到 basis 上。
 	if _shake > 0.001:
-		_shake = maxf(0.0, _shake - delta / 0.9)
+		_shake = maxf(0.0, _shake - delta / 1.6)
 		var s := _shake * _shake
-		_cam.h_offset = randf_range(-s, s) * 0.75
-		_cam.v_offset = randf_range(-s, s) * 0.75
-		_cam.rotation.z = randf_range(-s, s) * 0.012
+		var wob := sin(_t * 61.0) * 0.35 + sin(_t * 103.0) * 0.2
+		_cam.h_offset = (randf_range(-s, s) + wob * s) * 2.2
+		_cam.v_offset = (randf_range(-s, s) + wob * s) * 2.2
+		_roll_jitter = randf_range(-s, s) * 0.055
 	elif _cam != null:
 		_cam.h_offset = 0.0
 		_cam.v_offset = 0.0
+		_roll_jitter = 0.0
 
 	if _t >= TOTAL:
 		_finish()
@@ -178,14 +219,17 @@ func _process(delta: float) -> void:
 func _on_land() -> void:
 	_shake = 1.0
 	_hitstop = 0.9
+	# ⚠️ 2026-11-10 实测 bug：`one_shot = true` 的粒子在**同一帧**里
+	#    `restart()` 之后立刻 `emitting = true`，会被内部状态机覆盖回 false ——
+	#    探针量到的结果是 7 层全部 `emitting=false`，烟一颗都没放出来。
+	#    修法：先 `restart()`，**等一帧**再 `emitting = true`。
 	for d in _dust:
 		d.set_meta("drop_fired", true)
 		d.restart()
-		d.emitting = true
 	for p in [_rocks, _streaks]:
 		if p != null:
 			p.restart()
-			p.emitting = true
+	_fire_after_frame()
 	for m in _shock_mats:
 		m.set_shader_parameter("progress", 0.0)
 	for s in [_shock, _shock2]:
@@ -212,6 +256,28 @@ func _on_land() -> void:
 		if m != null:
 			m.visible = false
 	print("[drop] 落地")
+
+
+## 落地后等一帧，再把粒子真正打开（见 `_on_land()` 里那段实测说明）。
+func _fire_after_frame() -> void:
+	await get_tree().process_frame
+	for d in _dust:
+		if d != null:
+			d.emitting = true
+	for p in [_rocks, _streaks]:
+		if p != null:
+			p.emitting = true
+	# 二次爆开（第 ⑥ 层）：让它晚 0.18 s 再炸，制造「余波」
+	if _dust.size() > 5:
+		var f := _dust[5]
+		f.emitting = false
+		var tw := create_tween()
+		tw.tween_interval(0.18)
+		tw.tween_callback(func() -> void:
+			if f != null and is_instance_valid(f):
+				f.restart()
+				f.emitting = true)
+	print("[drop] 灰尘已开火（%d 层）" % _dust.size())
 
 
 func _tween_shock() -> void:
@@ -255,16 +321,45 @@ func _dir_from_deg(deg: float) -> Vector3:
 	return (fwd * cos(a) + right * sin(a)).normalized()
 
 
+## 收窄的钟形包络：k=0/1 时为 0，k=0.5 时为 1，但只在 `width` 这一段里鼓起。
+## `width = 1.0` 退化成 `sin(πk)`；`0.55` 表示「中间 55% 的时间才翻」。
+static func _bell(k: float, width: float) -> float:
+	if width >= 0.999:
+		return sin(PI * k)
+	# 把 k 映射到「中间 width 段」，外面拉平到 0
+	var lo := (1.0 - width) * 0.5
+	var hi := 1.0 - lo
+	if k <= lo or k >= hi:
+		return 0.0
+	var u := (k - lo) / (hi - lo)      # 0..1
+	return sin(PI * u)
+
+
 func _place_camera(t: float) -> void:
 	var orbit_start := FALL_TIME + HOLD_BEFORE_ORBIT
 	var k := clampf((t - orbit_start) / ORBIT_TIME, 0.0, 1.0)
 	var ease_k := k * k * (3.0 - 2.0 * k)
 	var ang := deg_to_rad(ORBIT_START_DEG + ORBIT_SWEEP_DEG * ease_k)
-	var pitch := deg_to_rad(lerpf(ORBIT_PITCH_0, ORBIT_PITCH_1, ease_k))
-	var r := lerpf(ORBIT_RADIUS * 0.88, ORBIT_RADIUS, ease_k)
+
+	# ── 俯仰：三段插值（30° 俯看 → -22° 翻转仰拍 → 12° 收）──
+	# 用**收窄的**钟形：只在环绕中途翻，开头结尾都在正常视角。
+	# 旧版用 `sin(πk)`（全程钟形）实测下来「画面大半时间都是歪的，房子看不清」。
+	var bell := _bell(k, FLIP_BELL_WIDTH)
+	var pitch_lerp := lerpf(ORBIT_PITCH_0, ORBIT_PITCH_1, ease_k)
+	var pitch := pitch_lerp + (ORBIT_PITCH_MID - pitch_lerp) * bell
+	var pitch_r := deg_to_rad(pitch)
+
+	# ── 半径：中途收近（压迫感），两头放远 ──
+	var r := lerpf(ORBIT_RADIUS * 0.92, ORBIT_RADIUS, ease_k)
+	r -= (ORBIT_RADIUS - ORBIT_RADIUS_MID) * bell * 0.55
+
 	# ang 的 0° = 门朝向（你摆在哪就绕哪），正值顺时针扫
 	var horiz := _dir_from_deg(rad_to_deg(ang))
-	var pos := _center + horiz * r + Vector3(0.0, sin(pitch) * r * 0.55 + 1.2, 0.0)
+	# 标准球坐标：r 是**到房间中心的真实距离**，
+	# pitch 决定「多高」—— 负 pitch 时相机跑到地面以下，画面就是仰拍颠倒的。
+	var pos := _center + horiz * (cos(pitch_r) * r) \
+		+ Vector3(0.0, sin(pitch_r) * r + ORBIT_LOOK_HEIGHT, 0.0)
+	# 视线目标：稍高于房间中心，让房子落在画面正中偏下（上方留天空，下坠感更好）
 	var look := _center + Vector3(0.0, ORBIT_LOOK_HEIGHT, 0.0)
 	if t < FALL_TIME:
 		look.y += (_room.global_position.y - _base_y) * 0.38
@@ -281,6 +376,16 @@ func _place_camera(t: float) -> void:
 		right = Vector3.RIGHT
 	right = right.normalized()
 	var up := to_target.cross(right).normalized()
+
+	# ── 横滚（「转圈圈」）：中途绕视线轴自转 ──
+	# 同样用收窄钟形，两头不滚、中间滚满 —— 结束时画面自然回正。
+	# 再叠上落地抖动的横滚分量 `_roll_jitter`（见 `_process` 的 ④）。
+	var roll := deg_to_rad(ORBIT_ROLL_DEG) * bell + _roll_jitter
+	if absf(roll) > 0.0001:
+		var q := Quaternion(to_target, roll)
+		right = (q * right).normalized()
+		up = (q * up).normalized()
+
 	_cam.global_transform = Transform3D(Basis(right, up, -to_target), pos)
 
 
@@ -340,7 +445,10 @@ static func _soft_dot(hard := 0.28) -> ImageTexture:
 		for x in n:
 			var d := Vector2(x - c.x, y - c.y).length() / r
 			var a := clampf(1.0 - (d - hard) / (1.0 - hard), 0.0, 1.0)
-			img.set_pixel(x, y, Color(1, 1, 1, a * a))
+			# ⚠️ 2026-11-10 原来是 `a * a`，把中心 1.0 之外全压扁了，
+			#    再乘 tint.a（0.26~0.62）→ 实际 alpha 只剩 0.06~0.14，看不见。
+			#    现在用 `pow(a, 0.65)`：中心保持实，边缘柔，整体密度上来。
+			img.set_pixel(x, y, Color(1, 1, 1, pow(a, 0.65)))
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
@@ -379,13 +487,18 @@ func _dust_layer(amount: int, life: float, size: float, tint: Color,
 	pm.initial_velocity_min = vmin
 	pm.initial_velocity_max = vmax
 	pm.gravity = Vector3(0.0, grav, 0.0)
-	pm.damping_min = 1.6
-	pm.damping_max = 5.0
+	# ⚠️ 2026-11-10 使用者「怎么没看见烟雾了」——
+	#    旧值 damping 1.6~5.0 会让粒子一出生就刹死，灰还没散开就停在原地，
+	#    加上贴图中心只有 0.22 不透明度 → 整片看不见。现在阻尼降下来、让它飞出去。
+	pm.damping_min = 0.25
+	pm.damping_max = 1.10
 	pm.scale_min = size * 0.55
 	pm.scale_max = size * 1.5
 	pm.color = tint
 	pm.angle_min = -180.0
 	pm.angle_max = 180.0
+	# ⚠️ 这一行 2026-11-10 被误删过一次 —— 没有它粒子**根本没有发射参数**，
+	#    `emitting=true` 也一颗不飞（探针量到「7 层全 fired=true 但画面没烟」就是这个）。
 	p.process_material = pm
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1.0, 1.0)
@@ -394,8 +507,13 @@ func _dust_layer(amount: int, life: float, size: float, tint: Color,
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	mat.vertex_color_use_as_albedo = true
-	mat.albedo_texture = _soft_dot(0.22)
+	mat.albedo_texture = _soft_dot(0.42)
 	mat.disable_receive_shadows = true
+	# ⚠️ 2026-11-10：`vertex_color_use_as_albedo = true` 时，粒子的 `color` 会乘到
+	#    **ALBEDO（颜色）**上，而不是 ALPHA —— 所以 tint 的 alpha 被当成了亮度，
+	#    画面里出现一片「发光的白点」而不是灰。
+	#    解法：给贴图一个真正的灰，并让粒子颜色走 `color`（含 alpha）。
+	mat.albedo_color = Color(1, 1, 1, 1)
 	quad.material = mat
 	p.draw_pass_1 = quad
 	add_child(p)
@@ -404,29 +522,44 @@ func _dust_layer(amount: int, life: float, size: float, tint: Color,
 
 
 func _build_dust() -> void:
+	# ⚠️ 2026-11-10 使用者「怎么没看见烟雾了，加回来」——
+	#    旧版 5 层合计 2600 颗、alpha 0.26~0.62，配合那张中心 0.22 的软点，
+	#    实际不透明度只剩个位数，等于没有。现在：
+	#      · 层数 5 → 7（补两层贴地大团 + 一层高空飘）
+	#      · 颗粒数 2600 → 4600
+	#      · alpha 全线提到 0.45~0.82
+	#      · 速度拉开差距，让灰飞得出去
 	# ① 贴地尘毯：低、宽、快，落地瞬间糊住地面
-	var a := _dust_layer(900, 2.8, 2.6, Color(0.52, 0.49, 0.45, 0.62),
-		Vector3(9.5, 0.25, 13.5), 9.0, 22.0, 0.35, 88.0)
+	var a := _dust_layer(1400, 3.2, 3.0, Color(0.62, 0.58, 0.52, 0.80),
+		Vector3(10.0, 0.30, 14.0), 11.0, 26.0, 0.30, 88.0)
 	a.position = Vector3(0, 0.2, 0)
 	# ② 中环：往外扩的主力
-	var b := _dust_layer(700, 3.6, 4.4, Color(0.44, 0.42, 0.39, 0.52),
-		Vector3(7.0, 0.6, 10.0), 6.0, 15.0, 0.5, 90.0)
+	var b := _dust_layer(1100, 4.0, 5.0, Color(0.55, 0.52, 0.47, 0.72),
+		Vector3(7.5, 0.70, 11.0), 7.0, 18.0, 0.45, 90.0)
 	b.position = Vector3(0, 0.8, 0)
 	# ③ 大团灰：慢、暗、大，撑体积感
-	var c := _dust_layer(420, 5.2, 6.5, Color(0.33, 0.32, 0.30, 0.40),
-		Vector3(5.5, 0.9, 8.0), 3.0, 9.0, 0.75, 90.0)
+	var c := _dust_layer(700, 5.6, 7.5, Color(0.44, 0.42, 0.39, 0.60),
+		Vector3(6.0, 1.00, 9.0), 3.5, 10.0, 0.70, 90.0)
 	c.position = Vector3(0, 1.4, 0)
 	# ④ 冲天柱：往上蹿，把"砸下来"的高度感拉满
-	var d := _dust_layer(320, 3.2, 3.2, Color(0.48, 0.46, 0.43, 0.48),
-		Vector3(4.0, 0.2, 6.0), 5.0, 13.0, 1.2, 40.0)
-	d.process_material.gravity = Vector3(0, 1.6, 0)
+	var d := _dust_layer(520, 3.6, 3.8, Color(0.60, 0.57, 0.52, 0.70),
+		Vector3(4.5, 0.25, 6.5), 6.0, 16.0, 1.05, 42.0)
+	d.process_material.gravity = Vector3(0, 2.2, 0)
 	d.process_material.direction = Vector3(0, 1, 0)
 	d.process_material.spread = 55.0
 	d.position = Vector3(0, 0.4, 0)
 	# ⑤ 高空散尘：慢速飘、寿命最长，让灰一直留在画面里
-	var e := _dust_layer(260, 6.5, 8.5, Color(0.40, 0.38, 0.36, 0.26),
-		Vector3(8.0, 1.2, 11.0), 1.0, 4.0, 0.25, 90.0)
-	e.position = Vector3(0, 2.2, 0)
+	var e := _dust_layer(480, 7.5, 10.0, Color(0.52, 0.50, 0.46, 0.45),
+		Vector3(9.0, 1.4, 12.0), 1.2, 5.0, 0.20, 90.0)
+	e.position = Vector3(0, 2.4, 0)
+	# ⑥ 二次爆开：落地 0.18 s 后再从中心炸一次，制造「余波」
+	var f := _dust_layer(600, 3.0, 4.4, Color(0.58, 0.55, 0.50, 0.62),
+		Vector3(3.0, 0.4, 4.0), 14.0, 30.0, 0.15, 90.0)
+	f.position = Vector3(0, 0.5, 0)
+	# ⑦ 贴近镜头的碎尘：让灰从画面里「冲出来」
+	var g := _dust_layer(300, 2.4, 2.2, Color(0.68, 0.65, 0.60, 0.55),
+		Vector3(12.0, 0.6, 12.0), 16.0, 34.0, 0.10, 90.0)
+	g.position = Vector3(0, 1.0, 0)
 
 
 ## 贴地尘毯：一块水平圆盘，着色器按 progress 从中心扩到 ~46 m，同时淡出
@@ -447,7 +580,12 @@ void fragment() {
 	float noise = fract(sin(dot(floor(UV * 220.0), vec2(12.9898, 78.233))) * 43758.5453);
 	float fade = (1.0 - smoothstep(0.25, 1.0, progress)) * 0.85;
 	ALBEDO = dust_color.rgb;
-	ALPHA = clamp(body * fade * (0.75 + noise * 0.45), 0.0, 1.0);
+	// ⚠️ 2026-11-10：旧版 alpha 最高到 0.85 且整块 46 m 铺满 —— 实测从演出机位看
+	//    就是地上一块**不透明的塑料布**，把刚砸下来的房子整个盖住。
+	//    现在压到 0.42 上限，并且**中间挖空**（房子本体那一块不画），
+	//    让它读起来像「贴着地面的扬尘」而不是「一块板」。
+	float hole = smoothstep(0.10, 0.42, d);   // 中心 10% 全空、42% 外全实
+	ALPHA = clamp(body * fade * hole * (0.60 + noise * 0.40), 0.0, 0.42);
 }
 """
 	_dust_sheet_mat.shader = sh
@@ -456,9 +594,11 @@ void fragment() {
 	_dust_sheet = MeshInstance3D.new()
 	_dust_sheet.name = "DustSheet"
 	_dust_sheet.mesh = q
-	_dust_sheet.scale = Vector3(46.0, 46.0, 1.0)
+	# 46 m → 30 m：房间对角 19.7 m，30 m 已经能盖到外圈，又不至于铺满整个平台
+	_dust_sheet.scale = Vector3(30.0, 30.0, 1.0)
 	_dust_sheet.rotation_degrees = Vector3(-90, 0, 0)
-	_dust_sheet.position = Vector3(0.0, 0.18, 0.0)
+	# 抬高到 0.55 m：原先 0.18 m 几乎贴在地砖上，和地板 z-fighting，看着像块补丁
+	_dust_sheet.position = Vector3(0.0, 0.55, 0.0)
 	_dust_sheet.visible = false
 	add_child(_dust_sheet)
 
