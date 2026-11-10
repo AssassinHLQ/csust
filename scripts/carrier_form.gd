@@ -539,8 +539,33 @@ func set_form(on: bool) -> bool:
 	set_process(on)
 	if on:
 		_play("Idle", true)
-		# 变形出来的那一刻是站着的（地面形态），先不飞
-		_airborne = false
+		# ── 变身时要不要直接进飞行态？看**变的那一刻人在不在空中** ──
+		#
+		# ⚠️ 2026-11-10 修（用户：「为什么在空中变身不能飞行,只能够从地上飞起来?」）
+		#
+		# 原来这里无条件写死 `_airborne = false`（注释写「变形出来那一刻是站着的」），
+		# 于是在空中变身会被当成「站在地上」。而起来之后：
+		#   起飞条件 = `not _airborne and grounded_grace and ...`
+		#   `grounded_grace = on_floor or (now - _air_since) <= COYOTE_MS(110ms)`
+		# 空中时 `on_floor` 是 false，而 `_air_since` 早就超过 110 ms
+		# ⇒ **条件永远不成立**，既飞不上去、也不会往下掉（垂直被本脚本接管了），
+		# 人就那么僵在半空 —— 正是用户报的现象。
+		#
+		# 正确做法：**离地就按离地处理**，直接进 `_airborne`（等价于半空中完成起飞），
+		# 并立刻把垂直方向接过来（`set_flight_lock(true)`），否则 `player.gd`
+		# 的重力会在这段时间里把人往下拽。
+		var was_airborne := _player != null and not _player.is_on_floor()
+		if was_airborne:
+			_airborne = true
+			_air_since = float(Time.get_ticks_msec())
+			_hold_y = _player.global_position.y
+			if _player.has_method("set_flight_lock"):
+				_player.call("set_flight_lock", true)
+			print("[Carrier] 空中变身 → 直接进入飞行态（高度 %.2f m）" % _hold_y)
+		else:
+			# 站在地上变身：照旧，先站住
+			_airborne = false
+			_hold_y = -9000.0
 		_vert_want = 0.0
 		_last_shot_index = int(_weapon().get("_shot_index")) if _weapon() != null else 0
 		# **激光大炮**：机甲形态下 `Weapon` 走光束路径（不是飞行子弹）
