@@ -49,19 +49,6 @@ static func polish(root: Node3D) -> Dictionary:
 		if not _looks_like_halo(String(mi.name)):
 			continue
 		report["meshes"] = int(report["meshes"]) + 1
-		# ── 网格细化：30 段 → 96 段（2026-11-10）──
-		#
-		# 用户：「只有柚子光环形状有问题,高处看正常,低处看丢了东西像是被减面了」。
-		# 本喵从 GLB 里数出来：光环只有 **120 顶点 / 228 三角面**，
-		# 反推约 **30 段**（每段 12°）—— 近看必然是折线多边形，不是圆环。
-		#
-		# 「高处看正常、低处看丢东西」的成因：这是个**很薄**的环（厚度只有
-		# 周围几条边），从低角度斜着看时，那些细窄的侧面在屏幕上被压到
-		# 不足一个像素，加上背面又剔掉一部分，就"缺了一块"。
-		# 面数提高后每个面片更小，这种"整块消失"会变成平滑过渡。
-		var refined := _refine_halo_mesh(mi)
-		if refined:
-			report["refined"] = int(report.get("refined", 0)) + 1
 		# 一个网格可能有多个 surface（柚子这个是 1 个），逐个来
 		var surfaces := mi.get_surface_override_material_count()
 		if mi.mesh != null:
@@ -212,104 +199,6 @@ static func _average_color(tex: Texture2D) -> Color:
 	return avg
 
 
-## ── 光环网格细化：把低模环重建成高精度的 ──
-##
-## 用户 2026-11-10：「只有柚子光环形状有问题,高处看正常,低处看丢了东西像是被减面了」。
-##
-## 实测原网格：120 顶点 / 228 三角面 ⇒ 约 **30 段**（每段 12°），
-## 近看就是折线多边形。而且环很薄，低角度斜看时侧面被压到不足一像素 ⇒ 缺块。
-##
-## 做法：**按原网格的包围盒重建一个圆环**，保留原来的材质/UV 走向。
-## 不试图去"细分原网格"（原拓扑是 30 段 × 4 边的管状环，细分要先反推参数），
-## 直接按「同一个位置、同样大小、同样的管径比例」重建要稳得多。
-##
-## ⚠️ 只在**面数确实很低**的网格上做（< 400 面），否则可能把别人精心做的环改坏。
-const REFINE_MIN_TRIS := 400
-const REFINE_SEGMENTS := 96        ## 绕一圈几段（30 → 96，每段 3.75°）
-const REFINE_RING_SIDES := 6       ## 管截面几边（原 4 边 → 6 边，更圆）
-
-
-static func _refine_halo_mesh(mi: MeshInstance3D) -> bool:
-	if mi == null or mi.mesh == null:
-		return false
-	var mesh := mi.mesh
-	if mesh.get_surface_count() != 1:
-		return false
-	var arr := mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var idx = arr[Mesh.ARRAY_INDEX]
-	var tris := 0
-	if idx != null and (idx as PackedInt32Array).size() > 0:
-		tris = (idx as PackedInt32Array).size() / 3
-	else:
-		tris = verts.size() / 3
-	if tris >= REFINE_MIN_TRIS:
-		return false        # 本来就不低模，别动
-
-	# 原网格的包围盒 → 决定环的外径 / 管径 / 厚度
-	var aabb := mesh.get_aabb()
-	var center := aabb.get_center()
-	var size := aabb.size
-	# 环的水平外径：取 XZ 里较大的那一维的一半
-	var outer_r := maxf(size.x, size.z) * 0.5
-	# 管径：取「竖直厚度」和「径向带宽」里较小的一半
-	var tube := minf(size.y, maxf(size.x, size.z) * 0.18) * 0.5
-	if outer_r <= 0.0 or tube <= 0.0:
-		return false
-	var ring_r := outer_r - tube       # 环中心线半径
-
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var segs := REFINE_SEGMENTS
-	var sides := REFINE_RING_SIDES
-	for i in segs:
-		var a0 := TAU * float(i) / float(segs)
-		var a1 := TAU * float(i + 1) / float(segs)
-		for j in sides:
-			var b0 := TAU * float(j) / float(sides)
-			var b1 := TAU * float(j + 1) / float(sides)
-			# 环面上的一点：先绕 Y 转到角度 a，再在截面圆里偏 (cos b, sin b)
-			var p00 := _ring_point(a0, b0, ring_r, tube, center)
-			var p01 := _ring_point(a0, b1, ring_r, tube, center)
-			var p10 := _ring_point(a1, b0, ring_r, tube, center)
-			var p11 := _ring_point(a1, b1, ring_r, tube, center)
-			# UV：沿环走 u，绕截面走 v（和原贴图"一圈一圈"的走向一致）
-			var u0 := float(i) / float(segs)
-			var u1 := float(i + 1) / float(segs)
-			var v0 := float(j) / float(sides)
-			var v1 := float(j + 1) / float(sides)
-			st.set_uv(Vector2(u0, v0))
-			st.add_vertex(p00)
-			st.set_uv(Vector2(u0, v1))
-			st.add_vertex(p01)
-			st.set_uv(Vector2(u1, v1))
-			st.add_vertex(p11)
-			st.set_uv(Vector2(u0, v0))
-			st.add_vertex(p00)
-			st.set_uv(Vector2(u1, v1))
-			st.add_vertex(p11)
-			st.set_uv(Vector2(u1, v0))
-			st.add_vertex(p10)
-	st.generate_normals()
-	var new_mesh := st.commit()
-	if new_mesh == null:
-		return false
-	# 原材质要带过去（`polish()` 之后会覆写，所以这里只求"有东西可读"）
-	if mesh.surface_get_material(0) != null:
-		new_mesh.surface_set_material(0, mesh.surface_get_material(0))
-	mi.mesh = new_mesh
-	return true
-
-
-static func _ring_point(a: float, b: float, ring_r: float, tube: float,
-		center: Vector3) -> Vector3:
-	# 环心圆上的一点
-	var cx := cos(a) * ring_r
-	var cz := sin(a) * ring_r
-	# 该点的径向朝外方向（水平）与竖直方向构成截面平面
-	var outward := Vector3(cos(a), 0.0, sin(a))
-	var pt := Vector3(cx, 0.0, cz) + outward * (cos(b) * tube) + Vector3.UP * (sin(b) * tube)
-	return pt + center
 
 
 ## 取不到贴图时的兜底色。

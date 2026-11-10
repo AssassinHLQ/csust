@@ -72,7 +72,11 @@ func _run() -> void:
 	print("\n── 网格 %s ──" % halo.name)
 	var tris := _tri_count(halo.mesh)
 	print("  面数 = %d" % tris)
-	_check(tris > 800, "光环已细化（%d 面 > 800；原来只有 228）" % tris)
+	# ⚠️ 2026-11-10 回滚：本喵曾用程序化圆环**替换**掉原光环网格，
+	#    结果把所有人的光环都改成了同一个圆（用户：「你怎么把所有人都改成球光环了,
+	#    这根本不是柚子的光环」）。那一步**整个撤销**。
+	#    这里改成断言**保持原网格**（228 面），防止以后又有人去动它。
+	_check(tris == 228, "光环保持原始网格（228 面，实际 %d）—— 不再被程序化替换" % tris)
 
 	# 材质检查
 	var mat: Material = halo.material_override
