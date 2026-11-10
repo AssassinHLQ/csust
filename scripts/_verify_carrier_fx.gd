@@ -167,11 +167,14 @@ func _run() -> void:
 			var arr0: Array = extra.get(pair[0])
 			print("  %s = %d 个（应为 0）" % [pair[1], arr0.size()])
 			_check(arr0.size() == 0, "%s **已移除**（%d 个）" % [pair[1], arr0.size()])
-		# 保留的两样
-		for pair in [["_tips", "翼尖光点"], ["_burners", "加力尾焰"]]:
-			var arr: Array = extra.get(pair[0])
-			print("  %s = %d 个" % [pair[1], arr.size()])
-			_check(arr.size() > 0, "%s 建出来了（%d 个）" % [pair[1], arr.size()])
+		# 加力白焰也删了（2026-11-10 补删：0.055×2.4 m 的白棍子，和用户要删的是同一类东西）
+		var burners: Array = extra.get("_burners")
+		print("  加力白焰 = %d 个（应为 0）" % burners.size())
+		_check(burners.size() == 0, "加力白焰 **已移除**（%d 个）" % burners.size())
+		# 只留翼尖光点
+		var tips: Array = extra.get("_tips")
+		print("  翼尖光点 = %d 个" % tips.size())
+		_check(tips.size() > 0, "翼尖光点 建出来了（%d 个）" % tips.size())
 
 	# ⑥ 环在动：快进几帧看 scale 是否变化
 	var sample := (fx_list[0]["rings"] as Array)[0] as MeshInstance3D

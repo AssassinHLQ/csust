@@ -82,11 +82,11 @@ func build(carrier: Node3D, skel: Skeleton3D, player: Node3D) -> void:
 	if _carrier == null:
 		return
 	# 已按用户要求关掉：_build_ribbons() / _build_rings() / _build_speed_lines()
+	# 以及 _build_afterburners()（2026-11-10 补删：它也是根 0.055×2.4 m 的白棍子）
 	_build_wing_tips()
-	_build_afterburners()
 	_built = true
-	print("[FX+] 装饰特效就位：翼尖 %d / 加力焰 %d（光带/能量环/气流线已按用户要求关闭）" % [
-		_tips.size(), _burners.size()])
+	print("[FX+] 装饰特效就位：翼尖 %d（光带/能量环/气流线/加力白焰已按用户要求关闭）" % [
+		_tips.size()])
 
 
 func is_built() -> bool:
@@ -360,7 +360,7 @@ func tick(delta: float) -> void:
 	#   _drive_ribbons / _drive_rings / _drive_speed_lines
 	# 连驱动都不调用 —— 数组本来就是空的，调了也只是白跑循环。
 	_drive_wing_tips(t)
-	_drive_burners(t)
+	# _drive_burners(t) —— 已停（白棍子）
 
 
 func _bone_xform(bi: int) -> Transform3D:
