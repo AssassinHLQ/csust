@@ -56,8 +56,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
 [node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -0.45, 0, 0)
 spring_length = 3.4
-margin = 0.12
+margin = 0.25
 collision_mask = 1
+exclude_parent = true
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
 fov = 62.0

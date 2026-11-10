@@ -158,6 +158,19 @@ const CAMERA_FORWARD_OFFSET := PI
 ## 「腰射 / 开镜」的观感关系搞乱。
 const AIM_FOV_RATIO := 0.55
 @export var cam_lerp := 12.0
+## 相机避墙的阻尼时间常数（秒）。见 `_collide_camera_arm()`。
+## 拉近要快（不然镜头会插进墙里看到内壁），拉远要慢（不然离开走廊时「啪」一下弹回去）。
+const CAM_IN_TAU := 0.045
+const CAM_OUT_TAU := 0.22
+## 相机离墙至少留这么多（米）。太小会露出墙的内侧面，太大在窄走廊里怼脸更狠。
+@export var cam_wall_margin := 0.25
+## 相机探测器用的球形半径。给一点半径，墙角/门框才不会从缝里钻过去。
+@export var cam_probe_radius := 0.18
+## 相机避墙射线打哪些层。默认 layer 1（世界）。
+## `SpringArm3D.collision_mask` 会在 `_ready()` 里被置 0 —— 内置收缩由
+## `_collide_camera_arm()` 接管（原因见那个函数上面的注释）。
+@export_flags_3d_physics var cam_wall_mask := 1
+var _wall_mask := 1
 
 ## ── 近景：滚轮推近时**把相机支点降下来**（用户 2026-11-09）──
 ##
@@ -268,6 +281,11 @@ func _ready() -> void:
 	rig.rotation.y = _yaw
 	_zoom_distance = hip_distance
 	health = max_health
+	# 相机避墙：关掉 SpringArm3D 内置的收缩，改由 `_collide_camera_arm()` 接管。
+	# 内置收缩每帧直接把 Camera3D 摆到命中点、不可插值 —— 那正是
+	# 「穿过窄走廊镜头突然怼脸」（用户 2026-11-10）的直接原因。
+	_wall_mask = cam_wall_mask
+	spring.collision_mask = 0
 	_apply_camera(1.0)
 	health_changed.emit(health, max_health)
 	_respawn_xform = global_transform
@@ -867,6 +885,19 @@ func _physics_process(delta: float) -> void:
 
 
 ## 相机平滑：开镜时拉近、抬高、右肩偏移、缩 FOV
+##
+## ── 「穿窄走廊相机突然怼脸」的修法（用户 2026-11-10）──
+##
+## `SpringArm3D` 撞墙时**自己**在内部把子节点位置缩到交点前，这一步不接受任何
+## 插值 —— 它每帧直接把 Camera3D 摆到命中点上。所以只要射线打中墙，镜头就是
+## 一帧之内从 3.4 m 掉到 0.x m，表现为「进走廊瞬间怼脸」。
+##
+## 修法：**不再让 SpringArm3D 移动镜头**。把 `spring_length` 设成一个固定够长的
+## 值（让它永远够不着墙，即不参与收缩），改成我们自己用 `intersect_ray` 探墙，
+## 再按「拉近快、拉远慢」的指数阻尼走过去：
+##   - 拉近（被墙推近）τ = `CAM_IN_TAU`，快一点，避免镜头穿进墙里；
+##   - 拉远（离开墙）  τ = `CAM_OUT_TAU`，慢一点，不会「啪」地弹回去。
+## 这条路帧率无关（`1 - exp(-dt/τ)`），低帧时也不会一帧跨完。
 func _apply_camera(delta: float) -> void:
 	var t := clampf(cam_lerp * delta, 0.0, 1.0)
 	# 上台阶缓冲（见 `_physics_process` 里记 `_step_lag` 那段）：指数衰减，
@@ -880,7 +911,9 @@ func _apply_camera(delta: float) -> void:
 	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
 	#    见 `min_zoom_for_full_body()`。
 	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body(look))
-	spring.spring_length = lerpf(spring.spring_length, want, t)
+	# 先平滑出「想拉到的长度」，再让墙把它压回去（压的那一步同样带阻尼）。
+	var want_smooth := lerpf(spring.spring_length, want, t)
+	spring.spring_length = _collide_camera_arm(want_smooth, delta)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else shoulder), t)
 	rig.position.y = lerpf(rig.position.y, aim_height if aiming else look, t) + _step_lag
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)
@@ -891,6 +924,53 @@ func _apply_camera(delta: float) -> void:
 	spring.rotation.x = _pitch + _recoil_pitch
 	spring.rotation.y = _recoil_yaw
 	rig.rotation.y = _yaw
+
+
+## 相机避墙：把「想拉到的长度」按墙的位置压回去，并带阻尼。
+##
+## ⚠️ 为什么不用 `SpringArm3D` 自带的收缩：它每帧**直接把 Camera3D 摆到命中点**，
+##    这一步不可插值 —— 撞墙就是一瞬间掉到 0.x m。这里改用自己打射线，
+##    只动 `spring_length` 这个**数值**，再让它以指数阻尼逼近，镜头才是滑过去的。
+##
+## ⚠️ `spring.collision_mask` 必须置 0（在 `_ready()` 里做），否则内置收缩会
+##    抢在阻尼之前把镜头一帧怼到墙上 —— 两套机制同时生效就白改了。
+##
+## 射线从 `CameraRig` 的支点（y≈1.35~1.62）沿弹簧臂方向打出去：
+##   - 方向取弹簧臂的局部 -Z 的反向（子节点摆在 `(0,0,+length)`）；
+##   - `exclude` 显式排掉玩家自己，避免「撞到自己胶囊」这种误判；
+##   - 用细射线再扣 `cam_probe_radius`，等价于球形探测（墙角和门框不会被钻过去）。
+func _collide_camera_arm(want: float, delta: float) -> float:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return want
+
+	# 支点：就是 SpringArm3D 自己所在的位置。
+	var origin := spring.global_position
+	# 从支点指向相机的那一侧。
+	var dir := -spring.global_transform.basis.z.normalized()
+
+	var exclude: Array[RID] = [get_rid()]
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			origin, origin + dir * (want + cam_probe_radius + cam_wall_margin),
+			_wall_mask, exclude))
+	var blocked := want
+	if not hit.is_empty():
+		var dist: float = origin.distance_to(hit["position"]) - cam_probe_radius - cam_wall_margin
+		# 走廊再窄也不低于 zoom_min —— 不让镜头穿进角色脑袋。
+		blocked = maxf(dist, zoom_min)
+
+	if blocked >= want:
+		# 没被压（或墙退开了）：往外走同样要慢，否则离开走廊会「啪」地弹回原距离。
+		# ⚠️ 只有「上一步被压过」才需要，否则会拖慢正常滚轮拉远 —— 用
+		#    `spring_length` 当前值判断：它比 want 短，说明刚从压缩状态回来。
+		if spring.spring_length < want - 0.01:
+			var k_out := 1.0 - exp(-(1.0 / CAM_OUT_TAU) * delta)
+			return lerpf(spring.spring_length, want, k_out)
+		return want
+
+	# 被墙压：按 CAM_IN_TAU 快速靠过去（仍然是滑的，不是瞬移）。
+	var k_in := 1.0 - exp(-(1.0 / CAM_IN_TAU) * delta)
+	return lerpf(want, blocked, k_in)
 
 
 ## 滚轮能拉到多近，还能看见**全身**。
