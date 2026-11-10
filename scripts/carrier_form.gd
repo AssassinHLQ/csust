@@ -554,6 +554,17 @@ func set_form(on: bool) -> bool:
 		# 表现就是「变回来以后跑得飞快、而且开不了枪」。
 		if cruise:
 			set_cruise(false)
+		# ⚠️ 2026-11-10 修：机甲的「能量条 HUD」必须在这里显式隐藏。
+		#
+		# 用户：「变回普通爱丽丝为什么还有机甲爱丽丝的hud」。
+		# 真因：`_update_power_hud()` 里虽然有 `if not _on: hide`，
+		# 但那个函数**只在 `_update_power()` 里被调**，
+		# 而 `_update_power()` 又只在机甲形态的 `_process` 里跑 ——
+		# 变回本体后 `set_process(false)`，这条隐藏逻辑永远执行不到。
+		# 实测（`_diag_carrier_hud_pitch.gd`）：变回后 visible 仍然是 true，
+		# 屏幕上就留着一行「◆◆◆◆◆ 5/5 进度 100% 巡航者模式」。
+		# 结论：**隐藏要写在状态切换处，不能依赖每帧更新**。
+		_hide_power_hud()
 		# 变回本体：如果还在空中，把垂直速度留给 `player.gd` 的重力去接（它自己会掉下来）；
 		# 这里只把「飞行接管」的标志清掉，不动位置。
 		_airborne = false
@@ -1523,10 +1534,16 @@ func _ensure_power_hud() -> void:
 	_power_layer.add_child(_power_label)
 
 
+## 藏掉机甲能量条 HUD。**状态切换处要直接调**，别指望 `_update_power_hud()`
+## 每帧兜底 —— 那个函数只在机甲形态的 `_process` 里跑（见 `set_form(false)` 的注释）。
+func _hide_power_hud() -> void:
+	if _power_layer != null and is_instance_valid(_power_layer):
+		_power_layer.visible = false
+
+
 func _update_power_hud() -> void:
 	if not _on:
-		if _power_layer != null and is_instance_valid(_power_layer):
-			_power_layer.visible = false
+		_hide_power_hud()
 		return
 	_ensure_power_hud()
 	_power_layer.visible = true
@@ -1551,10 +1568,30 @@ func _update_power_hud() -> void:
 ## 保留 `_lean` 这个名字与存储，是为了不要去动已经引用它的地方；
 ## 真正的行为这次才接上（见 `POSE_BACK_LEAN_DEG` 那段：旧版只写不读）。
 func _update_lean(delta: float) -> void:
+	# ── 2026-11-10 修「快速飞行还是仰头」──
+	#
+	# 用户反复报仰头。本喵实测出真因（`_diag_carrier_hud_pitch.gd`）：
+	#
+	#   want = FLY_PITCH_LEVEL_DEG(8.81°) + min(speed × 0.40, 9.0°)
+	#   速度   0 → 8.81°   速度 11 → 13.21°   速度 19 → 16.41°   速度 30 → 17.81°
+	#
+	# ⚠️ 但这里有个**符号陷阱**，本喵第一次改错了方向：
+	#    `_carrier.rotation = Vector3(_lean, yaw, 0)`，注释写明
+	#    「绕 X 转 **+θ** 会把机头下压 = **前倾**」（模型正面是 +Z）。
+	#    ⇒ **_lean 越大 = 越前倾**，不是越仰。
+	#    所以「速度越快越仰」的真因不是"加得太多"，而是**基准 8.81° 本身就偏大**，
+	#    加上速度加成后把脊梁顶到了 13~17°——那是"抬头挺胸"，看起来就是仰头。
+	#
+	# 正确做法：**基准调小 + 速度加成收敛**，全速时停在「明显前倾但不俯冲」。
+	#   · 悬停 ≈ +7.3°（正好抵消动画自带的 −7.31° 后仰 ⇒ 净平视）
+	#   · 全速 ≈ +12°（前冲感，但没到 `_verify_carrier_pitch` 的 18° 上限）
+	const BASE_DEG := 7.3
+	const MAX_EXTRA_DEG := 5.0
+	const SPEED_FOR_FULL := 19.0     # `player.gd::SPEED_FLY_BOOST`
 	var want := 0.0
 	if _airborne:
-		want = deg_to_rad(FLY_PITCH_LEVEL_DEG
-			+ minf(flight_speed * FLY_PITCH_PER_SPEED, FLY_PITCH_EXTRA_MAX_DEG))
+		var spd01 := clampf(flight_speed / SPEED_FOR_FULL, 0.0, 1.0)
+		want = deg_to_rad(BASE_DEG + MAX_EXTRA_DEG * spd01)
 	_lean = lerpf(_lean, want, clampf(6.0 * delta, 0.0, 1.0))
 
 
