@@ -611,6 +611,7 @@ func _build() -> bool:
 		_snapshot_rest()
 		_build_boost_fx()
 		_build_cannon_fx()
+		_build_extra_fx()
 		_borrow_anims()
 		_setup_upper_layer()
 		print("[Carrier] 机甲硬件就位：推进器 %d 根｜肩翼 %d 根｜炮 %d 根｜炮口焰 %d 个｜动作 %d 条" % [
@@ -619,6 +620,28 @@ func _build() -> bool:
 	else:
 		push_warning("[Carrier] 载具模型里没找到 Skeleton3D，飞行特效不会出现")
 	return true
+
+
+## 装饰特效层（2026-11-10，用户：「总感觉不够多不够炫丽」）。
+##
+## 五样纯装饰：等离子光带 / 能量环阵列 / 速度气流线 / 翼尖光点 / 加力尾焰。
+## 拆到 `carrier_fx_extra.gd` 是因为本文件已经 2000+ 行 —— 再塞进来没法维护，
+## 而且那一层出问题（掉帧/穿模）可以整体关掉，不影响飞行本身。
+var _fx_extra: Node3D = null
+const FxExtra := preload("res://scripts/carrier_fx_extra.gd")
+
+
+func _build_extra_fx() -> void:
+	if _fx_extra != null:
+		return
+	if _skel == null or _carrier == null:
+		return
+	_fx_extra = FxExtra.new() as Node3D
+	if _fx_extra == null:
+		return
+	_fx_extra.name = "ExtraFx"
+	_carrier.add_child(_fx_extra)
+	_fx_extra.call("build", _carrier, _skel, _player)
 
 
 ## 把模型脚底挪到节点原点（本体胶囊站在 y=0 上，模型也得对齐）
@@ -1778,6 +1801,19 @@ func _run_effects(delta: float) -> void:
 				if rmat != null:
 					rmat.albedo_color.a = clampf(alpha * 0.75, 0.0, 1.0)
 					rmat.emission_energy_multiplier = lerpf(4.5, 1.2, phase)
+
+	# ── 装饰特效层（2026-11-10）──
+	# 推力/速度/加力三件事喂给它，剩下全在 `carrier_fx_extra.gd` 里。
+	# 速度归一：`SPEED_FLY` 11 / `SPEED_FLY_BOOST` 19（见 `player.gd`），
+	# 用 12 当「满速」参考点 —— 超过就按 1 封顶。
+	if _fx_extra != null:
+		_fx_extra.set("thrust", clampf(_thrust, 0.0, 1.2))
+		var spd := 0.0
+		if _player != null:
+			spd = Vector3(_player.velocity.x, 0.0, _player.velocity.z).length()
+		_fx_extra.set("speed01", clampf(spd / 12.0, 0.0, 1.0))
+		_fx_extra.set("boosting", _thrust > 0.92)
+		_fx_extra.call("tick", delta)
 
 
 # ── 双炮开火 ───────────────────────────────────────────────────────────────

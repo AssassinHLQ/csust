@@ -149,7 +149,22 @@ func _run() -> void:
 					all_add = false
 	_check(all_two_rings, "每个推进器都挂了 2 个激波环")
 
-	# ⑤ 环在动：快进几帧看 scale 是否变化
+	# ⑤ 装饰特效层（2026-11-10 新增五样）
+	# ⚠️ 路径：`ExtraFx` 挂在 **_carrier（载具模型节点）** 下，不是 CarrierForm 下
+	#    —— 见 `carrier_form.gd::_build_extra_fx()` 里的 `_carrier.add_child(_fx_extra)`。
+	#    本探针第一版查的是 carrier 自己，所以拿到 null。
+	var extra := carrier.get("_fx_extra") as Node3D
+	_check(extra != null, "装饰特效层 _fx_extra 已创建")
+	if extra != null:
+		_check(bool(extra.call("is_built")), "ExtraFx 完成 build()")
+		for pair in [["_ribbons", "等离子光带"], ["_rings", "能量环"],
+				["_speed_lines", "速度气流线"], ["_tips", "翼尖光点"],
+				["_burners", "加力尾焰"]]:
+			var arr: Array = extra.get(pair[0])
+			print("  %s = %d 个" % [pair[1], arr.size()])
+			_check(arr.size() > 0, "%s 建出来了（%d 个）" % [pair[1], arr.size()])
+
+	# ⑥ 环在动：快进几帧看 scale 是否变化
 	var sample := (fx_list[0]["rings"] as Array)[0] as MeshInstance3D
 	var s0 := sample.scale
 	for _i in 20:
