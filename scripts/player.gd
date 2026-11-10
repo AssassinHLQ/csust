@@ -411,6 +411,20 @@ func _input(event: InputEvent) -> void:
 		var key := (event as InputEventKey).keycode
 		# ── 开发者快捷键（用户 2026-11-08）──
 		# ⚠️ 必须放在下面 `KEY_R` 换弹之前：开发者模式下这几键要优先被吃掉。
+		#
+		# ⚠️ 2026-11-10：**F3 完全交给 `game.gd`**，这里不再处理。
+		#
+		#   原因：两个脚本的 `_input` 都想吃 F3，而**谁先谁后由树序决定**
+		#   （Player 在前），加上每边一个 `set_input_as_handled()`，
+		#   就变成「只有一个能跑」——
+		#     · player 先吃 → `game.gd` 收不到 → **帧率浮层打不开**
+		#     · 反过来 → 开发者模式开不了
+		#   而且 Player 是 PAUSABLE：开菜单/播剧情时它压根收不到 `_input`，
+		#   于是 F3 的行为还随「有没有暂停」变。用户报的「F3 不见了」
+		#   就是这一堆顺序问题的综合症状。
+		#
+		#   现在：由 `game.gd` 一处处理（开浮层 + 切开发者模式），
+		#   本脚本只认领 F4/F5/F6 并吃掉它们。
 		if _dev_key(key):
 			get_viewport().set_input_as_handled()
 			return
@@ -482,7 +496,7 @@ func _poll_mouse_buttons() -> void:
 
 ## ── 开发者快捷键（用户 2026-11-08）────────────────────────────────────────
 ##
-##   F3 → 开/关**开发者模式**（帧率面板归 `game.gd`，它自己也监听 F3，两边各吃各的）
+##   F3 → **不在本脚本处理**（见 `_input` 里那段注释，现在归 `game.gd`）
 ##   F4 → 直接切到另一个场景（在 `game.tscn` 就跳 `next_level.tscn`，反之亦然）
 ##   F5 → 秒杀场上所有 `bosses` 分组里的敌人
 ##   F6 → 角色速度 ×3 / 恢复（调试用）
@@ -491,11 +505,6 @@ func _poll_mouse_buttons() -> void:
 ## 返回 true 表示这个键被吃掉了。
 func _dev_key(key: int) -> bool:
 	match key:
-		KEY_F3:
-			var on := DevMode.toggle()
-			print("[Dev] 开发者模式 → %s（F4 下一场景 / F5 秒杀 / F6 三倍速）"
-				% ("开" if on else "关"))
-			return true
 		KEY_F4:
 			if not DevMode.is_on():
 				return false

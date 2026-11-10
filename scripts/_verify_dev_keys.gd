@@ -74,8 +74,15 @@ func _run() -> void:
 
 	print("")
 	print("========== 2. F3 开开发者模式 ==========")
-	_check(bool(player.call("_dev_key", KEY_F3)), "F3 被吃掉（面板归 game.gd，这里只切开关）")
-	_check(DevMode.is_on(), "开发者模式已开")
+	# ⚠️ 2026-11-10：F3 **不再归 player**，改由 `game.gd::_input` 统一处理
+	#    （player 的 `_input` 吃掉 F3 后 game 就收不到 → 帧率浮层打不开，
+	#     用户报的「F3 不见了」就是它）。所以这里验 `_dev_key` **不再认领** F3，
+	#    再直接验开关本身。真实按键链路见 `_probe_f3.gd`（那才是端到端的）。
+	_check(not bool(player.call("_dev_key", KEY_F3)),
+		"F3 不被 player 认领（归 game.gd，避免两边抢）")
+	# 再验开关本身（直接置位，不经过按键链路 —— 那部分由 `_probe_f3.gd` 端到端负责）
+	DevMode.set_on(true)
+	_check(DevMode.is_on(), "开发者模式已开（直接置位）")
 	_check(float(player.get("_dev_speed_scale")) == 1.0, "刚开时倍速还是 1.0（要按 F6 才变）")
 
 	print("")

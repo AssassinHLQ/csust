@@ -2,6 +2,8 @@ extends Node3D
 ## 玩法场景总控：把 Player / Weapon / HUD / 高斯泼溅校园接起来，记账击杀。
 
 const SceneFlow := preload("res://scripts/scene_flow.gd")
+## 开发者模式开关（全静态）。F3 归本脚本处理 —— 开帧率浮层 + 切这个开关。
+const DevMode := preload("res://scripts/dev_mode.gd")
 ## 609 画室桌上的十颗 9950X3D（隐藏福利）。单独一个场景，方便在编辑器里拖位置。
 const ROOM609_CPUS := preload("res://scenes/room609_cpus.tscn")
 ## 商店东侧延长的地块与游戏开发部部室直接摆在 `scenes/game.tscn` 里
@@ -190,6 +192,16 @@ func _input(event: InputEvent) -> void:
 		_keys_seen += 1
 		if not key.echo and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
 			_toggle_perf_overlay()
+			# ⚠️ F3 **不要** `set_input_as_handled()`：`player.gd::_input` 排在
+			#    本函数**之后**（树里 Player 在前），一吃掉 player 那半边的
+			#    「开发者模式开关」就永远轮不到了。
+			#    （反过来的坑也踩过：player 先吃、game 收不到 → 浮层打不开。
+			#     现在两边都不吃 F3，各管各的一半。）
+			#
+			# ⚠️ 暂停时也要开开发者模式：Player 是 PAUSABLE，开菜单时它收不到
+			#    `_input`，只剩本函数（ALWAYS）。不在这里补一刀的话，
+			#    就是「暂停时按 F3，面板出来了但 F4/F5/F6 不生效」。
+			DevMode.toggle()
 
 
 func _report_input() -> void:

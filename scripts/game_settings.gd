@@ -234,6 +234,15 @@ static func value(key: String, fallback: Variant = null) -> Variant:
 
 static func set_value(key: String, v: Variant) -> void:
 	_ensure()
+	# ⚠️ `dev_mode` 是**运行时调试开关**（F3），不是用户在设置里调的项：
+	#    它没有 UI 行，也不应该被「恢复默认」清掉。所以这里放行它、
+	#    并跳过 `_save()` —— 下次开游戏不该自动进开发者模式。
+	if key == "dev_mode":
+		if _values.get(key) == v:
+			return
+		_values[key] = v
+		_emit(key, v)
+		return
 	if not DEFAULTS.has(key):
 		push_warning("[GameSettings] 未知设置项：%s" % key)
 		return
@@ -365,6 +374,7 @@ static func label(key: String) -> String:
 
 
 static func keys() -> Array:
+	# ⚠️ 排除 `dev_mode`：它是运行时开关，不是设置项，不该在 Esc 菜单里长出一行
 	return DEFAULTS.keys()
 
 
