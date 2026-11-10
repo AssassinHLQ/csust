@@ -406,14 +406,6 @@ func _input(event: InputEvent) -> void:
 			return
 
 	# --- 键盘 ---
-	# ⚠️ 必须先处理**松开**：EX 是「按下蓄力、松手放出」，
-	#    如果只写在 pressed 分支里，松开那一刻永远等不到（会一直蓄在那儿）。
-	if event is InputEventKey and not (event as InputEventKey).pressed:
-		if (event as InputEventKey).keycode == KEY_Q and ex != null:
-			if bool(ex.call("release_ex")):
-				get_viewport().set_input_as_handled()
-				return
-
 	if event is InputEventKey and (event as InputEventKey).pressed \
 		and not (event as InputEventKey).echo:
 		var key := (event as InputEventKey).keycode
@@ -428,12 +420,15 @@ func _input(event: InputEvent) -> void:
 		if key == KEY_R and weapon:
 			weapon.try_reload()
 			return
-		# ── EX 必杀（2026-11-09）──
-		# 用户说「按 EX 释放」。键盘上没有叫 EX 的键，取 **Q**：
-		# 不撞现有键位（WASD/Space/Ctrl/Shift/T/R/G/F/F3–F6/Esc 都被占了）。
-		# 按下开始蓄力，**松手才放**；点一下就松也能放（最短 0.18 s，见 ex_system.gd）。
-		if key == KEY_Q and ex != null:
-			if bool(ex.call("press_ex")):
+		# ── EX 必杀（2026-11-10 按用户更正：连按 E → X）──
+		# 用户原话：「连续按键盘 E X 触发,消耗 6 cost,不需要充能条和蓄力时间,
+		#            就是按完 E X 键盘就是最大功率发射」
+		# 所以这里只做一件事：把 E / X 两个键喂给 ex_system 的搓招状态机。
+		# ⚠️ 必须放在 `_dev_key` **之后**：开发者模式的 F 键优先级更高；
+		#    但要在换弹 `KEY_R` 之后 —— 两者不冲突（R 不参与 E/X 序列）。
+		if (key == KEY_E or key == KEY_X) and ex != null:
+			if bool(ex.call("feed_key", key)):
+				get_viewport().set_input_as_handled()
 				return
 
 	# --- 鼠标按键：只处理「按下」这一沿，松开用 poll ---
