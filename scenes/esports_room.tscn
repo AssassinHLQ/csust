@@ -1,63 +1,20 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://b0kmhdgpa68qn"]
 
-; 游戏开发电竞房（2026-11-07 换壳）。
-;
-; 使用者 2026-11-07：「游戏开发电竞房.fbx 新的电竞房，就是之前那个电竞酒店改版」，
-; 并要求「旧的程序化房间里那套 4 主力位 + 凯伊桌 + 8 卡 9995WX 开放架 + 5090 工作站整体下线」。
-;
-; 所以这个场景现在**只剩一个东西**：新 GLB 本身。
-;   · 模型：`models/esports_room/esports_room.glb`
-;     （217 MB FBX / 759 万面 → 59 个材质桶 / 105 万面 / 47 MB，构建见
-;      `tools/build_esports_room.py`，贴图已内嵌、Y-up、地板 y=0、原点在水平中心）
-;   · 尺寸：10.40 × 3.60 × 16.84 m，长边沿 Z
-;   · 原点：地板中心；「门口」在本地 +Z 那一头（朝向 = 房间中心 −→ 门）
-;   · 旧的程序化墙 / 家具 / 灯 / 5 屏 / 显卡架 / 海报全部撤掉
-;     （旧脚本 `scripts/_build_esports_room.gd` 留着当历史，不再生成这个文件）
-;
-; ⚠️ 按材质合并后没法单独隐藏某一件家具；要动某一处得回到 FBX 改。
-;
-; 2026-11-08 使用者：「为什么没有简单的墙碰撞」——
-;   GLB 里 59 个网格一个碰撞体都没有（3ds Max 导出来的，没带 -col 节点），
-;   所以人可以直接穿过墙走到窗帘前。现在由 `scripts/esports_collision.gd`
-;   在运行时按网格 AABB 生成盒子碰撞：外壳拆成地板/天花板/四面墙共 6 个，
-;   家具各一个。不用 trimesh —— 105 万面构建和查询都太贵。
-;
-; ── 2026-11-08 加的两样 ──
-; ① `Lights`（`scripts/esports_light.gd`）：使用者「给电竞房一点灯吧，里面好黑」。
-;    GLB 里**一个灯光节点都没有**（101 个 node 全是网格），场景里也没有，
-;    而这是**封闭外壳**——全局那盏太阳照不进来，所以屋里漆黑。
-;    脚本在运行时按房间实测尺寸摆 7 盏 OmniLight（补光 5 + 天花板柔光 + 门口）。
-;
-; ② `Lod`（`scripts/esports_lod.gd`）：使用者「总感觉减面后版本不好看了，
-;    试试放进去减面前版本，减面版本做lod回退」。
-;    三档（近 0~8 m 高模 / 中 8~20 m 中模 / 远 20 m+ 现有低模），
-;    用 `visibility_range` 在**引擎侧**切换，不进每帧脚本
-;    —— 原因见 `ryzen_9950x3d.gd`：引擎自动 LOD 对这批模型**实测无效**。
-;
-; ── 2026-11-09 换掉碰撞 ──
-; 使用者：「你总是做大了碰撞，书本桌子本来是两个不同的碰撞，结果你只做一个大的碰撞」。
-; 旧版在运行时把「按材质合并的 59 个网格」切体素 —— 书和桌子同材质就分不开，糊成一坨。
-; 现在改成**离线烘好的「一件物体一个盒子」**：
-;   `models/esports_room/esports_parts.json`（728 件，由 tools/dump_esports_parts.py 生成）
-;   → `scenes/esports_collision_baked.tscn`（335 个 BoxShape3D，由 _bake_esports_parts.gd 生成）
-; 下面 `BakedCollision` 就是它。运行时**零计算**（旧版建盒子要 575 ms）。
-
-[ext_resource type="PackedScene" path="res://models/esports_room/esports_room.glb" id="1_room"]
-[ext_resource type="Script" path="res://scripts/esports_collision.gd" id="2_col"]
-[ext_resource type="Script" path="res://scripts/esports_light.gd" id="3_light"]
-[ext_resource type="Script" path="res://scripts/esports_lod.gd" id="4_lod"]
+[ext_resource type="PackedScene" uid="uid://cmq12mq1nbb58" path="res://models/esports_room/esports_room.glb" id="1_room"]
+[ext_resource type="Script" uid="uid://dig4dve3yue0u" path="res://scripts/esports_collision.gd" id="2_col"]
+[ext_resource type="Script" uid="uid://j8trgu0iogwv" path="res://scripts/esports_light.gd" id="3_light"]
+[ext_resource type="Script" uid="uid://mt1ypoul64ud" path="res://scripts/esports_lod.gd" id="4_lod"]
 [ext_resource type="PackedScene" path="res://scenes/esports_collision_baked.tscn" id="5_bakedcol"]
 
-[node name="EsportsRoom" type="Node3D"]
+[node name="EsportsRoom" type="Node3D" unique_id=1923525531]
 script = ExtResource("2_col")
 
-[node name="Lights" type="Node3D" parent="."]
+[node name="Lights" type="Node3D" parent="." unique_id=1264324162]
 script = ExtResource("3_light")
 
-[node name="Lod" type="Node3D" parent="."]
+[node name="Lod" type="Node3D" parent="." unique_id=736906184]
 script = ExtResource("4_lod")
 
-; 一件物体一个盒子的碰撞（离线烘好）
-[node name="BakedCollision" parent="." instance=ExtResource("5_bakedcol")]
+[node name="BakedCollision" parent="." unique_id=1404628984 instance=ExtResource("5_bakedcol")]
 
-[node name="Room" parent="." instance=ExtResource("1_room")]
+[node name="Room" parent="." unique_id=180173575 instance=ExtResource("1_room")]
