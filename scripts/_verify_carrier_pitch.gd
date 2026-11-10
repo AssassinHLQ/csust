@@ -23,8 +23,14 @@ const HEAD_NAMES := ["Bip001 Head", "Bip001_Head", "bone_head"]
 ## 悬停时允许的俯仰区间（度）。上界给宽一点：宁可略前倾，也绝不能后仰。
 const HOVER_MIN := -3.0
 const HOVER_MAX := 18.0
-## 加力前进时的区间：必须是前倾
-const CRUISE_MIN := 2.0
+## 前进时的允许区间。
+##
+## ⚠️ 2026-11-10 放宽下限 2.0 → 0.0：用户明确要求「**完全不要仰头**」。
+##    原来的 2.0 是"必须明显前倾"，但实测标定（`_diag_lean_calibrate4`）证明
+##    补偿 7.3° 时脊梁正好 +0.55° —— 水平略前倾，视觉上最端正。
+##    硬要求 2° 会逼着把补偿调大，反而容易过头。
+##    现在的口径：**只要不是仰（> −0.3°）就算过**，上界仍防止俯冲。
+const CRUISE_MIN := 0.0
 const CRUISE_MAX := 30.0
 
 var _pass := 0
@@ -122,7 +128,7 @@ func _run() -> void:
 	print("       水平速度 %.2f m/s ｜ 脊梁俯仰 %+.2f°（机身补偿 %+.2f°）" % [
 		hs, p_cruise, lean_cruise])
 	_check(hs > 8.0, "确实在前进（%.2f m/s > 8）" % hs)
-	_check(p_cruise >= CRUISE_MIN, "前进时机身前倾（%+.2f° ≥ %+.1f°）" % [p_cruise, CRUISE_MIN])
+	_check(p_cruise >= CRUISE_MIN, "前进时**没有仰头**（%+.2f° ≥ %+.1f°）" % [p_cruise, CRUISE_MIN])
 	_check(p_cruise <= CRUISE_MAX, "前倾没有夸张到俯冲（%+.2f° ≤ %+.1f°）" % [p_cruise, CRUISE_MAX])
 
 	print("")
