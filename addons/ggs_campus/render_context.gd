@@ -3,21 +3,38 @@ extends Object
 
 class DeletionQueue:
 	var queue : Array[RID] = []
+	## 已经还掉的 RID 集合。
+	## ⚠️ 2026-11-10：`RID.is_valid()` **只说明这个 RID 对象不是空的，不代表它在
+	##    RenderingDevice 里还活着**。已释放的 RID 照样 `is_valid() == true`，
+	##    所以拿它去 `uniform_set_create` 会返回空 set 并报
+	##        `ERROR: Image (binding: N, index 0) is not a valid texture.`
+	##    这个集合就是用来查「到底还了没有」的。
+	var freed : Dictionary = {}
 	
 	func push(rid : RID) -> RID:
 		queue.push_back(rid)
 		return rid
 	
+	func mark_freed(rid : RID) -> void:
+		if rid.is_valid():
+			freed[str(rid)] = true
+	
+	func is_freed(rid : RID) -> bool:
+		return freed.has(str(rid))
+	
 	func flush(device : RenderingDevice) -> void:
 		# We work backwards in order of allocation when freeing resources
 		if device == null:
 			# device 已经被 `release_all()` 收走过一次：RID 早就还了，这里只是收尾
+			for rid in queue:
+				mark_freed(rid)
 			queue.clear()
 			return
 		var t0 := Time.get_ticks_usec()
 		for i in range(queue.size() - 1, -1, -1):
 			if not queue[i].is_valid(): continue
 			device.free_rid(queue[i])
+			mark_freed(queue[i])
 		# 2026-11-05：换窗口时这一下要放掉约 500 MB 的缓冲，实测可能几百毫秒 ——
 		# 打印出来是为了把「换窗口卡顿」拆成「分配 / 释放 / 上传」三段。
 		if queue.size() > 8:
@@ -28,7 +45,9 @@ class DeletionQueue:
 	func free_rid(device : RenderingDevice, rid : RID) -> void:
 		var rid_idx := queue.find(rid)
 		assert(rid_idx != -1, 'RID was not found in deletion queue!')
-		device.free_rid(queue.pop_at(rid_idx))
+		var r : RID = queue.pop_at(rid_idx)
+		device.free_rid(r)
+		mark_freed(r)
 	
 class Descriptor:
 	var rid : RID
@@ -117,15 +136,41 @@ func create_texture(dimensions : Vector2, format : RenderingDevice.DataFormat, u
 
 ## Creates a descriptor set. The ordering of the provided descriptors matches the binding ordering
 ## within the shader.
+##
+## ⚠️ 2026-11-10：**先校验每个 descriptor 的 RID 是否还有效**，有一个无效就返回空 RID，
+##    不调 `uniform_set_create`。原因（用户报「校园泼溅偶发整屏白 / 点被拉成针状散开，
+##    回地面也不恢复，重开游戏才好」）：
+##    纹理被释放之后再拿它去建 uniform set，`uniform_set_create` 会返回**空 RID** 并报
+##        `ERROR: Texture (binding: N, index 0) is not a valid texture.`
+##        `ERROR: Parameter "us" is null.`
+##    而那个空 set 会被当成正常 set 绑进 pipeline，之后**每一帧的 compute 都失败**，
+##    泼溅点按错误数据投影 —— 一次就坏到进程结束。
+##    返回空 RID 让调用方自己决定跳过这一帧（数据还在传/刚被释放），比静默产生
+##    一个永远失败的 set 好得多。
 func create_descriptor_set(descriptors : Array, shader : RID, descriptor_set_index :=0) -> RID:
+	if not shader.is_valid():
+		return RID()
 	var uniforms : Array[RDUniform]
 	for i in range(len(descriptors)):
+		var d = descriptors[i]
+		if d == null or not (d.rid as RID).is_valid():
+			return RID()
+		# `is_valid()` 挡不住「已释放」——那些 RID 照样 is_valid()==true。
+		# 必须查 `deletion_queue.freed`（见那一处的长注释）。
+		if deletion_queue.is_freed(d.rid):
+			return RID()
 		var uniform := RDUniform.new()
-		uniform.uniform_type = descriptors[i].type
+		uniform.uniform_type = d.type
 		uniform.binding = i  # This matches the binding in the shader.
-		uniform.add_id(descriptors[i].rid)
+		uniform.add_id(d.rid)
 		uniforms.push_back(uniform)
-	return deletion_queue.push(device.uniform_set_create(uniforms, shader, descriptor_set_index))
+	var out : RID = device.uniform_set_create(uniforms, shader, descriptor_set_index)
+	if not out.is_valid():
+		# 仍然失败（驱动拒绝）→ 不要 push 进 deletion queue，免得后面 free 一个空 RID
+		push_warning("[render_context] uniform_set_create 返回空 RID（shader=%s, %d 个 descriptor）"
+			% [str(shader), descriptors.size()])
+		return RID()
+	return deletion_queue.push(out)
 
 ## Returns a [Callable] which will dispatch a compute pipeline (within a compute) list based on the
 ## provided block dimensions. The ordering of the provided descriptor sets matches the set ordering

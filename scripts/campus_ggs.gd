@@ -8,7 +8,13 @@ extends Node3D
 ## 项目里没有时退回开发机上的老绝对路径。
 
 const BIN := "res://campus_ggs.bin"
+## ⚠️ 2026-11-10：开发机绝对路径只在**编辑器/调试**下有效。
+##   导出到别的机器后这个路径不存在，`_ready()` 的 `file_exists` 会把关，
+##   不会拿错文件；但为了让发布版彻底不带这个死路径，用 `OS.has_feature` 包一层。
 const BIN_DEV := "C:/Users/WY157/Desktop/GODOT/_arisu_captures/campus_ggs.bin"
+## 缓存子目录名（交给 `scripts/cache_dir.gd` 拼到 exe 同目录下的 `_cache/`）
+const CACHE_SUBDIR := "window"
+const CacheDir := preload("res://scripts/cache_dir.gd")
 const PlyFileScript := preload("res://addons/ggs_campus/ply_file.gd")
 const Rasterizer := preload("res://addons/ggs_campus/gaussian_splatting_rasterizer.gd")
 
@@ -19,6 +25,8 @@ var quad: MeshInstance3D
 var tex := Texture2DRD.new()
 var _quad_mat: ShaderMaterial = null
 var _fine_ready := -1.0
+## 粗层「就绪」开关，同上：-1 = 还没设过（首帧一定写一次）
+var _coarse_ready := -1.0
 var panorama: Texture2D
 var _ready_done := false
 var _gdgs_sc: Node
@@ -71,8 +79,25 @@ const WINDOW_SIDE := 3
 var window_side := WINDOW_SIDE
 ## 双缓冲：换窗口时在**后台线程**把新窗口写进另一个文件，当前这份继续渲染。
 ## 单文件做不到 —— 写的时候会把正在读的那份覆盖掉，画面会闪一下破烂数据。
-const WINDOW_BIN_A := "user://campus_window_a.bin"
-const WINDOW_BIN_B := "user://campus_window_b.bin"
+##
+## ⚠️ 2026-11-10：从 `user://campus_window_a.bin` 挪到 **exe 同目录 `_cache/window/`**
+##    （见 `scripts/cache_dir.gd`）。理由：用户要求「不要抢 AppData」，
+##    而这两个文件实测占 **219.6 MB**（各 109.8 MB）。
+##    它们是每次换窗口重写的临时物，放 exe 旁边删掉即净。
+##    原来写成 `const`，现在改成函数 —— 因为路径要等 CacheDir 解析完才知道。
+var _window_bin_a := ""
+var _window_bin_b := ""
+
+## 取双缓冲槽的文件路径（0 = A，1 = B）。首次调用时解析并缓存。
+func _window_bin(slot: int) -> String:
+	if _window_bin_a.is_empty():
+		_window_bin_a = CacheDir.file_for(CACHE_SUBDIR, "campus_window_a.bin")
+		_window_bin_b = CacheDir.file_for(CACHE_SUBDIR, "campus_window_b.bin")
+		if _window_bin_a.is_empty():
+			# 缓存不可用：退回 user://，至少还能跑
+			_window_bin_a = "user://campus_window_a.bin"
+			_window_bin_b = "user://campus_window_b.bin"
+	return _window_bin_a if slot == 0 else _window_bin_b
 ## 多久重新评估一次窗口（秒）。每帧排 97 个块没必要。
 const WINDOW_POLL := 0.5
 
@@ -100,7 +125,7 @@ var _write_mutex := Mutex.new()
 var _write_done := false
 var _write_failed := false
 var _write_bytes := 0
-var _write_path := WINDOW_BIN_A
+var _write_path := ""
 var _pending_window := PackedStringArray()
 var _window_slot := 0
 
@@ -221,7 +246,7 @@ func _ready() -> void:
 		if _coarse_path == "" and not _coarse_off:
 			if FileAccess.file_exists(COARSE_BIN):
 				_coarse_path = COARSE_BIN
-			elif FileAccess.file_exists(COARSE_BIN_DEV):
+			elif _is_dev_build() and FileAccess.file_exists(COARSE_BIN_DEV):
 				_coarse_path = COARSE_BIN_DEV
 		if _coarse_path != "" and FileAccess.file_exists(_coarse_path):
 			var cf := FileAccess.open(_coarse_path, FileAccess.READ)
@@ -234,12 +259,17 @@ func _ready() -> void:
 			_coarse_path = ""
 			push_warning("[campus_ggs] 没有粗层 bin，退回单层分块（窗外会空）")
 	elif _bin_override == "":
-		if not FileAccess.file_exists(BIN) and FileAccess.file_exists(BIN_DEV):
+		# ⚠️ 2026-11-10：发布版**不再打包** `campus_ggs.bin`（1.4 GB），只在分块失败时
+		# 才会走到这里。这时候全量 bin 在 pck 里通常也不存在 —— 明确说明原因，
+		# 免得看日志的人以为是自己删错了文件。
+		if not FileAccess.file_exists(BIN) and _is_dev_build() and FileAccess.file_exists(BIN_DEV):
 			_bin_path = BIN_DEV
 			push_warning("[campus_ggs] 项目里没有 campus_ggs.bin，退回开发机路径")
 		# 两处都没有就别硬撑：不碰 GDGS，让老泼溅照常工作（否则校园会整片消失）
 		if not FileAccess.file_exists(_bin_path):
-			push_error("[campus_ggs] 找不到 %s，回退 GDGS 泼溅" % _bin_path)
+			push_error("[campus_ggs] 分块清单加载失败，且回退的全量 bin 也不在（%s）。" % _bin_path
+				+ " 发布版不打包 campus_ggs.bin，所以这里只能回退 GDGS 泼溅。"
+				+ " 检查 pck 里 splatdata/campus_chunks10w/ 是否完整。")
 			_gave_up = true
 			set_process(false)
 			return
@@ -486,9 +516,31 @@ func _release_campus(keep_coarse := false) -> void:
 	if not keep_coarse:
 		# 换窗口时**不动 quad / tex**：quad 继续画着，粗层那张纹理还在，
 		# 新细层传好之前玩家看到的就是粗层 —— 不会黑一下（实测从空 4 帧降到 0 帧）。
+		#
+		# ⚠️ 2026-11-10 修「校园泼溅偶发整屏白 / 碎成针状」（用户报「一飞进泼溅区全白、
+		#    回地面也不恢复、重开游戏才好」）：
+		#    这里原来是 `quad.queue_free()` + 立刻 `ctx.free()`（下面第 534 行，走
+		#    `call_on_render_thread` **当帧**就把纹理 RID 还掉）。问题是
+		#    `queue_free()` 要等到**这一帧末尾**才真释放 —— 中间这段时间里
+		#    quad 还活着、材质还指着刚被还掉的纹理，渲染管线重建 uniform set 时就会报
+		#        `Texture (binding: 1, index 0) is not a valid texture`
+		#        `Parameter "us" is null`
+		#    那个 null 的 uniform set 之后**每帧都失败**，泼溅点按错误数据投影，
+		#    表现就是整屏白 / 点被拉成针状散开，而且**坏掉就一直坏到重开游戏**。
+		#    `_exit_tree()` 里早就踩过一次同样的坑（见那里的长注释），当时只在退出路径修了，
+		#    运行时这条释放路径漏了。这里照同样的顺序同步拆干净：
+		#      ① 先把材质里的纹理参数解绑（此时 RID 还有效，只是不用它了）
+		#      ② 立刻 `free()` 掉 quad（不是 queue_free），保证它不会再被绘制
+		#      ③ 最后才让光栅器去还纹理
 		if quad != null:
-			quad.queue_free()
+			if _quad_mat != null:
+				_quad_mat.set_shader_parameter("render_texture", null)
+				_quad_mat.set_shader_parameter("coarse_texture", null)
+			if quad.is_inside_tree():
+				remove_child(quad)
+			quad.free()
 			quad = null
+			_quad_mat = null
 		if tex != null:
 			# ⚠️ 2026-11-06 修：这里**不能**再 `tex.texture_rd_rid = RID()`。
 			#    给 `texture_rd_rid` 赋值是**拥有权转移**（会释放原来持有的 RID），
@@ -551,6 +603,11 @@ func _make_quad() -> void:
 	sm.set_shader_parameter("coarse_texture", coarse_tex)
 	sm.set_shader_parameter("panorama", panorama)
 	sm.set_shader_parameter("fine_ready", 0.0)
+	# 粗层也先关掉：等 `_process` 里确认 `coarse_rasterizer.is_loaded` 才打开。
+	# 不挡这一下，纹理还没建好时采到的是垃圾像素 → 整屏白。
+	sm.set_shader_parameter("coarse_ready", 0.0)
+	_fine_ready = 0.0
+	_coarse_ready = 0.0
 	quad.material_override = sm
 	_quad_mat = sm
 	add_child(quad)
@@ -641,11 +698,18 @@ func _process(_dt: float) -> void:
 		or (coarse_rasterizer != null and coarse_rasterizer.is_loaded)
 	# 细层没就绪就**完全不采**它（`main_sky.gdshader` 的 `fine_ready`）：
 	# 分帧上传之后「细层没传完」会持续很多帧，不挡这一下就会采到未初始化的纹理。
+	# 粗层同理（`coarse_ready`）：它被释放/还没建好时无条件采样会拿到垃圾像素，
+	# 混进 `mix(sky, coarse, coarse.a)` 就是整屏白（2026-11-10 修）。
+	var coarse_ok: bool = coarse_rasterizer != null and coarse_rasterizer.is_loaded
 	if _quad_mat != null:
 		var want_fine := 1.0 if fine_ok else 0.0
 		if want_fine != _fine_ready:
 			_fine_ready = want_fine
 			_quad_mat.set_shader_parameter("fine_ready", want_fine)
+		var want_coarse := 1.0 if coarse_ok else 0.0
+		if want_coarse != _coarse_ready:
+			_coarse_ready = want_coarse
+			_quad_mat.set_shader_parameter("coarse_ready", want_coarse)
 	_active = player != null and player.global_position.z < -74.0 and any_loaded
 	if quad != null:
 		quad.visible = _active
@@ -655,7 +719,20 @@ func _process(_dt: float) -> void:
 # 10×10 分块 + 3×3 窗口
 # ─────────────────────────────────────────────────────────────
 
+## 是否开发构建（编辑器或带调试的导出）。
+## 开发机的绝对路径（`BIN_DEV` / `COARSE_BIN_DEV`）只在这两种构建下才允许用，
+## 发布版里彻底不碰 —— 免得别人的机器上出现「指向本机桌面」的死路径。
+func _is_dev_build() -> bool:
+	return OS.has_feature("editor") or OS.has_feature("debug")
+
+
 ## 读离线生成的清单（块名 → 世界中心 / bin / 字节数）。
+## ⚠️ 2026-11-10：加了**块文件存在性自检**。
+##   原来只验 `chunks.json` 本身能不能解析，不验块文件真在不在。后果是
+##   pck 漏打包某些 `Chunk_*.bin` 时，`_load_manifest()` 仍返回 true，
+##   然后每次开窗口那几块**静默打不开**（`_merge_window_bins` 里只
+##   `push_warning` 就跳过）—— 表现为「校园有一部分是空的」，不崩、难查。
+##   现在缺块就直接返回 false，让上层回退 `campus_ggs.bin` 全量，画面至少完整。
 func _load_manifest() -> bool:
 	if not FileAccess.file_exists(chunks_json):
 		return false
@@ -675,7 +752,23 @@ func _load_manifest() -> bool:
 			"bin": String(dd.get("bin", "")),
 			"bytes": int(dd.get("bytes", 0)),
 		})
-	return _chunk_list.size() > 0
+	if _chunk_list.is_empty():
+		return false
+	# 块文件存在性自检：空块（bytes == 0）允许不存在 —— 那是 10×10 网格里
+	# 落在校园范围外的格子，`split_ggs_bin.py` 会写 0 字节占位。
+	var missing: PackedStringArray = PackedStringArray()
+	for c in _chunk_list:
+		if int(c["bytes"]) <= 0:
+			continue
+		var p := "res://" + String(c["bin"])
+		if not FileAccess.file_exists(p):
+			missing.append(String(c["bin"]))
+	if not missing.is_empty():
+		push_error("[campus_ggs] 分块清单里有 %d 块找不到文件（pck 漏打包了？），回退全量 bin。前 3 个：%s"
+			% [missing.size(), ", ".join(missing.slice(0, 3))])
+		_chunk_list.clear()
+		return false
+	return true
 
 
 ## 以玩家所在格子为中心取 `window_side`² 块（10×10 网格的 ±1 邻域）。
@@ -747,9 +840,10 @@ func _chunk_entry(nm: String) -> Dictionary:
 ## ⚠️ 现在只给探针用（`_probe_switch_hitch.gd` 拿它量「同步拷要多久」），
 ##    正式路径走 `_start_window_write()` + 后台线程，不再阻塞主线程。
 func _write_window(names: PackedStringArray) -> int:
-	var f := FileAccess.open(WINDOW_BIN_A, FileAccess.WRITE)
+	var dst := _window_bin(0)
+	var f := FileAccess.open(dst, FileAccess.WRITE)
 	if f == null:
-		push_error("[campus_ggs] 写不了 %s" % WINDOW_BIN_A)
+		push_error("[campus_ggs] 写不了 %s" % dst)
 		return 0
 	var written := 0
 	for nm in names:
@@ -820,7 +914,8 @@ func _start_window_write(names: PackedStringArray) -> bool:
 		jobs.append({"path": "res://" + String(e["bin"]), "bytes": int(e["bytes"])})
 	if jobs.is_empty():
 		return false
-	_write_path = WINDOW_BIN_B if _window_slot == 0 else WINDOW_BIN_A
+	# 双缓冲：写另一槽，当前渲染的那份不动
+	_write_path = _window_bin(1) if _window_slot == 0 else _window_bin(0)
 	_write_mutex.lock()
 	_write_bytes = 0
 	_write_failed = false

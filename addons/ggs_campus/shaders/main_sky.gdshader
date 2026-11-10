@@ -15,6 +15,11 @@ uniform int debug_layer = 0;
 // 换窗口时细层的 RID 会被释放、新纹理也会先清成透明，不挡这一下就会采到
 // 已释放的纹理或未初始化的像素（表现为闪一下黑/雪花）。
 uniform float fine_ready = 1.0;
+// 粗层**没就绪**时置 0：和 `fine_ready` 同一个道理 —— 纹理被释放 / 还没建好时
+// 无条件采样会拿到垃圾像素（alpha 可能是 1、颜色可能是任意值），
+// 混进 `mix(sky, coarse, coarse.a)` 就是**整屏白**。
+// 用户 2026-11-10 报「一飞进泼溅区全白、回地面也不恢复」的另一条路径。
+uniform float coarse_ready = 1.0;
 
 vec3 srgb_to_linear(vec3 x) {
 	vec3 higher = pow((x + 0.055) / 1.055, vec3(2.4));
@@ -31,7 +36,10 @@ void fragment() {
 	if (fine_ready > 0.5) {
 		fine = texture(render_texture, SCREEN_UV);
 	}
-	vec4 coarse = texture(coarse_texture, SCREEN_UV);
+	vec4 coarse = vec4(0.0);
+	if (coarse_ready > 0.5) {
+		coarse = texture(coarse_texture, SCREEN_UV);
+	}
 
 	vec4 v = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);
 	v.xyz /= v.w;

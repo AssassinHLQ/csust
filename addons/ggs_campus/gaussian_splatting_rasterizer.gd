@@ -173,6 +173,26 @@ func init_gpu() -> void:
 	var boundaries_set = context.create_descriptor_set([descriptors['histogram'], descriptors['sort_keys'], descriptors['tile_bounds']], shaders['boundaries'], 0)
 	var render_set = context.create_descriptor_set([descriptors['culled_splats'], descriptors['sort_values'], descriptors['tile_bounds'], descriptors['tile_splat_pos'], descriptors['render_texture']], shaders['render'], 0)
 	
+	# ⚠️ 2026-11-10：任何一个 descriptor set 建不出来（空 RID），**整个光栅器都不该半死活着**。
+	#    以前 `create_descriptor_set` 会把 `uniform_set_create` 的失败结果（空 RID）原样
+	#    塞进 pipeline，于是 compute 每帧失败、泼溅点按错误数据投影 —— 表现为
+	#    「整屏白」或「点被拉成针状散开」，而且**一直坏到重开游戏**
+	#    （用户 2026-11-10 报的就是这个）。这里明确失败，让上层走回退/重试。
+	var sets := {
+		"projection": projection_set,
+		"radix_sort_upsweep": radix_sort_upsweep_set,
+		"radix_sort_spine": radix_sort_spine_set,
+		"radix_sort_downsweep": radix_sort_downsweep_set,
+		"boundaries": boundaries_set,
+		"render": render_set,
+	}
+	for set_name in sets:
+		if not (sets[set_name] as RID).is_valid():
+			push_error("[ggs] descriptor set「%s」建失败（空 RID）→ 放弃这次 init_gpu，避免半死的光栅器"
+				% set_name)
+			is_loaded = false
+			return
+	
 	# ⚠️ 2026-11-06：这里是把**同一个 Texture2DRD 对象**从「没有纹理」带到「有纹理」。
 	#    如果它上面还挂着上一次（已被 `context.free()` 还掉的）RID，这次赋值就会去
 	#    释放一个无效 RID ⇒ `Attempted to free invalid ID`（栈顶就是这一行）。
@@ -356,6 +376,7 @@ func release_splats() -> void:
 	descriptors['splats'] = context.create_storage_buffer(4 * 4)
 	if old != null and old.rid.is_valid():
 		device.free_rid(old.rid)
+		context.deletion_queue.mark_freed(old.rid)
 		# 已经还掉了，别再让它留在队列里被 PREDELETE 顺手再还一次
 		context.deletion_queue.queue.erase(old.rid)
 	_bin_loading = false

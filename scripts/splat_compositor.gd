@@ -24,6 +24,10 @@ var _script: GDScript = null
 var _script_checked := false
 ## 已挂过的相机：实例 id -> Compositor（避免每帧重建资源）
 var _attached := {}
+## 「被别的系统摘走」只警告一次，别每帧刷屏
+var _stolen_warned := false
+## `_process` 首次执行日志（只打一次）
+var _tick_logged := false
 
 
 func _enter_tree() -> void:
@@ -62,7 +66,24 @@ func _process(_delta: float) -> void:
 	if cam == null:
 		return
 	var key := cam.get_instance_id()
-	if _attached.has(key) and cam.compositor == _attached[key]:
+	# 2026-11-10：确认 `_process` 真的在跑（曾经出现过「`_ready` 打了日志、但
+	# `_process` 一次都没执行」的情况，结果相机上始终没有 Compositor）。
+	if not _tick_logged:
+		_tick_logged = true
+		print("[SplatCompositor] _process 第 1 次跑到：相机「%s」compositor=%s"
+			% [cam.name, "有" if cam.compositor != null else "无"])
+	# ⚠️ 2026-11-10：`campus_ggs.gd` 会**每帧**把 `cam.compositor` 设成 null
+	#    （它 line 625，理由是「校园走全屏 quad，Compositor 会把光栅器拖到个位数帧率」）。
+	#    两套系统抢同一台相机的 `compositor`：谁后跑谁赢，表现为校园里偶发整屏异常，
+	#    而且**一旦坏掉就一直坏到重开游戏**（用户报「在校园里一直白，重开才好」）。
+	#    这里只记录、不硬抢：抢回去会让 campus_ggs 的全屏 quad 方案失效（fps 崩）。
+	if _attached.has(key):
+		if cam.compositor == _attached[key]:
+			return
+		if not _stolen_warned:
+			_stolen_warned = true
+			print("[SplatCompositor] ⚠️ 相机「%s」的 Compositor 被别的系统摘掉/换掉了"
+				% cam.name + "（大概率是 campus_ggs 走全屏 quad）—— 本次会话不再自动重挂")
 		return
 	_attach(cam, key)
 
@@ -95,12 +116,27 @@ func _attach(cam: Camera3D, key: int) -> void:
 		set_process(false)
 		return
 	var effect: Variant = _script.new()
-	var effects: Array[CompositorEffect] = [effect]
+	if effect == null:
+		push_warning("[SplatCompositor] effect 实例化失败（%s）" % COMPOSITOR_SCRIPT)
+		set_process(false)
+		return
+	if not (effect is CompositorEffect):
+		push_warning("[SplatCompositor] effect 不是 CompositorEffect（实际 %s）"
+			% str(typeof(effect)))
+		set_process(false)
+		return
+	var effects: Array[CompositorEffect] = [effect as CompositorEffect]
 	var comp := Compositor.new()
 	comp.compositor_effects = effects
 	cam.compositor = comp
 	_attached[key] = comp
-	# 每次挂都打一行：正常情况下整个会话只有 1~2 行（玩家相机 + 探针/自检自己的相机）。
-	# 如果这里刷屏，说明 `_process` 的比对没生效、正在逐帧重建 Compositor 与着色器。
-	print("[SplatCompositor] 已为相机「%s」挂上 Compositor + GaussianCompositorEffect（累计 %d 台）"
-		% [cam.name, _attached.size()])
+	# 2026-11-10：**挂完立刻回读**。曾经出现过「打印说挂上了、但 `cam.compositor`
+	# 仍是 null」的情况（相机换代 / 属性被别的系统重置），而这条路径失败得非常安静：
+	# Compute 后端下没有 Compositor 就一张泼溅都渲不出来。这里当场核对一次。
+	var back: Compositor = cam.compositor
+	if back == null:
+		push_warning("[SplatCompositor] ⚠️ 给相机「%s」赋值 Compositor 后回读为 null！" % cam.name)
+	elif back != comp:
+		push_warning("[SplatCompositor] ⚠️ 相机的 Compositor 被别人换掉了（不是刚建的这台）")
+	print("[SplatCompositor] 已为相机「%s」挂上 Compositor + GaussianCompositorEffect（累计 %d 台，回读 %s）"
+		% [cam.name, _attached.size(), "OK" if back == comp else "失败"])
