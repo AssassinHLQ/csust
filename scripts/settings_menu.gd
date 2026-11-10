@@ -189,12 +189,39 @@ func _build() -> void:
 	vbox.add_theme_constant_override("separation", ROW_GAP)
 	margin.add_child(vbox)
 
-	var title := Label.new()
-	title.text = "设置"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", _skin["text"])
-	vbox.add_child(title)
+	# BA 观感：标题背后压一块**斜切白牌**，下面一道**亮黄底划线**
+	# （见 `ui_skin.gd::title_tag_style` / `title_rule_style`）。
+	# 贴图皮肤下这两个函数返回 `StyleBoxEmpty`，等于什么都没画。
+	# ⚠️ 这个块要 `SIZE_SHRINK_CENTER`：`VBoxContainer` 默认把子项**拉满宽度**，
+	#    不 shrink 的话牌子会横跨整个面板、斜切两端顶到边框，看着像画错了。
+	if UiSkin.is_procedural(_skin):
+		var tag := PanelContainer.new()
+		tag.name = "TitleTag"
+		tag.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		tag.custom_minimum_size = Vector2(0.0, UiSkin.TITLE_TAG_HEIGHT)
+		tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tag.add_theme_stylebox_override("panel", UiSkin.title_tag_style(_skin))
+		var tl := Label.new()
+		tl.text = "  设置  "
+		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		tl.add_theme_font_size_override("font_size", 24)
+		tl.add_theme_color_override("font_color", _skin["text"])
+		tag.add_child(tl)
+		vbox.add_child(tag)
+		var rule := Panel.new()
+		rule.name = "TitleRule"
+		rule.custom_minimum_size = Vector2(0.0, UiSkin.TITLE_RULE_HEIGHT)
+		rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rule.add_theme_stylebox_override("panel", UiSkin.title_rule_style(_skin))
+		vbox.add_child(rule)
+	else:
+		var title := Label.new()
+		title.text = "设置"
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 24)
+		title.add_theme_color_override("font_color", _skin["text"])
+		vbox.add_child(title)
 	vbox.add_child(HSeparator.new())
 
 	# 三种控件：离散型给分段按钮、数值型给滑块、其余给开关 ——
@@ -207,6 +234,8 @@ func _build() -> void:
 	scroll.custom_minimum_size = Vector2(0.0, 560.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
+	# BA 皮肤：细的深藏蓝轨 + 青蓝圆角滑块（贴图皮肤不动）
+	UiSkin.style_scroll(_skin, scroll)
 
 	var rows := VBoxContainer.new()
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -271,10 +300,18 @@ func _build() -> void:
 
 ## 分组小标题（「画面」/「准星」—— 上面压一条分隔线，视觉上和设置项分开）。
 ## 抽成函数是因为 2026-10-22 加了第二组「准星」，再抄一遍就该走散了。
+## ⚠️ 2026-11-10：BA 皮肤下小标题改成**青蓝色块 + 深藏蓝粗字**（原来是一行灰字），
+##    和下面一排亮青斜切按钮呼应；贴图皮肤保持原样（灰色小字）。
 func _add_header(parent: Node, text: String) -> void:
 	var h := Label.new()
 	h.text = text
 	h.add_theme_font_size_override("font_size", 14)
+	if UiSkin.is_procedural(_skin):
+		h.add_theme_color_override("font_color", _skin["accent"])
+		h.add_theme_constant_override("outline_size", 0)
+		parent.add_child(HSeparator.new())
+		parent.add_child(h)
+		return
 	h.add_theme_color_override("font_color", _skin["subtext"])
 	parent.add_child(HSeparator.new())
 	parent.add_child(h)
@@ -617,12 +654,36 @@ func _build_credits() -> void:
 	vbox.add_theme_constant_override("separation", 10)
 	margin.add_child(vbox)
 
-	var title := Label.new()
-	title.text = "致谢与素材署名"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", _skin["text"])
-	vbox.add_child(title)
+	# 和设置菜单同一个标题装饰（斜切白牌 + 亮黄底划线）。
+	# ⚠️ 牌子要 `SIZE_SHRINK_CENTER`，理由见设置菜单那一处。
+	if UiSkin.is_procedural(_skin):
+		var ctag := PanelContainer.new()
+		ctag.name = "TitleTag"
+		ctag.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ctag.custom_minimum_size = Vector2(0.0, UiSkin.TITLE_TAG_HEIGHT)
+		ctag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ctag.add_theme_stylebox_override("panel", UiSkin.title_tag_style(_skin))
+		var ctl := Label.new()
+		ctl.text = "  致谢与素材署名  "
+		ctl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ctl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		ctl.add_theme_font_size_override("font_size", 22)
+		ctl.add_theme_color_override("font_color", _skin["text"])
+		ctag.add_child(ctl)
+		vbox.add_child(ctag)
+		var crule := Panel.new()
+		crule.name = "TitleRule"
+		crule.custom_minimum_size = Vector2(0.0, UiSkin.TITLE_RULE_HEIGHT)
+		crule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		crule.add_theme_stylebox_override("panel", UiSkin.title_rule_style(_skin))
+		vbox.add_child(crule)
+	else:
+		var title := Label.new()
+		title.text = "致谢与素材署名"
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 22)
+		title.add_theme_color_override("font_color", _skin["text"])
+		vbox.add_child(title)
 	vbox.add_child(HSeparator.new())
 
 	var scroll := ScrollContainer.new()
@@ -630,6 +691,8 @@ func _build_credits() -> void:
 	scroll.custom_minimum_size = Vector2(0.0, CREDITS_HEIGHT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
+	# BA 皮肤：滚动条和设置菜单同一套
+	UiSkin.style_scroll(_skin, scroll)
 	_credits_scroll = scroll
 
 	var body := Label.new()

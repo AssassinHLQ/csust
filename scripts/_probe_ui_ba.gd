@@ -255,6 +255,12 @@ func _run() -> void:
 		for _i in 20:
 			await process_frame
 		await _shot("settings")
+		# ④b 致谢面板：标题装饰 + 滚动条都在这张里看
+		if menu.has_method("open_credits"):
+			menu.call("open_credits")
+			for _i in 16:
+				await process_frame
+			await _shot("credits")
 
 	print("[probe] 输出目录 %s" % _out)
 	quit(0)

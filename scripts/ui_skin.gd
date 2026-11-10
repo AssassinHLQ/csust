@@ -540,6 +540,82 @@ static func name_tag_skew(skin: Dictionary) -> float:
 	return float(skin["btn_skew"]) * NAME_TAG_SKEW_SCALE
 
 
+# ── 标题装饰 & 滚动条（BA 观感）────────────────────────────────────────────
+#
+# ⚠️ 这两样都是**本喵按 BA 的视觉语言自己设计**的，不是照搬某个官方控件：
+#    BA 的标题牌是「斜切色块 + 底下一道亮黄线」，滚动条是「细的深藏蓝轨 + 青蓝滑块」。
+
+## 标题牌高度
+const TITLE_TAG_HEIGHT := 42.0
+## 标题底下那道亮线的粗细
+const TITLE_RULE_HEIGHT := 3.0
+
+
+## 标题背后的斜切色块。**白底 + 浅蓝描边**：标题在浅色面板上，不能铺满色，
+## 铺满会像一颗按钮；只做一个「牌子」压在标题后面。
+static func title_tag_style(skin: Dictionary) -> StyleBox:
+	if not is_procedural(skin):
+		return StyleBoxEmpty.new()
+	var sb := flat_button(skin, Color(1, 1, 1, 0.92), skin["accent"])
+	# 牌子只包住标题两个字（约 2 个字宽），两端各留 20 px —— 内容边距再给大会把
+	# 斜切量吃掉，牌子的倾斜就看不出来了。
+	# ⚠️ `content_margin_top/bottom` 要**清掉**：`flat_button` 给的 6 px 上下留白
+	#    会让牌子比标题高出一截，`PanelContainer` 再按它撑高，看着像块「空盒子」。
+	sb.content_margin_left = 20.0
+	sb.content_margin_right = 20.0
+	sb.content_margin_top = 0.0
+	sb.content_margin_bottom = 0.0
+	return sb
+
+
+## 标题底下那道亮黄线（BA 的 `#FFE433` 底划线）。贴图皮肤给空（不画）。
+static func title_rule_style(skin: Dictionary) -> StyleBox:
+	if not is_procedural(skin):
+		return StyleBoxEmpty.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = skin["yellow"]
+	sb.set_corner_radius_all(2)
+	return sb
+
+
+## 滚动条的槽 / 滑块。`kind` 取 "scroll"（竖直是轨道）/ "grabber" / "grabber_hot"。
+static func scrollbar_style(skin: Dictionary, kind: String) -> StyleBox:
+	if not is_procedural(skin):
+		return StyleBoxEmpty.new()
+	var sb := StyleBoxFlat.new()
+	sb.set_corner_radius_all(5)
+	match kind:
+		"grabber":
+			sb.bg_color = skin["accent"]
+		"grabber_hot":
+			sb.bg_color = Color(skin["accent"]).lightened(0.18)
+		_:
+			# 槽：深藏蓝压得很淡，細一点、不抢视线
+			sb.bg_color = Color(0.0, 0.19, 0.33, 0.13)
+	return sb
+
+
+## 给一个 `ScrollContainer` 套上 BA 滚动条。**程序化皮肤才动**，贴图皮肤原样返回。
+##
+## ⚠️ 为什么不去改 `Theme`：`ScrollContainer` 的竖条是它自己内部建的 `VScrollBar`
+##    子节点，样式得按节点覆盖；而且设置菜单和致谢面板各有自己的滚动条，
+##    统一用一个函数处理才不会走散。
+##
+## ⚠️ `skin` 必须显式传进来，不能读静态缓存 —— 这个类**全是 static**，
+##    GDScript 静态变量在 `--script` 自检里语义不稳，别引入隐式状态。
+static func style_scroll(skin: Dictionary, scroll: ScrollContainer) -> void:
+	if not is_procedural(skin):
+		return
+	var v := scroll.get_v_scroll_bar()
+	if v == null:
+		return
+	v.custom_minimum_size.x = 10.0
+	v.add_theme_stylebox_override("scroll", scrollbar_style(skin, "scroll"))
+	v.add_theme_stylebox_override("grabber", scrollbar_style(skin, "grabber"))
+	v.add_theme_stylebox_override("grabber_highlight", scrollbar_style(skin, "grabber_hot"))
+	v.add_theme_stylebox_override("grabber_pressed", scrollbar_style(skin, "grabber_hot"))
+
+
 ## 圆角小方块纹理。逐像素判「四角圆」：把坐标夹到「内缩 r 的矩形」上，
 ## 夹出来的偏移超出半径就透明。
 static func rounded_texture(size: int, radius: int, color: Color) -> ImageTexture:
