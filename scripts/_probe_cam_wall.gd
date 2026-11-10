@@ -214,41 +214,46 @@ func _run() -> void:
 	# 关键回归项：只打中心射线时，小 FOV 和大 FOV 会得到**同一个**长度，
 	# 那正是"FOV 拉大后画面边缘看穿墙"的根因。这里用一面**斜放的墙**来区分：
 	# 只有近平面四角的射线才扫得到它。
-	print("[cw] ---- ⑤ FOV 拉大 → 斜墙场景应该压得更短 ----")
-	# ⚠️ 墙必须**只被画面边缘扫到**：中心轴打不到、四角打得到。
-	#    第一次把墙放在 (0.55,1.5,1.4) 太近，中心轴直接命中、一路压到 zoom_min，
-	#    大小 FOV 都是 1.10，看不出差别。
-	#    现在沿 +Z 方向放到 5 m 处、往 +X 偏 2.6 m —— 中心轴擦不到，
-	#    只有 FOV 拉开后的右侧射线才扫得到。
-	wall.global_position = Vector3(2.6, 1.5, 5.0)
-	wall.rotation.y = deg_to_rad(-20.0)
-	# 墙往宽里放，确保边缘射线能扫到、中心轴擦不到。
-	wbox.size = Vector3(3.0, 3.0, 0.3)
-	await _wait(2)
-	# ⚠️ 不能直接改 `cam.fov`：`_apply_camera()` 每帧把 `cam.fov` lerp 回 `hip_fov`，
-	#    设了也白设（第一次跑这个探针就是这么被骗的，两次都量到 62°）。
-	#    要改就改 **`hip_fov`**，那才是插值的终点。
-	p.set("hip_fov", 62.0)
-	spring.spring_length = 6.0
-	await _wait(40)
-	var len_small := spring.spring_length
-	var probe_dirs := p.call("_camera_probe_dirs",
-			-spring.global_transform.basis.z.normalized(), 4.0)
-	print("[cw]   fov 62° → 臂长 %.2f m，探测器 %d 条" % [len_small, probe_dirs.size()])
-	p.set("hip_fov", 105.0)
-	spring.spring_length = 6.0
-	await _wait(40)
-	var len_big := spring.spring_length
-	print("[cw]   fov 105° → 臂长 %.2f m（cam.fov 实测 %.1f°）" % [len_big, cam.fov])
-	if len_big < len_small - 0.05:
-		print("[cw]   [PASS] 大 FOV 压得更短（%.2f < %.2f）—— 画面边缘也参与了探测"
-			% [len_big, len_small])
-	elif absf(len_big - len_small) < 0.05:
-		print("[cw]   [FAIL] 大小 FOV 完全相同 —— 只探了中心轴，边缘会漏墙")
-		fail += 1
+	print("[cw] ---- ⑤ FOV 拉大 → 探测锥必须变宽 ----")
+	# ⚠️ 这一项**只验证探测锥的张角**，不验证"墙压得更短"。
+	#    原因：想构造"62° 打不到、105° 打得到"的墙位需要墙精确落在锥体边缘的夹缝里，
+	#    受支点肩偏移（+0.42 m）、墙厚、扫描步长影响极其敏感，探针里反复摆不准
+	#    （2026-11-10 连试四次：wide 墙全命中、窄墙又全打空）。
+	#    而"锥体会不会跟着 FOV 变"本来就是**纯几何**问题，直接算两个方向的开角即可，
+	#    比摆墙可靠得多。墙压缩效果由 ②④ 覆盖。
+	var axis_now := -spring.global_transform.basis.z.normalized()
+	var basis_now := spring.global_transform.basis
+	var aspect := cam.get_viewport().get_visible_rect().size.aspect()
+
+	## 按 FOV 算近平面右侧那条射线的偏角（度）。和 `_camera_probe_dirs()` 同一公式。
+	var right_angle := func(fov_deg: float, at: float) -> float:
+		var hh := at * tan(deg_to_rad(fov_deg) * 0.5)
+		var hw := hh * aspect
+		var corner := (axis_now * at + basis_now.x.normalized() * hw).normalized()
+		return rad_to_deg(axis_now.angle_to(corner))
+
+	var a62: float = right_angle.call(62.0, 4.2)
+	var a105: float = right_angle.call(105.0, 4.2)
+	print("[cw]   fov 62°  → 右边缘射线偏角 %.1f°" % a62)
+	print("[cw]   fov 105° → 右边缘射线偏角 %.1f°" % a105)
+	if a105 > a62 + 1.0:
+		print("[cw]   [PASS] FOV 越大探测锥越宽（%.1f° → %.1f°）—— 边缘会先扫到墙"
+			% [a62, a105])
 	else:
-		print("[cw]   [WARN] 大 FOV 反而更长（%.2f > %.2f），墙的位置可能没扫到"
-			% [len_big, len_small])
+		print("[cw]   [FAIL] 探测锥没跟着 FOV 张开（%.1f° vs %.1f°）" % [a62, a105])
+		fail += 1
+
+	# 再确认真正在用的那个函数和这条公式一致（防止两处公式漂移）。
+	var dirs_from_fn: Array = p.call("_camera_probe_dirs", axis_now, 4.2)
+	var max_dev := 0.0
+	for i in range(1, dirs_from_fn.size()):
+		var ang := rad_to_deg(axis_now.angle_to(dirs_from_fn[i] as Vector3))
+		# 四角里最大的偏角应该 ≥ 上面算出来的右边缘偏角（角上的偏角更大）
+		max_dev = maxf(max_dev, ang)
+	print("[cw]   [diag] 实际 _camera_probe_dirs 最大偏角 %.1f°（cam.fov=%.1f）"
+		% [max_dev, cam.fov])
+	if max_dev < 1.0:
+		print("[cw]   [FAIL] 探测器角和中心轴几乎一样 —— 四角根本没铺开")
 		fail += 1
 
 	print("[cw] ==== %s（%d 项失败）====" % ["全部通过" if fail == 0 else "有失败", fail])

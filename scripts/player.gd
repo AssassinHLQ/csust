@@ -159,9 +159,17 @@ const CAMERA_FORWARD_OFFSET := PI
 const AIM_FOV_RATIO := 0.55
 @export var cam_lerp := 12.0
 ## 相机避墙的阻尼时间常数（秒）。见 `_collide_camera_arm()`。
-## 拉近要快（不然镜头会插进墙里看到内壁），拉远要慢（不然离开走廊时「啪」一下弹回去）。
-const CAM_IN_TAU := 0.045
-const CAM_OUT_TAU := 0.22
+##
+## ⚠️ 这两个值**不能差太多**。曾经是 0.045 / 0.22（差 5 倍），结果墙的边缘
+##    正好在"打中/打不中"之间时：打中 → 快速缩进，打不中 → 慢慢退出，
+##    退一半又打中 → 再缩进，表现为**一前一后地摆**。
+##    现在压到 0.09 / 0.14（差 1.5 倍）：拉近仍然比拉远快，但迟滞小到这个量级，
+##    不会再形成"缩进去—退出来"的往复。
+const CAM_IN_TAU := 0.09
+const CAM_OUT_TAU := 0.14
+## 目标长度比当前值变化不到这个量（米）时**完全不动** —— 死区。
+## 墙的边缘在射线命中临界点上抖动时，这一条直接把微小的来回翻转吃掉。
+const CAM_DEAD_ZONE := 0.02
 ## 相机臂长每帧的**绝对位移上限**（米/秒）。指数阻尼在 `want` 和目标差很大时
 ## 单帧位移会很凶（9.0 → 2.0 差 7 m，一帧能走 2 m），低帧时直接跨过一堵墙。
 ## 32 m/s 对 60 fps 是每帧 0.53 m，对 30 fps 是 1.07 m —— 都小于常见墙厚，
@@ -916,10 +924,14 @@ func _apply_camera(delta: float) -> void:
 	# ⚠️ 腰射的最近距离**不是固定 zoom_min**：还要满足「看得见全身」，
 	#    见 `min_zoom_for_full_body()`。
 	var want := aim_distance if aiming else maxf(_zoom_distance, min_zoom_for_full_body(look))
-	# 先把「想拉到的长度」本身平滑掉（滚轮 / 开镜的过渡），再交给避墙逻辑。
-	# ⚠️ 顺序很重要：避墙要拿**平滑后的目标**去测，而不是拿上一帧的实际长度。
-	var want_smooth := lerpf(spring.spring_length, want, t)
-	spring.spring_length = _collide_camera_arm(want_smooth, delta)
+	# ⚠️ 这里**不能再做一次 lerp**（用户 2026-11-10：「摄像头总是突然一前一后」）。
+	#    之前的写法是 `want_smooth = lerpf(spring.spring_length, want, t)` 再交给
+	#    `_collide_camera_arm`，等于**两段 lerp 串联，而且第二段的起点是上一帧的
+	#    实际值** —— 正反馈，静止不动也会以两帧周期来回摆（实测峰峰 0.15 m、
+	#    90 帧反向 20 次，空地上也一样，和墙无关）。
+	#    现在把平滑**全部**交给 `_collide_camera_arm()`，它直接拿原始 `want` 当目标，
+	#    从「当前实际长度」朝它走一步 —— 单一阻尼、单一目标、无级联。
+	spring.spring_length = _collide_camera_arm(want, delta)
 	spring.position.x = lerpf(spring.position.x, -(aim_shoulder if aiming else shoulder), t)
 	rig.position.y = lerpf(rig.position.y, aim_height if aiming else look, t) + _step_lag
 	cam.fov = lerpf(cam.fov, aim_fov if aiming else hip_fov, t)
@@ -968,13 +980,26 @@ func _collide_camera_arm(want: float, delta: float) -> float:
 	var axis := -spring.global_transform.basis.z.normalized()
 
 	var exclude: Array[RID] = [get_rid()]
-	# 沿长轴能走多远（多留一点，让"贴脸"也能被探到）。
+	# ⚠️ 探测长度用 `want`，**不是**当前 `spring_length`：
+	#    用当前长度当探测范围会形成循环依赖（臂变短 → 探测范围变小 → 探不到墙
+	#    → 臂回弹 → 又探到），那就是「一前一后」的第二个来源。
+	#    `want` 是滚轮/开镜决定的**外部目标**，与臂的实际状态无关，天然稳定。
 	var reach := want + cam_probe_radius + cam_wall_margin
 	var best := INF
 	for d: Vector3 in _camera_probe_dirs(axis, want):
 		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
 				origin, origin + d * reach, _wall_mask, exclude))
 		if hit.is_empty():
+			continue
+		# ⚠️ 只认**竖直墙面**，不认地板和天花板（探针实测 2026-11-10：
+		#    近平面四角里的下面两条射线会撞到地板，`best` 被地板锁在 ~2.1 m，
+		#    墙怎么移都不动 —— 表现为臂长"卡住"）。
+		#    判据：命中法线的**水平分量**足够大，或者射线本身接近水平
+		#    （天花板正上方、地板正下方这种纯垂直面直接跳过）。
+		var n: Vector3 = hit.get("normal", Vector3.UP)
+		if absf(n.y) > 0.85:
+			# 接近水平的地板 / 天花板面 —— 相机滑着过去就行，不该缩短臂长。
+			# 用一点余量把它吸开，避免镜头贴地时"无限往下压"。
 			continue
 		# 命中的**长轴投影长度**才是臂长的上限：斜着打到墙不等于臂能伸那么长。
 		var along: float = origin.distance_to(hit["position"]) * d.dot(axis)
@@ -988,6 +1013,12 @@ func _collide_camera_arm(want: float, delta: float) -> float:
 	# 目标：墙允许的更短就听墙的，否则就是想要的长度。
 	var target := minf(want, blocked)
 	var now := spring.spring_length
+
+	# ── 死区：目标几乎没变就不动 ──
+	# 墙的边缘在射线命中临界点上时，`blocked` 会每帧微微翻动；不加死区的话
+	# 镜头会跟着抖。2 cm 远小于肉眼可分辨的推拉，但足以吃掉这种抖动。
+	if absf(target - now) < CAM_DEAD_ZONE:
+		return now
 
 	# ── 阻尼 + 限速，一律针对**最终的 spring_length** ──
 	# ⚠️ 踩过的坑（探针 ④ 实测 9.00 → 2.06 单帧跳 1.49 m）：
