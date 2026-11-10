@@ -55,6 +55,28 @@ const NO_COLLIDE := [
 	"物件_6",
 ]
 
+## 地板碰撞**抬高**这么多米（2026-11-10）。
+##
+## 使用者：「碰撞调高一点点让角色的脚露出来」
+##
+## 背景：角色站在电竞房地板上时，脚会陷进地板里。
+## 抬高碰撞地板顶面一点点，角色就会「站得高一点」，脚自然露在视觉地板之上 ——
+## 这是最省事、最不破坏视觉的做法（视觉模型一个像素都不动）。
+##
+## 只对「地板那一类」生效（见 `is_floor_box`），家具不受影响。
+const FLOOR_LIFT := 0.06
+
+## 判断一个盒子是不是「地板」：底边贴地（< 0.05）、顶面在膝盖以下（< 0.6）、
+## 而且水平投影够大（> 4 m²）—— 这样只命中真正的地板，不会把桌椅也算进去。
+func is_floor_box(center: Vector3, size: Vector3) -> bool:
+	var y_bottom := center.y - size.y * 0.5
+	var y_top := center.y + size.y * 0.5
+	if y_bottom > 0.05:
+		return false
+	if y_top > 0.60:
+		return false
+	return size.x * size.z > 4.0
+
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -97,6 +119,7 @@ func _run() -> void:
 	var n_skip := 0
 	var n_multi := 0
 	var n_nocol := 0
+	var n_lift := 0
 	for i in parts.size():
 		var p: Dictionary = parts[i]
 		# 门板 / 门槛：不做碰撞（否则门被封死，见 `NO_COLLIDE` 的说明）
@@ -126,12 +149,17 @@ func _run() -> void:
 			if s.x * s.y * s.z < MIN_VOLUME or (s.x + s.y + s.z) < MIN_EXTENT:
 				n_skip += 1
 				continue
+			# 地板整体抬高一点点，让角色脚露在视觉地板之上（见 FLOOR_LIFT 说明）
+			if is_floor_box(c, s):
+				c.y += FLOOR_LIFT
+				n_lift += 1
 			_add_shape(body, root, c, s, "P%04d_%d" % [i, k])
 			k += 1
 		n_one += k
 
 	print("[bake] 盒子 %d 个（%d 件被拆成多块以排掉空气）、跳过 %d 个碎片、%d 件门板不建碰撞"
 		% [n_one, n_multi, n_skip, n_nocol])
+	print("[bake] 其中 %d 个地板盒子抬高了 %.2f 米（让角色脚露出来）" % [n_lift, FLOOR_LIFT])
 	print("[bake] StaticBody 下共 %d 个形状" % body.get_child_count())
 
 	var ps := PackedScene.new()

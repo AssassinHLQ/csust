@@ -677,6 +677,17 @@ func _ready() -> void:
 ## 东侧三块已经露出来过（成交后只翻一次 `visible`，之后就关掉心跳）
 var _east_rooms_done := false
 
+## ⚠️ 2026-11-10 使用者：「为什么每次切回场景都要播放这个落地动画?」
+##
+## 根因：`ShopClerk._bought` 是 **static var**，一旦买过就跨场景保留。
+## 而 `_setup_east_rooms()` 每次进场景都把 `_east_rooms_done` 重置成 false，
+## 于是「已成交」的老存档每次重进都会再演一遍落地。
+##
+## 修法：另开一个 **static** 标记记住「这一局已经演过了」，
+## 重进场景时只把房子摆出来，不再放动画。
+## 想重新看演出：重启游戏（static 归零），或把这里手动清掉。
+static var _drop_played_this_run := false
+
 
 ## 备用 Boss：`scenes/bosses_standby.tscn` 里躺着 6 位（霸王龙 / 倭瓜 / 霍德 /
 ## 佩洛洛斯拉 / 比纳 / 哥利亚），主场景里**只留飞猪优香** —— 全摆上去太挤。
@@ -863,8 +874,9 @@ func _process(delta: float) -> void:
 	_update_room_swap()
 	_tick_perf_overlay(delta)
 	# 电竞房等芹香那边成交才现身（见 `_setup_east_rooms`）；露出来之后就自动关掉
+	# `_drop_played_this_run` 为真说明这一局已经演过了 → 只现身、不放动画
 	if not _east_rooms_done and ShopClerk.is_bought():
-		_reveal_east_rooms()
+		_reveal_east_rooms(not _drop_played_this_run)
 	if _player and _player.global_position.y < FALL_LIMIT:
 		_player.global_position = _spawn
 		_player.velocity = Vector3.ZERO
@@ -1051,7 +1063,12 @@ func _setup_east_rooms() -> void:
 	set_process(true)
 	_assert_always_on_visible()
 	if ShopClerk.is_bought():
-		_reveal_east_rooms()
+		# 已经成交过：房子直接现身。
+		# ⚠️ 但**只在第一次**放落地动画 —— 见 `_drop_played_this_run` 的说明。
+		_reveal_east_rooms(not _drop_played_this_run)
+	elif _drop_played_this_run:
+		# 演过了但（理论上）没成交：不要再演一次
+		set_process(false)
 
 
 ## 自检护栏：部室和地块必须一直是可见的。
@@ -1077,7 +1094,10 @@ func _assert_always_on_visible() -> void:
 ##
 ## 演出的「落地高度」用的是**它自己在场景里的 y**（`game.tscn` 里是 0.01），
 ## 演出脚本记下来、结束时原样放回。
-func _reveal_east_rooms() -> void:
+##
+## `with_drop`：是否播落地动画。**重进场景时传 false** ——
+## 使用者 2026-11-10：「为什么每次切回场景都要播放这个落地动画?」
+func _reveal_east_rooms(with_drop := true) -> void:
 	_east_rooms_done = true
 	set_process(false)
 	for nm in EAST_ROOMS:
@@ -1091,8 +1111,13 @@ func _reveal_east_rooms() -> void:
 			% [nm, str(node.visible), str(node.global_position), node.get_child_count()])
 	if _rd != null:
 		_rd.rebuild()
-	print("[Game] 已成交 → 电竞房现身：%s" % ", ".join(EAST_ROOMS))
-	_play_esports_drop()
+	if with_drop:
+		_drop_played_this_run = true
+		print("[Game] 已成交 → 电竞房现身（播放落地动画）：%s" % ", ".join(EAST_ROOMS))
+		_play_esports_drop()
+	else:
+		print("[Game] 已成交 → 电竞房直接现身（本局演过了，不再播）：%s"
+			% ", ".join(EAST_ROOMS))
 
 
 ## 电竞房「天降」演出。挂了 `esports_drop.gd` 的节点放在镜头前；
