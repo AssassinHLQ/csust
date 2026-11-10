@@ -1611,6 +1611,23 @@ func _update_power_hud() -> void:
 ## （`const` 在 GDScript 里改不了，逼得上一版探针只能手写 rotation，量出来是假数据。）
 var lean_comp_deg := 7.3
 
+## 机甲**站在地上**时的机身补偿角（度）。
+##
+## ⚠️ 为什么地上和空中要分开（2026-11-10）：
+##    两者播的是**不同动画** —— 地上 `Idle`、空中 `Move_Ing`。
+##    同一句"补偿 7.3°"在两个动画上落出来的脊梁角完全不同：
+##      · 空中 `Move_Ing` + 7.3° ⇒ 脊梁 **+0.35°**（端正，已验收）
+##      · 地上 `Idle`     + 7.3° ⇒ 脊梁 **+10.96°**（明显前倾，过头了）
+##    所以地面单独标定一个值。
+##
+## ⚠️ 这个值是用 `_diag_ground_lean.gd` 扫出来的（几何量法：胯→头向量投到前向/上向）：
+##      补偿 −12° → 脊梁 −9.94°（仰）
+##      补偿  −5° → 脊梁 −1.58°
+##      补偿  **−2° → 脊梁 −0.08°** ← 取这个（端正）
+##      补偿   0° → 脊梁 +3.33°（前倾）
+##      补偿 7.3° → 脊梁 +9.16°（前倾过头）
+var lean_comp_ground_deg := -2.0
+
 
 func _update_lean(delta: float) -> void:
 	# ── 2026-11-10 最终标定：**完全不要仰头** ──
@@ -1639,8 +1656,16 @@ func _update_lean(delta: float) -> void:
 	# 现在：固定 **−3°** 起步，实测再微调（见 `LEAN_COMP_DEG` 那段）。
 	# **不做任何"速度加成"** —— 用户要的是不仰头，速度越快越仰更是反的。
 	var want := 0.0
-	if _airborne:
-		want = deg_to_rad(lean_comp_deg)
+	# ⚠️ 2026-11-10：判据从 `_airborne` 改成 `_on`（用户：「只有地上,爱丽丝机甲才仰头,
+	#    空中之前改好了」）。
+	#    原来只有**空中**才补偿机身，站在地上时补偿恒为 0 ——
+	#    而机甲自带的 `Idle` 动画本身有 **−6.60° 后仰**（见本文件顶部的实测注释），
+	#    于是"站在地上"就是那个仰头姿势。空中之所以正常，正是因为那里补偿上了。
+	#    机甲形态**不论地上空中**都该站/飞得端正，所以判据是 `_on`。
+	if _on:
+		# 地上 / 空中播的是**不同动画**（`Idle` vs `Move_Ing`），
+		# 同一补偿值落出来的脊梁角差很多 ⇒ 各用各的标定值（见上面两个常量）。
+		want = deg_to_rad(lean_comp_deg if _airborne else lean_comp_ground_deg)
 	_lean = lerpf(_lean, want, clampf(6.0 * delta, 0.0, 1.0))
 
 
@@ -1648,7 +1673,10 @@ func _update_lean(delta: float) -> void:
 func _fix_head_face() -> void:
 	if not HEAD_FIX_ENABLE or _skel == null or _model == null:
 		return
-	if not _on or not _airborne:
+	# ⚠️ 2026-11-10：判据从 `not _on or not _airborne` 改成 `not _on`
+	#    （同一个 bug 的另一半，见 `_update_lean()` 里的说明）。
+	#    原来地上不掰头 ⇒ 机甲站在地上时下巴抬着、脸朝斜上方。
+	if not _on:
 		return
 	var hi := _skel.find_bone(HEAD_BONE)
 	if hi < 0:

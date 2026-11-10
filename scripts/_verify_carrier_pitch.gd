@@ -132,7 +132,7 @@ func _run() -> void:
 	_check(p_cruise <= CRUISE_MAX, "前倾没有夸张到俯冲（%+.2f° ≤ %+.1f°）" % [p_cruise, CRUISE_MAX])
 
 	print("")
-	print("========== 3. 地面：俯仰必须归零 ==========")
+	print("========== 3. 地面：也要端正（不仰头）==========")
 	Input.action_release("move_forward")
 	Input.action_release("sprint")
 	cf.call("_land")
@@ -141,8 +141,19 @@ func _run() -> void:
 	for i in 60:
 		await physics_frame
 	var lean_ground := rad_to_deg(float(cf.get("_lean")))
-	print("       地面机身补偿 %+.2f°" % lean_ground)
-	_check(absf(lean_ground) < 1.0, "落地后俯仰回到 0（%.2f°）" % lean_ground)
+	var p_ground := _pitch_deg(skel, carrier, hip, head)
+	print("       地面机身补偿 %+.2f°（地面专用值 %.2f°）" % [
+		lean_ground, float(cf.get("lean_comp_ground_deg"))])
+	print("       地面脊梁俯仰 %+.2f°" % p_ground)
+	# ⚠️ 2026-11-10 改：原来这里断言 `|_lean| < 1.0`（"落地后补偿回到 0"）——
+	#    那**正是 bug 本身**：地上不补偿 ⇒ 机甲 Idle 自带的 −6.6° 后仰露出来 ⇒
+	#    用户看到的「站在地上仰头」。现在判据改成**真正的脊梁角**：
+	#    地上空中都要端正（≈水平，允许略前倾）。
+	#    地上用单独的标定值（−2.0°），因为地上播 `Idle`、空中播 `Move_Ing`。
+	_check(p_ground > -3.0, "落地后**没有仰头**（%+.2f° > -3.0）" % p_ground)
+	_check(absf(p_ground) < 6.0, "落地后基本端正（|%+.2f°| < 6）" % p_ground)
+	_check(absf(lean_ground - float(cf.get("lean_comp_ground_deg"))) < 0.5,
+		"地面补偿用的是**地面专用值**（实测 %+.2f°）" % lean_ground)
 
 	_done()
 
