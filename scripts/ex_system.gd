@@ -210,6 +210,35 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 	holder.queue_free()
 
 
+## 这个节点能不能按「敌人」的签名挨 EX 的伤害？
+##
+## 为什么要判签名，而不是只判 `has_method("take_damage")`：
+## **`Player` 也有 `take_damage`，但参数是 `(amount, hit_from, knockback)`** ——
+## 第 3 个（从 0 数起是 index 2）是 `float`；而 Boss / 靶子是
+## `(amount, hit_pos, hit_dir)`，第 3 个是 `Vector3`。EX 按后者传，
+## 落到 Player 身上就变成「Cannot convert argument 4 from Vector3 to float」，
+## GDScript 直接**硬崩**（用户 2026-11-10「机甲按 EX 就闪退」，调试器 79 条同类错误）。
+##
+## 判据用 `get_method_list()` 看 **index 2** 的参数类型（实测 4.7.1）：
+##   boss.gd   → [amount:float, _hit_pos:Vector3, _hit_dir:Vector3]
+##   player.gd → [amount:float, hit_from:Vector3, knockback:float]
+## ⚠️ 别去判「参数个数 ≥ 4」—— 两边的 `args.size()` **都是 3**（本喵第一版判错了，
+##    导致 Boss 也被判成「不能挨打」）。
+func _can_hurt_take_damage(n: Object) -> bool:
+	if n == null or not n.has_method("take_damage"):
+		return false
+	for m in n.get_method_list():
+		if String(m.get("name", "")) != "take_damage":
+			continue
+		var args: Array = m.get("args", [])
+		if args.size() < 3:
+			return false
+		# GDScript 的 args 是 [{"name":..., "type": TYPE_*, ...}, ...]
+		var t2 := int((args[2] as Dictionary).get("type", TYPE_NIL))
+		return t2 == TYPE_VECTOR3
+	return false
+
+
 func _orb_explode(holder: Node3D, at: Vector3) -> void:
 	var hurt := 0
 	for n in get_tree().get_nodes_in_group("bosses"):
@@ -356,6 +385,22 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 			var endp := from + dir * RAIL_RANGE
 			var q := PhysicsRayQueryParameters3D.create(from, endp)
 			q.collide_with_areas = false
+			# ⚠️ **射线必须排除自己**（玩家 CharacterBody3D）。
+			#
+			#    用户 2026-11-10：「爱丽丝机甲按 EX 就闪退」，调试器里 79 条
+			#    `Invalid type in function 'take_damage' (via call) in base
+			#     'CharacterBody3D (Player)'. Cannot convert argument 4 from Vector3 to float.`
+			#    根因：射线从**炮口**出发（`_carrier_muzzles`），而机甲的炮口贴着机体，
+			#    射线一出发就撞到自己身上 ⇒ `hit.collider` 是 Player ⇒
+			#    下面 `hit.collider.has_method("take_damage")` 为真（Player 也有
+			#    `take_damage`）⇒ 按「敌人」的签名（amount, hit_pos, hit_dir）传了
+			#    **4 个参数**，而 `player.gd` 的是 `(amount, hit_from, knockback)`——
+			#    第 4 个是 float。GDScript 的 `call` 参数类型不匹配会**硬崩**，
+			#    每 0.06 s 一跳 × 两条射线，于是一按 EX 就刷屏式崩溃。
+			#
+			#    用 `exclude` 而不是「撞到自己就跳过」：后者会让光柱在自机位置上
+			#    被截断，视觉上短一截。
+			q.exclude = [_player]
 			var hit := space.intersect_ray(q)
 			var reach := RAIL_RANGE
 			if not hit.is_empty():
@@ -374,17 +419,28 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 
 			if now >= next_tick and not hit.is_empty():
 				var col = hit.get("collider")
-				if col != null and col.has_method("take_damage"):
+				# ⚠️ 第三道保险：**不给自己发伤害**。
+				#    前两道是 `q.exclude = [_player]`（射线不撞自己）和
+				#    `_can_hurt_take_damage()`（签名对不上就不调，见下面那个函数）。
+				#    这里再挡一次是因为 `exclude` 认的是**节点身份**，而换场景 / 自检里
+				#    `_player` 有可能已经失效或换了个实例，那时排除不生效。
+				if col != null and col == _player:
+					col = null
+				if col != null and _can_hurt_take_damage(col):
 					col.call("take_damage", RAIL_TICK_DAMAGE, hit["position"], -dir)
 					total_hits += 1
 				elif col is Node and (col as Node).get_parent() != null \
-						and (col as Node).get_parent().has_method("take_damage"):
+						and _can_hurt_take_damage((col as Node).get_parent()):
 					(col as Node).get_parent().call("take_damage",
 						RAIL_TICK_DAMAGE, hit["position"], -dir)
 					total_hits += 1
-		if now >= next_tick:
-			next_tick = now + int(RAIL_TICK_SEC * 1000.0)
-			tick_count += 1
+
+			# ⚠️ 这一段必须在 `for fi in froms.size():` **循环体内**（缩进 3 个 tab），
+			#    不能提到循环外 —— `now` / `next_tick` 都是循环里算出来的。
+			#    本喵第一次改就是把缩进弄出去了，报 "Identifier now not declared"。
+			if now >= next_tick:
+				next_tick = now + int(RAIL_TICK_SEC * 1000.0)
+				tick_count += 1
 
 	for b in beams:
 		var holder: Node3D = b["holder"]
