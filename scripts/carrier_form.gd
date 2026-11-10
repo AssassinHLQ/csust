@@ -777,6 +777,48 @@ func _build_boost_fx() -> void:
 		light.position = Vector3(0.0, -0.18, 0.0)
 		holder.add_child(light)
 
+		# ── 喷口激波环（2026-11-10 新增）──
+		#
+		# 真实喷气口后面会一圈圈"推"出激波环（马赫环 / shock diamonds 的视觉简化）。
+		# 旧版三层锥 + 柔光斑还是"静态的两根焰"，缺的就是这个**周期性的动**。
+		#
+		# 做法：一个细圆环（TorusMesh），沿 −Y 不断外扩 + 淡出，循环。
+		# 之所以用独立节点而不是粒子：环要**保持正圆且垂直于喷流**，
+		# 粒子会被 spread/重力带歪，读起来是"雾"不是"激波"。
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.72
+		torus.outer_radius = 1.0
+		torus.rings = 16
+		torus.ring_segments = 8
+		ring.mesh = torus
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ring.layers = 1
+		var ring_mat := StandardMaterial3D.new()
+		ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		ring_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		ring_mat.albedo_color = Color(0.62, 0.88, 1.00, 0.55)
+		ring_mat.emission_enabled = true
+		ring_mat.emission = Color(0.50, 0.80, 1.00)
+		ring_mat.emission_energy_multiplier = 3.5
+		ring_mat.disable_receive_shadows = true
+		ring.material_override = ring_mat
+		# TorusMesh 默认躺在 XZ 平面（环轴 = Y），喷流沿 −Y ⇒ 正好垂直，不用转
+		ring.scale = Vector3(0.22, 0.10, 0.22)
+		holder.add_child(ring)
+
+		# 再补一个错相的环：两个环一前一后，读起来是"连续推出去的"
+		var ring2 := MeshInstance3D.new()
+		ring2.mesh = torus
+		ring2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ring2.layers = 1
+		var ring_mat2 := ring_mat.duplicate() as StandardMaterial3D
+		ring2.material_override = ring_mat2
+		ring2.scale = Vector3(0.15, 0.08, 0.15)
+		holder.add_child(ring2)
+
 		# 喷口处一片**面向相机的柔光**。
 		# 硬边三角的另一半原因是「喷口只有锥体」——锥体的底边是一条直线，
 		# 从侧面看就是一条硬边。加一层软圆斑之后，喷口读起来是
@@ -838,6 +880,8 @@ func _build_boost_fx() -> void:
 			"light": light,
 			"particles": gp,
 			"glow": glow,
+			"rings": [ring, ring2],
+			"ring_mats": [ring_mat, ring_mat2],
 		})
 	boost_dot_count = _boost_fx.size()
 	_build_aux_fx()
@@ -947,6 +991,16 @@ func _make_flame_mesh() -> ArrayMesh:
 
 
 ## 加色混合的火焰材质。`blend_mode = ADD` + 不写深度 ⇒ 多层叠起来就是发光的蓝焰。
+##
+## ── 2026-11-10 细化（用户：「继续细化飞行特效」）──
+##
+## 旧材质是**纯色光面**：锥体侧面亮度均匀，看起来像一块塑料片在发光，
+## 没有「在燃烧」的细节。现在贴一张**程序化噪声图**，沿 Y 轴流动：
+##   · 噪声给表面加了明暗起伏 → 有焰舌的斑驳感
+##   · 用 `uv1_scale` 把噪声在 Y 方向拉长（1×3），读起来是**竖向的火舌**
+##   · 滚动靠 `_run_effects()` 里每帧改 `albedo_texture` 的偏移不行（会整体走样），
+##     所以改用 **材质自发光能量 + 顶点噪声图**：噪声是静态的，但每层相位不同，
+##     三层错开后视觉上就在"翻动"（加色混合放大差异）。
 func _make_flame_mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -956,10 +1010,69 @@ func _make_flame_mat(c: Color) -> StandardMaterial3D:
 	m.no_depth_test = false
 	m.disable_receive_shadows = true
 	m.albedo_color = c
+	# 噪声贴图：让表面有斑驳的火舌质感（纯色太"塑料"）
+	m.albedo_texture = _flame_noise_tex_or_make()
+	m.uv1_scale = Vector3(1.0, 3.0, 1.0)
 	m.emission_enabled = true
 	m.emission = c
 	m.emission_energy_multiplier = 3.0
 	return m
+
+
+## 焰面噪声贴图（128×128）。**只用红通道**当亮度调制：
+## 中心区域亮、边缘暗，叠一层高频斑点 —— 贴到锥体上就像焰舌在翻。
+##
+## 为什么自己生成而不是引资源：项目里没有合适的无缝噪声贴图，
+## 而这张 128×128（64 KB）开销可以忽略，且**确定性**（同一 seed 每次一样，
+## 出图对比不会因为噪声随机而误判）。
+static var _flame_noise_tex: ImageTexture = null
+
+
+func _flame_noise_tex_or_make() -> ImageTexture:
+	if _flame_noise_tex != null:
+		return _flame_noise_tex
+	var n := 128
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	# 固定种子：出图对比要可复现
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x5EED
+	# 两层叠加：粗斑（低频）+ 细斑（高频），比单层纯随机更像"火焰"
+	var coarse := []
+	var fine := []
+	for i in 64:
+		coarse.append(rng.randf())
+	for i in 256:
+		fine.append(rng.randf())
+	for y in n:
+		for x in n:
+			var u := float(x) / float(n)
+			var v := float(y) / float(n)
+			# 低频：8×8 格之间双线性插值
+			var cu := u * 8.0
+			var cv := v * 8.0
+			var ci := int(cu) % 8
+			var cj := int(cv) % 8
+			var fx := cu - float(int(cu))
+			var fy := cv - float(int(cv))
+			var c00: float = coarse[cj * 8 + ci]
+			var c10: float = coarse[cj * 8 + (ci + 1) % 8]
+			var c01: float = coarse[((cj + 1) % 8) * 8 + ci]
+			var c11: float = coarse[((cj + 1) % 8) * 8 + (ci + 1) % 8]
+			var top := lerpf(c00, c10, fx)
+			var bot := lerpf(c01, c11, fx)
+			var low := lerpf(top, bot, fy)
+			# 高频：16×16
+			var hi: float = fine[((int(v * 16.0) * 16 + int(u * 16.0)) % 256)]
+			# 混合：低频为主（0.72），高频提细节（0.28）
+			var t := low * 0.72 + hi * 0.28
+			# 收一下对比度：太散会把焰拉花
+			t = clampf(0.35 + t * 0.85, 0.0, 1.0)
+			# 边缘稍微暗一点（让锥体的轮廓更明确）
+			var edge := 1.0 - absf(v - 0.5) * 0.35
+			t *= edge
+			img.set_pixel(x, y, Color(t, t, t, 1.0))
+	_flame_noise_tex = ImageTexture.create_from_image(img)
+	return _flame_noise_tex
 
 
 func _make_particle_mesh() -> QuadMesh:
@@ -1635,6 +1748,36 @@ func _run_effects(delta: float) -> void:
 			if gm != null:
 				gm.albedo_color.a = clampf(0.10 + 0.55 * t, 0.0, 1.0)
 				gm.emission_energy_multiplier = lerpf(0.5, 3.0, t)
+
+		# ── 激波环：沿喷流方向周期性外扩 + 淡出（2026-11-10 新增）──
+		#
+		# 两个环相位差 0.5，各自跑一个 0→1 的循环：
+		#   p = 0  → 贴着喷口、小而亮
+		#   p = 1  → 往下游推出去、变大变淡
+		# 位移给到 −Y * FLAME_LEN * 0.85（跟着焰柱长度走，焰长环也推得远）。
+		# 推力不足时环整个隐藏（不然悬停时喷口下面挂两个亮圈，很怪）。
+		var rings: Array = fx.get("rings", [])
+		var ring_mats: Array = fx.get("ring_mats", [])
+		if rings.size() >= 2:
+			# 环的循环速度随推力加快：喷得猛时激波推得快
+			var ring_speed := lerpf(0.9, 2.6, t)
+			for ri in rings.size():
+				var rm := rings[ri] as MeshInstance3D
+				var rmat := ring_mats[ri] as StandardMaterial3D
+				# 第二环错开半个周期
+				var phase := fmod(_wing_phase * ring_speed + float(ri) * 0.5, 1.0)
+				# 半径随 phase 变大（0.22 → 1.0 倍基准），同时越远越暗
+				var grow := lerpf(0.55, 2.1, phase)
+				var alpha := (1.0 - phase) * clampf(t, 0.0, 1.0)
+				# 厚度在扩散时变薄（激波越远越薄）
+				var thick := lerpf(1.0, 0.35, phase)
+				rm.scale = Vector3(0.22 * grow, 0.10 * thick, 0.22 * grow)
+				# 沿 −Y 推出去（holder 的局部 −Y 就是喷流方向）
+				rm.position = Vector3(0.0, -FLAME_LEN * 0.85 * phase * t, 0.0)
+				rm.visible = t > 0.12 and alpha > 0.02
+				if rmat != null:
+					rmat.albedo_color.a = clampf(alpha * 0.75, 0.0, 1.0)
+					rmat.emission_energy_multiplier = lerpf(4.5, 1.2, phase)
 
 
 # ── 双炮开火 ───────────────────────────────────────────────────────────────
