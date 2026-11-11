@@ -342,15 +342,24 @@ func shoot() -> bool:
 	_fire_raycast()
 	# 枪声走**非定位**（2D）：玩家自己的枪永远「在耳边」，用 3D 定位会随镜头左右漂。
 	#
-	# 机甲形态换成了**激光音**（用户 2026-11-08：「炮是激光大炮」）——
-	# 用的是 Kenney 那批 `laserSmall_*.ogg`，`sfx.gd` 里那条注释写着它们当初
-	# 正是「不像枪」被换掉的；现在回到正确岗位（见 `fire_beam` 里的说明）。
+	# ⚠️⚠️ 判据必须是 `use_beam()`（= 机甲双肩炮），**绝不能用 `uses_beam_visual()`**。
+	#
+	# `uses_beam_visual()` = `use_beam() or laser_gun`，而 `laser_gun` 在**普通形态就是 true**
+	# （`player.gd::_ready()` 调 `set_laser_gun(true)`，目的是让普通攻击射出「激光子弹」
+	# 而不是老曳光弹）。于是这里一直播 `fire_beam`（Kenney 那批 `laserSmall_*.ogg`），
+	# **普通攻击一次都没播过 `fire`** —— 本喵改了三轮 `SPEC.fire` 全是白改。
+	# 用户 2026-11-11 的原话就是铁证：「普通攻击枪还是不对，声音要这个**前 1.5 秒**这样子的」
+	# （那 1.5 秒正是 `gunshot_*.wav` 连打 20 发）。
+	#
+	# 教训：**「激光子弹」是视觉，「激光音」只属于机甲大炮**，两个概念不能共用一个判据。
+	# `_verify_sfx.gd` 第 5 节现在会断言「普通形态开枪播的是 `fire` 的那批文件」，
+	# 再出现这种「改了库表但根本没被播」的回归会当场红。
 	#
 	# ⚠️ 这两个名字必须写成**字符串字面量**、分成两个 `Sfx.play()` 调用，
 	#    不能写成 `Sfx.play("fire_beam" if use_beam() else "fire")` ——
 	#    `_verify_sfx.gd` 是**静态扫源码里的字面量**来核对「库表里每个名字都有调用点」，
 	#    拼出来的名字它扫不到，会报「没人用的：fire, fire_beam」。
-	if uses_beam_visual():
+	if use_beam():
 		Sfx.play("fire_beam")
 	else:
 		Sfx.play("fire")

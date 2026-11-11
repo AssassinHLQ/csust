@@ -300,7 +300,31 @@ func _test_in_game() -> void:
 	Sfx.stop_all()
 	var fired: bool = weapon.call("shoot")
 	_check(fired and Sfx.active_count() >= 1,
-		"开一枪：shoot() = %s，`fire` 响了（%d 个在播）" % [str(fired), Sfx.active_count()])
+		"开一枪：shoot() = %s，有声音在播（%d 个）" % [str(fired), Sfx.active_count()])
+
+	# ⚠️⚠️ **光「响了」不算数，必须核对播的是哪个文件。**
+	#
+	# 2026-11-11 栽过：普通形态 `player.gd` 会把 `weapon.laser_gun` 设成 true
+	# （为了让普通攻击射「激光子弹」这个**视觉**），而 `shoot()` 里当时的判据是
+	# `uses_beam_visual()`（= `use_beam() or laser_gun`）→ 普通攻击**一直在播
+	# `fire_beam`（Kenney 激光音）**，`fire` 一次都没响过。
+	# 上面那种「active_count >= 1」的断言对这件事**完全无感**：
+	# 有声音，只是播错了那一条，于是本喵改了三轮 `SPEC.fire` 全白改，
+	# 用户听到的一直是激光音。
+	#
+	# 现在把「普通形态播的就是 `fire` 的那批文件」钉死在这里：
+	# 再有人改判据、或者 `laser_gun` 又被拿去兼职，这条会当场红。
+	var played := _playing_2d()
+	var played_path := ""
+	if played != null and played.stream != null:
+		played_path = String(played.stream.resource_path)
+	var fire_files: Array[String] = Sfx.files("fire")
+	_check(fire_files.has(played_path),
+		"普通形态开枪播的是 `fire` 那批（实测 %s）｜库里是 %s"
+		% [played_path.get_file() if played_path != "" else "（没抓到播放器）", str(fire_files)])
+	_check(not played_path.contains("laserSmall"),
+		"普通形态**不再**播激光音 `fire_beam`（laserSmall）%s"
+		% ("" if not played_path.contains("laserSmall") else "：实测 " + played_path.get_file()))
 
 	# 把弹药清空再换弹 —— `try_reload()` 在满弹时会直接 return
 	weapon.set("current_ammo", 0)
