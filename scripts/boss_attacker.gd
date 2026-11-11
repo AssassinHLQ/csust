@@ -33,6 +33,21 @@ extends Boss
 @export var attack_reach := 5.0
 ## 预警圈半径（m）。**同时就是伤害半径**，两者必须一致，见文件头。
 @export var attack_radius := 4.8
+## **高度容差（m）**：玩家比本体高出超过这个值就打不到。
+##
+## ⚠️ 2026-11-11 修用户报的 bug：「飞起来发现飞猪优香居然打得到我,
+##    证明之前 boss 攻击范围有误,没考虑高度,直接攻击范围内无限高的单位」。
+##
+## 真因：原来的判定把 y 分量**硬编码成 0**
+## （`Vector3(dx, 0.0, dz).length() <= attack_radius`），
+## 于是伤害区是一根「无限高的圆柱」—— 玩家飞到 100 m 高空照样挨打。
+## 发现玩家那一步也一样（只比了水平朝向）。
+##
+## 现在改成：**水平距离照旧**（预警圈画在地上的圆仍然一一对应），
+## 但额外要求 `|玩家y − 本体y| <= attack_max_height`。
+## 取 6 m：飞猪/霸王龙的身高量级是 3~8 m，跳跃躲不开、
+## 机甲的起飞高度（`_hold_y` 起步就 8 m 以上）一律打不到。
+@export var attack_max_height := 6.0
 ## 命中时的水平击退（m/s）
 @export var knockback_force := 8.0
 ## 预警圈颜色（霸王龙红、飞猪紫 —— 场上有两只时能一眼看出是谁要打你）
@@ -84,6 +99,9 @@ func _process(delta: float) -> void:
 	var flat_to_player := Vector3(to_player.x, 0.0, to_player.z)
 	if to_player.length() > attack_range or flat_to_player.length_squared() < 0.001:
 		return
+	# 高度：飞太高就不起手（否则它会对着天上的玩家空放一圈，看着像 bug）
+	if absf(to_player.y) > attack_max_height:
+		return
 	if facing().dot(flat_to_player.normalized()) \
 			< cos(deg_to_rad(attack_half_angle_degrees)):
 		return
@@ -114,7 +132,10 @@ func _attack(_player: Player) -> void:
 		var flat := Vector3(
 			now_player.global_position.x - center.x, 0.0,
 			now_player.global_position.z - center.z)
-		if flat.length() <= attack_radius:
+		# ⚠️ 高度也要判：蓄力这 0.9 s 里玩家可能已经飞上去了。
+		#    原来只比水平距离 ⇒ 伤害区是「无限高的圆柱」，见 `attack_max_height`。
+		var dy := absf(now_player.global_position.y - global_position.y)
+		if flat.length() <= attack_radius and dy <= attack_max_height:
 			now_player.take_damage(attack_damage, global_position, knockback_force)
 	_telegraph.visible = false
 	_attacking = false

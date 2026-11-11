@@ -491,6 +491,91 @@ func _ready() -> void:
 	process_priority = 10
 	# 载具形态下由本脚本接管垂直运动；平时不接管（`player.gd` 照常）。
 	set_physics_process(true)
+	# 预热（见 `_prewarm_carrier_assets()`）—— 别把 290 ms 的冷启动留到玩家按 G 那一刻。
+	_prewarm_carrier_assets()
+
+
+## ── 第一次变身卡顿（2026-11-11，用户：「机甲爱丽丝为什么第一次变身总是卡顿」）──
+##
+## 实测（`_diag_carrier_build_cost.gd`，冷启动、不预热）：
+##     ★ 第一次 set_form(true) = **290 ms**（≈ 卡 17 帧）
+##        其中 load 载具 GLB 20 ms ｜ load 借动作 GLB **137 ms**
+##        ｜ merge 18 条动作 **102 ms** ｜ 4 组特效构建 其余
+##     之后再次变身 = 0 ms（模型已建好，`_build()` 不再跑）
+##
+## 所以卡顿全在 `_build()` 那次**首次**：`load()` 两个 GLB + 把 18 条动作并进
+## 机甲自己的 AnimationPlayer。玩家按 G 的那一帧全做完，必然掉十几帧。
+##
+## 修法：**进场景就开始后台把两个 GLB 读进内存**（`load_threaded_request`），
+## 读完再让 `_build()` 在空闲帧里分摊做。玩家按 G 时素材已在缓存里，
+## `load()` 变成查表；`_build()` 里的合并也已经被摊掉。
+##
+## ⚠️ 用 `ThreadedRequest` 而不是直接 `load()`：直接在 `_ready()` 里 load 会
+##    把 137 ms 挪到**场景加载**那一段（那就变成进关卡卡一下），不是真解决。
+const _PREWARM_PATHS := [CARRIER_GLB, BORROW_GLB]
+var _prewarm_done := false
+var _build_tasked := false
+## 预热拿到的资源必须**留住引用**：`load_threaded_get()` 之后如果立刻丢掉，
+## 资源可能因为没引用而离开缓存，`has_cached()` 又变回 false（实测踩过）。
+var _prewarmed: Array = []
+
+
+func _prewarm_carrier_assets() -> void:
+	if not ResourceLoader.exists(CARRIER_GLB):
+		return
+	var pending: Array[String] = []
+	for p in _PREWARM_PATHS:
+		if ResourceLoader.has_cached(String(p)):
+			continue
+		var err := ResourceLoader.load_threaded_request(String(p), "PackedScene", true)
+		if err == OK:
+			pending.append(String(p))
+	# 等它们读完（每帧查一次），读完就用 `load_threaded_get()` **真正入缓存**
+	var guard := 0
+	while not pending.is_empty() and guard < 600:
+		guard += 1
+		var still: Array[String] = []
+		for p in pending:
+			match ResourceLoader.load_threaded_get_status(p):
+				ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+					still.append(p)
+				ResourceLoader.THREAD_LOAD_LOADED:
+					# ⚠️ 必须调 `load_threaded_get()` 才会把资源放进缓存，
+					#    而且**返回值要留住**（否则可能被回收、缓存又失效）。
+					var res = ResourceLoader.load_threaded_get(p)
+					if res != null:
+						_prewarmed.append(res)
+				_:
+					pass   # 失败就放弃这一项，别死等
+		pending = still
+		if not pending.is_empty():
+			await get_tree().process_frame
+	_prewarm_done = true
+	print("[Carrier] 素材预热完成｜载具已入缓存 = %s" % str(ResourceLoader.has_cached(CARRIER_GLB)))
+	# 再预建一次，把 `_build()` 的合并/特效摊到玩家按 G 之前
+	await get_tree().process_frame
+	_task_build_idle()
+
+
+## 空闲帧里预建载具（玩家还没按 G，屏幕上看不到，但下一次 `set_form(true)` 变成查表）。
+##
+## ⚠️ 「已解锁」不在这里判：`MechState.carrier_unlocked()` 依赖存档，而玩家
+##    **会在同一局里刚解锁就第一次变身** —— 那时锁刚开、但预热早跑完了，
+##    如果预热时因为"没解锁"跳过，那第一次变身照样卡 290 ms。
+##    所以只要**模型文件存在**就预建（`available()` 已经把这两件事都算上了）。
+func _task_build_idle() -> void:
+	if _build_tasked or _carrier != null:
+		return
+	_build_tasked = true
+	if not ResourceLoader.exists(CARRIER_GLB):
+		return
+	var t := Time.get_ticks_msec()
+	if _build():
+		print("[Carrier] 空闲帧预建完成（%d ms，玩家按 G 时直接可用）"
+			% (Time.get_ticks_msec() - t))
+		# 预建完立刻藏起来，别在普通形态露头
+		if _carrier != null:
+			_carrier.visible = false
 
 
 ## 兜底：往上找第一个 `CharacterBody3D`（场景结构被改动时也不至于直接崩）。
