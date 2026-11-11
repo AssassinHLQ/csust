@@ -6,6 +6,42 @@
 [ext_resource type="Script" uid="uid://mt1ypoul64ud" path="res://scripts/esports_lod.gd" id="4_lod"]
 [ext_resource type="PackedScene" path="res://scenes/esports_collision_baked.tscn" id="5_bakedcol"]
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_outer_n"]
+size = Vector3(10.843701, 0.3, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_outer_s"]
+size = Vector3(10.843701, 0.3, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_outer_w"]
+size = Vector3(0.22, 0.3, 16.837502)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_outer_e"]
+size = Vector3(0.22, 0.3, 16.837502)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_mid_n"]
+size = Vector3(11.283702, 0.2, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_mid_s"]
+size = Vector3(11.283702, 0.2, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_mid_w"]
+size = Vector3(0.22, 0.2, 17.277502)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_mid_e"]
+size = Vector3(0.22, 0.2, 17.277502)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_inner_n"]
+size = Vector3(11.723701, 0.1, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_inner_s"]
+size = Vector3(11.723701, 0.1, 0.22)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_inner_w"]
+size = Vector3(0.22, 0.1, 17.717501)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_step_inner_e"]
+size = Vector3(0.22, 0.1, 17.717501)
+
 [node name="EsportsRoom" type="Node3D" unique_id=1923525531]
 script = ExtResource("2_col")
 
@@ -18,3 +54,55 @@ script = ExtResource("4_lod")
 [node name="BakedCollision" parent="." unique_id=1404628984 instance=ExtResource("5_bakedcol")]
 
 [node name="Room" parent="." unique_id=180173575 instance=ExtResource("1_room")]
+
+[node name="BaseSteps" type="StaticBody3D" parent="." unique_id=1208554137]
+collision_layer = 1
+collision_mask = 0
+
+[node name="Step0_N" type="CollisionShape3D" parent="BaseSteps" unique_id=1590324511]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.42109, 8.528749)
+shape = SubResource("BoxShape3D_step_outer_n")
+
+[node name="Step0_S" type="CollisionShape3D" parent="BaseSteps" unique_id=1583030194]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.42109, -8.528751)
+shape = SubResource("BoxShape3D_step_outer_s")
+
+[node name="Step0_W" type="CollisionShape3D" parent="BaseSteps" unique_id=1402066217]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.311852, 3.42109, -1e-06)
+shape = SubResource("BoxShape3D_step_outer_w")
+
+[node name="Step0_E" type="CollisionShape3D" parent="BaseSteps" unique_id=1742139603]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.311852, 3.42109, -1e-06)
+shape = SubResource("BoxShape3D_step_outer_e")
+
+[node name="Step1_N" type="CollisionShape3D" parent="BaseSteps" unique_id=1285072931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.47109, 8.74875)
+shape = SubResource("BoxShape3D_step_mid_n")
+
+[node name="Step1_S" type="CollisionShape3D" parent="BaseSteps" unique_id=1933336106]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.47109, -8.748753)
+shape = SubResource("BoxShape3D_step_mid_s")
+
+[node name="Step1_W" type="CollisionShape3D" parent="BaseSteps" unique_id=1889550496]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.531853, 3.47109, -1e-06)
+shape = SubResource("BoxShape3D_step_mid_w")
+
+[node name="Step1_E" type="CollisionShape3D" parent="BaseSteps" unique_id=2098884686]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.531853, 3.47109, -1e-06)
+shape = SubResource("BoxShape3D_step_mid_e")
+
+[node name="Step2_N" type="CollisionShape3D" parent="BaseSteps" unique_id=1647536499]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.52109, 8.96875)
+shape = SubResource("BoxShape3D_step_inner_n")
+
+[node name="Step2_S" type="CollisionShape3D" parent="BaseSteps" unique_id=1361463949]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.52109, -8.968752)
+shape = SubResource("BoxShape3D_step_inner_s")
+
+[node name="Step2_W" type="CollisionShape3D" parent="BaseSteps" unique_id=1179115745]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.75185, 3.52109, -1e-06)
+shape = SubResource("BoxShape3D_step_inner_w")
+
+[node name="Step2_E" type="CollisionShape3D" parent="BaseSteps" unique_id=1254817621]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.75185, 3.52109, -1e-06)
+shape = SubResource("BoxShape3D_step_inner_e")

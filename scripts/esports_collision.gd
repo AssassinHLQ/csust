@@ -285,13 +285,17 @@ func _find_base_box() -> AABB:
 ## 「底座」根本不存在 —— 那种情况下建出来的台阶会挂在半空中
 ## （实测：每级只有 0.018 m 高，因为选中的是另一块薄板）。
 func _build_base_steps() -> void:
+	# ⚠️ 先看场景里有没有**已经摆好的**（`scenes/esports_room.tscn` 里现在就有一个
+	#    `BaseSteps` 静态节点，是烘进场景的）—— 有就什么都不做，别叠出第二份。
+	#    这一步要放在翻转判断**之前**：静态节点是房间本地空间的，
+	#    独立加载 tscn 时（没有翻转）它照样在，不该被跳过。
+	if get_node_or_null(STEP_NODE) != null:
+		return
 	if global_basis.y.y >= 0.0:
 		return                      # 没摆进场地（未翻转），不建
 	var base := _find_base_box()
 	if base.size == Vector3.ZERO:
 		push_warning("[EsportsCol] 找不到底座盒，台阶环不建")
-		return
-	if get_node_or_null(STEP_NODE) != null:
 		return
 
 	var body := StaticBody3D.new()

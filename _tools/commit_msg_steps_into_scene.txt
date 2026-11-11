@@ -1,0 +1,41 @@
+电竞房: 台阶从「运行时临时建」改成写进 esports_room.tscn（编辑器可见）
+
+用户 2026-11-11（附编辑器截图）：「这个碰撞为什么我编辑器没看见你改了」。
+
+原因：上一版（ebd1f83）只在 `esports_collision.gd::_build_base_steps()` 里
+**运行时**现建 12 个碰撞盒，一个字节都没写进场景文件；而且那个脚本不是 `@tool`，
+`_ready()` 在编辑器里根本不跑 —— 所以编辑器里当然看不见。
+
+现在把台阶作为**静态节点写进 `scenes/esports_room.tscn`**：
+
+    BaseSteps (StaticBody3D)
+      Step0_N/S/W/E  世界顶面 0.339（最高，齐平台面）
+      Step1_N/S/W/E  世界顶面 0.239
+      Step2_N/S/W/E  世界顶面 0.139
+      → 屋外地块 0.000
+
+12 个 CollisionShape3D + 12 个 BoxShape3D 子资源，坐标是**房间本地空间**的
+（由运行时那版换算出来，见提交说明里的推导），打开 `esports_room.tscn`
+就能在编辑器里选中、拖动、量尺寸。
+
+- scenes/esports_room.tscn：新增上述 13 个节点 + 12 个子资源
+- scripts/esports_collision.gd：`_build_base_steps()` 改成「场景里已有就什么都不做」，
+  而且这个判断放在**翻转判断之前** —— 静态节点是房间本地空间的，
+  独立加载 tscn（没有翻转）时它照样在，不该被跳过。
+  运行时兜底逻辑保留：万一哪天静态节点被删了，游戏里仍能自动建出来。
+
+── 为什么没走「重新烘焙」那条路 ──
+
+`scenes/esports_collision_baked.tscn` 现在挂着另一个会话**未提交**的改动
+（地板厚度 0.3 → 0.0533、多个墙盒重新合并），现在重跑 `_bake_esports_parts.gd`
+会把他们的活儿整个覆盖掉。所以改走「写进 esports_room.tscn」——
+同样是真写进场景、编辑器可见，而且不碰那个正在被编辑的文件。
+
+── 实测 ──
+
+· 独立加载 `esports_room.tscn`：BaseSteps 存在，12 个子节点（编辑器口径 ✔）
+· 游戏内：BaseSteps 12 个子节点、**节点只有 1 个**（没有叠两份）
+· 沿 +Z 脚下高度：`0.339 → 0.239 → 0.139 → 0.000`，四级连续
+· `_verify_esports_collision`：硬失败 **0 项**（门洞仍通）
+· `_verify_music`：**22/22 全过**
+· `_smoke_build`：**12/12「可以打包」**
