@@ -565,33 +565,30 @@ func _fix_glb_materials(inst: Node3D) -> void:
 				mat.emission_enabled = false
 				mat.albedo_texture = null
 				mat.vertex_color_use_as_albedo = false
-				# ⚠️ 2026-11-11 用户：「店里白墙改混凝土的质感，现在是不是反射高了」。
+				# ⚠️ 2026-11-11 用户第二句：「我喜欢白混凝土」。
 				#
-				# 先回答"反射高"：查下来 **不是镜面反射高**，是**反照率高**：
-				#     旧值 albedo (0.95, 0.96, 0.97) → 反照率 95%，白纸式全反射
-				#     metallic = 0.0（镜面反射其实几乎没有）
-				#     roughness = 0.55（偏高光）
-				# 白墙把天空环境光（`Env_arena` 的 ambient_light_source = 3）
-				# 几乎全反射回来 → 白天过曝 **57.74%**（`_probe_shop_concrete.gd` 实测）。
+				# 上一版按"混凝土物理反照率 0.30~0.50"选了中灰 (0.48,0.47,0.45)，
+				# 结果跑出来**偏暖褐 / 像生锈**，用户直接否了。两处暖叠一起：
+				#   ① `ambient_light_source = 3`（走天空），而天空是**粉紫**的 → 灰墙被染暖
+				#   ② albedo 三通道 R>G>B (0.48,0.47,0.45) 本身又叠一层暖
+				# 实测「暖度 R-B」：中灰版 +6.3，中性版 −1.4。
 				#
-				# 混凝土的真实值：反照率 0.30~0.45、粗糙度 0.80~0.95，两者都要降。
-				# A/B 四档实测（12:00，朝店里深处的同一机位）：
-				#     A 现状 (0.95) rough 0.55  → 过曝 57.74%  平均 223.5
-				#     B 浅灰 (0.62) rough 0.88  → 过曝  1.67%  平均 183.8
-				#     C 中灰 (0.48) rough 0.90  → 过曝  1.64%  平均 155.8  ← 采用
-				#     D 深灰 (0.36) rough 0.92  → 过曝  1.37%  平均 128.3
-				# 选 C：白天有层次、夜里（21:00 平均 121.3）也有体积感，
-				# B 太接近白、D 在夜里偏沉。图在 `_arisu_captures/_shop_concrete/`。
+				# 白混凝土应该是：**高明度 + 中性色 + 保留粗糙度和颗粒**。
+				# 四档实测（12:00，货架之间那个视角，用户截图同机位）：
+				#     C 中灰 (0.48,0.47,0.45) → 亮度 152.6  暖度 +1.2   ← 偏褐，否
+				#     P1 中性 (0.68,0.68,0.68) → 亮度 182.8  暖度 −4.4   ← 采用
+				#     P2 微冷 (0.66,0.68,0.70) → 亮度 182.5  暖度 −8.8   ← 略偏蓝紫
+				#     P4 更白 (0.75,0.77,0.79) → 亮度 191.9  暖度 −8.6   ← 白天偏飘
+				# 选 P1：天空那层粉紫正好把中性灰中和成干净的白，
+				# 白天不炸（过曝 2.40%，和中灰版一致）、夜里（21:00）也还看得清。
+				# 图在 `_arisu_captures/_shop_white_concrete/`。
 				#
-				# 另外挂了程序化混凝土贴图（`_gen_concrete_tex.gd` 生成，512²）：
-				#   · albedo 灰度斑驳 → 大尺度明暗，不像纯色塑料
-				#   · normal 细颗粒   → 光照下才有"混凝土"的表面凹凸
-				#   · rough 变化      → 抹子痕那种不均匀的哑光
-				# 贴图叠在 albedo_color 上，所以上面的色值仍是基准色。
+				# roughness 保持 0.88（哑光）—— 这是「混凝土」和「白纸」的分界：
+				# 白而哑光 = 白混凝土；白而光滑 = 又是之前那个 57.74% 过曝的白墙。
 				var is_wall := key.contains("PLASTIK") or key.contains("Rectangle")
 				if is_wall:
-					mat.albedo_color = Color(0.48, 0.47, 0.45)
-					mat.roughness = 0.90
+					mat.albedo_color = Color(0.68, 0.68, 0.68)
+					mat.roughness = 0.88
 					mat.metallic = 0.0
 					mat.metallic_specular = 0.30
 					var tex_a := load("res://assets/tex/concrete_albedo.png")
@@ -607,7 +604,7 @@ func _fix_glb_materials(inst: Node3D) -> void:
 						mat.normal_enabled = true
 						mat.normal_texture = tex_n
 						mat.normal_scale = 0.85
-					print("[Shop]   材质 %-16s → 混凝土（albedo 0.48 / rough 0.90 / 带贴图 %s）"
+					print("[Shop]   材质 %-16s → 白混凝土（albedo 0.68 / rough 0.88 / 带贴图 %s）"
 						% [key, "有" if tex_a != null else "无"])
 				else:
 					# 非墙非地的结构件（柜台等）：保守给中性灰，保持可读

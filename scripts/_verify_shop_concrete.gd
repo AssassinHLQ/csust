@@ -15,10 +15,17 @@ extends SceneTree
 const WALL_MAT := "PLASTIK_W"
 const FLOOR_MAT := "Rectangle009__0"
 
-## 混凝土的物理区间（参考：普通水泥 ~0.35，浅色混凝土 ~0.45）
-const ALBEDO_MIN := 0.30
-const ALBEDO_MAX := 0.50
+## 混凝土的物理区间。
+## ⚠️ 2026-11-11 用户第二句「我喜欢白混凝土」→ 从"中灰混凝土"改成"白混凝土"。
+##    白混凝土（清水混凝土刷白 / 白色素混凝土）反照率确实比普通水泥高：
+##    普通水泥 ~0.35，白混凝土 ~0.55~0.70。
+##    所以区间放宽到 [0.55, 0.78]，但**粗糙度下限仍然是 0.80** ——
+##    "白而哑光"才是白混凝土，"白而光滑"就是之前那个 57.74% 过曝的白纸墙。
+const ALBEDO_MIN := 0.55
+const ALBEDO_MAX := 0.78
 const ROUGH_MIN := 0.80
+## 中性度：白混凝土不能偏色。R 与 B 的差超过这个就当"染色了"。
+const NEUTRAL_MAX_DRIFT := 0.05
 
 var _pass := 0
 var _fail := 0
@@ -74,9 +81,14 @@ func _run() -> void:
 		print("   %s：albedo=%s（亮度 %.2f）rough=%.2f metallic=%.2f"
 			% [nm, str(mat.albedo_color), lum, mat.roughness, mat.metallic])
 		_check(lum >= ALBEDO_MIN and lum <= ALBEDO_MAX,
-			"  %s 反照率 %.2f 落在混凝土区间 [%.1f, %.1f]" % [nm, lum, ALBEDO_MIN, ALBEDO_MAX])
+			"  %s 反照率 %.2f 落在白混凝土区间 [%.2f, %.2f]" % [nm, lum, ALBEDO_MIN, ALBEDO_MAX])
+		# 中性度：白混凝土不能偏色（上一版 R>G>B 被天空粉紫一叠就成褐色）
+		var drift := absf(mat.albedo_color.r - mat.albedo_color.b)
+		_check(drift <= NEUTRAL_MAX_DRIFT,
+			"  %s 色相中性（|R−B| = %.3f ≤ %.2f，不会叠成褐色）"
+				% [nm, drift, NEUTRAL_MAX_DRIFT])
 		_check(mat.roughness >= ROUGH_MIN,
-			"  %s 粗糙度 %.2f ≥ %.2f（不再是白纸式高光）" % [nm, mat.roughness, ROUGH_MIN])
+			"  %s 粗糙度 %.2f ≥ %.2f（白而哑光，不是白纸）" % [nm, mat.roughness, ROUGH_MIN])
 		_check(mat.metallic <= 0.01, "  %s metallic ≈ 0（不是镜面反射高）" % nm)
 		_check(mat.albedo_texture != null, "  %s 挂了 albedo 贴图" % nm)
 		_check(mat.roughness_texture != null, "  %s 挂了 roughness 贴图" % nm)
@@ -119,4 +131,4 @@ func _check(ok: bool, msg: String) -> void:
 func _summary() -> void:
 	print("\n═══ 通过 %d / 失败 %d ═══" % [_pass, _fail])
 	if _fail == 0:
-		print("★ 全过：白墙已成混凝土（反照率、粗糙度、三张贴图都对）")
+		print("★ 全过：白墙已成**白混凝土**（高反照率 + 中性色 + 哑光 + 三张贴图）")
