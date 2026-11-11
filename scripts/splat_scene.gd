@@ -869,12 +869,31 @@ func _clear_built_collision() -> void:
 
 
 func _player_node() -> Node3D:
-	var p := get_tree().get_first_node_in_group("player") as Node3D
-	if p != null:
-		return p
+	# ⚠️⚠️ **先认 `current_scene/Player`，再退回分组查找** —— 顺序反过来会踩一个
+	#    只在换场景时才出现的坑：
+	#
+	#    旧场景的 `Player` 是 `queue_free()` 延迟释放的，那几帧里它**还在 `player` 分组中**，
+	#    于是 `get_first_node_in_group("player")` 可能拿到**上一个场景**的玩家，
+	#    读到的是那边的世界坐标（跑酷 / Boss 区，离 609 很远）。
+	#    结果 `_is_inside_room()` 判「玩家在房间外面」→ `_unload_for_vram()` 立刻把
+	#    刚解码好的泼溅放掉。
+	#
+	#    用户 2026-11-11 的日志就是这个链条（`godot2026-11-11T22.16.15.log`）：
+	#       345  [Dev] F4：next_level.tscn → game.tscn
+	#       350  [SplatScene] 画室609：延后加载（delay 10.0 s / 距离 22.0 m）
+	#       518  [SplatScene] 完成：2769855 点，耗时 3.9 s      ← 刚加载好
+	#       528  [SplatScene] 画室609：离开范围，释放泼溅显存   ← 紧接着就被卸了
+	#    现象就是「F4 回来 609 只剩代理兜底几何（灰地砖 + 道具）」。
+	#
+	#    顺带把 `is_instance_valid` / `is_inside_tree` 也补上：拿到的引用必须真的能用。
 	var scene := get_tree().current_scene
 	if scene != null:
-		return scene.get_node_or_null("Player") as Node3D
+		var cur := scene.get_node_or_null("Player") as Node3D
+		if cur != null and is_instance_valid(cur) and cur.is_inside_tree():
+			return cur
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	if p != null and is_instance_valid(p) and p.is_inside_tree():
+		return p
 	return null
 
 
