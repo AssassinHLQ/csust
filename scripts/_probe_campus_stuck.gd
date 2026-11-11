@@ -14,9 +14,15 @@ extends SceneTree
 ## 另外排除「脚下没地」（向下射线打不到东西）和「起点就在碰撞里」的点。
 
 const LEVEL := "res://scenes/next_level.tscn"
-const STEP := 25.0          # 网格间距（米）
-const SPAN := 400.0         # 覆盖边长
-const FRAMES := 25          # 每个方向按多久
+## 网格间距（米）/ 覆盖边长 / 每方向按多久 / 位移小于这个算卡住。
+##
+## ⚠️ 默认值很慢：`SPAN/STEP = 16`，16×16×4 方向×25 帧 ≈ **25600 个物理帧**，
+##    实测 420 秒都跑不完，而结果只在最后才打印 —— 于是「跑了一次啥也没看到」。
+##    所以现在可以用命令行覆盖，并且**每扫完一行就打一次进度**：
+##      godot --path . --script res://scripts/_probe_campus_stuck.gd -- --step=60 --frames=12
+const STEP_DEFAULT := 25.0
+const SPAN := 400.0
+const FRAMES_DEFAULT := 25
 const STUCK_MOVE := 0.30    # 位移小于这个算卡住
 
 var _level: Node3D
@@ -57,6 +63,15 @@ func _run() -> void:
 	print("[stuck] 玩家 layer=%d mask=%d" % [_player.collision_layer, _player.collision_mask])
 
 	var space := _level.get_world_3d().direct_space_state
+	# 命令行覆盖（见文件头那段「为什么加这个」）
+	var STEP := STEP_DEFAULT
+	var FRAMES := FRAMES_DEFAULT
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--step="):
+			STEP = maxf(float(a.substr(7)), 5.0)
+		elif a.begins_with("--frames="):
+			FRAMES = maxi(int(a.substr(9)), 4)
+	print("[stuck] 参数：间距 %.0f m / 每方向 %d 帧" % [STEP, FRAMES])
 	var x0 := -SPAN * 0.5
 	var z0 := -230.0 - SPAN * 0.5
 	var nx := int(SPAN / STEP)
@@ -103,6 +118,9 @@ func _run() -> void:
 				ok_moves += 1
 			else:
 				stuck.append({"p": Vector3(px, gy, pz), "best": best_move})
+		# 每扫完一行就打一次进度（结果在最后，否则长扫描时完全看不到进展）
+		print("[stuck] 进度 z=%.0f：已检查 %d、卡住 %d" % [z0 + float(iz) * STEP,
+			checked, stuck.size()])
 
 	print("\n[stuck] 网格 %d×%d（间距 %.0f m），有地面的 %d 个，空气/越界跳过 %d 个"
 		% [nx, nx, STEP, checked, skipped_air])
