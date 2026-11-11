@@ -4880,6 +4880,61 @@ Player 加入了 `"player"` 组，Boss 靠它找人。
   （专门防止「两只被做成一模一样」）、圈内扣血 + 击退 + 收圈
 - `_verify_boss_pig.gd` §8（23 项）—— 第四、第五位（霍德 / 佩洛洛斯拉），见 §7.7
 
+### 7.5.1 霸王龙会跑过来追你（2026-11-11）
+
+用户：「霸王龙要能跑动，追人那种？」
+
+#### ⚠️ 这份 GLB 里**没有走路动作**
+
+动画只有 6 段：`bite / charge / idle / roar / stomp / tail_sweep`。
+`charge` 那段是「前冲顶撞」——腿是钉在原地的，循环起来像抽筋（出图否掉了）。
+所以**腿是程序化摆的**（`trex_yuuka_boss.gd::_tick_legs()`）：
+
+- 左右腿各取「大腿 + 小腿」：左 `Bone.014` / `.015`，右 `Bone.038` / `.039`
+- 绕**模型的左右轴**加正弦摆动，左右相位差 π（一前一后），小腿再反相弯一点
+- 关键：`axis_local = 骨静置基⁻¹ × Vector3.RIGHT` —— 骨头的局部坐标系和模型轴是错开的，
+  不换一次就会绕着奇怪的轴扭（本喵先用 `_probe_trex_legs.gd` 把 10 根腿骨的轴都打出来才动手）
+- 是**在当前姿态上叠加**（`set_bone_pose_rotation(q * delta)`），不是拿 rest 覆盖 ——
+  这样 idle 里的呼吸、摆尾都还在
+- ⚠️ `process_priority = 100`：必须排在 `AnimationPlayer` **之后**写骨骼，
+  否则每帧被动画覆盖回去（表现就是「腿一动不动」）
+
+#### 走位本身很简单
+
+它只是一只 `StaticBody3D`，直接改 `global_position` 就能动。配套三件事一起做了：
+
+| 参数 | 默认 | 作用 |
+|---|---|---|
+| `chase_speed` | **12 m/s** | 比玩家（6 m/s）快，必须靠闪避 / 机甲起飞躲 |
+| `chase_turn_speed` | 80°/s | 25 m 的大块头，转太快像陀螺 |
+| `chase_stop_distance` | 7 m | 走到这么近就停下开打 |
+| `chase_notice_range` | 60 m | 多远开始追 |
+| `chase_leash` | **45 m** | 离出生点超过它就往回走，不会一路追出校园 |
+| `leg_swing_deg` / `leg_knee_deg` | 20° / 18° | 大腿摆幅 / 小腿反弯 |
+| `leg_cycle_hz` | 1.15 | 每秒几步 |
+
+三个细节：
+
+- **朝当前朝向走**，不是直接朝目标走 —— 先转身再迈步，否则大块头会横着滑过去
+- **向下打射线贴地**（起点在头顶 +8 m，因为龙有 9~10.5 m 高，从原点往下会先撞到自己），
+  `lerp` 平滑，走坡不浮空也不陷进去
+- **`_busy` 期间不挪窝**：正在放技能就站着，免得一边滑一边咬
+
+#### ⚠️ 子类覆盖 `_process` 必须调 super
+
+`trex_yuuka_boss.gd` 新写了 `_process()`，**第一行必须 `super._process(delta)`** ——
+`BossAttacker._process()` 里是攻击冷却和起手判定，漏掉这一行整只 Boss 就再也不会攻击，
+而且**不报错**。
+
+#### 自检 `_verify_trex_chase.gd`（9 项）
+
+玩家放 30 m 外跑 1.5 s：本体真的移动 18 m、拉近 18 m；朝向点积 **1.00**；
+玩家贴到 2 m 时不顶着碾；大腿骨相邻帧转动 **2.41°**（证明腿真在摆不是滑步）；
+y 偏差 < 3 m；玩家丢到 200 m 外时本体停在离出生点 34.6 m（拴绳 45 m 内）。
+
+出图：`bash _tools/run_shot.sh res://scripts/_probe_trex_run_shot.gd -- --splat=off`
+→ `_arisu_captures/_trex_run/01_stride.png`、`02_stride.png`
+
 ### 还没做的
 
 - **骨骼动作**：霸王龙那 73 根骨、霍德 164 根、佩洛洛斯拉 47 根都还在，
