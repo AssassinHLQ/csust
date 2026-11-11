@@ -180,12 +180,22 @@ func _run() -> void:
 	if es_zone != null:
 		es_size = _print_zone(es_zone)
 		es_centre = es_zone.global_transform * (es_zone.get_child(0) as CollisionShape3D).position
-	# 触发区应当和房间同量级：这栋房子实测长边约 16.8 m（见 game.gd 的 8.42 半深）
-	var es_zone_ok := es_zone != null \
-		and es_size.x > 4.0 and es_size.z > 4.0 \
-		and es_size.x < 40.0 and es_size.z < 40.0
-	print("  盒子 %.2f × %.2f × %.2f（应在 4~40 m 之间，房子长边约 16.8 m）"
-		% [es_size.x, es_size.y, es_size.z])
+	# ⚠️ 触发区 = 房间包围盒 **水平每边外扩 2 m**（用户 2026-11-11：
+	#    「电竞房判定范围往外扩一圈2m」）。这里用房间自己量出来的那份包围盒对账，
+	#    而不是写死数字 —— 房间尺寸还在变。
+	var es_bounds := AABB()
+	if es_room.has_method("_baked_bounds"):
+		es_bounds = es_room.call("_baked_bounds")
+	var want_x: float = es_bounds.size.x + 4.0      # 每边 +2
+	var want_z: float = es_bounds.size.z + 4.0
+	var want_y: float = es_bounds.size.y * 2.0      # 高度仍取 2 倍
+	print("  房间包围盒 %.2f × %.2f × %.2f" % [es_bounds.size.x, es_bounds.size.y, es_bounds.size.z])
+	print("  期望盒子   %.2f × %.2f × %.2f（水平每边 +2 m）" % [want_x, want_y, want_z])
+	var es_zone_ok := es_zone != null and es_bounds.size != Vector3.ZERO \
+		and absf(es_size.x - want_x) < 0.05 \
+		and absf(es_size.z - want_z) < 0.05 \
+		and absf(es_size.y - want_y) < 0.05
+	print("  实际盒子   %.2f × %.2f × %.2f" % [es_size.x, es_size.y, es_size.z])
 
 	# 人造玩家：第 1 层 + `player` 组，正好是触发区认的目标
 	var probe := _make_probe_player()

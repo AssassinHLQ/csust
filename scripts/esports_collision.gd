@@ -38,8 +38,12 @@ const BAKED_AUTOCOL := "BakedCollision/AutoCol"
 ## ── BGM ──
 ## 曲目表见 `scripts/music.gd`（逻辑名 `esports`）
 const MUSIC_TRACK := "esports"
-## 触发区比碰撞包围盒再内缩多少米
-const MUSIC_INSET := 0.6
+## 触发区比房间**往外扩**多少米（每边）。
+##
+## 用户 2026-11-11：「电竞房判定范围往外扩一圈2m」。
+## 早先是往内缩 0.6 m（怕贴墙走忽开忽关），但那样跨门槛时会卡在墙线上；
+## 现在改成外扩 2 m：墙外 2 m 就开、走出 2 m 才停。
+const MUSIC_GROW := 2.0
 
 var _reported := false
 var _music_inside := 0
@@ -92,7 +96,8 @@ func build_collision() -> void:
 #      · 并且接 `visibility_changed`：万一玩家已经站在那块地上、房子才落地，
 #        也能当场补上（不然要等他走出去再走进来）。
 # 2. 碰撞是**离线烘好的 769 个盒子**（`BakedCollision/AutoCol`），不是手拖的几个。
-#    房间还在改（门、家具都在动），所以同样**不写死尺寸**，直接从这些盒子量包围盒。
+#    房间还在改（门、家具都在动），所以同样**不写死尺寸**，直接从这些盒子量包围盒，
+#    再按 `MUSIC_GROW` 往外扩一圈（见那个常量的说明）。
 
 func _build_music_zone() -> void:
 	if _music_area != null and is_instance_valid(_music_area):
@@ -109,11 +114,13 @@ func _build_music_zone() -> void:
 	area.monitoring = true
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	# 高度取包围盒的 2 倍、中心仍在包围盒中心：玩家怎么跳都在里面
+	# 水平方向**往外扩 MUSIC_GROW**（用户 2026-11-11：「电竞房判定范围往外扩一圈2m」），
+	# 也就是音乐在墙外 2 m 就开始响、走出去 2 m 才停 —— 跨越门槛时不会正好卡在墙线上。
+	# 高度仍取包围盒的 2 倍、中心在包围盒中心：那本来就已经远超墙高，没必要再往外长。
 	box.size = Vector3(
-		maxf(bounds.size.x - MUSIC_INSET * 2.0, 0.5),
+		maxf(bounds.size.x + MUSIC_GROW * 2.0, 0.5),
 		maxf(bounds.size.y * 2.0, 1.0),
-		maxf(bounds.size.z - MUSIC_INSET * 2.0, 0.5))
+		maxf(bounds.size.z + MUSIC_GROW * 2.0, 0.5))
 	cs.shape = box
 	var c := bounds.get_center()
 	cs.position = c
@@ -122,8 +129,10 @@ func _build_music_zone() -> void:
 	area.body_entered.connect(_on_music_body.bind(1))
 	area.body_exited.connect(_on_music_body.bind(-1))
 	_music_area = area
-	print("[EsportsCol] BGM 触发区：%.2f × %.2f × %.2f m，中心本地 (%.2f, %.2f, %.2f)（曲目 `%s`）"
-		% [box.size.x, box.size.y, box.size.z, c.x, c.y, c.z, MUSIC_TRACK])
+	print("[EsportsCol] BGM 触发区：%.2f × %.2f × %.2f m（房间 %.2f × %.2f × %.2f，水平每边 +%.1f m），中心本地 (%.2f, %.2f, %.2f)（曲目 `%s`）"
+		% [box.size.x, box.size.y, box.size.z,
+			bounds.size.x, bounds.size.y, bounds.size.z, MUSIC_GROW,
+			c.x, c.y, c.z, MUSIC_TRACK])
 
 
 ## `BakedCollision/AutoCol` 里所有碰撞盒的包围盒（**本节点空间**）。
