@@ -77,6 +77,15 @@ func _run() -> void:
 	env.environment.background_color = Color(0.05, 0.06, 0.09)
 	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.environment.ambient_light_color = Color(0.45, 0.47, 0.52)
+	# ⚠️ 和**游戏里一致**的 glow：`game.tscn` 的 glow_intensity 只有 0.25
+	#    （为了灯管/室内不过曝压低的）。探针第一版完全没开 glow，
+	#    所以照片上 FX 一片死平 —— 图的观感骗了本喵，必须按游戏值复现。
+	env.environment.glow_enabled = true
+	env.environment.glow_intensity = 0.25
+	env.environment.glow_strength = 1.0
+	env.environment.glow_bloom = 0.0
+	env.environment.glow_hdr_threshold = 1.0
+	env.environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	world.add_child(env)
 
 	var ground := StaticBody3D.new()

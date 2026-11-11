@@ -158,6 +158,10 @@ func _orb_charge(origin: Vector3, dir: Vector3) -> void:
 	core.material_override = cmat
 	holder.add_child(core)
 
+	# 蓄力光晕（图 3/4 那团糊开的光）
+	var chalo := _halo(ORB_RADIUS * 9.0, Color(1.00, 0.70, 0.95, 0.0), 6.5)
+	holder.add_child(chalo)
+
 	# 蓝色电弧：几根细杆，每帧随机旋转、随机长度，做出「乱窜」的抖动感
 	var arcs: Array = []
 	for i in 5:
@@ -180,6 +184,8 @@ func _orb_charge(origin: Vector3, dir: Vector3) -> void:
 		var cs := lerpf(0.18, 0.62, t)
 		core.scale = Vector3(cs, cs, cs)
 		cmat.albedo_color.a = 0.25 + 0.6 * t
+		chalo.scale = Vector3.ONE * lerpf(0.25, 1.0, t)
+		(chalo.material_override as StandardMaterial3D).albedo_color.a = 0.15 + 0.5 * t
 		for a in arcs:
 			var mi2 := a as MeshInstance3D
 			var rr := randf() * TAU
@@ -276,6 +282,9 @@ func _fire_laser_orb() -> void:
 		holder.add_child(ami)
 		arc_meshes.append(ami)
 	holder.set_meta("arcs", arc_meshes)
+	# 光晕（假泛光）
+	var orb_halo := _halo(ORB_RADIUS * 7.0, Color(0.95, 0.70, 1.00, 0.55), 7.0)
+	holder.add_child(orb_halo)
 
 	_orb_fly(holder, origin, dir)
 
@@ -284,6 +293,7 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 	var space := _fx_root.get_world_3d().direct_space_state
 	var pos := origin
 	var travelled := 0.0
+	var last_crescent := 0.0
 	var step_total := ORB_SPEED * ORB_LIFE
 	while travelled < step_total and is_instance_valid(holder):
 		await get_tree().process_frame
@@ -302,6 +312,10 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 		pos = next
 		travelled += step
 		holder.global_position = pos
+		# 弯月扫掠：每 0.09 s 在球的位置甩一片扩张的青色弧（参考图 1/2）
+		if travelled - last_crescent >= 3.8:
+			last_crescent = travelled
+			_crescent(pos, dir, randf_range(2.2, 3.4), ORB_ARC)
 		# 电弧每帧抖一下：绕球随机朝向 + 随机长度（参考图里那圈乱窜的青色电光）
 		if holder.has_meta("arcs"):
 			for a in (holder.get_meta("arcs") as Array):
@@ -397,6 +411,20 @@ func _orb_explode(holder: Node3D, at: Vector3) -> void:
 	tw.tween_property(burst, "scale", Vector3.ONE * ORB_AOE, 0.42) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(mat, "albedo_color:a", 0.0, 0.42)
+
+	# 爆炸光晕（假泛光）+ 两片弯月，让爆点不只是「一个球」
+	var ex_halo := _halo(ORB_AOE * 3.2, Color(0.95, 0.72, 1.00, 0.65), 8.0)
+	_fx_root.add_child(ex_halo)
+	ex_halo.global_position = at
+	ex_halo.scale = Vector3.ONE * 0.3
+	var htw := ex_halo.create_tween()
+	htw.set_parallel(true)
+	htw.tween_property(ex_halo, "scale", Vector3.ONE, 0.5) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	htw.tween_property(ex_halo.material_override, "albedo_color:a", 0.0, 0.5)
+	htw.chain().tween_callback(ex_halo.queue_free)
+	_crescent(at, Vector3.UP, ORB_AOE * 1.5, ORB_ARC)
+	_crescent(at, Vector3.RIGHT, ORB_AOE * 1.2, Color(1.0, 0.75, 1.0, 0.9))
 	tw.chain().tween_callback(burst.queue_free)
 
 	var light := OmniLight3D.new()
@@ -538,6 +566,93 @@ func _add_mat(c: Color, energy: float) -> StandardMaterial3D:
 	return mat
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  「假泛光」：FX 自己带光晕，不去动场景的 glow
+# ═══════════════════════════════════════════════════════════════════
+##
+## 用户 2026-11-11 要求照参考图补足（参考图里那圈糊开的白光）。
+##
+## ⚠️ **不能靠拉高 `glow_intensity`**：`game.tscn` 是 0.25、`next_level.tscn` 只有 0.12，
+##    这是为了灯管和室内不过曝特意压下去的（见 `mondrian_house.gd` 里那段记录：
+##    「配 glow_intensity = 0.25 会在天花板上糊成一大团白」）。全局拉高 → 天花板先炸。
+##
+## 所以改成 FX 自带：程序生成一张**径向渐变**贴图（白芯→透明边），
+## 贴在加色混合的 billboard 方片上当光晕。亮度靠 emission，形状靠贴图，
+## 完全不依赖后处理，也不受场景 glow 强弱影响。
+static var _HALO_TEX: GradientTexture2D
+
+
+func _halo_tex() -> GradientTexture2D:
+	if _HALO_TEX != null:
+		return _HALO_TEX
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 128
+	t.height = 128
+	_HALO_TEX = t
+	return t
+
+
+## 一片光晕（billboard 方片 + 径向渐变 + 加色）。`size` 是边长（米）。
+func _halo(size: float, c: Color, energy: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(size, size)
+	mi.mesh = q
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := _add_mat(c, energy)
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.albedo_texture = _halo_tex()
+	mi.material_override = mat
+	return mi
+
+
+## 弯月扫掠（参考图 1/2 那几道青蓝弧光）：
+## 在 `at` 处生成两片**倾斜的环**，向外扩、同时淡出，然后自删。
+## 用环而不是真的月牙：环倾斜后在透视里就是一道扫过去的弧，成本低、且不会穿帮。
+func _crescent(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
+	var holder := Node3D.new()
+	holder.name = "Crescent"
+	_fx_root.add_child(holder)
+	holder.global_position = at
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var right := up.cross(dir).normalized()
+	var realup := dir.cross(right).normalized()
+	holder.global_basis = Basis(right, dir, realup)
+
+	var mats: Array = []
+	for i in 2:
+		var mi := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.90
+		tm.outer_radius = 1.0
+		tm.rings = 40
+		tm.ring_segments = 4
+		mi.mesh = tm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := _add_mat(col, 6.0)
+		mi.material_override = mat
+		holder.add_child(mi)
+		# 两个环各自绕 X 倾斜不同角度 → 看起来像斜着扫过去的两道
+		mi.rotation = Vector3(deg_to_rad(58.0 if i == 0 else 72.0), 0.0, deg_to_rad(-18.0 + 36.0 * i))
+		mats.append(mat)
+	holder.scale = Vector3.ONE * 0.25 * radius
+
+	var tw := holder.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(holder, "scale", Vector3.ONE * radius, 0.34) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	for m in mats:
+		tw.tween_property(m, "albedo_color:a", 0.0, 0.34)
+	tw.chain().tween_callback(holder.queue_free)
+
+
 func _fire_railgun() -> void:
 	var dir := _aim_dir()
 	var froms: Array[Vector3] = [_muzzle_point()]
@@ -597,7 +712,9 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 			holder.add_child(mi)
 			mats.append(mi.material_override)
 			cones.append({"cm": cm, "r": float(L["r"]), "m": float(L["m"])})
-		beams.append({"holder": holder, "mats": mats, "cones": cones})
+		beams.append({"holder": holder, "mats": mats, "cones": cones,
+			"halo": _halo(RAIL_WIDTH * 11.0, Color(0.80, 0.92, 1.00, 0.50), 5.5), "from": froms[f]})
+		_fx_root.add_child(beams[beams.size() - 1]["halo"])
 
 	while Time.get_ticks_msec() < t_end and is_instance_valid(self):
 		await get_tree().process_frame
@@ -655,6 +772,13 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 				var cm2: CylinderMesh = cd["cm"]
 				var mult := 1.0 + (float(cd["m"]) - 1.0) * shrink
 				cm2.bottom_radius = RAIL_WIDTH * float(cd["r"]) * mult
+			# 枪口光晕跟着一起收细（假泛光，不依赖场景 glow）
+			var mh: MeshInstance3D = b.get("halo")
+			if mh != null and is_instance_valid(mh):
+				mh.global_position = from + dir * 0.5
+				mh.scale = Vector3.ONE * (1.0 + 4.2 * shrink)
+				(mh.material_override as StandardMaterial3D).albedo_color.a = \
+					0.28 + 0.45 * shrink
 
 			if now >= next_tick and not hit.is_empty():
 				var col = hit.get("collider")
@@ -684,11 +808,17 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 	for b in beams:
 		var holder: Node3D = b["holder"]
 		var mats: Array = b["mats"]
+		var halo: MeshInstance3D = b.get("halo")
 		var tw := holder.create_tween()
 		tw.set_parallel(true)
 		for m in mats:
 			tw.tween_property(m, "albedo_color:a", 0.0, 0.18)
 		tw.chain().tween_callback(holder.queue_free)
+		if halo != null and is_instance_valid(halo):
+			var htw := halo.create_tween()
+			htw.set_parallel(true)
+			htw.tween_property(halo.material_override, "albedo_color:a", 0.0, 0.18)
+			htw.chain().tween_callback(halo.queue_free)
 
 	print("[EX] 轨道炮结束：%d 跳 × %.0f = 最多 %.0f，命中 %d 次" % [
 		tick_count, RAIL_TICK_DAMAGE, RAIL_TICK_DAMAGE * tick_count, total_hits])

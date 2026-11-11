@@ -88,6 +88,29 @@ const LOT_LOSE_HI := 1.60
 ## 原来一局最多把 10 万滚到十几万，够不到商店那 67 万的坎（2026-11 门槛从 50 万提到 67 万）。
 const PROFIT_MULT := 1.0
 
+## ── HUD 显隐（用户 2026-11-11）──
+##
+## 用户原话：「保证金这一块HUD不要常态显示,只要开始跑酷后显示,到平台就渐渐隐藏,
+## 到了平台只要留银行卡的余额就行了」。
+##
+## 所以拆成两行，各管各的：
+##   · `_debt_label`（保证金/负债/资产/银行卡/强平）—— **只在跑酷中显示**；
+##   · `_bank_label`（只有银行卡余额）        —— **常驻**（跑酷中也亮着）。
+##
+## ⚠️ 用户 2026-11-11 第二次修正原话：「跑酷中全显示,不要淡出bank」。
+##    本喵第一版写成了「两行互斥」—— 跑酷中把 `Bank` 藏起来，那是错的。
+##    正确规则见 `_tick_hud_visibility()`：跑酷中两行都亮，到平台才让 `Debt` 淡出。
+##
+## 判据用 `_pk.timer_running`（起跑=真、停表=假），而不是距离：
+##   「开始跑酷」这件事在 `parkour.gd` 里就是 `_start_timer()`，
+##   「到平台」就是 `_disarm()` / `_stop_timer()` —— 别另造一套判据。
+## 淡入淡出用时（秒）。用户要的是「渐渐隐藏」，不是啪一下没。
+const HUD_FADE := 0.45
+## 当前这一行该不该亮（补间在跑时不要每帧重设，否则会一直重启补间）
+var _hud_showing := -1
+var _hud_tw: Tween = null
+var _bank_label: Label
+
 ## ── 账户（单位：万）──
 ## `margin` = 保证金（真实结算：每块 K 线第一次踩上去，就按它牌子上那个涨跌幅结算一次）
 ## `debt`   = 负债（强平累加）/ `liquidations` 强平次数 / `collapses` 薛定谔坍缩次数
@@ -576,8 +599,28 @@ func _build_hud() -> void:
 	_debt_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.62, 1))
 	_debt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_debt_label.add_theme_constant_override("outline_size", 6)
+	# 常态**不显示**（用户 2026-11-11）—— 起跑后才淡入，见 `_tick_hud_visibility()`。
+	_debt_label.modulate.a = 0.0
 	_hud_layer.add_child(_debt_label)
 	_update_hud_text()
+
+	# 常驻那一行：**只有银行卡余额**（用户：「到了平台只要留银行卡的余额就行了」）
+	# 位置放在 `Debt` 同一行，两者同时亮的时候不会叠字（`Debt` 在跑酷中会把
+	# 「银行卡」那一段也写出来，所以这行只在跑酷**结束**时才有存在感）。
+	_bank_label = Label.new()
+	_bank_label.name = "Bank"
+	_bank_label.anchor_left = 1.0
+	_bank_label.anchor_right = 1.0
+	_bank_label.offset_left = -960.0
+	_bank_label.offset_right = -28.0
+	_bank_label.offset_top = 100.0
+	_bank_label.offset_bottom = 136.0
+	_bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_bank_label.add_theme_font_size_override("font_size", 22)
+	_bank_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.55, 1))
+	_bank_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_bank_label.add_theme_constant_override("outline_size", 6)
+	_hud_layer.add_child(_bank_label)
 
 	# 第二行：最近一次结算（踩板时 +2.31% / −3.87% 就写在这儿，钱也跟着变）
 	_result_label = Label.new()
@@ -676,6 +719,7 @@ func _physics_process(delta: float) -> void:
 	_tick_hazards()
 	_tick_schro()
 	_tick_plates()
+	_tick_hud_visibility(delta)
 
 
 func _tick_hazards() -> void:
@@ -1119,6 +1163,41 @@ func _update_hud_text() -> void:
 		margin, debt, _fmt_yuan(assets_yuan), ram_count, extra,
 		_fmt_yuan(bank_yuan), liquidations,
 		"　对冲✓" if hedged else ""]
+	# 常驻那行只写余额（见 `HUD_FADE` 那段）
+	if _bank_label != null:
+		_bank_label.text = "银行卡 ¥%s 元" % _fmt_yuan(bank_yuan)
+
+
+## 每帧决定两行 HUD 谁亮（用户 2026-11-11）。
+##
+## 规则（用户第二次修正：「跑酷中全显示,不要淡出bank」）：
+##   · **跑酷中**（`timer_running`）→ 两行**都显示**：`Debt` 写完整账目，
+##     `Bank` 写「银行卡余额」单独一行，谁也不淡出；
+##   · **到平台**（停表）       → `Debt` 淡出，只留 `Bank` 那行余额。
+##
+## ⚠️ 判据是**跑酷计时器**，不是距离：`timer_running` 为真的那一段就是「正在跑酷」，
+##    停表（`_disarm()` / `_stop_timer()`）就是「到平台了」。
+##    自己另算一套「离平台多远」会在骑火箭、坠落、传送时判错 —— 那些时刻计时器都没在跑。
+##
+## ⚠️ 补间只起一次：`_hud_showing` 记住「上一次的目标值」，每帧重设会让补间永远重启，
+##    表现就是「一直半透明、怎么说都不亮」。
+func _tick_hud_visibility(_delta: float) -> void:
+	if _debt_label == null or _bank_label == null:
+		return
+	var running := _pk != null and bool(_pk.get("timer_running"))
+	var want := 1 if running else 0
+	if want == _hud_showing:
+		return
+	_hud_showing = want
+	if _hud_tw != null and _hud_tw.is_valid():
+		_hud_tw.kill()
+	_hud_tw = create_tween()
+	_hud_tw.set_parallel(true)
+	# `Debt`：跑酷中亮、到平台淡出
+	_hud_tw.tween_property(_debt_label, "modulate:a", float(want), HUD_FADE)
+	# `Bank`：**永远亮着**（跑酷中也是，用户明确说不要淡出）。
+	# ⚠️ 不要写成 `1 - want`：那会让跑酷中把余额那行藏起来 —— 用户专门纠正过一次。
+	_hud_tw.tween_property(_bank_label, "modulate:a", 1.0, HUD_FADE)
 
 
 func _banner_text(text: String, col: Color) -> void:

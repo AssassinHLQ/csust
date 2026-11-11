@@ -1002,7 +1002,7 @@ func _schedule_impact(pos: Vector3, normal: Vector3, delay: float) -> void:
 
 # --- 特效 ---
 
-func _muzzle_flash(at: Vector3) -> void:
+func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.86, 0.55)
 	light.light_energy = 3.5
@@ -1033,7 +1033,95 @@ func _muzzle_flash(at: Vector3) -> void:
 	tw.tween_property(light, "light_energy", 0.0, 0.05)
 	tw.tween_property(mat, "albedo_color:a", 0.0, 0.05)
 	tw.chain().tween_callback(flash.queue_free)
-	tw.chain().tween_callback(light.queue_free)
+
+	# ── 枪口扩散环 + 光晕（用户 2026-11-11 照参考图要「图 1/2」那种）──
+	# 参考图里炮口除了亮点，还有一圈**向外扩散的光环**跳出去。
+	# 环面与射线方向垂直（倾斜环在透视里就是一圈扩散的光）。
+	# ⚠️ 不依赖场景 glow（game.tscn 只有 0.25、next_level 只有 0.12），
+	#    光晕用程序生成的径向渐变 + 加色混合自己做。
+	var d := dir
+	if d.length_squared() < 0.001:
+		d = -global_transform.basis.z
+	d = d.normalized()
+	var up := Vector3.UP if absf(d.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var right := up.cross(d).normalized()
+	var realup := d.cross(right).normalized()
+
+	var ring := MeshInstance3D.new()
+	var rm := TorusMesh.new()
+	rm.inner_radius = 0.86
+	rm.outer_radius = 1.0
+	rm.rings = 28
+	rm.ring_segments = 4
+	ring.mesh = rm
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var rmat := StandardMaterial3D.new()
+	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	rmat.albedo_color = Color(0.80, 0.95, 1.00, 0.85)
+	rmat.emission_enabled = true
+	rmat.emission = Color(0.55, 0.85, 1.00)
+	rmat.emission_energy_multiplier = 5.0
+	ring.material_override = rmat
+	_fx_root.add_child(ring)
+	ring.global_position = at + d * 0.10
+	ring.global_basis = Basis(right, d, realup).scaled(Vector3.ONE * 0.12)
+
+	var halo := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.85, 0.85)
+	halo.mesh = q
+	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var hmat := StandardMaterial3D.new()
+	hmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	hmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	hmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	hmat.albedo_texture = _halo_tex()
+	hmat.albedo_color = Color(1.0, 0.95, 0.80, 0.75)
+	hmat.emission_enabled = true
+	hmat.emission = Color(1.0, 0.90, 0.65)
+	hmat.emission_energy_multiplier = 6.0
+	halo.material_override = hmat
+	_fx_root.add_child(halo)
+	halo.global_position = at + d * 0.06
+
+	var tw2 := ring.create_tween()
+	tw2.set_parallel(true)
+	tw2.tween_property(ring, "scale", Vector3.ONE * 0.95, 0.20) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw2.tween_property(rmat, "albedo_color:a", 0.0, 0.20)
+	tw2.chain().tween_callback(ring.queue_free)
+	var tw3 := halo.create_tween()
+	tw3.set_parallel(true)
+	tw3.tween_property(halo, "scale", Vector3.ONE * 1.6, 0.09)
+	tw3.tween_property(hmat, "albedo_color:a", 0.0, 0.09)
+	tw3.chain().tween_callback(halo.queue_free)
+
+
+## 程序生成的径向渐变（白芯 → 透明边），给枪口光晕用。
+## 见上面那段：场景 glow 被压到 0.12~0.25，光晕只能 FX 自己做。
+static var _HALO_TEX: GradientTexture2D
+
+
+func _halo_tex() -> GradientTexture2D:
+	if _HALO_TEX != null:
+		return _HALO_TEX
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 128
+	t.height = 128
+	_HALO_TEX = t
+	return t
 
 
 func _spawn_impact(pos: Vector3, normal: Vector3) -> void:

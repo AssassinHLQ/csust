@@ -2068,6 +2068,29 @@ func _test_ram_loot() -> void:
 	_check(hud != null and hud.text.contains("资产") and hud.text.contains("保证金")
 		and hud.text.contains("负债"),
 		"HUD 一行三本账：%s" % (hud.text if hud != null else "没有 HUD"))
+	# ⑦.5 HUD 显隐（用户 2026-11-11）：
+	#   跑酷中 **两行都亮**（`Debt` 详细账 + `Bank` 单独余额），到平台才只留 `Bank`。
+	#   用户第二次纠正原话：「跑酷中全显示,不要淡出bank」—— 所以这里钉死三件事：
+	#     ① `Bank` 这一行**存在**
+	#     ② 跑酷中 `Debt` 不透明
+	#     ③ 跑酷中 `Bank` **也不透明**（写成 `1 - want` 就会变成 0）
+	var bank_lab := fut.get_node_or_null("FuturesHUD/Bank") as Label
+	_check(bank_lab != null and bank_lab.text.contains("银行卡"),
+		"有一行只写银行卡余额：%s" % (bank_lab.text if bank_lab != null else "没有 Bank 行"))
+	if hud != null and bank_lab != null:
+		var was_running := bool(_pk.get("timer_running"))
+		_pk.set("timer_running", true)
+		fut.call("_tick_hud_visibility", 0.0)
+		await _wait_ms(int(0.45 * 1000.0) + 120)
+		_check(hud.modulate.a > 0.95, "跑酷中 `Debt` 亮着（a=%.2f）" % hud.modulate.a)
+		_check(bank_lab.modulate.a > 0.95, "★ 跑酷中 `Bank` **也亮着**、没被淡出（a=%.2f）" % bank_lab.modulate.a)
+		_pk.set("timer_running", false)
+		fut.call("_tick_hud_visibility", 0.0)
+		await _wait_ms(int(0.45 * 1000.0) + 120)
+		_check(hud.modulate.a < 0.05, "到平台 `Debt` 已经淡出（a=%.2f）" % hud.modulate.a)
+		_check(bank_lab.modulate.a > 0.95, "到平台只留 `Bank` 余额（a=%.2f）" % bank_lab.modulate.a)
+		_pk.set("timer_running", was_running)
+		fut.call("_tick_hud_visibility", 0.0)
 	# ⑧ 天上掉下来的**不算**：砸一根下来，资产一分不涨
 	var assets_before_drop := fut.assets_yuan
 	var count_before_drop := fut.ram_count
