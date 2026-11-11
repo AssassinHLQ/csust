@@ -141,6 +141,9 @@ var _follow_skel: Skeleton3D
 var _slice_pad := 0.05
 ## 这片骨骼的包围盒长宽高变化都小于这个值就跳过写入（省掉物理服务器的空写）
 const SLICE_EPS := 0.02
+## 一只 Boss 最多建多少个切片盒。多=贴得准但物理侧要过更多形状；
+## 12 条肢体/段落在 25 m 长的霸王龙身上已经能分清头颈/躯干/尾/两条腿。
+const MAX_SLICE_BOXES := 14
 
 const BootGate := preload("res://scripts/boot_gate.gd")
 const BankCard := preload("res://scripts/bank_card.gd")
@@ -430,24 +433,31 @@ func _build_box_parts_collision() -> bool:
 	return _build_mesh_box_parts_collision()
 
 
-## 蒙皮模型：把骨骼点沿「最长的水平轴」切片，每片包一个盒子，**并且每帧跟着骨骼重算**。
+## 蒙皮模型：把骨骼按**根骨链**分组，每条链沿自己的长轴切片，每片一个盒子，
+## **并且每帧跟着骨骼重算**。
 ##
 ## 为什么切片而不是「一根骨头一个盒子」：73 根骨会变成 73 个碰撞形状，
 ## 物理侧每帧都要过一遍，而且大量骨骼是重叠的躯干内部骨，纯属浪费。
-## 切片之后一只霸王龙 8 个盒子，轮廓已经能分清头 / 颈 / 躯干 / 尾。
 ##
 ## 为什么尺寸烘进 `BoxShape3D.size`、变换只放平移：Godot 对**带缩放的碰撞体**
 ## 支持很差（见 `_build_convex_hulls_collision()` 里那段「玩家贴上去卡死」）。
 ##
-## ⚠️ 2026-11-11 两处改动（用户：「碰撞错了，而且碰撞没有随着霸王龙放技能改变」）：
+## ⚠️ 2026-11-11 三处改动（用户：「碰撞错了，而且碰撞没有随着霸王龙放技能改变」）：
 ##
-## ① **切片方式改成按坐标等分**。原来是「按骨头根数等分」——可骨头密度极不均匀
-##    （脚趾/下巴一堆小骨、尾巴稀），量出来 6 片是 13.98 / 2.25 / 3.89 / 4.32 / 3.00
-##    / 8.78 m，尾巴那一片 14 m 长、把半个身子罩住。按坐标等分后每片长度接近。
-## ② **每帧按骨骼当前位置重算每片的包围盒**（`_sync_bone_collisions()`）。
+## ① **每帧按骨骼当前位置重算每片的包围盒**（`_sync_bone_collisions()`）。
 ##    为什么不是「把盒子挂到骨骼上做刚体跟随」：那版试过了，静止/摆尾/跺地/撕咬
 ##    都贴得很好，但身体**弯折**的两段盖不住（冲锋戳出 1.79 m、咆哮 1.33 m）。
 ##    重算 AABB 是「骨头都在自己的包围盒里」的恒等式 —— 任何姿势都漏不出身体。
+## ② **片内按坐标等分**。原来是「按骨头根数等分」——可骨头密度极不均匀
+##    （脚趾/下巴一堆小骨、尾巴稀），量出来 6 片是 13.98 / 2.25 / 3.89 / 4.32 / 3.00
+##    / 8.78 m，尾巴那一片 14 m 长、把半个身子罩住。
+## ③ **先按根骨链分组再切**（`_bone_chains()`）。这条是看图看出来的：
+##    只沿「整体长轴」切的话，同一条链上的**腿**会和**躯干**落进同一片 ——
+##    量出来那片盒子从 y=0（脚底）一路罩到 y=10（后背），中间全是空气，
+##    玩家贴着龙腿走会被一个看不见的大盒子挡住（`_arisu_captures/_trex_boxes/`）。
+##    这份 GLB 的尾巴 / 左腿 / 右腿各自是**独立的根骨**（`get_bone_parent() == -1`），
+##    所以按链分组天然把四条肢体分开，每个盒子只罩一条肢体。
+##    单根骨的骨架会退化成「一条链」，行为和原来一致。
 func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 	var to_body := global_transform.affine_inverse()
 	var xf := to_body * skel.global_transform
@@ -460,56 +470,71 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 	if overall.size.y <= 0.0001:
 		return false
 
-	# 长轴：取 x / z 里更长的那个（模型可能被旋转过，不能写死 z）
-	var axis := 0 if overall.size.x >= overall.size.z else 2
-	var lo := overall.position[axis]
-	var span := overall.size[axis]
-	if span <= 0.0001:
-		return false
-
-	# 每片大约「三分之一身高」长 → 霸王龙 25 m 长、10 m 高 ⇒ 6~8 片。
-	# ⚠️ 从「半身高、最多 6 片」加密的原因：片越粗，弯折时盒子膨胀得越厉害
-	#    （AABB 要把整片包住），细一点畸形小、轮廓也更像身体。
-	var slices := clampi(int(round(span / maxf(overall.size.y * 0.35, 0.2))), 3, 8)
 	# 骨点是**骨架中心线**，离表皮还有距离：按身高给一圈余量
 	var pad := maxf(overall.size.y * 0.055, 0.05)
 	_slice_pad = pad
-	# 相邻片沿长轴**轻微重叠**（各让出本片长度的 10%），弯折时相邻两片不会张开缝。
-	var overlap := span / float(slices) * 0.10
+
+	# 每条链先按「片长约身高 1/3」估片数，再从最粗的那条开始削，直到总数不超预算
+	var chains := _bone_chains(skel)
+	var per_chain: Array[int] = []
+	var wanted := 0
+	for c in chains:
+		var bb := _points_aabb(_chain_points(c, pts))
+		var axis := _long_axis(bb)
+		var want := clampi(int(round(bb.size[axis] / maxf(overall.size.y * 0.35, 0.2))), 1, 4)
+		per_chain.append(want)
+		wanted += want
+	while wanted > MAX_SLICE_BOXES:
+		var bi := 0
+		for k in per_chain.size():
+			if per_chain[k] > per_chain[bi]:
+				bi = k
+		if per_chain[bi] <= 1:
+			break
+		per_chain[bi] -= 1
+		wanted -= 1
 
 	var made := 0
-	for si in slices:
-		# 按坐标等分：本片包含 [c0, c1)（最后一片含右端点）
-		var c0 := lo + span * float(si) / float(slices) - overlap
-		var c1 := lo + span * float(si + 1) / float(slices) + overlap
-		var last := si == slices - 1
-		var idx := PackedInt32Array()
-		for k in pts.size():
-			var v: float = pts[k][axis]
-			if v >= c0 and (v < c1 or (last and v <= c1)):
-				idx.append(k)
-		if idx.is_empty():
-			continue
-		var sub: Array[Vector3] = []
-		for k in idx:
-			sub.append(pts[k])
-		var bb := _points_aabb(sub).grow(pad)
-		# 盒子不要探到地面以下（boss 脚底在 y = 0，地下半截纯属浪费）
-		if bb.position.y < 0.0:
-			var shrink := -bb.position.y
-			bb.position.y = 0.0
-			bb.size.y = maxf(bb.size.y - shrink, 0.1)
-		var box := BoxShape3D.new()
-		box.size = bb.size
-		var cs := CollisionShape3D.new()
-		cs.name = "Collision" if made == 0 else "Collision%d" % made
-		cs.shape = box
-		cs.transform = Transform3D(Basis.IDENTITY, bb.get_center())
-		add_child(cs)
-		_collisions.append(cs)
-		# 记下「这片负责哪几根骨头」+ 上次算出来的盒子（用来跳过没变化的写入）
-		_slices.append({ "cs": cs, "bones": idx, "last": bb })
-		made += 1
+	for ci in chains.size():
+		var ids := chains[ci]
+		var chain_pts := _chain_points(ids, pts)
+		var cbb := _points_aabb(chain_pts)
+		var axis := _long_axis(cbb)
+		var span := cbb.size[axis]
+		var slices := per_chain[ci]
+		# 相邻片沿长轴**轻微重叠**（各让出本片长度的 10%），弯折时相邻两片不会张开缝
+		var overlap := (span / float(slices) * 0.10) if slices > 1 else 0.0
+		for si in slices:
+			var idx := PackedInt32Array()
+			if slices <= 1:
+				idx = ids.duplicate()
+			else:
+				var c0 := cbb.position[axis] + span * float(si) / float(slices) - overlap
+				var c1 := cbb.position[axis] + span * float(si + 1) / float(slices) + overlap
+				var last := si == slices - 1
+				for bi in ids:
+					var v: float = pts[bi][axis]
+					if v >= c0 and (v < c1 or (last and v <= c1)):
+						idx.append(bi)
+			if idx.is_empty():
+				continue
+			var bb := _points_aabb(_chain_points(idx, pts)).grow(pad)
+			# 盒子不要探到地面以下（boss 脚底在 y = 0，地下半截纯属浪费）
+			if bb.position.y < 0.0:
+				var shrink := -bb.position.y
+				bb.position.y = 0.0
+				bb.size.y = maxf(bb.size.y - shrink, 0.1)
+			var box := BoxShape3D.new()
+			box.size = bb.size
+			var cs := CollisionShape3D.new()
+			cs.name = "Collision" if made == 0 else "Collision%d" % made
+			cs.shape = box
+			cs.transform = Transform3D(Basis.IDENTITY, bb.get_center())
+			add_child(cs)
+			_collisions.append(cs)
+			# 记下「这片负责哪几根骨头」+ 上次算出来的盒子（用来跳过没变化的写入）
+			_slices.append({ "cs": cs, "bones": idx, "last": bb })
+			made += 1
 	if made == 0:
 		_collisions.clear()
 		_slices.clear()
@@ -518,9 +543,54 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 	_follow_skel = skel
 	collision_layer = 1
 	collision_mask = 0
-	print("[Boss] 骨骼切片碰撞：%d 个盒子（骨骼 %d 根，按%s轴等分，每帧跟随骨骼）" % [
-		made, skel.get_bone_count(), "x" if axis == 0 else "z"])
+	print("[Boss] 骨骼切片碰撞：%d 个盒子（骨骼 %d 根 / %d 条根骨链，每帧跟随骨骼）" % [
+		made, skel.get_bone_count(), chains.size()])
 	return true
+
+
+## 按「根骨链」把骨骼分组：从每根根骨（`get_bone_parent() == -1`）出发走一遍子树。
+## 用 BFS 而不是「按索引顺序扫」：骨骼的存储顺序不保证父在前。
+func _bone_chains(skel: Skeleton3D) -> Array[PackedInt32Array]:
+	var n := skel.get_bone_count()
+	var children: Dictionary = {}
+	var roots: Array[int] = []
+	for i in n:
+		var p := skel.get_bone_parent(i)
+		if p < 0 or p >= n:
+			roots.append(i)
+		else:
+			if not children.has(p):
+				children[p] = [] as Array[int]
+			(children[p] as Array[int]).append(i)
+	var out: Array[PackedInt32Array] = []
+	for r in roots:
+		var chain := PackedInt32Array()
+		var stack: Array[int] = [r]
+		while not stack.is_empty():
+			var v: int = stack.pop_back()
+			chain.append(v)
+			if children.has(v):
+				for ch in (children[v] as Array[int]):
+					stack.append(ch)
+		chain.sort()
+		out.append(chain)
+	return out
+
+
+## 一串骨索引 → 它们的位置
+func _chain_points(ids: PackedInt32Array, pts: Array[Vector3]) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	out.resize(ids.size())
+	for k in ids.size():
+		out[k] = pts[ids[k]]
+	return out
+
+
+## 包围盒最长的那个轴（0=x, 1=y, 2=z）
+func _long_axis(bb: AABB) -> int:
+	if bb.size.x >= bb.size.y and bb.size.x >= bb.size.z:
+		return 0
+	return 1 if bb.size.y >= bb.size.z else 2
 
 
 ## 每物理帧按骨骼**当前**位置重算每片碰撞盒（见 `_slices` 的注释）。

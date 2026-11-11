@@ -4699,7 +4699,7 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
 | 值 | 名字 | 做法 | 用在哪 |
 |---|---|---|---|
 | 0 | `BOX` | 一个方盒把整只框住 | 兜底，其它形态建不出来才走 |
-| 1 | `BOX_PARTS` | **骨骼切片**：沿长轴切 3~8 片，每片一个盒，**每帧按骨骼当前位置重算** | 第二关三只霸王龙（`trex_yuuka_boss.tscn` 里写死 `collision_mode = 1`） |
+| 1 | `BOX_PARTS` | **骨骼切片**：按「根骨链」分组，每条链沿自身长轴切 1~4 片（总数 ≤14），**每帧按骨骼当前位置重算** | 第二关三只霸王龙（`trex_yuuka_boss.tscn` 里写死 `collision_mode = 1`） |
 | 2 | `CONVEX_HULLS` | 引擎自带 V-HACD（`create_multiple_convex_collisions`） | **默认**。飞猪等大多数 Boss |
 | 3 | `TRIMESH` | 原始网格全量三角面 | 最准也最费，用户报过「有点卡」 |
 
@@ -4729,6 +4729,18 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
    14 m 长，把半个身子罩住。现在按坐标等分（每片约身高的 1/3），相邻片还留 10% 重叠。
 2. **每帧按骨骼当前位置重算每片的包围盒**（`boss.gd::_sync_bone_collisions()`，在 `_physics_process` 里）。
 
+#### 为什么还要「按根骨链分组」（看图才发现的）
+
+第 1 条改完，数字全都好看，但出图一看还是不对：**腿和躯干被切进了同一片**。
+原因是只沿「整体长轴」切 —— 而两条腿是从髋部一直垂到地面的竖直结构，
+和躯干落在同一个 z 区间里，那一片的 AABB 就从 y=0（脚底）一路罩到 y=10（后背），
+中间全是空气。玩家贴着龙腿走会被一个看不见的大盒子挡住。
+
+这份 GLB 的**尾巴 / 左腿 / 右腿各自是独立的根骨**（`get_bone_parent() == -1`），
+所以按「根骨链」分组天然把四条肢体分开，每条链再沿**自己的**长轴切。
+量出来是 **4 条链 → 12 个盒子**：头颈 4 + 尾巴 4 + 两条腿各 2。
+单根骨的骨架（其它 Boss 若也用 BOX_PARTS）会退化成「一条链」，行为和前一版一致。
+
 #### 为什么不是「把盒子挂到骨骼上做刚体跟随」
 
 那版**先做过了**：每片挂到「离片重心最近的那根骨」上，盒子随骨骼刚体旋转。
@@ -4749,11 +4761,11 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
 
 | 指标 | 结果 |
 |---|---|
-| 每只霸王龙的盒子数 | 8 个（骨骼 73 根） |
-| 五段技能里盒子最大位移 | 1.95 ~ 8.31 m（改之前全是 0.00 m） |
+| 每只霸王龙的盒子数 | **12 个**（骨骼 73 根 / 4 条根骨链） |
+| 五段技能里盒子最大位移 | 1.93 ~ 8.31 m（改之前全是 0.00 m） |
 | 身体跑出盒子的最大距离 | 撕咬/摆尾/跺地/咆哮 **0.00 m**；冲锋 0.47~0.66 m（见下） |
 | 骨点被盒子盖住的比例 | 99 ~ 100% |
-| 每帧开销 | 单只 12~13 μs，三只合计 **37.5 μs ≈ 一帧的 0.22%** |
+| 每帧开销 | 单只 15~17 μs，三只合计 **47.6 μs ≈ 一帧的 0.29%** |
 
 冲锋那 0.47~0.66 m 是**故意留的**：`_sync_bone_collisions()` 里有一条「盒子不探到地平面
 以下」的 clamp，身体沉下去时地下的那截骨头被排除在碰撞之外。想让脚底下也有碰撞就删掉那条。
@@ -4770,8 +4782,13 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
 ```powershell
 # 量每个盒子在每段技能下的位移与出格距离
 bash _tools/run_probe.sh res://scripts/_probe_trex_boxes.gd -- --no-capture --splat=off
+# 73 根骨的位置 / 归属哪条链（查「盒子为什么胖」用）
+bash _tools/run_probe.sh res://scripts/_probe_trex_bones.gd -- --no-capture --splat=off
 # 77 项：静止贴合 + 五段技能跟随 + 每帧开销
 bash _tools/run_probe.sh res://scripts/_verify_trex_hitbox.gd -- --no-capture --splat=off
+# 出图（真窗口，屏幕外）：idle / 冲锋 / 摆尾 三张，半透明绿盒 = 碰撞体积
+bash _tools/run_shot.sh res://scripts/_probe_trex_boxes_shot.gd -- --splat=off
+#   → _arisu_captures/_trex_boxes/01_idle.png、02_charge.png、03_tail_sweep.png
 ```
 
 ## 7.4 想调大小 / 位置
