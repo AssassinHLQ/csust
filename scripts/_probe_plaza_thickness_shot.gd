@@ -46,8 +46,9 @@ func _run() -> void:
 	cam.far = 900.0
 	lvl.add_child(cam)
 	for shot in [
-		{"name": "under", "pos": Vector3(30, -26, 30), "look": Vector3(20, -5, 20)},
-		{"name": "side", "pos": Vector3(120, -18, 60), "look": Vector3(40, -12, 20)},
+		{"name": "far", "pos": Vector3(320, 70, 320), "look": Vector3(0, -25, 0)},
+		{"name": "under", "pos": Vector3(60, -95, 60), "look": Vector3(20, -40, 20)},
+		{"name": "side", "pos": Vector3(200, -30, 100), "look": Vector3(30, -30, 10)},
 	]:
 		cam.global_position = shot["pos"]
 		cam.look_at(shot["look"], Vector3.UP)
@@ -63,11 +64,21 @@ func _run() -> void:
 		root.get_texture().get_image().save_png(f)
 		print("[截图] %s" % f)
 
-	# 顺带报一下几何，方便核对
+	# 顺带报一下几何 + **材质实际参数**（确认自发光到底生效没有），方便核对
 	var plaza := lvl.get_node_or_null("Plaza") as Node3D
 	if plaza != null:
 		print("  Plaza 位置 %s" % str(plaza.global_position.snappedf(0.01)))
 		var mi := plaza.get_node_or_null("Mesh") as MeshInstance3D
 		if mi != null and mi.mesh != null:
 			print("  Plaza 网格 AABB 尺寸 %s" % str(mi.get_aabb().size.snappedf(0.01)))
+			var mat := mi.get_active_material(0)
+			if mat is BaseMaterial3D:
+				var b := mat as BaseMaterial3D
+				print("  材质「%s」：albedo=%s  自发光=%s  emission=%s  能量=%.2f"
+					% [String(mat.resource_name), str(b.albedo_color),
+						str(b.emission_enabled), str(b.emission),
+						b.emission_energy_multiplier])
+			else:
+				print("  材质：%s（不是 BaseMaterial3D）"
+					% (mat.get_class() if mat != null else "null"))
 	quit(0)

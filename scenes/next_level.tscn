@@ -93,12 +93,15 @@ size = Vector3(2.6, 1.8, 2.6)
 [sub_resource type="StandardMaterial3D" id="Mat_plaza"]
 albedo_color = Color(0.30, 0.285, 0.265, 1)
 roughness = 0.92
+emission_enabled = true
+emission = Color(0.30, 0.285, 0.265, 1)
+emission_energy_multiplier = 0.3
 
 [sub_resource type="BoxShape3D" id="Shape_plaza"]
-size = Vector3(120, 40, 120)
+size = Vector3(120, 80, 120)
 
 [sub_resource type="BoxMesh" id="Mesh_plaza"]
-size = Vector3(120, 40, 120)
+size = Vector3(120, 80, 120)
 
 [sub_resource type="BoxShape3D" id="Shape_parapet"]
 size = Vector3(120.8, 0.62, 0.4)
@@ -158,7 +161,7 @@ directional_shadow_max_distance = 90.0
 ; 三层室内，靶子按楼层分布：L1 地面 / L2 二层 / L3 三层，终点台在 L3 北侧高台。
 
 [node name="Plaza" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -20.02, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -40.02, 0)
 
 [node name="Collision" type="CollisionShape3D" parent="Plaza"]
 shape = SubResource("Shape_plaza")
