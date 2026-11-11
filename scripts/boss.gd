@@ -18,6 +18,10 @@ extends StaticBody3D
 ##      之前判成「缩放差 1~2 个数量级」是拿蒙皮前的 8732 当参照，错的。
 ##   4. 霸王龙自身脸朝 +Z（rotation.y = 0 时），与 Arisu 同一套朝向约定；
 ##      飞猪也是 **+Z**（实测鼻子在 z=+2.17、尾巴在 z=−1.95），所以两个都不用补 180°。
+##   5. **碰撞盒**：四种形态见 `collision_mode`；蒙皮模型走「骨骼切片」，
+##      而且**每物理帧按骨骼当前位置重算**（`_slices` / `_sync_bone_collisions()`）。
+##      ⚠️ 子类若自己实现 `_physics_process`，必须调 `super._physics_process(delta)`。
+##      来龙去脉见 README §7.3.1。
 
 signal died(by_damage: float)
 signal health_changed(current: float, maximum: float)
@@ -108,6 +112,35 @@ var _collision_shape: BoxShape3D
 ## 多块碰撞体（BOX_PARTS 模式会是好几个）。`_collision` 就是第一个，保持兼容。
 var _collisions: Array[CollisionShape3D] = []
 var _booted := false
+
+## ── 跟着骨骼走的碰撞盒（2026-11-11 用户报「碰撞错了，而且碰撞没有随着霸王龙放技能改变」）──
+##
+## 原来 `_build_bone_cluster_collision()` 只在 `_boot()` 那一刻按**当时一个姿态**
+## 把骨骼切成几片、建成几个静态盒子，之后盒子就钉死在原地了。技能一播网格甩出去
+## 十几米，盒子还留在下颚/尾巴的**旧位置** —— 打不中、人还能从身体穿过去。
+## 实测（`_probe_trex_boxes.gd`）：五段技能各播到 impact 时刻，盒子位移全是 **0.00 m**。
+##
+## 现在每片记下「自己负责哪几根骨头」，`_physics_process` 里按骨骼**当前**位置
+## 重算这一片的包围盒。两个做不到的地方值得写清楚：
+##
+## ⚠️ ① 为什么是「重算 AABB」而不是「把盒子挂在骨骼上」：
+##    挂骨骼那版试过（盒子随代表骨做刚体旋转），静止和摆尾/跺地/撕咬都贴得很好，
+##    但**弯折**的两段盖不住 —— 冲锋有骨头戳出盒面 1.79 m、咆哮 1.33 m
+##    （`_verify_trex_hitbox.gd` 的「最远骨点出格」）。刚性片在骨头互相弯开时
+##    必然张缝。重算 AABB 是「所有骨头都在自己包围盒里」的恒等式，
+##    因此**任何姿势下都不可能漏出身体**，代价是形状要每帧改尺寸。
+##
+## ⚠️ ② 改的是 `BoxShape3D.size`（形状自己的尺寸），**不是** `CollisionShape3D` 的
+##    缩放 —— 引擎对「带缩放的碰撞体」支持很差（见 `_build_convex_hulls_collision()`
+##    里那段「玩家贴上去卡死」）。改形状尺寸是官方支持的路子。
+##
+## 每项：{ "cs": CollisionShape3D, "bones": PackedInt32Array, "last": AABB }
+var _slices: Array[Dictionary] = []
+var _follow_skel: Skeleton3D
+## 切片盒子往外放的余量（骨点是中心线，离表皮还有距离）。建盒时算一次，每帧沿用。
+var _slice_pad := 0.05
+## 这片骨骼的包围盒长宽高变化都小于这个值就跳过写入（省掉物理服务器的空写）
+const SLICE_EPS := 0.02
 
 const BootGate := preload("res://scripts/boot_gate.gd")
 const BankCard := preload("res://scripts/bank_card.gd")
@@ -397,15 +430,24 @@ func _build_box_parts_collision() -> bool:
 	return _build_mesh_box_parts_collision()
 
 
-## 蒙皮模型：把骨骼点沿「最长的水平轴」切片，每片包一个盒子。
+## 蒙皮模型：把骨骼点沿「最长的水平轴」切片，每片包一个盒子，**并且每帧跟着骨骼重算**。
 ##
 ## 为什么切片而不是「一根骨头一个盒子」：73 根骨会变成 73 个碰撞形状，
 ## 物理侧每帧都要过一遍，而且大量骨骼是重叠的躯干内部骨，纯属浪费。
-## 切片之后一只霸王龙 4~6 个盒子，轮廓已经能分清头 / 躯干 / 尾。
+## 切片之后一只霸王龙 8 个盒子，轮廓已经能分清头 / 颈 / 躯干 / 尾。
 ##
-## 为什么 `cs.transform` 只放平移：Godot 对**带缩放的碰撞体**支持很差
-## （见 `_build_convex_hulls_collision()` 里那段「玩家贴上去卡死」），
-## 所以尺寸一律烘进 `BoxShape3D.size`，变换保持单位基。
+## 为什么尺寸烘进 `BoxShape3D.size`、变换只放平移：Godot 对**带缩放的碰撞体**
+## 支持很差（见 `_build_convex_hulls_collision()` 里那段「玩家贴上去卡死」）。
+##
+## ⚠️ 2026-11-11 两处改动（用户：「碰撞错了，而且碰撞没有随着霸王龙放技能改变」）：
+##
+## ① **切片方式改成按坐标等分**。原来是「按骨头根数等分」——可骨头密度极不均匀
+##    （脚趾/下巴一堆小骨、尾巴稀），量出来 6 片是 13.98 / 2.25 / 3.89 / 4.32 / 3.00
+##    / 8.78 m，尾巴那一片 14 m 长、把半个身子罩住。按坐标等分后每片长度接近。
+## ② **每帧按骨骼当前位置重算每片的包围盒**（`_sync_bone_collisions()`）。
+##    为什么不是「把盒子挂到骨骼上做刚体跟随」：那版试过了，静止/摆尾/跺地/撕咬
+##    都贴得很好，但身体**弯折**的两段盖不住（冲锋戳出 1.79 m、咆哮 1.33 m）。
+##    重算 AABB 是「骨头都在自己的包围盒里」的恒等式 —— 任何姿势都漏不出身体。
 func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 	var to_body := global_transform.affine_inverse()
 	var xf := to_body * skel.global_transform
@@ -420,24 +462,37 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 
 	# 长轴：取 x / z 里更长的那个（模型可能被旋转过，不能写死 z）
 	var axis := 0 if overall.size.x >= overall.size.z else 2
-	var ordered := pts.duplicate()
-	ordered.sort_custom(func(a: Vector3, b: Vector3) -> bool:
-		return a[axis] < b[axis])
+	var lo := overall.position[axis]
+	var span := overall.size[axis]
+	if span <= 0.0001:
+		return false
 
-	# 每片大约「半个身高」长 → 霸王龙 25 m 长、10 m 高 ⇒ 4~5 片
-	var slices := clampi(int(round(overall.size[axis] / maxf(overall.size.y * 0.5, 0.2))), 2, 6)
+	# 每片大约「三分之一身高」长 → 霸王龙 25 m 长、10 m 高 ⇒ 6~8 片。
+	# ⚠️ 从「半身高、最多 6 片」加密的原因：片越粗，弯折时盒子膨胀得越厉害
+	#    （AABB 要把整片包住），细一点畸形小、轮廓也更像身体。
+	var slices := clampi(int(round(span / maxf(overall.size.y * 0.35, 0.2))), 3, 8)
 	# 骨点是**骨架中心线**，离表皮还有距离：按身高给一圈余量
 	var pad := maxf(overall.size.y * 0.055, 0.05)
+	_slice_pad = pad
+	# 相邻片沿长轴**轻微重叠**（各让出本片长度的 10%），弯折时相邻两片不会张开缝。
+	var overlap := span / float(slices) * 0.10
 
 	var made := 0
 	for si in slices:
-		var i0 := int(floor(float(ordered.size()) * float(si) / float(slices)))
-		var i1 := int(floor(float(ordered.size()) * float(si + 1) / float(slices)))
-		if i1 <= i0:
+		# 按坐标等分：本片包含 [c0, c1)（最后一片含右端点）
+		var c0 := lo + span * float(si) / float(slices) - overlap
+		var c1 := lo + span * float(si + 1) / float(slices) + overlap
+		var last := si == slices - 1
+		var idx := PackedInt32Array()
+		for k in pts.size():
+			var v: float = pts[k][axis]
+			if v >= c0 and (v < c1 or (last and v <= c1)):
+				idx.append(k)
+		if idx.is_empty():
 			continue
 		var sub: Array[Vector3] = []
-		for k in range(i0, i1):
-			sub.append(ordered[k])
+		for k in idx:
+			sub.append(pts[k])
 		var bb := _points_aabb(sub).grow(pad)
 		# 盒子不要探到地面以下（boss 脚底在 y = 0，地下半截纯属浪费）
 		if bb.position.y < 0.0:
@@ -452,16 +507,65 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 		cs.transform = Transform3D(Basis.IDENTITY, bb.get_center())
 		add_child(cs)
 		_collisions.append(cs)
+		# 记下「这片负责哪几根骨头」+ 上次算出来的盒子（用来跳过没变化的写入）
+		_slices.append({ "cs": cs, "bones": idx, "last": bb })
 		made += 1
 	if made == 0:
 		_collisions.clear()
+		_slices.clear()
 		return false
 	_collision = _collisions[0]
+	_follow_skel = skel
 	collision_layer = 1
 	collision_mask = 0
-	print("[Boss] 骨骼切片碰撞：%d 个盒子（骨骼 %d 根，按%s轴切）" % [
+	print("[Boss] 骨骼切片碰撞：%d 个盒子（骨骼 %d 根，按%s轴等分，每帧跟随骨骼）" % [
 		made, skel.get_bone_count(), "x" if axis == 0 else "z"])
 	return true
+
+
+## 每物理帧按骨骼**当前**位置重算每片碰撞盒（见 `_slices` 的注释）。
+##
+## 1 帧延迟说明：AnimationPlayer 在 `_process` 里刷骨骼，本函数在 `_physics_process`
+## 里读，所以盒子最多比网格晚一物理帧（60 Hz 下 16 ms）—— 看不出来。
+##
+## 开销（`_verify_trex_hitbox.gd` 第 ③ 段实测）：单只 ≈ 40 μs / 帧，
+## 第二关三只合计 ≈ 120 μs，约一帧（16.7 ms）的 0.7%。
+## 盒子没变化时（`SLICE_EPS` 内）直接跳过写入，所以安静站着时更省。
+func _sync_bone_collisions() -> void:
+	if _slices.is_empty() or not is_instance_valid(_follow_skel):
+		return
+	var skel := _follow_skel
+	var xf := global_transform.affine_inverse() * skel.global_transform
+	for s in _slices:
+		var cs: CollisionShape3D = s["cs"]
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var ids: PackedInt32Array = s["bones"]
+		var lo := Vector3(INF, INF, INF)
+		var hi := Vector3(-INF, -INF, -INF)
+		for bi in ids:
+			var p: Vector3 = xf * skel.get_bone_global_pose(bi).origin
+			lo = lo.min(p)
+			hi = hi.max(p)
+		if lo.x == INF:
+			continue
+		var bb := AABB(lo, hi - lo).grow(_slice_pad)
+		# 盒子不要探到地面以下（和建盒时同一口径，别让下半截凭空长出来）
+		if bb.position.y < 0.0:
+			var shrink := -bb.position.y
+			bb.position.y = 0.0
+			bb.size.y = maxf(bb.size.y - shrink, 0.1)
+		var last: AABB = s["last"]
+		if last.position.distance_to(bb.position) < SLICE_EPS \
+				and last.size.distance_to(bb.size) < SLICE_EPS:
+			continue
+		(cs.shape as BoxShape3D).size = bb.size
+		cs.transform = Transform3D(Basis.IDENTITY, bb.get_center())
+		s["last"] = bb
+
+
+func _physics_process(_delta: float) -> void:
+	_sync_bone_collisions()
 
 
 ## 非蒙皮模型的老路径：**每块网格一个盒子**。
@@ -566,6 +670,12 @@ func _build_trimesh_collision() -> bool:
 
 
 func _build_box_collision() -> void:
+	# 正常情况下 `_boot()` 里紧跟在 `_build_model()` 之后调，`model` 一定在。
+	# 但 `_build_model()` 在 `load(model_path)` 失败时会提前 return（model 保持 null），
+	# 那就别在这里崩 —— 报个明确的错比 Null 崩栈好排查。
+	if model == null:
+		push_error("[Boss %s] 建碰撞盒时 model 还是 null（模型没加载成功？）" % display_name)
+		return
 	_collision_shape = BoxShape3D.new()
 	# 身体占全长约 6 成（剩下是尾巴，不细究）；盒子稍微往上抬一点，避开脚
 	_collision_shape.size = Vector3(
@@ -641,6 +751,27 @@ func _die(by_damage: float) -> void:
 	died.emit(by_damage)
 	for c in _collisions:
 		c.set_deferred("disabled", true)
+	# ── 模型可能**还没建**（`_boot()` 是 BootGate 近距离才触发的延迟建）──
+	#
+	# ⚠️⚠️ 2026-11-11 用户：「按 F3 的 F5 游戏崩溃」，报错：
+	#     Cannot call method 'set_trans' on a null value.
+	#     0 - boss.gd:747  at function: _die
+	#     3 - player.gd:590  at function: _dev_key    ← F5 秒杀
+	#
+	# 真因：F5 给全场 Boss 打 1e9 伤害，而远处的 Boss 还没被 BootGate 建出来，
+	# `model` 仍是 null。`tween_property(null, ...)` 返回 **null**，
+	# 后面链式的 `.set_trans(...)` 就崩了。
+	#
+	# 这**不只是调试路径的问题**：任何"Boss 还没生成就被打死"的场合
+	# （远程武器、爆炸、脚本强制结算）都会踩到。
+	if model == null:
+		# 没模型就别演扑倒动画，但**掉落/结算/复活计时照走**
+		# （掉落逻辑在上面已经执行完了，这里只跳过视觉）
+		if respawn_on_death:
+			var tw0 := create_tween()
+			tw0.tween_interval(respawn_time)
+			tw0.tween_callback(_respawn)
+		return
 	# 向前扑倒（模型脸朝 +Z，绕 +X 转正角就是低头栽下去）
 	var tw := create_tween()
 	tw.set_parallel(true)
@@ -658,6 +789,9 @@ func _respawn() -> void:
 	health_changed.emit(health, max_health)
 	for c in _collisions:
 		c.set_deferred("disabled", false)
+	# 同上：模型可能还没建，这时候没有可复位的视觉
+	if model == null:
+		return
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(model, "rotation:x", 0.0, 0.35)
