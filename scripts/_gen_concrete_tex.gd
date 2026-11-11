@@ -1,22 +1,26 @@
 extends SceneTree
-## 生成混凝土的**程序化噪声贴图**（粗糙度 + 法线），离线跑一次写进 `textures/`。
+## 重新生成混凝土贴图：**更细腻**（1024²，颗粒更小、层次更多）。
 ##
-## 为什么要贴图：用户 2026-11-11「店里白墙改混凝土的质感」。
-## 只把颜色改成灰色 = **灰色塑料**，不像混凝土。混凝土的特征是
-##   · 表面有细密的颗粒/气孔（高频噪声）
-##   · 大尺度上有斑驳（低频噪声）
-##   · 粗糙度不均匀（有的地方更哑，有的地方微亮）
-## 这三样都要贴图，法线贴图负责「颗粒感」在光照下的凹凸。
+## 用户 2026-11-11：「太粗糙了，不够细腻，近看特别糊」。
 ##
-## 本脚本**生成三张图**（512²，够用了，别上 4K 浪费显存）：
-##   concrete_albedo.png    灰度斑驳（叠在 albedo_color 上做明暗变化）
-##   concrete_rough.png     粗糙度变化（0.80~0.95）
-##   concrete_normal.png    法线（颗粒凹凸）
+## 上一版的问题（两条，都要修）：
+##   ① 分辨率只有 512²，而一面墙有 8×6 m —— 单个纹素在墙上就有 1.5 cm，
+##      近看必然糊；
+##   ② 噪声的格点数太少（3/11/43），最小的颗粒也有很大一块 ——
+##      所以看上去是"面粉团"而不是"水泥颗粒"。
+##
+## 这一版：
+##   · 1024²（单纹素 ~0.8 cm，近看明显细腻）
+##   · 格点加密到 **5 / 23 / 97 / 311**（四层），最细那层是毛发级颗粒
+##   · 高度场改成"细颗粒主导"：细层权重最大，大斑驳只做很轻的底噪
+##   · 法线强度也调低（1.4），避免近看一片凹凸肉麻
 ##
 ## 用法：& <godot_console.exe> --headless --path . --script res://scripts/_gen_concrete_tex.gd
-## 输出：assets/tex/concrete_*.png（`.import` 已随仓库提供，按 lot_paver 的惯例写好）
+## 输出：assets/tex/concrete_{albedo,rough,normal}.png
 
 const OUT_DIR := "res://assets/tex"
+## 贴图边长。1024² 是 RGB8 × 3 张 ≈ 2.4 MB 落盘，显存走 bptc 压缩后很小。
+const SIZE := 1024
 
 
 func _initialize() -> void:
@@ -25,9 +29,8 @@ func _initialize() -> void:
 
 func _gen() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
-	var n := 512
+	var n := SIZE
 
-	# 三张同尺寸的浮点缓冲
 	var alb := PackedFloat32Array()
 	var rgh := PackedFloat32Array()
 	var hgt := PackedFloat32Array()
@@ -35,47 +38,48 @@ func _gen() -> void:
 	rgh.resize(n * n)
 	hgt.resize(n * n)
 
-	# ── 可平铺的 value noise：整数格点 + 双线性 + smoothstep ──
-	# `period` 让噪声在 period 格后重复 → 贴图无缝
 	for y in n:
 		for x in n:
 			var fx := float(x) / float(n)
 			var fy := float(y) / float(n)
-			# 大斑驳：3 格一循环
-			var big := _fbm(fx, fy, 3, 4)
-			# 中颗粒：11 格
-			var mid := _fbm(fx, fy, 11, 4)
-			# 细颗粒（气孔）：43 格
-			var fine := _fbm(fx, fy, 43, 2)
+			# 四层：大斑驳 / 中颗粒 / 细颗粒 / 毛发级
+			var big := _fbm(fx, fy, 5, 3)
+			var mid := _fbm(fx, fy, 23, 3)
+			var fine := _fbm(fx, fy, 97, 2)
+			var micro := _fbm(fx, fy, 311, 1)
 			var i := y * n + x
-			# 高度：细颗粒为主，中颗粒给"抹子痕"
-			hgt[i] = fine * 0.55 + mid * 0.45
-			# 反照率：0.82~1.08 的明暗起伏（叠到 albedo_color 上）
-			alb[i] = 0.82 + big * 0.16 + mid * 0.10
-			# 粗糙度：0.80~0.95
-			rgh[i] = 0.80 + big * 0.09 + fine * 0.06
 
-	# ── 写 albedo（灰度）──
+			# 高度：**细层主导**，颗粒才细腻
+			hgt[i] = micro * 0.40 + fine * 0.34 + mid * 0.20 + big * 0.06
+
+			# 反照率起伏：0.86~1.04
+			# ⚠️ 第一版给 0.90~1.06 太淡，墙上几乎看不出斑驳（只剩法线在动），
+			#    用户看到的还是一张白纸。这里把低频/中频的权重加大一档，
+			#    让"灰色的水泥斑"真的看得见，同时细颗粒仍占小份。
+			alb[i] = 0.86 + big * 0.11 + mid * 0.10 + fine * 0.05
+
+			# 粗糙度：0.84~0.96
+			rgh[i] = 0.84 + big * 0.05 + fine * 0.04 + micro * 0.03
+
+	# ── albedo（灰度）──
 	var img_a := Image.create(n, n, false, Image.FORMAT_RGB8)
 	for y in n:
 		for x in n:
-			var v := clampf(alb[y * n + x], 0.0, 1.0)
-			var c := int(round(v * 255.0))
+			var c := int(round(clampf(alb[y * n + x], 0.0, 1.0) * 255.0))
 			img_a.set_pixel(x, y, Color8(c, c, c))
 	img_a.save_png(ProjectSettings.globalize_path(OUT_DIR).path_join("concrete_albedo.png"))
 
-	# ── 写 roughness（灰度）──
+	# ── roughness（灰度）──
 	var img_r := Image.create(n, n, false, Image.FORMAT_RGB8)
 	for y in n:
 		for x in n:
-			var v := clampf(rgh[y * n + x], 0.0, 1.0)
-			var c := int(round(v * 255.0))
+			var c := int(round(clampf(rgh[y * n + x], 0.0, 1.0) * 255.0))
 			img_r.set_pixel(x, y, Color8(c, c, c))
 	img_r.save_png(ProjectSettings.globalize_path(OUT_DIR).path_join("concrete_rough.png"))
 
-	# ── 写法线（Sobel 求高度梯度）──
+	# ── normal（Sobel，强度 1.4）──
 	var img_n := Image.create(n, n, false, Image.FORMAT_RGB8)
-	var strength := 2.2
+	var strength := 1.4
 	for y in n:
 		for x in n:
 			var xl := (x - 1 + n) % n
@@ -84,24 +88,19 @@ func _gen() -> void:
 			var yd := (y + 1) % n
 			var dx := (hgt[y * n + xr] - hgt[y * n + xl]) * strength
 			var dy := (hgt[yd * n + x] - hgt[yu * n + x]) * strength
-			# 切线空间法线：(-dx, -dy, 1) 归一化 → 映射到 0..1
 			var nx := -dx
 			var ny := -dy
 			var nz := 1.0
 			var l := sqrt(nx * nx + ny * ny + nz * nz)
-			nx /= l
-			ny /= l
-			nz /= l
 			img_n.set_pixel(x, y, Color(
-				nx * 0.5 + 0.5, ny * 0.5 + 0.5, nz * 0.5 + 0.5))
+				nx / l * 0.5 + 0.5, ny / l * 0.5 + 0.5, nz / l * 0.5 + 0.5))
 	img_n.save_png(ProjectSettings.globalize_path(OUT_DIR).path_join("concrete_normal.png"))
 
-	print("[concrete] 生成完毕：%d² albedo / rough / normal → %s"
+	print("[concrete] %d² 重新生成完毕（格点 5/23/97/311 四层）→ %s"
 		% [n, ProjectSettings.globalize_path(OUT_DIR)])
 	quit(0)
 
 
-## 可平铺 fbm：`cells` 个格点一循环，`octaves` 层叠加
 func _fbm(x: float, y: float, cells: int, octaves: int) -> float:
 	var total := 0.0
 	var amp := 1.0
@@ -115,7 +114,6 @@ func _fbm(x: float, y: float, cells: int, octaves: int) -> float:
 	return total / norm
 
 
-## 一层的可平铺 value noise（在 c×c 网格上，周期 1.0）
 func _tile_noise(x: float, y: float, c: int) -> float:
 	var fx := x * float(c)
 	var fy := y * float(c)
@@ -123,23 +121,19 @@ func _tile_noise(x: float, y: float, c: int) -> float:
 	var y0 := int(floor(fy))
 	var tx := fx - float(x0)
 	var ty := fy - float(y0)
-	# smoothstep 插值，避免格子棱
 	tx = tx * tx * (3.0 - 2.0 * tx)
 	ty = ty * ty * (3.0 - 2.0 * ty)
 	var v00 := _rand01(_wrapi(x0, c), _wrapi(y0, c))
 	var v10 := _rand01(_wrapi(x0 + 1, c), _wrapi(y0, c))
 	var v01 := _rand01(_wrapi(x0, c), _wrapi(y0 + 1, c))
 	var v11 := _rand01(_wrapi(x0 + 1, c), _wrapi(y0 + 1, c))
-	var a := lerpf(v00, v10, tx)
-	var b := lerpf(v01, v11, tx)
-	return lerpf(a, b, ty)
+	return lerpf(lerpf(v00, v10, tx), lerpf(v01, v11, tx), ty)
 
 
 func _wrapi(v: int, m: int) -> int:
 	return ((v % m) + m) % m
 
 
-## 确定性哈希 → 0..1（同一个格点永远同一个值，贴图可重复生成）
 func _rand01(ix: int, iy: int) -> float:
 	var h := ix * 374761393 + iy * 668265263
 	h = (h ^ (h >> 13)) * 1274126177

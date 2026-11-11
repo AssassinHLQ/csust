@@ -585,6 +585,26 @@ func _fix_glb_materials(inst: Node3D) -> void:
 				#
 				# roughness 保持 0.88（哑光）—— 这是「混凝土」和「白纸」的分界：
 				# 白而哑光 = 白混凝土；白而光滑 = 又是之前那个 57.74% 过曝的白墙。
+				#
+				# ⚠️⚠️ 2026-11-11 用户第三句：「太粗糙了，不够细腻，近看特别糊」。
+				#
+				# 根因**不是贴图生成得糙**，是两个尺度参数算错了：
+				#   ① `uv1_scale = 3` 太小。墙网格的模型单位 x 跨 **168.38**，
+				#      对应实际 **8.0 m**（缩放 ≈21）。所以 uv1_scale = N 时
+				#      一个贴图周期铺 `8/N` 米 —— uv3 → **2.67 m 一个周期**，
+				#      一坨斑点就有 4 m 大，近看必糊。
+				#   ② 贴图只有 512²，单个纹素在墙上 ~1.5 cm，本身就撑不住近看；
+				#      而且噪声格点太稀（3/11/43），最小颗粒也是很大一块。
+				#
+				# 现在：贴图 **1024²**、格点加密到 **5/23/97/311 四层**（`_gen_concrete_tex.gd`），
+				#      `uv1_scale = 16` → 一个周期 **0.5 m**、单纹素 ~5 mm，
+				#      `normal_scale = 0.40`（旧 0.85 近看一片肉麻凸起）。
+				# 四档近看实测（镜头离墙 1.3 m，`_probe_shop_final_look.gd` 的 zoom_*）：
+				#     uv3  (2.67 m/周期) → 大团模糊斑块  ← 用户抱怨的那版
+				#     uv8  (1.00 m/周期) → 仍偏大、有块感
+				#     uv16 (0.50 m/周期) → 细密均匀的水泥颗粒  ← 采用
+				#     uv24 (0.33 m/周期) → 太碎，平铺重复明显
+				# 图在 `_arisu_captures/_shop_final/zoom_uv{3_old,8,16,24}.png`。
 				var is_wall := key.contains("PLASTIK") or key.contains("Rectangle")
 				if is_wall:
 					mat.albedo_color = Color(0.68, 0.68, 0.68)
@@ -596,15 +616,16 @@ func _fix_glb_materials(inst: Node3D) -> void:
 					var tex_n := load("res://assets/tex/concrete_normal.png")
 					if tex_a != null:
 						mat.albedo_texture = tex_a
-						mat.uv1_scale = Vector3(3.0, 3.0, 1.0)
+						# 墙 ~8 m 宽 / 16 = 一个贴图周期 0.5 m
+						mat.uv1_scale = Vector3(16.0, 16.0, 1.0)
 					if tex_r != null:
 						mat.roughness_texture = tex_r
 						mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 					if tex_n != null:
 						mat.normal_enabled = true
 						mat.normal_texture = tex_n
-						mat.normal_scale = 0.85
-					print("[Shop]   材质 %-16s → 白混凝土（albedo 0.68 / rough 0.88 / 带贴图 %s）"
+						mat.normal_scale = 0.40
+					print("[Shop]   材质 %-16s → 白混凝土（albedo 0.68 / rough 0.88 / uv 16 / 带贴图 %s）"
 						% [key, "有" if tex_a != null else "无"])
 				else:
 					# 非墙非地的结构件（柜台等）：保守给中性灰，保持可读

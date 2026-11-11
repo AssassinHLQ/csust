@@ -26,6 +26,13 @@ const ALBEDO_MAX := 0.78
 const ROUGH_MIN := 0.80
 ## 中性度：白混凝土不能偏色。R 与 B 的差超过这个就当"染色了"。
 const NEUTRAL_MAX_DRIFT := 0.05
+## UV 密度下限（用户 2026-11-11「太粗糙了…近看特别糊」）。
+## 墙网格模型单位 x 跨 168.38 = 实际 8.0 m，所以 uv1_scale = N 时
+## 一个贴图周期铺 8/N 米。uv3 → 2.67 m/周期，一坨斑点 4 m 大，近看必糊。
+## uv16 → 0.5 m/周期，单纹素 ~5 mm，近看才是水泥颗粒。
+const UV_SCALE_MIN := 12.0
+## 法线上限：0.85 近看一片肉麻凸起，实测 0.40 合适
+const NORMAL_MAX := 0.60
 
 var _pass := 0
 var _fail := 0
@@ -94,6 +101,12 @@ func _run() -> void:
 		_check(mat.roughness_texture != null, "  %s 挂了 roughness 贴图" % nm)
 		_check(mat.normal_enabled and mat.normal_texture != null,
 			"  %s 挂了法线贴图（颗粒感）" % nm)
+		# 尺度：UV 太稀 → 大团模糊；法线太强 → 近看肉麻
+		_check(mat.uv1_scale.x >= UV_SCALE_MIN,
+			"  %s UV 密度 %.1f ≥ %.1f（周期 %.2f m，近看不糊）"
+				% [nm, mat.uv1_scale.x, UV_SCALE_MIN, 8.0 / maxf(mat.uv1_scale.x, 0.001)])
+		_check(mat.normal_scale <= NORMAL_MAX,
+			"  %s 法线强度 %.2f ≤ %.2f（不肉麻）" % [nm, mat.normal_scale, NORMAL_MAX])
 		_check(not mat.emission_enabled, "  %s 关掉了自发光（不再是烘焙光）" % nm)
 
 	# 贴图资源本身能不能 load 到（防止路径写错）

@@ -66,6 +66,62 @@ func _run() -> void:
 		.path_join("_arisu_captures").path_join(OUT_DIR)
 	DirAccess.make_dir_recursive_absolute(out)
 
+	# ── UV 密度 / 法线强度 四档对照（用户 2026-11-11「太粗糙了，不够细腻，近看特别糊」）──
+	# 墙网格模型单位 x 跨 168.38 = 实际 8.0 m（缩放 ~21），所以
+	#   uv1_scale = N  →  一个贴图周期铺 8/N 米
+	# 上一版是 uv1_scale=3 → 周期 2.67 m，一坨斑点 4 m 大，近看必然糊。
+	var wall2: StandardMaterial3D = null
+	for mi in shop.find_children("*", "MeshInstance3D", true, false):
+		var m2 := (mi as MeshInstance3D).mesh
+		if m2 == null:
+			continue
+		for s2 in m2.get_surface_count():
+			var ov2 := (mi as MeshInstance3D).get_surface_override_material(s2) as StandardMaterial3D
+			if ov2 == null:
+				continue
+			var src2 := m2.surface_get_material(s2) as StandardMaterial3D
+			if src2 != null and src2.resource_name == "PLASTIK_W":
+				wall2 = ov2
+				break
+		if wall2 != null:
+			break
+
+	# ⚠️ 近看特写机位：离墙 ~1.2 m，正对墙面（复刻用户那两张图）
+	var cam_near := Camera3D.new()
+	cam_near.near = 0.05
+	cam_near.far = 500.0
+	cam_near.fov = 70.0
+	root.add_child(cam_near)
+
+	var UV_TIERS := [
+		["uv3_old", 3.0, 0.85],     # 上一版：周期 2.67 m
+		["uv8", 8.0, 0.55],         # 周期 1.0 m
+		["uv16", 16.0, 0.40],       # 周期 0.5 m
+		["uv24", 24.0, 0.35],       # 周期 0.33 m
+	]
+
+	# 目标墙面：店最里面的那面墙（z 最小），站在它前面 1.2 m
+	# 墙面在世界 z ≈ sp.z - 5.4（店进深 10.8，中心在 sp.z）
+	var wall_z := sp.z - 5.2
+	cam_near.global_position = Vector3(sp.x, 1.55, wall_z + 1.3)
+	cam_near.look_at(Vector3(sp.x, 1.55, wall_z), Vector3.UP)
+
+	if wall2 != null and tod != null:
+		tod.call("set_hours", 12.0)
+		for _f in 60:
+			await process_frame
+		print("\n── 近看特写：UV 密度 / 法线强度 四档（12:00，镜头离墙 1.3 m）──")
+		for t in UV_TIERS:
+			var tag2: String = t[0]
+			var uv: float = t[1]
+			var ns: float = t[2]
+			wall2.uv1_scale = Vector3(uv, uv, 1.0)
+			wall2.normal_scale = ns
+			await _shot(cam_near, out, "zoom_%s" % tag2)
+		# 还原成当前真值
+		wall2.uv1_scale = Vector3(3.0, 3.0, 1.0)
+		wall2.normal_scale = 0.85
+
 	# ① 用户截图那个视角（货架之间，略侧看）
 	var cam_user := Camera3D.new()
 	cam_user.near = 0.05
