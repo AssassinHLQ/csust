@@ -565,68 +565,45 @@ func _fix_glb_materials(inst: Node3D) -> void:
 				mat.emission_enabled = false
 				mat.albedo_texture = null
 				mat.vertex_color_use_as_albedo = false
-				# ⚠️ 2026-11-11 用户第二句：「我喜欢白混凝土」。
+				# ⚠️⚠️⚠️ 2026-11-11 用户第四句定稿：「不行，还是换回全白吧」，
+				#        并在选项里明确选了 **纯白 + 保持哑光 + 不加贴图**。
 				#
-				# 上一版按"混凝土物理反照率 0.30~0.50"选了中灰 (0.48,0.47,0.45)，
-				# 结果跑出来**偏暖褐 / 像生锈**，用户直接否了。两处暖叠一起：
-				#   ① `ambient_light_source = 3`（走天空），而天空是**粉紫**的 → 灰墙被染暖
-				#   ② albedo 三通道 R>G>B (0.48,0.47,0.45) 本身又叠一层暖
-				# 实测「暖度 R-B」：中灰版 +6.3，中性版 −1.4。
+				# 所以：贴图全部摘掉（不再加载 assets/tex/concrete_*.png），
+				#       只留 albedo + roughness —— 一块干净的白墙。
 				#
-				# 白混凝土应该是：**高明度 + 中性色 + 保留粗糙度和颗粒**。
-				# 四档实测（12:00，货架之间那个视角，用户截图同机位）：
-				#     C 中灰 (0.48,0.47,0.45) → 亮度 152.6  暖度 +1.2   ← 偏褐，否
-				#     P1 中性 (0.68,0.68,0.68) → 亮度 182.8  暖度 −4.4   ← 采用
-				#     P2 微冷 (0.66,0.68,0.70) → 亮度 182.5  暖度 −8.8   ← 略偏蓝紫
-				#     P4 更白 (0.75,0.77,0.79) → 亮度 191.9  暖度 −8.6   ← 白天偏飘
-				# 选 P1：天空那层粉紫正好把中性灰中和成干净的白，
-				# 白天不炸（过曝 2.40%，和中灰版一致）、夜里（21:00）也还看得清。
-				# 图在 `_arisu_captures/_shop_white_concrete/`。
+				# 但这不等于回到最初那版！最初是 albedo 0.95 + **roughness 0.55**
+				# （白而**光滑**），白天过曝 **57.74%**，用户当时就说"瞎死我了"。
+				# 现在 rough 保持 **0.90**（哑光），所以能白很多还不炸。
 				#
-				# roughness 保持 0.88（哑光）—— 这是「混凝土」和「白纸」的分界：
-				# 白而哑光 = 白混凝土；白而光滑 = 又是之前那个 57.74% 过曝的白墙。
+				# 白到什么程度是实测出来的（`_probe_shop_pure_white.gd`，
+				# 12:00 店内机位 / 用户视角机位，三档都出过图）：
+				#     albedo 0.85 → 过曝 12.72% / 4.62%   ← 采用（唯一既白又不炸的）
+				#     albedo 0.90 → 过曝 38.79% / 27.09%  ← 崩了，临界点就在这
+				#     albedo 0.95 → 过曝 56.64% / 46.06%  ← 回到最初那个"瞎"
+				#     albedo 1.00 → 过曝 60.00% / 47.51%
+				# 注意 0.90 是**陡变点**：0.85→0.90 只差 0.05，过曝从 12.7% 跳到 38.8%。
+				# 想要更白，得先压环境光（`Env_arena` 的 ambient_light_source = 3 走天空），
+				# 光调 albedo 是走不通的。
+				# 图在 `_arisu_captures/_shop_pure_white/`。
 				#
-				# ⚠️⚠️ 2026-11-11 用户第三句：「太粗糙了，不够细腻，近看特别糊」。
-				#
-				# 根因**不是贴图生成得糙**，是两个尺度参数算错了：
-				#   ① `uv1_scale = 3` 太小。墙网格的模型单位 x 跨 **168.38**，
-				#      对应实际 **8.0 m**（缩放 ≈21）。所以 uv1_scale = N 时
-				#      一个贴图周期铺 `8/N` 米 —— uv3 → **2.67 m 一个周期**，
-				#      一坨斑点就有 4 m 大，近看必糊。
-				#   ② 贴图只有 512²，单个纹素在墙上 ~1.5 cm，本身就撑不住近看；
-				#      而且噪声格点太稀（3/11/43），最小颗粒也是很大一块。
-				#
-				# 现在：贴图 **1024²**、格点加密到 **5/23/97/311 四层**（`_gen_concrete_tex.gd`），
-				#      `uv1_scale = 16` → 一个周期 **0.5 m**、单纹素 ~5 mm，
-				#      `normal_scale = 0.40`（旧 0.85 近看一片肉麻凸起）。
-				# 四档近看实测（镜头离墙 1.3 m，`_probe_shop_final_look.gd` 的 zoom_*）：
-				#     uv3  (2.67 m/周期) → 大团模糊斑块  ← 用户抱怨的那版
-				#     uv8  (1.00 m/周期) → 仍偏大、有块感
-				#     uv16 (0.50 m/周期) → 细密均匀的水泥颗粒  ← 采用
-				#     uv24 (0.33 m/周期) → 太碎，平铺重复明显
-				# 图在 `_arisu_captures/_shop_final/zoom_uv{3_old,8,16,24}.png`。
+				# ── 历史保留（别再重犯）──
+				# 期间试过：中灰混凝土 (0.48) → 偏暖褐被否；白混凝土 (0.68) + 三张贴图
+				# → 用户「太粗糙了，不够细腻，近看特别糊」；贴图做细到 1024²/uv16
+				# → 仍然「不行，还是换回全白」。结论：**用户要的就是干净白墙，不要纹理**。
+				# 贴图生成器 `scripts/_gen_concrete_tex.gd` 和 assets/tex/ 的三张图保留，
+				# 以后想再试质感直接接回去就行。
 				var is_wall := key.contains("PLASTIK") or key.contains("Rectangle")
 				if is_wall:
-					mat.albedo_color = Color(0.68, 0.68, 0.68)
-					mat.roughness = 0.88
+					mat.albedo_color = Color(0.85, 0.85, 0.85)
+					mat.roughness = 0.90
 					mat.metallic = 0.0
 					mat.metallic_specular = 0.30
-					var tex_a := load("res://assets/tex/concrete_albedo.png")
-					var tex_r := load("res://assets/tex/concrete_rough.png")
-					var tex_n := load("res://assets/tex/concrete_normal.png")
-					if tex_a != null:
-						mat.albedo_texture = tex_a
-						# 墙 ~8 m 宽 / 16 = 一个贴图周期 0.5 m
-						mat.uv1_scale = Vector3(16.0, 16.0, 1.0)
-					if tex_r != null:
-						mat.roughness_texture = tex_r
-						mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
-					if tex_n != null:
-						mat.normal_enabled = true
-						mat.normal_texture = tex_n
-						mat.normal_scale = 0.40
-					print("[Shop]   材质 %-16s → 白混凝土（albedo 0.68 / rough 0.88 / uv 16 / 带贴图 %s）"
-						% [key, "有" if tex_a != null else "无"])
+					# 纯白，不要任何纹理（用户在选项里明确选了"不加贴图"）
+					mat.albedo_texture = null
+					mat.roughness_texture = null
+					mat.normal_enabled = false
+					mat.normal_texture = null
+					print("[Shop]   材质 %-16s → 纯白哑光（albedo 0.85 / rough 0.90 / 无贴图）" % key)
 				else:
 					# 非墙非地的结构件（柜台等）：保守给中性灰，保持可读
 					mat.albedo_color = Color(0.80, 0.80, 0.79)

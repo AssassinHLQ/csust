@@ -15,16 +15,22 @@ extends SceneTree
 const WALL_MAT := "PLASTIK_W"
 const FLOOR_MAT := "Rectangle009__0"
 
-## 混凝土的物理区间。
-## ⚠️ 2026-11-11 用户第二句「我喜欢白混凝土」→ 从"中灰混凝土"改成"白混凝土"。
-##    白混凝土（清水混凝土刷白 / 白色素混凝土）反照率确实比普通水泥高：
-##    普通水泥 ~0.35，白混凝土 ~0.55~0.70。
-##    所以区间放宽到 [0.55, 0.78]，但**粗糙度下限仍然是 0.80** ——
-##    "白而哑光"才是白混凝土，"白而光滑"就是之前那个 57.74% 过曝的白纸墙。
-const ALBEDO_MIN := 0.55
-const ALBEDO_MAX := 0.78
-const ROUGH_MIN := 0.80
-## 中性度：白混凝土不能偏色。R 与 B 的差超过这个就当"染色了"。
+## ⚠️⚠️ 2026-11-11 用户第四句定稿：「不行，还是换回全白吧」，
+## 并在选项里明确选了 **纯白 + 保持哑光 + 不加贴图**。
+## 所以这套门槛整个反过来了：
+##   · 反照率区间从"混凝土 [0.55,0.78]" → **白墙 [0.80, 0.88]**
+##   · **要求没有贴图**（albedo / roughness / normal 三样都必须为空/关闭）
+##   · 粗糙度下限仍然 **0.90**（哑光 —— 这是白墙不再过曝的唯一保障）
+##
+## 为什么反照率封顶在 0.88 而不是 1.0：实测（`_probe_shop_pure_white.gd`，12:00）
+##     albedo 0.85 → 过曝 12.72%   ← 采用
+##     albedo 0.90 → 过曝 38.79%   ← **陡变点**，只差 0.05 就崩
+##     albedo 0.95 → 过曝 56.64%   ← 最初那个"瞎死我了"
+## 所以 0.90 以上一律判失败，防止以后有人"顺手调白一点"把问题调回来。
+const ALBEDO_MIN := 0.80
+const ALBEDO_MAX := 0.88
+const ROUGH_MIN := 0.90
+## 中性度：白墙不能偏色。R 与 B 的差超过这个就当"染色了"。
 const NEUTRAL_MAX_DRIFT := 0.05
 ## UV 密度下限（用户 2026-11-11「太粗糙了…近看特别糊」）。
 ## 墙网格模型单位 x 跨 168.38 = 实际 8.0 m，所以 uv1_scale = N 时
@@ -88,32 +94,28 @@ func _run() -> void:
 		print("   %s：albedo=%s（亮度 %.2f）rough=%.2f metallic=%.2f"
 			% [nm, str(mat.albedo_color), lum, mat.roughness, mat.metallic])
 		_check(lum >= ALBEDO_MIN and lum <= ALBEDO_MAX,
-			"  %s 反照率 %.2f 落在白混凝土区间 [%.2f, %.2f]" % [nm, lum, ALBEDO_MIN, ALBEDO_MAX])
-		# 中性度：白混凝土不能偏色（上一版 R>G>B 被天空粉紫一叠就成褐色）
+			"  %s 反照率 %.2f 落在白墙区间 [%.2f, %.2f]" % [nm, lum, ALBEDO_MIN, ALBEDO_MAX])
+		# 中性度：白墙不能偏色
 		var drift := absf(mat.albedo_color.r - mat.albedo_color.b)
 		_check(drift <= NEUTRAL_MAX_DRIFT,
-			"  %s 色相中性（|R−B| = %.3f ≤ %.2f，不会叠成褐色）"
-				% [nm, drift, NEUTRAL_MAX_DRIFT])
-		_check(mat.roughness >= ROUGH_MIN,
-			"  %s 粗糙度 %.2f ≥ %.2f（白而哑光，不是白纸）" % [nm, mat.roughness, ROUGH_MIN])
+			"  %s 色相中性（|R−B| = %.3f ≤ %.2f）" % [nm, drift, NEUTRAL_MAX_DRIFT])
+		# ⚠️ 加 0.001 容差：float32 里 0.9 存成 0.8999999…，
+		#    直接写 `0.90 >= 0.90` 会判假（第一次跑就栽在这）。
+		_check(mat.roughness >= ROUGH_MIN - 0.001,
+			"  %s 粗糙度 %.2f ≥ %.2f（哑光，不会过曝）" % [nm, mat.roughness, ROUGH_MIN])
 		_check(mat.metallic <= 0.01, "  %s metallic ≈ 0（不是镜面反射高）" % nm)
-		_check(mat.albedo_texture != null, "  %s 挂了 albedo 贴图" % nm)
-		_check(mat.roughness_texture != null, "  %s 挂了 roughness 贴图" % nm)
-		_check(mat.normal_enabled and mat.normal_texture != null,
-			"  %s 挂了法线贴图（颗粒感）" % nm)
-		# 尺度：UV 太稀 → 大团模糊；法线太强 → 近看肉麻
-		_check(mat.uv1_scale.x >= UV_SCALE_MIN,
-			"  %s UV 密度 %.1f ≥ %.1f（周期 %.2f m，近看不糊）"
-				% [nm, mat.uv1_scale.x, UV_SCALE_MIN, 8.0 / maxf(mat.uv1_scale.x, 0.001)])
-		_check(mat.normal_scale <= NORMAL_MAX,
-			"  %s 法线强度 %.2f ≤ %.2f（不肉麻）" % [nm, mat.normal_scale, NORMAL_MAX])
+		# 纯白：**要求没有任何纹理**（用户明确选了"不加贴图"）
+		_check(mat.albedo_texture == null, "  %s 没有 albedo 贴图（纯白平涂）" % nm)
+		_check(mat.roughness_texture == null, "  %s 没有 roughness 贴图" % nm)
+		_check(not mat.normal_enabled and mat.normal_texture == null,
+			"  %s 没有法线贴图（没有颗粒感）" % nm)
 		_check(not mat.emission_enabled, "  %s 关掉了自发光（不再是烘焙光）" % nm)
 
-	# 贴图资源本身能不能 load 到（防止路径写错）
+	# 贴图文件虽然不用了，但要还在（以后想再接回去，别让资源被误删）
 	for p in ["res://assets/tex/concrete_albedo.png",
 			"res://assets/tex/concrete_rough.png",
 			"res://assets/tex/concrete_normal.png"]:
-		_check(ResourceLoader.exists(p), "贴图存在：%s" % p)
+		_check(ResourceLoader.exists(p), "贴图资源保留（备用）：%s" % p)
 
 	# 灯带仍然自发光（别把灯管也关了）
 	if got.has("light"):
@@ -144,4 +146,4 @@ func _check(ok: bool, msg: String) -> void:
 func _summary() -> void:
 	print("\n═══ 通过 %d / 失败 %d ═══" % [_pass, _fail])
 	if _fail == 0:
-		print("★ 全过：白墙已成**白混凝土**（高反照率 + 中性色 + 哑光 + 三张贴图）")
+		print("★ 全过：白墙是**纯白哑光无贴图**（albedo 0.85 / rough 0.90）")
