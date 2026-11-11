@@ -6849,3 +6849,61 @@ await _pin_window()                                       # 再钉一次并复�
 ⚠️ 这个探针必须先拿 `GameSettings` 的 `window_mode` 改成 `"windowed"` 再载入关卡，
 否则 `RenderEnv.apply_window_mode()` 会把窗口从屏幕外拉回 `(0,34)` 最大化
 （§14.1.4 那次翻车的同一个原因）。实测窗口全程 `(-4000,-4000)`、`is_safe = true`。
+
+## 14.4 开场改成「你自己的 CG 优先」（`b93a16a`）
+
+用户：「这个不好看,我还是自己做cg吧」，格式答「mp4」。
+
+于是 `title_intro.gd` 从「只有一张程序化标题卡」改成 **三级优先**，本喵那版退成兜底：
+
+| 优先级 | 放什么 | 走哪条路 |
+|---|---|---|
+| ① | `assets/cg/opening.ogv` | `VideoStreamPlayer` |
+| ② | `assets/cg/opening/*.png` | 帧序列，`FRAME_FPS` 24 逐帧推 |
+| ③ | 都没有 | 程序化标题卡（兜底） |
+
+三者共用同一套骨架：**黑幕盖到 609 泼溅就绪**、按键只跳动画不跳加载、播完淡出。
+换正片不该把这些重新踩一遍 —— 这是分层的意义。
+
+新增 `_tools/mp4_to_ogv.sh`（mp4 → ogv，`libtheora -q:v 8` + `libvorbis -q:a 5`
++ `-pix_fmt yuv420p`）。**mp4 / webm 播不了是引擎限制**，不是本项目的限制，
+所以统一在导入这一步转掉：使用者照常导出 mp4，脚本负责转。
+
+### ⚠️ 14.4.1 三条实测结论（两条推翻了我自己的初稿）
+
+1. **`.ogv` 不需要 `.import`**。Godot 4 把它当**原生资源**直接读，
+   跑 `--import` 只生 `.uid` 不生 `.import`。
+   本喵一开始在 `assets/cg/README.md` 里写了「转完必须再进一次编辑器导入」——**是错的**，已改。
+2. **GDScript 里没有 `VideoStream.instantiate_playback()`**。
+   `ClassDB` 里那个叫 `_instantiate_playback`（C++ 内部接口，带下划线）。
+   所以「有没有音轨」没法直接查；自检改成验 `get_stream_length() > 0`，
+   音轨交给转码脚本保证（固定 `libvorbis`）。
+3. **`stream_position` 对 Theora 恒为 `0.00`**，不能用它判断"播没播"。
+   headless 出图看到 `CG 播到 0.00 / 2.0 s` 一度让本喵以为没播 ——
+   真窗口出图（`_arisu_captures/_cg/01_cg.png`）证明画面确实在播
+   （测试源是 ffmpeg `testsrc` 彩条，铺满 1280×720）。
+
+### ⚠️ 14.4.2 真问题：视频等待循环必须有上限
+
+第一版 `while vp.is_playing() and not _skipped:` **没有超时**。
+解码卡住时（编码不支持 / 文件截断 / 后端推不动时钟）`is_playing()` 恒 true，
+**玩家会永远开不了游戏** —— 比"CG 不好看"严重得多。
+
+现在：上限 = `get_stream_length() + 5 s`（拿不到时长退回 60 s），
+超时强制收尾 + `push_warning`。headless 自检里正是靠这条才没卡死。
+
+### 验证
+
+`_verify_cg_slot.gd` **7/7**：
+
+- `.ogv` 旁边**没有** `.import`、有 `.uid`；
+- `load()` 拿到 `VideoStreamTheora`、`get_stream_length()` = 2.00 s；
+- 有 ogv 时 `kind()` 报 `video`；删掉 ogv 后报 `procedural`；
+- 兜底路径能播完（2.91 s，不卡死）。
+
+`_verify_title_intro.gd` 仍然 **11/11**（兜底那版没被改坏）。
+真窗口出图 `_arisu_captures/_cg/`：`00_black` / `01_cg`（彩条在播）/ `02_after`（世界露出、无残影）。
+
+⚠️ 测试用的 `opening.ogv` 已删掉，`assets/cg/` 只留 `README.md`
+（放 CG 的位置 + 格式说明 + 三级优先级）。使用者的 CG 该不该入库由他决定，
+本喵没有擅自加 `.gitignore`。
