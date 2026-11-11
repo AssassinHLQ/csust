@@ -73,3 +73,26 @@
    `Normal_Attack_Ing` / `Normal_Reload`（都有 `has_animation()` 兜底）。
 3. **朝向约定**：这套模型 `rotation.y = 0` 时脸朝世界 **+Z**（README §1.4）。
    换了模型要用四方位渲图重新确认，`scripts/_probe_view.gd` 就是干这个的。
+4. **LOD**：角色模型的 `.glb.import` 里 `meshes/generate_lods` 必须是 **`false`**。
+   角色面数本来就少（柚子 1 万面），Godot 自动生成的 LOD1/LOD2 一掉就是糊的。
+   实测（`scripts/_probe_char_lod.gd`，2026-11-11）：柚子距相机 15 m，
+   全局 `mesh_lod_threshold = 8.0 px`（用户存档值，默认 1.0）时只画 **1,789** 个图元，
+   关掉 LOD 后是 **10,352**（5.8×）；而且默认 1.0 时也已经掉到 6,139。
+   核对用 `scripts/_verify_char_no_lod.gd`（21 项，含每个模型能否正常加载）。
+
+## 关于「角色 `.import` 为什么单独入库」
+
+`.gitignore` 把 `/models/*.glb.import`、`/models/companions/**`、`/models/npc/**`、
+`/models/boss/**` 都排除了（模型本体是第三方、不随仓库分发）。但**角色的
+`.import` 文件被 `git add -f` 单独收进仓库**，理由和 `assets/music/*.ogg.import`
+那条先例一样：**参数本身就是决定**。
+
+具体是第 4 条那个 `meshes/generate_lods=false`。如果 `.import` 不入库，
+换一台机器重新导入时会按默认值 `generate_lods=true` 重新生成，角色又会被 LOD 削一遍，
+而且**没有任何东西提示你**。`.import` 只有几百字节，且源模型不存在时 Godot
+只会记一条警告、不会删它，所以收进来是安全的。
+
+改过参数的模型（19 个）：`Arisu_Battle` / `Arisu_Battle_Carrier` /
+`Arisu_Battle_Scenario` / `Arisu_ext` / `Arisu_Maid` / `RunFire`（骨架专用、0 网格）、
+`companions/*`（9）、`npc/sensei` / `npc/serika` / `npc/sora`、
+`boss/trex_yuuka_rigged`。`Arisu.glb` 早就是 `false`，一并核对。
