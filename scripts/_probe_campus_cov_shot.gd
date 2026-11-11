@@ -34,18 +34,12 @@ func _initialize() -> void:
 	_run.call_deferred()
 
 
-## 硬闸：这条探针必须开真窗口，所以必须满足 AGENTS.md 的「不抢前台」四条。
-## 漏一条就**直接退出**，不出图 —— 宁可本喵自己失败，也不要弹个窗口抢用户的鼠标。
+## 硬闸：这条探针必须开真窗口，所以必须守住「不抢前台」。
+## ⚠️ **不能**去查命令行里有没有 `--position`：`--position` / `--resolution`
+##    是引擎自己的参数，Godot 会从 `OS.get_cmdline_args()` 里**吃掉**，查不到
+##    （2026-11-11 实测：本探针因此一律误判「缺参数」直接退出，一张图都没出）。
+##    真正该守的是**运行时状态**：`OffWin.apply()` 之后用 `OffWin.is_safe()` 实测。
 func _check_window_args() -> void:
-	var args := OS.get_cmdline_args()
-	var has_pos := false
-	for a in args:
-		if a == "--position":
-			has_pos = true
-	if not has_pos:
-		push_error("[cov] 缺 --position -4000,-4000（会把窗口弹到用户屏幕上），拒绝运行")
-		quit(2)
-		return
 	if not OS.get_cmdline_user_args().has("--no-capture"):
 		push_error("[cov] 缺 --no-capture（窗口拿到焦点就会抢鼠标），拒绝运行")
 		quit(2)
@@ -62,6 +56,11 @@ func _run() -> void:
 	# ⚠️ 第一步就把窗口挪到屏幕外、取消最大化、缩到 960×540。
 	#    命令行参数**顶不住** project.godot 里的 window/size/mode=2，必须运行时代码改。
 	await OffWin.apply(self)
+	var safe0: Array = OffWin.is_safe()
+	if not bool(safe0[0]):
+		push_error("[cov] 窗口没挪到屏幕外，拒绝出图：%s" % str(safe0[1]))
+		quit(2)
+		return
 	var ps := load(LEVEL) as PackedScene
 	if ps == null:
 		push_error("[cov] 加载不了关卡")
