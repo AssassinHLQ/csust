@@ -296,22 +296,48 @@ use_default_orientation = true
 
 ; 2026-11-01：校园泼溅上放三只霸王龙优香（原来只有第一关场地上那只）。
 ; 体型 9.0 / 7.5 / 10.5 m，走近 60 m 才建模型，最长等 20 s 兜底。
+;
+; ── 2026-11-11 用户定稿：三只各有名字和配色 + **真不复活** ──
+;
+;   「设置霸王龙也不能复活，到时候加新的霸王龙贴图，
+;     第一个就是暗影霸王龙优香，第二个是炫彩霸王龙优香，第三是经典霸王龙优香」
+;
+; ① **不复活**用 `respawn_on_death = false`，不是把 `respawn_time` 调大。
+;    之前 `Target` 靶子写的是 `respawn_time = 9999` —— 用户指出
+;    「9999 秒岂不是 9999 秒会复活」，说得对（2.78 小时后照样站起来）。
+;    `respawn_on_death = false` 才是真的一次性：`boss.gd::_die()` 里
+;    那个分支直接 return，压根不挂复活计时。
+;
+; ② 配色走 `boss.gd` 现成的 `tint`（所有材质的 `albedo_color` 都乘它，白 = 原色）：
+;      A 暗影  —— 近黑紫，压暗压冷
+;      B 炫彩  —— 高饱和品红偏青（"炫彩"的落点，后面换真贴图时会替换它）
+;      C 经典  —— 纯白 tint = 保留原贴图原色
+;    等用户做的新贴图到了，把 `texture_map` 指过去即可，`tint` 那几行可以留着微调。
 [node name="TrexBossA" parent="." instance=ExtResource("16_trex")]
 transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -95, 0, -96)
 height = 9.0
 attack_range = 26.0
+display_name = "暗影霸王龙优香"
+respawn_on_death = false
+tint = Color(0.32, 0.26, 0.46, 1)
 
 [node name="TrexBossB" parent="." instance=ExtResource("16_trex")]
 transform = Transform3D(0.293, 0, -0.956, 0, 1, 0, 0.956, 0, 0.293, -120, 0, -115)
 height = 7.5
 attack_range = 24.0
 attack_start_delay = 4.0
+display_name = "炫彩霸王龙优香"
+respawn_on_death = false
+tint = Color(1.0, 0.42, 0.86, 1)
 
 [node name="TrexBossC" parent="." instance=ExtResource("16_trex")]
 transform = Transform3D(0.410, 0, -0.912, 0, 1, 0, 0.912, 0, 0.410, -135, 0, -140)
 height = 10.5
 attack_range = 28.0
 attack_start_delay = 6.0
+display_name = "经典霸王龙优香"
+respawn_on_death = false
+tint = Color(1, 1, 1, 1)
 
 [node name="Scoreboard" type="Label3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2, 4.1, 7.6)

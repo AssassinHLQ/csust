@@ -40,6 +40,13 @@ var _perf_frames := 0
 var _perf_steps := 0
 var _perf_phys_frames := 0
 
+## F4/F5/F6 按键回显（2026-11-11 用户选 C 方案）。
+## 单独一个 Label，**不复用** `LevelUI/Message` —— 那条被关卡提示占着
+## （「击破 N 个机关…」），混用会互相盖掉。懒建：第一次按 F4/F5/F6 才建节点。
+var _echo: Label
+var _echo_t := 0.0
+const ECHO_HOLD := 3.0
+
 ## 天空盒：和主场景同一批 AllSky Free 全景（assets/sky，MIT），进关卡时随机抽一张。
 ## 命令行 `-- --sky=<key>` 可以固定；key 见下面的表。
 const SKY_PATHS := {
@@ -219,11 +226,93 @@ func _input(event: InputEvent) -> void:
 	# 所以 `_input` 的调用顺序是 **父先于子** —— 和 `game.tscn` 那边一致。
 	if event is InputEventKey:
 		var key := event as InputEventKey
-		if key.pressed and not key.echo \
-				and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
-			_toggle_perf_overlay()
-			DevMode.toggle()
-			print("[Dev] F3 → 开发者模式 = %s" % str(DevMode.is_on()))
+		if key.pressed and not key.echo:
+			# ── F3：开关开发者模式 + 浮层 ──
+			if key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY:
+				_toggle_perf_overlay()
+				DevMode.toggle()
+				print("[Dev] F3 → 开发者模式 = %s" % str(DevMode.is_on()))
+				return
+			# ── F4/F5/F6：**回显**（2026-11-11 用户选 C 方案）──
+			#
+			# 用户报「第二场景仍然不能用 f456」，可探针实测三键逻辑都正常
+			# （F5 能把三只 Boss 打到 health=0，F6 能把倍速 1.0→5.0）。
+			# 既然代码没错，就要在**真机上**分清是「按键没到」还是「到了但看不见效果」。
+			#
+			# 所以这里对 F4/F5/F6 做三件事，一件都不省：
+			#   ① 屏幕角落闪一行字，说明「按到了什么、开发者模式开没开」
+			#      —— 不用翻日志，游戏里当场能看见；
+			#   ② `print()` 一行带 `[Dev]` 前缀，日志里也能对；
+			#   ③ **不吃事件**（不 `set_input_as_handled`），
+			#      留给 `player.gd` 去执行真正的动作。
+			#
+			# ⚠️ 这段只做"回显"，不代替 `player.gd::_dev_key()` 干活 ——
+			#    否则同一件事会被执行两次（比如 F5 打两遍伤害、F6 翻两次倍速）。
+			if key.keycode == KEY_F4 or key.keycode == KEY_F5 or key.keycode == KEY_F6:
+				var nm := "F4" if key.keycode == KEY_F4 \
+					else ("F5" if key.keycode == KEY_F5 else "F6")
+				var on := DevMode.is_on()
+				_show_key_echo("%s 收到 · 开发者模式 %s" % [nm, "开" if on else "关（先按 F3）"])
+				print("[Dev] %s 按键到达 next_level.gd（开发者模式=%s）" % [nm, str(on)])
+
+
+## 屏幕右下角闪一行「按到了什么」（F4/F5/F6 回显，2026-11-11 用户选 C 方案）。
+##
+## 单独一个 `Label`，**不复用** `LevelUI/Message` —— 那条被关卡提示占着
+## （「击破 N 个机关…」），混用会互相盖掉。
+##
+## 第一次调用时才建节点（懒建），之后只改文字 + 重置计时。
+func _show_key_echo(text: String) -> void:
+	if _echo == null:
+		var layer := $LevelUI as CanvasLayer
+		if layer == null:
+			return
+		var box := PanelContainer.new()
+		box.name = "KeyEcho"
+		# 右下角，避开血条（顶部）和 COST（右下偏上）
+		box.anchor_left = 1.0
+		box.anchor_right = 1.0
+		box.anchor_top = 1.0
+		box.anchor_bottom = 1.0
+		box.offset_left = -420.0
+		box.offset_right = -16.0
+		box.offset_top = -70.0
+		box.offset_bottom = -30.0
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.62)
+		sb.set_corner_radius_all(4)
+		sb.set_content_margin_all(6)
+		box.add_theme_stylebox_override("panel", sb)
+		layer.add_child(box)
+		_echo = Label.new()
+		_echo.name = "KeyEchoLabel"
+		_echo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_echo.add_theme_font_size_override("font_size", 15)
+		_echo.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		_echo.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		_echo.add_theme_constant_override("outline_size", 4)
+		box.add_child(_echo)
+	_echo.text = text
+	_echo_t = ECHO_HOLD
+
+
+func _tick_key_echo(delta: float) -> void:
+	if _echo == null or _echo_t <= 0.0:
+		return
+	_echo_t -= delta
+	if _echo_t <= 0.0:
+		# 不销毁节点（下次还要用），只是淡出到不可见
+		var p := _echo.get_parent() as CanvasItem
+		if p != null:
+			p.modulate.a = 0.0
+	elif _echo_t < 0.6:
+		var p2 := _echo.get_parent() as CanvasItem
+		if p2 != null:
+			p2.modulate.a = _echo_t / 0.6
+	else:
+		var p3 := _echo.get_parent() as CanvasItem
+		if p3 != null:
+			p3.modulate.a = 1.0
 
 
 ## F3 浮层：和 `game.gd::_toggle_perf_overlay()` 同一套（本场景独立一份，
@@ -472,6 +561,7 @@ func _open_exit_door() -> void:
 func _process(delta: float) -> void:
 	_update_campus_visibility()
 	_tick_perf_overlay(delta)
+	_tick_key_echo(delta)
 
 
 ## 校园泼溅的可见性闸门：
