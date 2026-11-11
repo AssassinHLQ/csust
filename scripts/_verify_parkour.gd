@@ -519,7 +519,10 @@ func _test_fund_lottery() -> void:
 	_check(sum / 1000.0 < -0.5,
 		"**大部分输钱**：1000 注均摊 %.2f%%/注，期望为负" % (sum / 1000.0))
 
-	# ② 稳定基金：踩第 1 段的 P1 → 保证金 ×1.001
+	# ② 起点段（站名 `P1` 所在的那一段）= **不结算**
+	# ⚠️ 2026-11-11 用户：「起点不要牌子,也不要加钱0.5」——
+	#    以前这里断言「踩 P1 → 保证金 ×1.005」，现在反过来：**分文不加**。
+	#    （`P1` 实测属于 seg=0「起跳・极限跳」，站 0-8，就是开始平台那一段。）
 	fut.margin = fut.start_margin
 	fut.settled.clear()
 	fut._settled_pct.clear()
@@ -529,19 +532,17 @@ func _test_fund_lottery() -> void:
 	_put(b1.position.x + b1.size.x * 0.5, _pk.top_at(i1) + 0.05,
 		b1.position.z + b1.size.z * 0.5)
 	await _wait(6)
-	var want := fut.start_margin * (1.0 + ParkourFutures.FUND_PCT / 100.0)
-	_check(absf(fut.margin - want) < 0.002 and fut._last_settle.contains("稳定基金"),
-		"踩上第 1 段的 P1 → 保证金 %.4f → %.4f 万（+%.2f%%，复利）：%s"
-		% [fut.start_margin, fut.margin, ParkourFutures.FUND_PCT, fut._last_settle])
+	_check(absf(fut.margin - fut.start_margin) < 0.0001,
+		"踩起点段的 P1 → **不光不加钱**（保证金仍是 %.4f 万，起点段已停用结算）"
+		% fut.margin)
 
-	# ③ 一块板只结算一次（来回走不许刷钱）
-	_put(b1.position.x + b1.size.x * 0.5, _pk.top_at(i1) + 0.05,
-		b1.position.z + b1.size.z * 0.5)
-	await _wait(6)
-	_check(absf(fut.margin - want) < 0.0001,
-		"同一块板再站一次**不再结算**（保证金仍是 %.4f 万）" % fut.margin)
+	# ③ 起点段的规则牌也已经删掉（用户：「起点不要牌子」）
+	var start_sign := fut.get_node_or_null("RuleSign_S0")
+	_check(start_sign == null, "起点段没有「稳定基金」规则牌（RuleSign_S0 不存在）")
+	var lottery_sign := fut.get_node_or_null("RuleSign_S1")
+	_check(lottery_sign != null, "彩票段仍然有规则牌（RuleSign_S1）")
 
-	# ④ 体育彩票：踩第 2 段的 T1 → 钱按彩票规则动，HUD 上写「体育彩票」
+	# ④ 体育彩票：踩第 1 段（站名 `T1`）→ 钱按彩票规则动，HUD 上写「体育彩票」
 	var i2 := _idx("T1")
 	var b2 := _pk.box_at(i2)
 	var m2 := fut.margin
