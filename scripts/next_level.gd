@@ -12,6 +12,33 @@ extends Node3D
 ## 永远完不成。
 
 const SceneFlow := preload("res://scripts/scene_flow.gd")
+## 开发者模式开关（全静态）。F3 归本脚本处理 —— 和 `game.gd` 一套逻辑。
+##
+## ⚠️⚠️ 2026-11-11 用户：「为什么第二场景开不了开发者模式」。
+##
+## 原因：F3 的处理**只写在 `game.gd::_input()` 里**（开帧率浮层 + 调 `DevMode.toggle()`），
+## 而 `next_level.gd` 连 `_input` 都没有 —— 第二场景压根没人听 F3。
+## `player.gd` 那边只认领 F4/F5/F6，而且它们都先判 `DevMode.is_on()`，
+## 所以第二场景里不仅 F3 没反应，连 F4/F5/F6 也全废（开关永远打不开）。
+##
+## 状态本身没问题：`DevMode` 把值存在 `GameSettings`（`dev_mode` 那一项），
+## 跨场景保留。缺的只是"谁来按"。
+const DevMode := preload("res://scripts/dev_mode.gd")
+## 和 `game.gd::PERF_KEY` 保持一致
+const PERF_KEY := KEY_F3
+## 浮层刷新间隔（秒），和 `game.gd::PERF_REFRESH` 一致
+const PERF_REFRESH := 0.2
+## 帧耗时滑窗长度
+const PERF_WINDOW := 120
+
+var _perf_layer: CanvasLayer
+var _perf_label: Label
+var _perf_clock := 0.0
+var _perf_dts: Array[float] = []
+var _perf_phys_sum := 0.0
+var _perf_frames := 0
+var _perf_steps := 0
+var _perf_phys_frames := 0
 
 ## 天空盒：和主场景同一批 AllSky Free 全景（assets/sky，MIT），进关卡时随机抽一张。
 ## 命令行 `-- --sky=<key>` 可以固定；key 见下面的表。
@@ -179,6 +206,122 @@ func _on_setting_changed(key: String, _value: Variant) -> void:
 		_apply_render()
 
 
+func _input(event: InputEvent) -> void:
+	# ── F3：开发者模式开关（2026-11-11 补）──
+	#
+	# 和 `game.gd::_input()` 完全同一套做法：
+	#   · 只在**按下**、且不是长按重复（`echo`）时响应；
+	#   · `keycode` 和 `physical_keycode` 都判（有的键盘布局只填其中一个）；
+	#   · **不要** `set_input_as_handled()` —— `player.gd` 的 `_input` 还要吃 F4/F5/F6，
+	#     吃掉 F3 不影响它们，但保持和 `game.gd` 一致更安全。
+	#
+	# 本场景节点在 `next_level.tscn` 里是根节点 `NextLevel`，而 `Player` 是它的子节点，
+	# 所以 `_input` 的调用顺序是 **父先于子** —— 和 `game.tscn` 那边一致。
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo \
+				and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
+			_toggle_perf_overlay()
+			DevMode.toggle()
+			print("[Dev] F3 → 开发者模式 = %s" % str(DevMode.is_on()))
+
+
+## F3 浮层：和 `game.gd::_toggle_perf_overlay()` 同一套（本场景独立一份，
+## 因为两个场景互不引用、各自是根节点，共享组件反而要多一层依赖）。
+func _toggle_perf_overlay() -> void:
+	if _perf_layer == null:
+		_build_perf_overlay()
+	_perf_layer.visible = not _perf_layer.visible
+	_perf_clock = 0.0
+	_perf_dts.clear()
+	if _perf_layer.visible:
+		_update_perf_overlay()
+	else:
+		print("[NextLevel] F3 性能浮层：关")
+
+
+func _build_perf_overlay() -> void:
+	_perf_layer = CanvasLayer.new()
+	_perf_layer.name = "PerfOverlay"
+	_perf_layer.layer = 200
+	_perf_layer.visible = false
+	add_child(_perf_layer)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(16, 132)
+	_perf_layer.add_child(panel)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0.55)
+	sb.set_corner_radius_all(4)
+	sb.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", sb)
+	_perf_label = Label.new()
+	_perf_label.add_theme_font_size_override("font_size", 14)
+	_perf_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_perf_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.92))
+	_perf_label.add_theme_constant_override("outline_size", 4)
+	panel.add_child(_perf_label)
+
+
+func _tick_perf_overlay(delta: float) -> void:
+	if _perf_layer == null or not _perf_layer.visible:
+		return
+	_perf_dts.append(delta * 1000.0)
+	if _perf_dts.size() > PERF_WINDOW:
+		_perf_dts.pop_front()
+	_perf_phys_sum += float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_perf_frames += 1
+	var pf := Engine.get_physics_frames()
+	if _perf_phys_frames > 0:
+		_perf_steps += pf - _perf_phys_frames
+	_perf_phys_frames = pf
+	_perf_clock += delta
+	if _perf_clock < PERF_REFRESH:
+		return
+	_perf_clock = 0.0
+	_update_perf_overlay()
+
+
+func _update_perf_overlay() -> void:
+	if _perf_label == null:
+		return
+	var n := maxi(_perf_frames, 1)
+	var phys := _perf_phys_sum / float(n)
+	var steps := float(_perf_steps) / float(n)
+	_perf_phys_sum = 0.0
+	_perf_frames = 0
+	_perf_steps = 0
+	var dts := _perf_dts.duplicate()
+	dts.sort()
+	var p50 := 0.0
+	var p99 := 0.0
+	var mx := 0.0
+	if not dts.is_empty():
+		p50 = dts[dts.size() / 2]
+		p99 = dts[mini(int(float(dts.size()) * 0.99), dts.size() - 1)]
+		mx = dts[dts.size() - 1]
+	var pos := Vector3.ZERO
+	if _player != null:
+		pos = _player.global_position
+	var stat := "最近 %d 帧 p50 %5.1f / p99 %5.1f / max %5.1f ms" % [dts.size(), p50, p99, mx]
+	if dts.is_empty():
+		stat = "正在采样…（0.2 s 出数）"
+	_perf_label.text = "\n".join([
+		"F3 性能浮层（第二关）—— 再按一次关闭",
+		"FPS %6.1f    %s" % [Engine.get_frames_per_second(), stat],
+		"draw call %5d      图元 %9d" % [
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))],
+		"显存 %7.0f MiB      物体 %6d" % [
+			float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0,
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))],
+		"物理 %6.2f ms      物理步/帧 %4.2f（上限 %d）" % [
+			phys, steps, Engine.max_physics_steps_per_frame],
+		"位置 (%7.2f, %6.2f, %7.2f)" % [pos.x, pos.y, pos.z],
+		"开发者模式 %s（F4 切场景 / F5 秒杀 / F6 加速）"
+			% ("开" if DevMode.is_on() else "关"),
+	])
+
+
 func _ready() -> void:
 	# 画面设置：先接上视口尺寸信号与设置监听，再走一次落地（和主场景同一套，
 	# 真正的逻辑在 `scripts/render_env.gd`）。
@@ -303,8 +446,9 @@ func _open_exit_door() -> void:
 	print("[ConstructivistLevel] 北门下沉")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_campus_visibility()
+	_tick_perf_overlay(delta)
 
 
 ## 校园泼溅的可见性闸门：
