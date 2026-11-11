@@ -36,26 +36,16 @@ const MIN_SIZE_RATIO := 0.75
 
 ## ── 动画中的判据 ──
 ## 每段技能里，盒子最大位移至少要有这么多（证明它跟着骨骼动了）。
-## 实测最小的一段（roar）也有 1.6 m；给一半余量。
 const MIN_BOX_TRAVEL := 0.8
-## 盒子中心到最近骨点的距离上限（m）。片子是骨点做 AABB 再 pad，中心必然靠里。
-const MAX_BOX_TO_BONE := 3.5
-## 骨点必须被某个盒子盖住的比例（留余量给「pad 之外的边角骨」）。
+## **网格顶点**被碰撞体积盖住的比例 —— 这才是用户真正在意的「碰撞跟模型对不对」。
 ##
-## ⚠️ 这条只当**粗筛**用，阈值故意放得比实测值低：AABB 重算偶尔会因为
-## 「不建到地平面以下」那条 clamp 削掉一点。真正咬精度的是下面那条软覆盖。
-const MIN_BONE_COVER := 0.85
-## 骨点离盒面的**容差**，超过这个才算「漏出去」。
-const COVER_TOL := 0.35
-## ── 软覆盖（硬指标）──
-## 任何一个骨点，离「最近那个盒子的表面」都不能超过这么多米。
-##
-## 为什么不设成 0：重算 AABB 之后，正常姿势下**本来就是 0.00**（骨头都在自己的
-## 包围盒里，这是恒等式）。唯一会漏的是 `boss.gd::_sync_bone_collisions()` 里
-## 「盒子不探到地平面以下」那条 clamp —— 冲锋时身体沉下去，地下的那截骨头
-## 被有意排除在碰撞之外。实测残留就是这个：charge 0.47~0.66 m，其余四段全是 0.00。
-## 所以这条阈值真正抓的是「有没有哪一截身体整段跑出盒子」，1 m 以内都算正常。
-const MAX_BONE_OUTSIDE := 1.0
+## 为什么不拿骨头当分母：盒子是拿蒙皮顶点量的（`boss.gd::_build_bone_cluster_collision`），
+## 而 `_end` / `_end_end` 那种瞄准骨本来就长在网格外面、永远盖不到。
+const MIN_MESH_COVER := 0.95
+## 盒子并集不能比网格并集胖太多（两边都取 AABB，比对角线长度）。
+const MAX_FAT_RATIO := 1.45
+## 盖子判定容差（m）：顶点离盒面这么近也算被盖住。
+const COVER_TOL := 0.20
 ## 每帧跟随更新的耗时上限（μs / 每次调用）。3 只一起跑也不能吃掉 1% 的一帧。
 const MAX_SYNC_US := 200.0
 
@@ -177,34 +167,30 @@ func _check_animated(level: Node) -> void:
 			var travel := 0.0
 			for k in mini(centers.size(), idle_centers.size()):
 				travel = maxf(travel, centers[k].distance_to(idle_centers[k]))
-			var bones := _bone_points(boss)
-			var box_to_bone := 0.0
-			for c in centers:
-				var nearest := INF
-				for p in bones:
-					nearest = minf(nearest, c.distance_to(p))
-				box_to_bone = maxf(box_to_bone, nearest)
-			var covered := 0
-			for p in bones:
+			# ⚠️ 判据是「**网格顶点**被盒子盖住的比例」，不是「骨头被盖住」。
+			#    盒子是拿蒙皮顶点量的（`boss.gd::_build_bone_cluster_collision`），
+			#    而 `_end` / `_end_end` 那种瞄准骨本来就长在网格外面、永远盖不到 ——
+			#    拿骨头当分母会变成一条恒红的假判据（实测恒定出格 2.9 m）。
+			var pts := _mesh_points(boss)
+			var inside := 0
+			for p in pts:
 				if _covered(boss.get("_collisions"), p):
-					covered += 1
-			var cover := float(covered) / float(maxi(bones.size(), 1))
-			# 软覆盖：最「出格」的那根骨点离最近盒面多远
-			var outside := 0.0
-			for p in bones:
-				outside = maxf(outside, _outside_distance(boss.get("_collisions"), p))
-			print("        %s %-11s 盒子最大位移 %5.2f m ｜ 盒子→最近骨点 %4.2f m ｜ 硬盖住 %d%% ｜ 最远骨点出格 %4.2f m" % [
-				nm, clip, travel, box_to_bone, roundi(cover * 100.0), outside])
+					inside += 1
+			var cover := float(inside) / float(maxi(pts.size(), 1))
+			# 胖不胖：盒子并集 vs 网格并集（同一批采样点，两边都按 AABB 比）
+			var box_aabb := _collision_aabb(boss.get("_collisions"))
+			var mesh_aabb := _points_aabb(pts)
+			var fat := box_aabb.size.length() / maxf(mesh_aabb.size.length(), 0.01)
+			print("        %s %-11s 盒子最大位移 %5.2f m ｜ 网格被盖住 %d%% ｜ 体积比 %4.2f" % [
+				nm, clip, travel, roundi(cover * 100.0), fat])
 			_check(travel >= MIN_BOX_TRAVEL,
 				"%s %s：盒子跟着技能动了（%0.2f m ≥ %.1f m）" % [nm, clip, travel, MIN_BOX_TRAVEL])
-			_check(box_to_bone <= MAX_BOX_TO_BONE,
-				"%s %s：盒子没被甩出身体（%0.2f m ≤ %.1f m）" % [nm, clip, box_to_bone, MAX_BOX_TO_BONE])
-			_check(cover >= MIN_BONE_COVER,
-				"%s %s：身体大面上没从盒子缝里漏出去（盖住 %d%% ≥ %d%%）" % [
-					nm, clip, roundi(cover * 100.0), roundi(MIN_BONE_COVER * 100.0)])
-			_check(outside <= MAX_BONE_OUTSIDE,
-				"%s %s：没有骨头戳出盒子 %.2f m 以外（%0.2f m ≤ %.2f m）" % [
-					nm, clip, MAX_BONE_OUTSIDE, outside, MAX_BONE_OUTSIDE])
+			_check(cover >= MIN_MESH_COVER,
+				"%s %s：网格被碰撞体积盖住 %d%%（≥ %d%%）" % [
+					nm, clip, roundi(cover * 100.0), roundi(MIN_MESH_COVER * 100.0)])
+			_check(fat <= MAX_FAT_RATIO,
+				"%s %s：盒子没有比龙本身胖太多（%.2f 倍 ≤ %.2f 倍）" % [
+					nm, clip, fat, MAX_FAT_RATIO])
 		anim.play("idle")
 		await _settle()
 
@@ -316,6 +302,36 @@ func _outside_distance(boxes: Array, p: Vector3) -> float:
 	if best == INF:
 		return 0.0
 	return best
+
+
+## 蒙皮网格的**当前姿态**顶点（**世界空间** —— `_covered()` 是按 `global_transform`
+## 把点转进盒子局部空间的，两边必须同一套坐标）。
+## 直接借 Boss 自己的采样器，保证「判据用的点」和「建盒用的点」同一套公式。
+func _mesh_points(boss: Node) -> Array[Vector3]:
+	var skel: Skeleton3D = boss.call("_best_skeleton", boss.get("model"))
+	if skel == null:
+		return []
+	# ⚠️ 这里**不乘** `global_transform.affine_inverse()`：要世界空间。
+	var xf: Transform3D = skel.global_transform
+	var bone_body: Array[Transform3D] = []
+	for b in skel.get_bone_count():
+		bone_body.append(xf * skel.get_bone_global_pose(b))
+	var smp: Dictionary = boss.call("_skinned_samples", skel, bone_body)
+	var out: Array[Vector3] = []
+	for p in (smp["pts"] as PackedVector3Array):
+		out.append(p)
+	return out
+
+
+func _points_aabb(pts: Array[Vector3]) -> AABB:
+	if pts.is_empty():
+		return AABB()
+	var lo := pts[0]
+	var hi := pts[0]
+	for p in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	return AABB(lo, hi - lo)
 
 
 func _bone_points(boss: Node) -> Array[Vector3]:
