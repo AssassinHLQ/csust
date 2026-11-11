@@ -15,6 +15,8 @@ extends SceneTree
 
 const SFX_DIR := "res://assets/sfx/"
 const SCRIPTS_DIR := "res://scripts/"
+## ⚠️ 必须 `preload` 而不是靠 `class_name`：`--script` 模式下解析不到全局类名。
+const OffWin := preload("res://scripts/offscreen_window.gd")
 ## 时长的合理区间（秒）：比这短多半是空文件，比这长多半拿错了素材。
 ## ⚠️ 下限取 5 ms：Kenney 的 `click_002.ogg` 只有 10 ms（就是个「嗒」），
 ##    本喵第一版写 20 ms，把它判成了坏文件。
@@ -30,6 +32,11 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# ⚠️ 用户硬要求「弹窗口测试不要抢占前台」。本套件必须真窗口（headless 的音频驱动是空的，
+	#    「真的在响」测不出来），所以先把窗口挪到屏幕外再干活。
+	#    项目设置 `window/size/mode=2`（最大化）会顶掉命令行的 `--windowed`/`--position`，
+	#    只能在脚本跑起来之后再改一次 —— 详见 `scripts/offscreen_window.gd` 开头那四条实测。
+	await OffWin.apply(self, Vector2i(1280, 720))
 	root.size = Vector2i(1280, 720)
 	await _wait(5)
 	_test_assets()

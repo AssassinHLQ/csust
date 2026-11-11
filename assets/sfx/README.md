@@ -1,12 +1,17 @@
 # `assets/sfx/` —— 音效文件投放目录
 
-这个目录里是**实际的音频文件**（13 个 `.ogg`，共约 103 KB），
+这个目录**根下**是 Kenney 的 CC0 素材（`.ogg`）+ 本工程自己合成的枪声（`.wav`），
 来源与许可见 [`LICENSE_Kenney_CC0.md`](LICENSE_Kenney_CC0.md) ——
-**Kenney 的 CC0 素材，故意提交进仓库**：克隆者不用做任何事就有声音。
+**故意提交进仓库**：克隆者不用做任何事就有声音。
+
+⚠️ 但 **`aris/` 子目录是例外**：那是蔚蓝档案的游戏内音频（© NEXON Games / Yostar），
+**音频本体不随仓库分发**，只留 `*.wav.import`。见 [`aris/README.md`](aris/README.md)。
+分出子目录就是为了让「哪些能分发、哪些不能」在磁盘上一眼可见
+（`_verify_credits.gd` 对 `assets/` 是「每个子目录都必须有自己的署名条目」）。
 
 ## 逻辑名 ↔ 文件，别在这里找
 
-**文件名保持 Kenney 的原始命名**（`laserSmall_003.ogg` 这种），
+**文件名保持素材的原始命名**（`laserSmall_003.ogg`、`SFX_Public_Aris_shot.wav` 这种），
 这样「哪个文件来自哪个包」一眼可查、换素材时也不会张冠李戴。
 
 **「游戏里什么时候响哪个文件」写在 `scripts/sfx.gd` 的 `SPEC` 表里**，
@@ -14,14 +19,18 @@
 
 | 逻辑名 | 文件 | 响在哪 |
 |---|---|---|
-| `fire` | `laserSmall_000` ~ `004`（随机挑一条 + 音高抖动） | `weapon.gd::shoot()` 开火 |
+| `fire` | `aris/SFX_Public_Aris_shot`、`aris/SFX_Aris_Hit_shot`（随机挑一条 + 音高抖动） | `weapon.gd::shoot()` 开火 |
+| `fire_beam` | `laserSmall_000` ~ `004`（`pitch_base 0.78` 压低成炮） | 机甲形态的激光大炮 |
 | `empty` | `click_001` | 空仓扣扳机（150 ms 节流，不然按住不放会「咔咔咔」） |
-| `reload_out` | `metalLatch` | 换弹开始（`reload_started`） |
-| `reload_in` | `metalClick` | 换弹完成（`reload_finished`） |
+| `reload_out` | `aris/SFX_Common_RG_aris_Reload_out` | 换弹开始（`reload_started`） |
+| `reload_in` | `aris/SFX_Common_RG_aris_Reload_in` | 换弹完成（`reload_finished`） |
 | `ui_press` | `click_002` | 设置菜单里的按钮（含画质分段按钮） |
 | `ui_toggle` | `toggle_001` | 开关（同伴开火 / Boss 攻击） |
 | `ui_slider` | `tick_002` | 滑条值变化（音量压得很低，-14 dB） |
 | `ui_open` / `ui_close` | `open_001` / `close_001` | 菜单开 / 关 |
+
+> `gunshot_000..004.wav` 现在**没有接线**了（2026-11-11 起 `fire` 换成爱丽丝原声）。
+> 文件留在根目录不删：既是备份，也方便 A/B 对比 —— 想回退就把 `SPEC.fire.files` 改回去。
 
 ## 加一条新音效
 

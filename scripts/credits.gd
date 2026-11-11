@@ -494,7 +494,18 @@ const ENTRIES := [
 		"distributed": true,
 		"source": "",
 		"license_file": "LICENSE",
-		"note": "不是采样，是算出来的；替换 laserSmall_*.ogg 是为了听起来像枪（见 README §1.19）",
+		"note": "不是采样，是算出来的；替换 laserSmall_*.ogg 是为了听起来像枪（见 README §1.19）。2026-11-11 起 fire 改用爱丽丝原声（见下一条），这 5 条留在磁盘上做备份与 A/B 对比",
+	},
+	{
+		"group": "音效",
+		"path": "assets/sfx/aris",
+		"title": "爱丽丝轨道炮音效（开枪 / 换弹，裁自游戏内 SFX）",
+		"author": "NEXON Games / Yostar（Blue Archive 游戏内 SFX）；裁剪：本项目作者（Python）",
+		"license": "专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于任何发布产物",
+		"distributed": false,
+		"source": "",
+		"license_file": "",
+		"note": "由 _godot_editor_data/make_aris_sfx.py 从 SFX_Public_Aris / SFX_Aris_Hit / SFX_Common_RG_aris_Reload 裁出并高通滤波（谱质心与 RMS 对齐被替换的合成枪声）；逐条裁决见 assets/sfx/aris/README.md。音频本体被 .gitignore 排除，只留 *.wav.import",
 	},
 
 	# ---------- 剧情与图标 ----------
