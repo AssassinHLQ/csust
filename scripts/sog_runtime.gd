@@ -99,6 +99,10 @@ static func find_source(explicit: String = "") -> String:
 static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
 	var t0 := Time.get_ticks_msec()
 	var progress: Callable = opts.get("progress", Callable())
+	## 中止回调（可选）：工作线程的节点被释放时，这里返回 true 就尽快收工。
+	## ⚠️ 由 `splat_scene.gd::_worker()` 传入 —— 没有它，换场景时主线程
+	##    必须等完整段解码（实测 2.9~3.7 s）才能 join，表现为「点了没反应」。
+	var abort: Callable = opts.get("abort", Callable())
 	var cache_mode := String(opts.get("cache", "off"))
 	var center_hint: Variant = opts.get("center", null)
 	var shared_centroids: PackedByteArray = opts.get("centroids", PackedByteArray())
@@ -165,6 +169,8 @@ static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
 	else:
 		var step := maxi(1, count / 64)
 		for i in count:
+			if (i & 0xFFFF) == 0 and abort.is_valid() and bool(abort.call()):
+				return _fail(ERR_SKIP, "解码被中止（节点已释放）")
 			var o := i * 3
 			var qx := (int(means_u[o + 0]) << 8) | int(means_l[o + 0])
 			var qy := (int(means_u[o + 1]) << 8) | int(means_l[o + 1])
@@ -190,6 +196,9 @@ static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
 	var has_shn := coeffs_per_channel > 0
 
 	for i in count:
+		# 中止检查：换场景 / 空中变身时节点被释放，这里尽早退出（见 `abort` 说明）
+		if (i & 0xFFFF) == 0 and abort.is_valid() and bool(abort.call()):
+			return _fail(ERR_SKIP, "解码被中止（节点已释放）")
 		var rgb := i * 3
 		var rgba := i * 4
 

@@ -290,6 +290,9 @@ var elapsed_seconds := 0.0
 
 var _thread: Thread = null
 var _mutex := Mutex.new()
+## 线程中止标记：节点被释放时置 true，`_worker` / `_crop_resource` 见到就收工。
+## 它只写 bool（原子性足够），不需要加锁 —— 加锁反而会拖慢裁剪热循环。
+var _abort_worker := false
 var _result: Dictionary = {}
 var _start_ms := 0
 ## ── 出房间释放（见 `unload_outside_room`）──
@@ -779,6 +782,49 @@ func _is_inside_room(pos: Vector3) -> bool:
 ## 换场景之后还拿着已经 free 的对象）。
 func _exit_tree() -> void:
 	GameSettings.unlisten(_on_settings_changed)
+	_join_worker_on_exit()
+
+
+## 节点被释放前，把后台解码线程的句柄收干净。
+##
+## ⚠️ 2026-11-11 实测崩溃：`Cannot call method 'lock' on a null value`
+##    （用户「空中变身时闪退」那一份日志，`splat_scene.gd:1201`）。
+##
+##    真因不是 `_result` 为空，而是 **`_mutex` 本身被释放了**：`Mutex` 是
+##    `RefCounted`，引用计数归零就析构。节点比工作线程先死时，成员 `_mutex`
+##    连带没了，而线程还持着 `self` 跑在 `SogRuntime.load_sog()` 里，
+##    解码一结束就去 `_mutex.lock()` —— 撞上一个已析构的 object，
+##    引擎报 `Condition "slot >= slot_max" is true. Returning: nullptr`，
+##    GDScript 拿到 null 再 `.lock()` 就是那句 SCRIPT ERROR。
+##    日志里那条链是连着的：
+##      `[SplatScene] 工作线程准备：内容盒 6 ms` → `slot >= slot_max` → `lock on null`
+##    再下一行就是 `[Carrier] 空中变身` —— 正是切场景/换形态把节点释放掉的时刻。
+##
+##    根治办法在 `_worker()` 里：线程启动时把 `_mutex` **自己持一份引用**，
+##    这样节点怎么死都不会让 mutex 提前析构（见 `_worker` 开头）。
+##    这里只负责在**线程已结束**时 join 回收句柄 —— 零等待。
+##
+## ⚠️ 为什么这里**真的 join**，而且为什么 now 不会卡：
+##    先置 `_abort_worker`，线程在 `_crop_resource` 的主循环里每 64K 点查一次，
+##    立刻退出（毫秒级）。所以 join 的等待是**短**的。
+##    不 join 的话有两个后果，本喵都实测到了：
+##      1. `~Thread: A Thread object is being destroyed without its completion
+##         having been realized`（用户截图里就有这条）
+##      2. 更糟：`SCRIPT ERROR: Nonexistent function '_lerp_range' in base 'GDScript'`
+##         —— 线程还在 `SogRuntime` 里跑，而那个 GDScript 实例已经随节点被回收了。
+##    也就是说「不管它」只是不崩 mutex，线程本身还是会撞死在半死的对象上。
+func _join_worker_on_exit() -> void:
+	if _thread == null:
+		return
+	_abort_worker = true
+	var t0 := Time.get_ticks_msec()
+	_thread.wait_to_finish()
+	_thread = null
+	var ms := Time.get_ticks_msec() - t0
+	# 正常应该是个位数毫秒；超过 100 ms 说明中止检查没赶上，值得记一笔。
+	if ms > 100:
+		print("[SplatScene] %s：退出时等了解码线程 %d ms（中止检查未及时命中）"
+			% [display_name, ms])
 
 
 ## ⚠️ 必须接受参数：`GameSettings._emit()` 广播时调的是 `cb.call(key, v)`，
@@ -1153,20 +1199,31 @@ func _cache_key(source: String) -> String:
 
 
 func _worker(source: String) -> void:
+	# ⚠️ **关键**：把 `_mutex` 抄成本地变量，线程就持有一份 RefCounted 引用。
+	#    节点被 queue_free 之后成员 `_mutex` 的引用没了，但因为这里还攥着一份，
+	#    Mutex 不会被析构 —— 下面每次 `mtx.lock()` 都是安全的。
+	#    这就是「`Cannot call method 'lock' on a null value`」的根治点。
+	var mtx := _mutex
 	var key := _cache_key(source)
 	var hit: Variant = _res_cache.get(key)
 	if hit is Dictionary:
 		var cached: Dictionary = (hit as Dictionary).duplicate()
 		cached["from_cache"] = true
 		print("[SplatScene] %s：复用内存里的展开结果（跳过解码/裁剪）" % display_name)
-		_mutex.lock()
+		mtx.lock()
 		_result = cached
-		_mutex.unlock()
+		mtx.unlock()
 		return
 	var result: Dictionary = SogRuntime.load_sog(source, {
 		"cache": cache_mode,
 		"progress": Callable(self, "_on_progress_from_thread"),
+		# 中止通道：`_exit_tree()` 置 `_abort_worker` 后，解码主循环每 64K 点查一次，
+		# 毫秒级退出 → 主线程的 `wait_to_finish()` 才不会干等 3 秒。
+		"abort": Callable(self, "_should_abort_worker"),
 	})
+	# 节点已经没了（换场景 / 空中变身）：到此为止，别再去碰任何成员。
+	if _abort_worker:
+		return
 	# ⚠️ 内容盒 + 裁剪以前在 `_finish()`（主线程）里做。实测 2,769,851 点时
 	#    这一段要 **2.79 s**，整整卡死一帧（用户报的「展开缓存这里总是卡」）。
 	#    它们只读资源数据、不碰场景树，所以搬进工作线程：
@@ -1198,9 +1255,18 @@ func _worker(source: String) -> void:
 		# 只留最后一份（同时只可能有一份场地在用），别让多份 665 MB 叠在内存里
 		_res_cache.clear()
 		_res_cache[key] = result.duplicate()
-	_mutex.lock()
+	# 用开头拷贝的 `mtx` 而不是成员 `_mutex`：双保险。
+	# `_exit_tree` 里已经 `wait_to_finish()`，正常不会走到「节点死了线程还活」，
+	# 但万一有人直接 `free()` 绕过退树流程，这份本地引用仍然有效。
+	mtx.lock()
 	_result = result
-	_mutex.unlock()
+	mtx.unlock()
+
+
+## 给 `SogRuntime.load_sog()` 的中止回调（**在工作线程里被调用**）。
+## 只读一个 bool，不碰场景树、不碰 UI —— 安全。
+func _should_abort_worker() -> bool:
+	return _abort_worker
 
 
 ## ⚠️ 这个回调在**工作线程**里执行：只能写变量 / 发延迟信号，绝不能碰场景树与 UI
@@ -1331,6 +1397,12 @@ func _crop_resource(res: Resource, cmin: Vector3, cmax: Vector3) -> Dictionary:
 	var scale_dropped := 0
 	var run_start := -1
 	for i in count:
+		# ⚠️ 中止检查：节点被释放（换场景 / 空中变身）时，`_abort_worker` 会被置位，
+		#    这里立刻收工，别再跑完 2~3 s 的裁剪 —— 否则主线程在 `_exit_tree()`
+		#    里 join 就得干等这么久（实测整段 2.9~3.7 s，其中裁剪 2.0~2.8 s）。
+		#    每 64K 点查一次，开销在噪声里。
+		if (i & 0xFFFF) == 0 and _abort_worker:
+			return {"ok": false, "aborted": true}
 		var p: Vector3 = xyz[i]
 		var keep := p.x >= box.position.x and p.x <= box_hi.x \
 			and p.y >= box.position.y and p.y <= box_hi.y \
