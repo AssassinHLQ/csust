@@ -308,11 +308,14 @@ use_default_orientation = true
 ;    `respawn_on_death = false` 才是真的一次性：`boss.gd::_die()` 里
 ;    那个分支直接 return，压根不挂复活计时。
 ;
-; ② 配色走 `boss.gd` 现成的 `tint`（所有材质的 `albedo_color` 都乘它，白 = 原色）：
-;      A 暗影  —— 近黑紫，压暗压冷
-;      B 炫彩  —— 高饱和品红偏青（"炫彩"的落点，后面换真贴图时会替换它）
+; ② 配色：
+;      A 暗影  —— `tint` 静态染成近黑紫（压暗压冷）
+;      B 炫彩  —— 走 **彩虹流光 shader**（`rainbow_flow = true`），
+;                 颜色沿身体流动 + 自发光。用户 2026-11-11：
+;                 「炫彩要动态的，像洛克王国一样」，选的是"彩虹流光（颜色随时间流转）"。
+;                 `tint` 对它不再生效（shader 路径独立）。
 ;      C 经典  —— 纯白 tint = 保留原贴图原色
-;    等用户做的新贴图到了，把 `texture_map` 指过去即可，`tint` 那几行可以留着微调。
+;    等用户做的新贴图到了，把 `texture_map` 指过去即可。
 [node name="TrexBossA" parent="." instance=ExtResource("16_trex")]
 transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -95, 0, -96)
 height = 9.0
@@ -328,7 +331,10 @@ attack_range = 24.0
 attack_start_delay = 4.0
 display_name = "炫彩霸王龙优香"
 respawn_on_death = false
-tint = Color(1.0, 0.42, 0.86, 1)
+rainbow_flow = true
+rainbow_speed = 0.45
+rainbow_wavelength = 2.2
+rainbow_glow = 0.55
 
 [node name="TrexBossC" parent="." instance=ExtResource("16_trex")]
 transform = Transform3D(0.410, 0, -0.912, 0, 1, 0, 0.912, 0, 0.410, -135, 0, -140)

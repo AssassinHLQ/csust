@@ -91,6 +91,25 @@ enum CollisionMode { BOX, BOX_PARTS, CONVEX_HULLS, TRIMESH }
 ## 受击闪白的颜色
 @export var flash_color := Color(1.0, 0.55, 0.55)
 
+## ── 彩虹流光（2026-11-11）──
+##
+## 用户：「炫彩要动态的，像洛克王国一样」，选的是**彩虹流光（颜色随时间流转）**。
+##
+## 打开后，这只 Boss 的所有标准材质会被换成
+## `shaders/rainbow_flow.gdshader`：色相沿身体轴流动 + 自发光，
+## 原贴图的明暗细节保留（当调制），所以还是有体积感，不是彩色气球。
+##
+## ⚠️ 和 `tint` 的关系：`tint` 是"静态染色"（把贴图乘一个颜色），
+##    彩虹流光走的是完全独立的 shader 路径，**两者互斥** ——
+##    开了 `rainbow_flow` 就不再走 `tint`。
+@export var rainbow_flow := false
+## 流动速度（色相每秒前进多少个周期）。0.45 ≈ 2.2 秒跑完整条彩虹
+@export var rainbow_speed := 0.45
+## 一个色相周期的长度（米）。越小，身上条带越密
+@export var rainbow_wavelength := 2.2
+## 自发光强度：暗处也彩色发亮
+@export var rainbow_glow := 0.55
+
 ## ── 进场加载节奏（2026-10-27 用户的分阶段加载策略，见 `boot_gate.gd`）──
 ## 玩家进场景后离得远就先不建模型；走近 `boot_distance` 米或等满 `boot_max_wait` 秒再建。
 ## 0/0 = 立即建（旧行为）。
@@ -148,6 +167,8 @@ var _cached_player: Node3D
 
 const BootGate := preload("res://scripts/boot_gate.gd")
 const BankCard := preload("res://scripts/bank_card.gd")
+## 彩虹流光 shader（`rainbow_flow = true` 时套用，见那个 export 的注释）
+const RAINBOW_SHADER := preload("res://shaders/rainbow_flow.gdshader")
 
 
 func _ready() -> void:
@@ -243,6 +264,24 @@ func _build_model() -> void:
 				sm.albedo_color = tint
 				if not _materials.has(sm):
 					_materials.append(sm)
+				# ── 彩虹流光：把这块材质换成 shader 版本（2026-11-11）──
+				#
+				# 用 `set_surface_override_material()` 而不是改 `sm` 本身：
+				# `am.surface_get_material(s)` 拿到的可能是**导入缓存里的共享资源**，
+				# 直接改会污染其它模型（`shop.gd::_fix_glb_materials()` 里踩过同样的坑）。
+				#
+				# ⚠️ 每块网格单独建一份 ShaderMaterial，因为要把**各自的原贴图**
+				#    传进去当明暗调制；共用一份会让所有部位用同一张贴图。
+				if rainbow_flow:
+					var rsm := ShaderMaterial.new()
+					rsm.shader = RAINBOW_SHADER
+					rsm.set_shader_parameter("source_albedo", sm.albedo_texture)
+					rsm.set_shader_parameter("use_source_albedo", sm.albedo_texture != null)
+					rsm.set_shader_parameter("flow_speed", rainbow_speed)
+					rsm.set_shader_parameter("wave_length", rainbow_wavelength)
+					rsm.set_shader_parameter("glow_strength", rainbow_glow)
+					m.set_surface_override_material(s, rsm)
+					_materials.erase(sm)     # 受击闪白不再操作标准材质
 				bound += 1
 			elif mat != null:
 				push_warning("[Boss] 材质不是 StandardMaterial3D，受击闪白会失效：%s" % mat.get_class())
