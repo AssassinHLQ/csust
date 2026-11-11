@@ -106,7 +106,7 @@ func _run() -> void:
 	wpn.set("tracer_speed", SLOW_SPEED)
 	print("[bolt-shot] tracer_speed %.1f → %.1f（只为出图）" % [old_speed, SLOW_SPEED])
 
-	# 连打 SHOTS 发：每发清掉冷却，隔 GAP_FRAMES 帧，让光点在弹道上排开
+	# 连打 SHOTS 发：每发清掉冷却，隔 GAP_FRAMES 帧，让子弹在弹道上排开
 	var fired := 0
 	for i in SHOTS:
 		wpn.set("_cooldown", 0.0)
@@ -123,7 +123,7 @@ func _run() -> void:
 		print("   弹丸：已飞 %.2f / 全程 %.2f m（%.1f m/s）" % [
 			float(it[3]), float(it[1]), float(wpn.get("tracer_speed"))])
 
-	# 按材质认光点（**不能**按网格类型：光点是 QuadMesh，球/柱都不是它）
+	# 按材质认子弹（**不能**按网格类型：子弹是 CapsuleMesh，球/柱都不是它）
 	var bolt_mat: Variant = wpn.get("_bolt_mat")
 	var bolts := 0
 	var others := 0
@@ -133,12 +133,12 @@ func _run() -> void:
 			bolts += 1
 		elif mi.mesh is SphereMesh or mi.mesh is CylinderMesh:
 			others += 1
-	print("  画面里：光点 %d 个（应该 = 在飞的 %d）；其它球/柱 %d 个（光柱/爆闪若出现会算在这里）"
+	print("  画面里：子弹 %d 个（应该 = 在飞的 %d）；其它球/柱 %d 个（光柱/爆闪若出现会算在这里）"
 		% [bolts, flight.size(), others])
 	if flight.size() > 0:
 		var item: Array = flight[0]
 		var mi2 := item[0] as MeshInstance3D
-		print("  最老那个光点：位置 %s  局部缩放 %s（稳态应 ≈ (1, 1, 1)）" % [
+		print("  最老那颗子弹：位置 %s  局部缩放 %s（稳态应 ≈ (1, 1, 1)）" % [
 			str(mi2.global_position.snappedf(0.01)), str(mi2.scale.snappedf(0.001))])
 
 	await _shot("01_bolts_full.png", false)

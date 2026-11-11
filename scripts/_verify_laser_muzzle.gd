@@ -65,7 +65,7 @@ func _check(ok: bool, what: String) -> void:
 
 
 ## 全树快照：`instance_id` → {kind, pos}。
-## 「点」= 材质等于 `_bolt_mat` 的那个（光点用的是 `QuadMesh`，不是球也不是柱）；
+## 「弹」= 材质等于 `_bolt_mat` 的那个（子弹用的是 `CapsuleMesh`）；
 ## 「球」/「柱」按网格类型认 —— 枪口闪光、命中爆闪都是球，光柱是柱。
 func _snap(bolt_mat: Variant) -> Dictionary:
 	var out := {}
@@ -73,7 +73,7 @@ func _snap(bolt_mat: Variant) -> Dictionary:
 		var mi := n as MeshInstance3D
 		var kind := ""
 		if bolt_mat != null and mi.material_override == bolt_mat:
-			kind = "点"
+			kind = "弹"
 		elif mi.mesh is SphereMesh:
 			kind = "球"
 		elif mi.mesh is CylinderMesh:
@@ -89,13 +89,40 @@ func _snap(bolt_mat: Variant) -> Dictionary:
 
 ## 差分：`after` 里比 `before` **新出现**的节点 = 这段时间新建的特效。
 func _diff(before: Dictionary, after: Dictionary) -> Dictionary:
-	var out := {"点": [], "球": [], "柱": [], "灯": []}
+	var out := {"弹": [], "球": [], "柱": [], "灯": []}
 	for id in after:
 		if before.has(id):
 			continue
 		var rec: Dictionary = after[id]
 		(out[String(rec["kind"])] as Array).append(rec)
 	return out
+
+
+## 找出场上贴着 `_bolt_mat` 的那个节点（用来查它的网格和材质）
+func _find_bolt_node(bolt_mat: Variant) -> MeshInstance3D:
+	if bolt_mat == null:
+		return null
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.material_override == bolt_mat:
+			return mi
+	return null
+
+
+## 一个网格在**世界空间**里、沿 `dir` 方向的最大张量，以及垂直方向的最大张量。
+## 用来判断「是长条还是球」：球的话两者相等，子弹应该沿 dir 明显更长。
+func _world_extent(mi: MeshInstance3D, dir: Vector3) -> Dictionary:
+	var aabb := mi.get_aabb()
+	var along := 0.0
+	var perp := 0.0
+	for i in 8:
+		var p := mi.global_transform * aabb.get_endpoint(i)
+		var v: Vector3 = p - mi.global_position
+		var a := absf(v.dot(dir))
+		var q := (v - dir * v.dot(dir)).length()
+		along = maxf(along, a * 2.0)
+		perp = maxf(perp, q * 2.0)
+	return {"along": along, "perp": perp}
 
 
 ## 只等几帧，**不主动释放任何特效**。
@@ -112,8 +139,8 @@ func _settle() -> void:
 
 
 func _kn(newf: Dictionary) -> String:
-	return "点 %d  球 %d  柱 %d  灯 %d" % [
-		(newf["点"] as Array).size(), (newf["球"] as Array).size(),
+	return "弹 %d  球 %d  柱 %d  灯 %d" % [
+		(newf["弹"] as Array).size(), (newf["球"] as Array).size(),
 		(newf["柱"] as Array).size(), (newf["灯"] as Array).size()]
 
 
@@ -175,17 +202,52 @@ func _run() -> void:
 	await process_frame
 	var bolt := _diff(s1, _snap(bolt_mat))
 	print("  新增：%s" % _kn(bolt))
-	_check((bolt["点"] as Array).size() == 1, "就是**一个光点**")
+	_check((bolt["弹"] as Array).size() == 1, "就是**一发子弹**")
 	_check((bolt["柱"] as Array).is_empty(), "**没有光柱**（0 个圆柱）")
 	_check((bolt["球"] as Array).is_empty(), "**没有球**（枪口/命中那种爆闪球都没有）")
-	_check((bolt["灯"] as Array).is_empty(), "**没有额外的灯**（光点自己不带灯）")
-	if (bolt["点"] as Array).size() == 1:
-		var bp: Vector3 = (bolt["点"] as Array)[0]["pos"]
+	_check((bolt["灯"] as Array).is_empty(), "**没有额外的灯**（子弹自己不带灯）")
+	if (bolt["弹"] as Array).size() == 1:
+		var bp: Vector3 = (bolt["弹"] as Array)[0]["pos"]
 		var along := (bp - a).dot((b - a).normalized())
-		print("  光点位置 %s（沿弹道 %.3f m，全长 %.1f m）" % [
+		print("  子弹位置 %s（沿弹道 %.3f m，全长 %.1f m）" % [
 			str(bp.snappedf(0.01)), along, a.distance_to(b)])
 		_check(along > 0.02 and along < a.distance_to(b) - 0.02,
-			"光点落在 a→b 这一段**中间**（不是压在某一端）")
+			"子弹落在 a→b 这一段**中间**（不是压在某一端）")
+
+		# ── ★ 形状：必须是**长条**，不能是球 ──
+		# 用户 2026-11-11（附截图）：「不要这个,这不是球吗,我要子弹,激光子弹,
+		# 不是激光球也不是激光炮」。第二版是「方片 + 径向渐变 + billboard」，
+		# 径向渐变本来就是圆的、billboard 又让它永远正对镜头 ⇒ 屏幕上就是个圆斑。
+		# 所以这里钉死两件事：**不 billboard** + **沿飞行方向明显长于垂直方向**。
+		var bolt_node := _find_bolt_node(bolt_mat)
+		if bolt_node != null:
+			var mat := bolt_node.material_override as StandardMaterial3D
+			if mat != null:
+				print("  billboard_mode = %d（0 = 关闭）" % mat.billboard_mode)
+				_check(mat.billboard_mode == BaseMaterial3D.BILLBOARD_DISABLED,
+					"★ 材质**不面向相机**（billboard 关着）—— 开了就会永远像个圆斑")
+			var mesh := bolt_node.mesh
+			if mesh is CapsuleMesh:
+				var cap := mesh as CapsuleMesh
+				# ⚠️ 别拿"网格高 / 直径"当长宽比：网格高固定是 `TRACER_LEN`（0.55），
+				#    真正的长度靠 `scale.y` 拉出来（见 `weapon.gd::BOLT_LEN` 那段）。
+				#    这里只判"网格本身是细长的"，真正的世界张量看下面 `_world_extent()`。
+				print("  网格 = CapsuleMesh  radius %.3f  height %.3f（高/半径 = %.1f 倍）" % [
+					cap.radius, cap.height, cap.height / maxf(cap.radius, 0.0001)])
+				_check(cap.height > cap.radius * 4.0,
+					"★ 网格本身是**细长**的（高 %.2f > 半径×4 %.2f）"
+						% [cap.height, cap.radius * 4.0])
+			else:
+				_check(false, "★ 网格是胶囊（实际 %s）"
+					% (mesh.get_class() if mesh != null else "null"))
+			# 再看**世界空间**里的实际张量：沿弹道方向 vs 垂直方向
+			var dir := (b - a).normalized()
+			var ext := _world_extent(bolt_node, dir)
+			print("  世界张量：沿弹道 %.3f m，垂直方向最大 %.3f m（比 %.1f）" % [
+				ext["along"], ext["perp"], ext["along"] / maxf(ext["perp"], 0.0001)])
+			_check(ext["along"] > ext["perp"] * 2.0,
+				"★ 沿弹道方向**比垂直方向长 2 倍以上**（%.2f vs %.2f）—— 子弹而不是球"
+					% [ext["along"], ext["perp"]])
 	await _settle()
 
 	# ── B. 真开一枪，走 `laser_gun` 那条路径 ──
@@ -217,7 +279,7 @@ func _run() -> void:
 		_kn(b1), flying])
 	_check((b1["柱"] as Array).is_empty(),
 		"★ **没有光柱**（新增圆柱 0 个）—— 用户否掉的就是这个")
-	_check((b1["点"] as Array).size() == 1, "新增**一个发光光点**（弹丸）")
+	_check((b1["弹"] as Array).size() == 1, "新增**一发激光子弹**")
 	_check((b1["球"] as Array).is_empty(), "没有爆闪球（枪口/命中那种）")
 	_check((b1["灯"] as Array).is_empty(),
 		"没有带灯的爆闪（枪口球 / 命中球都会带灯，这里 0 盏）")
@@ -254,7 +316,7 @@ func _run() -> void:
 				% (c1["柱"] as Array).size())
 		_check(not (c1["球"] as Array).is_empty(),
 			"机甲炮口闪光**保留**（新增 %d 个球 > 0）" % (c1["球"] as Array).size())
-		_check((c1["点"] as Array).is_empty(), "机甲不产生光点（光点是普通攻击专属）")
+		_check((c1["弹"] as Array).is_empty(), "机甲不产生子弹（子弹是普通攻击专属）")
 
 	print("\n========== 结果 ==========")
 	print("  通过 %d，失败 %d" % [_pass, _fail])

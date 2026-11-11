@@ -71,23 +71,37 @@ signal hit_confirmed(collider: Object, position: Vector3)
 const TRACER_LEN := 0.55
 
 ## ── 激光子弹（普通状态，2026-11-11）──
-## 用户：「这个光柱还是不好看，改成光点吧，就是发光子弹那种……就是还是用以前的
-##       机枪，只不过改成了激光子弹」。所以弹丸要长得像**一个发光的光点**。
+## 用户三轮口径，最后一轮把形状说死了：
+##   「这个光柱还是不好看，改成光点吧，就是发光子弹那种」
+##   → 「不要这个,这不是球吗,我要子弹,激光子弹,不是激光球也不是激光炮」
 ##
-## 实现：一块**面向相机的方片** + 程序化生成的**径向渐变**贴图（中心白 → 青 → 全透明），
-## 于是它渲染出来就是一个软边的光点，而不是一颗硬边小球。
-## 贴图是 `GradientTexture2D` 现生成的，**不引用任何图片文件**
-## （和 BA 皮肤同一条规矩：不碰游戏原始素材，见 README §13.12.1）。
+## ⚠️ 关键教训：**「光点」不等于"一颗圆的东西"。**
+##    第二版本喵用的是「方片 + 径向渐变 + 永远面向相机（billboard）」——
+##    径向渐变本来就该是圆的，再加上 billboard 让它永远正对镜头，
+##    于是不管朝哪飞，屏幕上都是一个圆斑 = **激光球**。用户一眼就看出来了。
 ##
-## ⚠️ 两个数字别随手改：
-##   · `BOLT_SIZE` 是光点的**视觉直径**（米）；0.30 在 12 m 外约 38 px，
-##     再大就变成一团糊住准星的光斑了。
-##   · `BOLT_LEN` 是飞行队列里的「弹丸段长」，这里**故意取成 `TRACER_LEN`**：
-##     `_advance_tracers()` 里 `scale.y = seg / TRACER_LEN`，段长等于分母时
-##     **稳态 `scale.y` 恒为 1.0**，网格就能保持自己设计好的正圆形状
-##     （我们做的是圆点，被拉长成椭圆就不叫光点了）。
-const BOLT_SIZE := 0.30
-const BOLT_LEN := TRACER_LEN
+##    现在改成**有朝向的条状**：
+##      · 网格 `CapsuleMesh`（细长、两端圆头），沿**弹道方向**躺着飞
+##        （`_orient_tracer()` 把局部 +Y 对到飞行方向，管线本来就支持）；
+##      · 贴图换成**沿长度方向的线性渐变**（两端收细、中段最亮），
+##        于是它是一道"短光条"，不是一团光；
+##      · **不要 billboard** —— 那正是"看起来像球"的元凶。
+##
+##    观感对照：激光炮 = 一条从枪口连到靶子的长光柱（机甲那条 `_spawn_beam`）；
+##    激光子弹 = 一颗短短的光条自己往前飞（这里）。两者不要再混。
+##
+## ⚠️ `BOLT_LEN` 和网格高度是**两件事**，别混：
+##    网格高度固定写成 `TRACER_LEN`（0.55），`BOLT_LEN` 才是**想要的世界长度**。
+##    因为 `_advance_tracers()` 里 `scale.y = seg / TRACER_LEN`，稳态 seg = `BOLT_LEN`，
+##    所以世界长度 = 网格高 0.55 × (BOLT_LEN / 0.55) = **BOLT_LEN**，正好抵消。
+##
+## ⚠️ 为什么是 1.1 m 这么长（2026-11-11 第二轮）：
+##    第一版按 0.55 m 做，出图一看几乎看不见 —— **因为玩家是从背后看子弹飞走的**，
+##    弹道和相机视线几乎平行，胶囊永远被"看成一端"，屏幕上只剩一个小白点。
+##    所以长度必须给足（实测 1.1 m 在 10 m 外是一道看得清的光条），
+##    而不是靠"形状对了"就以为够了。
+const BOLT_LEN := 1.30
+const BOLT_RADIUS := 0.075
 
 var current_ammo: int
 var _cooldown := 0.0
@@ -146,37 +160,45 @@ func _ready() -> void:
 	_tracer_mat.emission = Color(0.6, 0.88, 1.0)
 	_tracer_mat.emission_energy_multiplier = 2.2
 
-	# ── 激光子弹的网格与材质（普通状态，见 `BOLT_SIZE` 那段）──
-	# 一块方片 + 径向渐变贴图 = 软边光点；方片永远转向相机（`BILLBOARD_ENABLED`）。
+	# ── 激光子弹的网格与材质（普通状态，见 `BOLT_LEN` 那段）──
+	# 细长胶囊 + **沿长度**的渐变 = 一道短光条；沿弹道躺着飞，不面相机。
 	var grad := Gradient.new()
-	grad.offsets = PackedFloat32Array([0.0, 0.30, 0.62, 1.0])
+	# 两端收细、中段最亮：读起来是"一条光"，而不是"一个圆斑"。
+	# ⚠️ 别改回 `FILL_RADIAL` —— 径向渐变在方片/圆片上必然是圆的，
+	#    那正是用户说的「这不是球吗」。
+	grad.offsets = PackedFloat32Array([0.0, 0.10, 0.5, 0.90, 1.0])
 	grad.colors = PackedColorArray([
-		Color(1.00, 1.00, 1.00, 1.00),      # 芯：纯白，最亮
-		Color(0.72, 0.95, 1.00, 0.95),      # 内圈：激光青
-		Color(0.35, 0.80, 1.00, 0.45),      # 外圈：更蓝更淡
-		Color(0.18, 0.55, 1.00, 0.00)])     # 边缘：透明
+		Color(0.35, 0.80, 1.00, 0.00),      # 尾：透明（收尖）
+		Color(0.45, 0.90, 1.00, 0.95),
+		Color(0.85, 0.99, 1.00, 1.00),      # 中段：近白，最亮
+		Color(0.45, 0.90, 1.00, 0.95),
+		Color(0.35, 0.80, 1.00, 0.00)])     # 头：透明（收尖）
 	var bolt_tex := GradientTexture2D.new()
 	bolt_tex.gradient = grad
-	bolt_tex.fill = GradientTexture2D.FILL_RADIAL
-	bolt_tex.fill_from = Vector2(0.5, 0.5)
-	bolt_tex.fill_to = Vector2(0.5, 0.0)
-	bolt_tex.width = 64
+	# 沿 V（纵向）渐变：胶囊的 V 就是长度方向
+	bolt_tex.fill = GradientTexture2D.FILL_LINEAR
+	bolt_tex.fill_from = Vector2(0.5, 0.0)
+	bolt_tex.fill_to = Vector2(0.5, 1.0)
+	bolt_tex.width = 8
 	bolt_tex.height = 64
-	var bolt := QuadMesh.new()
-	bolt.size = Vector2(BOLT_SIZE, BOLT_SIZE)
+	var bolt := CapsuleMesh.new()
+	bolt.radius = BOLT_RADIUS
+	# ⚠️ 高度写 `TRACER_LEN`（不是 `BOLT_LEN`）—— 长度靠 `scale.y` 拉，
+	#    见 `BOLT_LEN` 上面那段"两件事别混"。
+	bolt.height = TRACER_LEN
+	bolt.radial_segments = 8
+	bolt.rings = 4
 	_bolt_mesh = bolt
 	_bolt_mat = StandardMaterial3D.new()
 	_bolt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# 混色（不是加色）：加色的光点打在亮墙/天上会直接消失，机枪看不见弹道很难受
+	# 混色（不是加色）：加色的弹丸打在亮墙/天上会直接消失，机枪看不见弹道很难受
 	_bolt_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_bolt_mat.albedo_texture = bolt_tex
 	_bolt_mat.emission_enabled = true
-	_bolt_mat.emission = Color(0.70, 0.95, 1.00)
-	_bolt_mat.emission_energy_multiplier = 2.4
+	_bolt_mat.emission = Color(0.45, 0.90, 1.00)
+	_bolt_mat.emission_energy_multiplier = 4.0
 	_bolt_mat.emission_texture = bolt_tex
-	# 光点是"一团光"，不是一块板子：转到侧面看不见会很怪，所以永远面向相机
-	_bolt_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_bolt_mat.billboard_keep_scale = true
+	# ⚠️ **绝对不要** billboard：那会让它永远正对镜头 = 看起来是一颗球。
 	_bolt_mat.disable_receive_shadows = true
 	_bolt_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
@@ -826,11 +848,11 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	_in_flight.append([mi, total, to, 0.0, len0, dir, from])
 
 
-## 激光子弹（普通状态，2026-11-11）：一个**发光的光点**，以 `tracer_speed` 飞向靶子。
+## 激光子弹（普通状态，2026-11-11）：一道**细长光条**，以 `tracer_speed` 飞向靶子。
 ##
 ## 和 `_spawn_tracer()` 的关系：**同一套飞行队列**（`_in_flight` + `_advance_tracers()`），
 ## 只有两处不同 ——
-##   1. 网格/材质换成光点（`_bolt_mesh` / `_bolt_mat`，见 `BOLT_SIZE` 那段）；
+##   1. 网格/材质换成光条（`_bolt_mesh` / `_bolt_mat`，见 `BOLT_LEN` 那段）；
 ##   2. 段长固定 `BOLT_LEN`，不随距离拉长（老曳光弹会拉到 1.65 m，连起来像光带）。
 ##
 ## 为什么复用队列而不是再写一套推进逻辑：弹丸「不会伸到起点身后」「到靶子就回收」
