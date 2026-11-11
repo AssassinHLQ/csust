@@ -613,9 +613,48 @@ func _halo(size: float, c: Color, energy: float) -> MeshInstance3D:
 	return mi
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  流线条纹：把噪声沿轴向拉成「一道道光条」，再让 UV 滚动
+# ═══════════════════════════════════════════════════════════════════
+##
+## 参考图里的光柱不是均匀的糖葫芦色块，而是**一条条平行流线**在流动。
+##
+## 做法：`NoiseTexture2D`（FastNoiseLite 无缝噪声）当 albedo_texture，
+## 把 `uv1_scale` 的 **V 方向压到很小**（0.12）—— 圆柱的 V 就是沿轴方向，
+## 于是噪声被拉成很长的条纹；再每帧推 `uv1_offset.y`，看起来就是能量在往炮口外流。
+## ⚠️ 噪声是程序生成的，不占仓库、也不依赖任何贴图资源。
+static var _STREAK_TEX: NoiseTexture2D
+
+
+func _streak_tex() -> NoiseTexture2D:
+	if _STREAK_TEX != null:
+		return _STREAK_TEX
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	n.frequency = 0.055
+	n.fractal_octaves = 4
+	var t := NoiseTexture2D.new()
+	t.noise = n
+	t.seamless = true
+	t.width = 256
+	t.height = 256
+	_STREAK_TEX = t
+	return t
+
+
+## 给材质套上流线条纹（只在需要的那层调）。
+## `stretch` 越小条纹越长；`around` 越大横向条纹越密。
+func _add_streaks(mat: StandardMaterial3D, around := 6.0, stretch := 0.12) -> void:
+	mat.albedo_texture = _streak_tex()
+	mat.uv1_scale = Vector3(around, stretch, 1.0)
+	# 噪声图默认是灰度，用 albedo_color 乘上去就变成「光条 + 底色」的层次
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+
+
 ## 弯月扫掠（参考图 1/2 那几道青蓝弧光）：
-## 在 `at` 处生成两片**倾斜的环**，向外扩、同时淡出，然后自删。
-## 用环而不是真的月牙：环倾斜后在透视里就是一道扫过去的弧，成本低、且不会穿帮。
+## 在 `at` 处生成两片**倾斜的月牙**，向外扩、同时淡出，然后自删。
+## 月牙是自定义 ArrayMesh（见 `_crescent_mesh`），不是环 —— 环是等宽的一圈，
+## 月牙是**中间厚两端尖**的一段弧，才是参考图那个「扫过去」的形状。
 func _crescent(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
 	var holder := Node3D.new()
 	holder.name = "Crescent"
@@ -629,17 +668,12 @@ func _crescent(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
 	var mats: Array = []
 	for i in 2:
 		var mi := MeshInstance3D.new()
-		var tm := TorusMesh.new()
-		tm.inner_radius = 0.90
-		tm.outer_radius = 1.0
-		tm.rings = 40
-		tm.ring_segments = 4
-		mi.mesh = tm
+		mi.mesh = _crescent_mesh(1.0, 150.0, 0.22)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var mat := _add_mat(col, 6.0)
 		mi.material_override = mat
 		holder.add_child(mi)
-		# 两个环各自绕 X 倾斜不同角度 → 看起来像斜着扫过去的两道
+		# 两片各自绕 X 倾斜不同角度 → 看起来像斜着扫过去的两道
 		mi.rotation = Vector3(deg_to_rad(58.0 if i == 0 else 72.0), 0.0, deg_to_rad(-18.0 + 36.0 * i))
 		mats.append(mat)
 	holder.scale = Vector3.ONE * 0.25 * radius
@@ -651,6 +685,35 @@ func _crescent(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
 	for m in mats:
 		tw.tween_property(m, "albedo_color:a", 0.0, 0.34)
 	tw.chain().tween_callback(holder.queue_free)
+
+
+## 月牙网格：一段圆弧，**中间厚两端尖**（外弧半径 = radius，内弧 = radius − 宽度）。
+## 宽度按 `sin(π·t)` 变化 ⇒ 两端收到 0，中间最厚。
+## 平面朝 +Z（调用方用 basis 让它朝向射线方向）。
+func _crescent_mesh(radius: float, arc_deg: float, thick: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var seg := 28
+	var arc := deg_to_rad(arc_deg)
+	for i in seg:
+		var t0 := float(i) / float(seg)
+		var t1 := float(i + 1) / float(seg)
+		var a0 := -arc * 0.5 + arc * t0
+		var a1 := -arc * 0.5 + arc * t1
+		var w0 := thick * sin(PI * t0)
+		var w1 := thick * sin(PI * t1)
+		var o0 := Vector3(cos(a0), sin(a0), 0.0) * radius
+		var o1 := Vector3(cos(a1), sin(a1), 0.0) * radius
+		var i0 := Vector3(cos(a0), sin(a0), 0.0) * maxf(radius - w0, 0.0)
+		var i1 := Vector3(cos(a1), sin(a1), 0.0) * maxf(radius - w1, 0.0)
+		# 两个三角（双面材质，所以不用管绕序）
+		st.add_vertex(o0)
+		st.add_vertex(i0)
+		st.add_vertex(o1)
+		st.add_vertex(o1)
+		st.add_vertex(i0)
+		st.add_vertex(i1)
+	return st.commit()
 
 
 func _fire_railgun() -> void:
@@ -697,20 +760,25 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 		]
 		var mats: Array = []
 		var cones: Array = []
-		for L in layer_specs:
+		for li in layer_specs.size():
+			var L: Dictionary = layer_specs[li]
 			var mi := MeshInstance3D.new()
 			var cm := CylinderMesh.new()
 			# 锥形：枪口端（bottom，因为 holder 放在中点、-Y 朝枪口）粗，远端（top）细
 			cm.bottom_radius = RAIL_WIDTH * float(L["r"])
 			cm.top_radius = RAIL_WIDTH * float(L["r"]) * 0.55
 			cm.height = 1.0
-			cm.radial_segments = 16
+			cm.radial_segments = 24
 			cm.rings = 1
 			mi.mesh = cm
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mi.material_override = _add_mat(L["c"], float(L["e"]))
+			var lmat := _add_mat(L["c"], float(L["e"]))
+			# 外层两层加流线条纹（核心那两层保持干净，否则整根柱子会糊）
+			if li <= 1:
+				_add_streaks(lmat, 9.0, 0.10)
+			mi.material_override = lmat
 			holder.add_child(mi)
-			mats.append(mi.material_override)
+			mats.append(lmat)
 			cones.append({"cm": cm, "r": float(L["r"]), "m": float(L["m"])})
 		beams.append({"holder": holder, "mats": mats, "cones": cones,
 			"halo": _halo(RAIL_WIDTH * 11.0, Color(0.80, 0.92, 1.00, 0.50), 5.5), "from": froms[f]})
@@ -779,6 +847,11 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 				mh.scale = Vector3.ONE * (1.0 + 4.2 * shrink)
 				(mh.material_override as StandardMaterial3D).albedo_color.a = \
 					0.28 + 0.45 * shrink
+			# 流线条纹滚动：UV 沿轴向推，看起来能量在往外流
+			for m in b["mats"]:
+				var mm := m as StandardMaterial3D
+				if mm.albedo_texture != null:
+					mm.uv1_offset.y -= get_process_delta_time() * 2.4
 
 			if now >= next_tick and not hit.is_empty():
 				var col = hit.get("collider")
