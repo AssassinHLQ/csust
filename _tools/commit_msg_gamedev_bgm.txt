@@ -1,0 +1,23 @@
+音乐: 游戏开发部活动室加 BGM「Pixel Time」（_verify_music 8/8 全过，冒烟 12/12）
+
+素材：「碧蓝档案OST🎵」音乐合集 Vol.1（320K）P70「Pixel Time（游戏开发部）」，
+原曲正好是规整的 8.00000 s 周期 → 用 tools/audio/make_loop.py 切在
+119.9993 s（= 15 × P，误差 0.0 ms），尾部 25 ms 环绕交叉淡化后接缝跳变
+0.000431，只有曲子内部相邻样点平均跳变的 0.01 倍（商店那首是 1.05 倍）。
+切掉的末尾约 11 s 是原曲自己的收尾淡出，留着进循环反而会「断一下」。
+
+- scripts/music.gd：曲目表加 `gamedev`；`stop()` 改用 is_instance_valid 判空
+  （被 queue_free 的节点引用不是 null，读 `.playing` 会抛 previously freed）
+- scripts/gamedev_room.gd：`_build_music_zone()` 运行时建 Area3D 触发区，
+  盒子尺寸从 Model/Collision 的碰撞盒**量出来**而不是写死在 .tscn 里
+  ——房间尺寸一直在微调，写死就会漂成「走到门里半米音乐才响」
+- assets/music/gamedev_theme.ogg.import：loop=true（音频本体按 .gitignore 不入库）
+- assets/music/README.md：曲目表、循环推导数值、强制重导的坑
+- scripts/_verify_music.gd：自检扩到两个房间（循环开关 / 进房播 / 出房停）
+
+实测：_verify_music 8/8 全过（进房 current=gamedev、出房回空）；
+_smoke_build 12/12「可以打包」。
+注：_verify_gamedev_room.gd 有 2 项红（西墙 / 门洞射线），与本次改动无关 ——
+那两条射线瞄的 z=±3.48 落在房间外：房间在 bac32cc 里从 z=-8.63 挪到 -6.92、
+x 从 47.89 挪到 51.44，而那个自检的坐标没跟着改。探针实测两条射线在
+collide_with_areas 开/关下结果一致、35 个碰撞盒全部在位且未 disabled。

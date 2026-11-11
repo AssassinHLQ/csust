@@ -9,8 +9,9 @@
 | 文件名 | 用在哪 | 来源 |
 |---|---|---|
 | `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
+| `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间淡入、走出去淡出） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
 
-**只有本地放好这个文件，商店才有音乐**。没有它时不会报错：
+**只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
 （和 `assets/ui_sprout/`、`assets/ui_font/` 一样的处理）。
 
@@ -47,14 +48,51 @@ ffmpeg -i "$TEMP/shop_loop.wav" -c:a libvorbis -q:a 5 -ar 44100 assets/music/sho
 但切在 40.20943 上接缝相关系数 +0.66，切在 40.000 上只有 +0.06、
 跳变是内部平均的 1.8 倍（会「咔」）。工具默认就是在目标值附近扫出最好的那个点。
 
+## 游戏开发部那首（`gamedev_theme.ogg`）
+
+源文件 131.1927 s（320 kbps MP3，`「碧蓝档案OST🎵」音乐合集~Vol.1（320K）_P70_Pixel Time（游戏开发部）_音频.mp3`）。
+这首是**规整的 8 秒周期**，正好落在工具的舒适区：
+
+```bash
+python tools/audio/make_loop.py \
+  "<源 mp3>" "$TEMP/gamedev_loop.wav" \
+  --target 120 --span 0.15
+
+ffmpeg -i "$TEMP/gamedev_loop.wav" -c:a libvorbis -q:a 5 -ar 44100 assets/music/gamedev_theme.ogg
+```
+
+实测数值：
+
+```
+自相关循环周期 P = 8.00000 s
+选定 L = 119.99932 s（= 15 × P，误差 0.0000 ms）
+  → 与开头的波形相关系数 r = +0.3049
+  → 接缝跳变 0.004150（曲子内部相邻样点平均跳变 0.0410，×0.10）
+环绕交叉淡化 25 ms（等功率 sqrt 曲线）
+  → 淡化后接缝跳变 0.000431（内部平均的 ×0.01）
+峰值归一化到 −1 dBFS
+```
+
+切掉的末尾约 11 s 是原曲自己的收尾淡出 —— 留着它进循环反而会「断一下」，
+所以宁可短一点、让整首在 120 s 上无缝回转。40 s（5 × P）也能无缝接，
+但那样同一段素材重复得太密，房间待久了会腻。
+
 ## 循环开关在哪
 
-`shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
+`gamedev_theme.ogg.import` / `shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
 这是 Godot 的**导入期**选项，`scripts/music.gd` **不会**在运行期改它 ——
 运行期改循环要每帧盯 `finished` 信号再 `play()` 一次，那会有一帧的空隙。
+
+⚠️ 改完 `.import` 的 `loop` 要**强制重导**才生效（只改文件 Godot 不会重导，
+因为源文件没变）：删掉 `.godot/imported/<名字>-<哈希>.oggvorbisstr`
+和同名 `.md5`，再跑 `godot --headless --path . --import`。
+自检脚本里会打印 `loop = true/false`，改完跑一遍就知道有没有生效。
 
 ## 代码在哪
 
 - `scripts/music.gd` —— 曲目表（逻辑名 → 文件 + 音量）、播放 / 停止 / 交叉淡入淡出
 - `scripts/shop.gd::_build_music_zone()` —— 店里的 `Area3D`，玩家进出时开 / 关音乐
-- `scripts/_verify_music.gd` —— 自检：循环开关、进店播放、出店停止
+  （烘焙场景 `shop_baked.tscn` 里的 `MusicZone` 节点走 `_wire_baked()` 接信号）
+- `scripts/gamedev_room.gd::_build_music_zone()` —— 活动室同理；盒子尺寸是**运行时**
+  从 `Model/Collision` 的碰撞盒量出来的，房间尺寸怎么改都不会漂
+- `scripts/_verify_music.gd` —— 自检：两个房间的循环开关、进/出播放与停止

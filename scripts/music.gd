@@ -31,6 +31,15 @@ const TRACKS := {
 	#    切在 40.2094 s 上相关系数 +0.66，再做过 25 ms 环绕交叉淡化。
 	#    生成脚本与推导见 `_tools` 旁边的说明，或本条提交信息。
 	"shop": {"file": "shop_theme.ogg", "db": -13.0},
+	# 游戏开发部活动室的 BGM（用户 2026-11-11：「音乐需要增加」）。
+	# 素材：「碧蓝档案OST Vol.1（320K）」P70「Pixel Time（游戏开发部）」。
+	# ⚠️ 源文件 131.1927 s，**只取前 119.9993 s** —— 这首的循环周期用自相关量出来
+	#    恰好是 **8.00000 s**（零误差），119.9993 s = 15 × P（误差 0.0 ms），
+	#    属于「切在周期的整数倍上」的理想情况。尾部还做了 25 ms 环绕交叉淡化：
+	#    接缝跳变 0.000431，只有曲子内部相邻样点平均跳变（0.040997）的 **0.01 倍**
+	#    —— 商店那首是 1.05 倍，这首更干净，接缝听不出来。
+	#    切掉的末尾约 11 s 是原曲自己的收尾淡出，去掉反而不打断循环。
+	"gamedev": {"file": "gamedev_theme.ogg", "db": -13.0},
 }
 
 ## 默认淡入/淡出时长（秒）
@@ -74,7 +83,15 @@ static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
 
 ## 停。`fade` 秒内降到静音再真的 `stop()`。
 static func stop(fade: float = FADE_DEFAULT) -> void:
-	if _player == null or not _player.playing:
+	# ⚠️ 这里必须用 `is_instance_valid`，不能写 `== null`：被 `queue_free()` 的节点
+	#    **引用还在、但不是 null**，读 `.playing` 会抛 "previously freed instance"。
+	#    退出游戏时 `GameDevRoom::_exit_tree()` 可能赶在 `MusicHost` 已经释放之后
+	#    调到这里（同类问题在 `sfx.gd` 有过）。
+	if not is_instance_valid(_player) or not _player.playing:
+		_current = ""
+		return
+	if not is_instance_valid(_host):
+		_player.stop()
 		_current = ""
 		return
 	var from_db := _player.volume_db
@@ -87,7 +104,7 @@ static func stop(fade: float = FADE_DEFAULT) -> void:
 	_tween = _host.create_tween()
 	_tween.tween_property(_player, "volume_db", -60.0, fade)
 	_tween.tween_callback(func() -> void:
-		if _player != null:
+		if is_instance_valid(_player):
 			_player.stop()
 		_current = "")
 	_current = ""
