@@ -617,9 +617,26 @@ func _release_campus(keep_coarse := false) -> void:
 	# 白屏那一格 `_window_names` 从 6 块变成 9 块（正在换窗口），而 `_fine_ready = 1.0`。
 	#
 	# ⇒ 不依赖后面那步：**在释放的这一瞬就把开关关掉**。
+	#
+	# ── 2026-11-11 第二轮：光关开关**不够**，必须把材质上的纹理也解绑 ──
+	#    实测（`_probe_campus_white_walk.gd`）：白屏只在**换窗口**那一下出现，
+	#    直接初始加载同一个 9 块窗口（3.7%）和之后停住 400 帧都不白 ⇒ 不是内容问题。
+	#    原因是 `fine_ready = 0` 只让 **shader** 不采它，但 Godot 仍要把这个
+	#    uniform（sampler）绑到 descriptor 上；而 `tex` 的 RID 已经被下面的
+	#    `ctx.free()` 还掉了 ⇒ 绑一个失效纹理 ⇒ `Parameter "us" is null`
+	#    ⇒ 整条绘制垮掉 ⇒ **整屏白**。（`742a15f` 报的就是这两行错，
+	#    但当时只修了 `keep_coarse == false` 那条路径，换窗口这条漏了。）
+	#    `7001`的注释也早写过：给 `texture_rd_rid` 赋值是**拥有权转移**，
+	#    所以这里**只丢引用、不碰 RID**（纹理由光栅器自己还）。
 	if _quad_mat != null and _fine_ready != 0.0:
 		_fine_ready = 0.0
 		_quad_mat.set_shader_parameter("fine_ready", 0.0)
+	if _fine_ready != 0.0:
+		_fine_ready = 0.0	# 换窗口（keep_coarse）时：解绑旧纹理 + 丢引用，让 `_make_bundle()` 建新的再绑回去。
+	# 粗层那张（`coarse_texture`）**不动** —— 它就是这段时间撑画面的底。
+	if keep_coarse and quad != null and _quad_mat != null:
+		_quad_mat.set_shader_parameter("render_texture", null)
+		tex = null
 	if not keep_coarse:
 		# 换窗口时**不动 quad / tex**：quad 继续画着，粗层那张纹理还在，
 		# 新细层传好之前玩家看到的就是粗层 —— 不会黑一下（实测从空 4 帧降到 0 帧）。
