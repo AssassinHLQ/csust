@@ -26,6 +26,24 @@ extends Node
 ## 牌子的斜切、圆角、描边全部走 `UiSkin.title_tag_style()`（程序化 BA 皮肤），
 ## 不引用任何图片 —— 和 §13.12.1 同一条规矩（不碰游戏原始素材）。
 
+## ── 三种"正片"，按优先级自动挑 ──────────────────────────────────────────
+## 用户 2026-11-11：「这个不好看,我还是自己做cg吧」——所以这块的定位改了：
+## **本喵画的那张只是兜底**，正片留给使用者自己的 CG。
+##
+## 优先级（先存在先赢）：
+##   ① `assets/cg/opening.ogv`        —— 真·CG（Ogg Theora）。
+##      ⚠️ Godot 4 的 `VideoStreamPlayer` **只认 .ogv**，mp4/webm 一律播不了
+##         （引擎限制）。使用者的工具链多半导出 mp4，那就用
+##         `_tools/mp4_to_ogv.sh` 转一下 —— **不用他手工处理**。
+##   ② `assets/cg/opening/0001.png…` —— PNG 帧序列（`frame_0001.png` 这种也行）。
+##      没有编码坑，时长和音画同步都好控；代价是文件多（`.gitignore` 掉即可）。
+##   ③ 都没有 → 播本喵那张程序化标题卡（就是现在这版）。
+##
+## 三者共用同一套骨架：**盖住加载**（黑幕一直盖到 `world_ready()` 为真）、
+## **按键只跳动画不跳加载**、播完淡出。换正片不该把这些重新踩一遍。
+const CG_VIDEO := "res://assets/cg/opening.ogv"
+const CG_FRAMES_DIR := "res://assets/cg/opening"
+
 const UiSkin := preload("res://scripts/ui_skin.gd")
 
 ## 标题文字。改名字只改这里。
@@ -38,6 +56,8 @@ const SUB_FONT := 21
 const TAG_IN := 0.55
 const RULE_IN := 0.40
 const SUB_IN := 0.38
+## PNG 帧序列的播放帧率。24 = 电影感，30 = 常见录屏。
+const FRAME_FPS := 24.0
 ## 全部就位后**停多久**再走（够看清标题，又不至于让人等）
 const HOLD := 1.15
 const OUT := 0.42
@@ -77,18 +97,171 @@ var _playing := false
 ## 播一遍。`world_ready` 返回 true 表示「画面后面那个世界已经可以看了」
 ## （`game.gd` 传的是它自己的 `_splats_ready`）。
 ## 调用方 `await` 它，返回时画面已经干净，可以接着演剧情了。
+##
+## 自动挑正片（见 `CG_VIDEO` 那段）：有 CG 就播 CG，没有就播本喵那张标题卡。
+## 三条路共用同一套「盖住加载 + 按键只跳动画」骨架。
 func play(world_ready: Callable) -> void:
 	if _playing:
 		return
 	_playing = true
+	_black_only()          # 先上黑幕：不管播什么，第一帧都不能露出世界
+	var kind := _pick_kind()
+	match kind:
+		"video":
+			await _play_video(world_ready)
+		"frames":
+			await _play_frames(world_ready)
+		_:
+			await _play_procedural(world_ready)
+	print("[TitleIntro] 正片 = %s" % kind)
+	await _fade_black_out()
+	if _layer != null and is_instance_valid(_layer):
+		_layer.queue_free()
+	_playing = false
+
+
+## 现在会播哪种（自检 / 日志用）
+func _pick_kind() -> String:
+	if ResourceLoader.exists(CG_VIDEO):
+		return "video"
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(CG_FRAMES_DIR)):
+		return "frames"
+	return "procedural"
+
+
+# ── 骨架：黑幕 / 顶层容器 ────────────────────────────────────────────────
+
+## 只把「层 + 全黑底」搭出来。三条路都从这儿起步。
+##
+## ⚠️ 本节点自己也要 `ALWAYS`：`create_tween()` 挂在自己身上，父链一暂停
+##    Tween 就冻住。开场之后紧接着播的对话框会把 `get_tree().paused` 置 true。
+func _black_only() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_layer = CanvasLayer.new()
+	_layer.name = "TitleIntro"
+	# 比 F3 性能浮层（200）、换场景黑幕（128）都高：开场时它必须在最上面
+	_layer.layer = 230
+	_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_layer)
+	_root = Control.new()
+	_root.name = "Root"
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_layer.add_child(_root)
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# 黑底：**创建时就是全黑**。第一帧世界可能还没画出来，不能先露一帧再盖。
+	_black = ColorRect.new()
+	_black.name = "Black"
+	_black.color = Color(0.0, 0.0, 0.0, 1.0)
+	_black.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_black)
+	_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+
+# ── ① 真·CG：.ogv ──────────────────────────────────────────────────────
+
+## Godot 4 只认 Ogg Theora。`VideoStreamPlayer` 自己带音轨、自己播完发 `finished`。
+## 这里只管：全屏铺开、播完 → 等世界就绪 → 交给统一的淡出。
+func _play_video(world_ready: Callable) -> void:
+	var stream := load(CG_VIDEO) as VideoStream
+	if stream == null:
+		push_warning("[TitleIntro] %s 加载失败，退回标题卡" % CG_VIDEO)
+		await _play_procedural(world_ready)
+		return
+	var vp := VideoStreamPlayer.new()
+	vp.name = "Cg"
+	vp.stream = stream
+	# 铺满整个视口、保持比例（CG 一般是 16:9，视口可能不是）
+	vp.expand = true
+	vp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(vp)
+	# 黑幕还在上面：CG 从黑里淡出来比"啪"地出现舒服
+	vp.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(vp, "modulate:a", 1.0, 0.35)
+	await tw.finished
+	vp.play()
+	# 等播完（或按键跳过）。
+	#
+	# ⚠️ 必须有**超时兜底**：视频解码卡住（编码不被支持、文件截断、headless 下
+	#    根本没有渲染/音频后端推不动时钟）时 `is_playing()` 会一直是 true，
+	#    玩家就永远卡在开场、连游戏都进不去 —— 比"CG 不好看"严重得多。
+	#    上限 = 视频时长 + 5 s；拿不到时长就退回 60 s。
+	var length := vp.get_stream_length()
+	var cap := (length + 5.0) if length > 0.0 else 60.0
+	var el := 0.0
+	while vp.is_playing() and not _skipped and el < cap:
+		await get_tree().process_frame
+		el += _delta()
+	if el >= cap and vp.is_playing():
+		push_warning("[TitleIntro] CG 播了 %.1f s 还没结束（时长 %s）—— 强制收尾"
+			% [el, str(length)])
+	vp.stop()
+	print("[TitleIntro] CG 播到 %.2f / %s s（%s）" % [
+		vp.stream_position, str(length), "看完" if not _skipped else "按键跳过"])
+	await _hold_until_ready(world_ready)
+
+
+# ── ② PNG 帧序列 ────────────────────────────────────────────────────────
+
+## 目录里按文件名排序取所有 `*.png`，用 `FRAME_FPS` 逐帧推。
+## 比视频稳：没有编码/容器问题，帧数就是时长。
+func _play_frames(world_ready: Callable) -> void:
+	var frames := _list_frames()
+	if frames.is_empty():
+		push_warning("[TitleIntro] %s 里没有 png，退回标题卡" % CG_FRAMES_DIR)
+		await _play_procedural(world_ready)
+		return
+	var tex := TextureRect.new()
+	tex.name = "Cg"
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_root.add_child(tex)
+	tex.modulate.a = 0.0
+	var fade := create_tween()
+	fade.tween_property(tex, "modulate:a", 1.0, 0.3)
+	await fade.finished
+
+	print("[TitleIntro] 帧序列 %d 帧 @ %.1f fps" % [frames.size(), FRAME_FPS])
+	var acc := 0.0
+	var i := 0
+	while i < frames.size() and not _skipped:
+		tex.texture = load(frames[i])
+		i += 1
+		var target := float(i) / FRAME_FPS
+		while acc < target and not _skipped:
+			await get_tree().process_frame
+			acc += _delta()
+	# `_skipped`（按键）跳到这里时，把最后一帧摆上 —— 不然后面是半截画面
+	if i > 0 and i < frames.size():
+		tex.texture = load(frames[frames.size() - 1])
+	await _hold_until_ready(world_ready)
+
+
+## 目录里的 png，按文件名排序（`0001.png` / `frame_0001.png` 都行）
+func _list_frames() -> Array:
+	var out: Array = []
+	var abs_dir := ProjectSettings.globalize_path(CG_FRAMES_DIR)
+	var d := DirAccess.open(abs_dir)
+	if d == null:
+		return out
+	for f in d.get_files():
+		if f.get_extension().to_lower() == "png":
+			out.append(CG_FRAMES_DIR.path_join(f))
+	out.sort()
+	return out
+
+
+# ── ③ 兜底：程序化标题卡（本喵画的那版）─────────────────────────────────
+
+func _play_procedural(world_ready: Callable) -> void:
 	_build()
 	await _layout_ready()
 	await _animate_in()
 	await _hold_until_ready(world_ready)
 	await _animate_out()
-	if _layer != null and is_instance_valid(_layer):
-		_layer.queue_free()
-	_playing = false
 
 
 # ── 搭建 ────────────────────────────────────────────────────────────────
@@ -97,32 +270,8 @@ func _build() -> void:
 	var skin: Dictionary = UiSkin.pick()
 	var font := UiSkin.ui_font()
 
-	# ⚠️ 本节点自己也要 `ALWAYS`：`create_tween()` 挂在自己身上，父链一暂停
-	#    Tween 就冻住。开场之后紧接着播的对话框会把 `get_tree().paused` 置 true。
-	process_mode = Node.PROCESS_MODE_ALWAYS
-
-	# ⚠️ `PROCESS_MODE_ALWAYS`：开场之后紧接着播的对话框会把 `get_tree().paused`
-	#    置 true，这层必须照常跑完自己的 Tween，不能跟着停。
-	_layer = CanvasLayer.new()
-	_layer.name = "TitleIntro"
-	# 比 F3 性能浮层（200）、换场景黑幕（128）都高：开场时它必须在最上面
-	_layer.layer = 230
-	_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(_layer)
-
-	_root = Control.new()
-	_root.name = "Root"
-	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_layer.add_child(_root)
-	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	# 黑底：**创建时就是全黑**。第一帧世界可能还没画出来，不能先露一帧再盖。
-	_black = ColorRect.new()
-	_black.name = "Black"
-	_black.color = Color(0.0, 0.0, 0.0, 1.0)
-	_black.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_black)
-	_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# ⚠️ 层和黑底**已经在 `_black_only()` 里建好了**（三条路共用），这里只搭内容。
+	#    早先这段是重复建的，改成"CG 优先"之后会把黑幕建两层、还盖在 CG 上面。
 
 	# 标题牌：白底斜切（`title_tag_style` 给的就是这个），字号大，字用深藏蓝
 	_tag = PanelContainer.new()
@@ -286,10 +435,11 @@ func _hold_until_ready(world_ready: Callable) -> void:
 		await RenderingServer.frame_post_draw
 
 
+## 只撤**程序化标题卡**那几样字（黑幕由 `_fade_black_out()` 统一收）。
+## 「先撤字、再放开画面」的次序由调用方 `play()` 保证（先 `_animate_out()` 再淡黑幕）。
 func _animate_out() -> void:
 	var tw := create_tween()
 	tw.set_parallel(true)
-	# 整体上滑 + 淡出；黑幕稍晚一点走，形成「先撤字、再放开画面」
 	for n in [_tag, _rule, _sub, _hint]:
 		var c := n as Control
 		if c == null:
@@ -298,10 +448,6 @@ func _animate_out() -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_property(c, "modulate:a", 0.0, OUT * 0.9)
 	await tw.finished
-	var tw2 := create_tween()
-	tw2.tween_property(_black, "color:a", 0.0, 0.45).set_delay(0.12) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	await tw2.finished
 
 
 ## 跳过：任意键 / 鼠标键 / 触摸都算。**每一段都查 `_skipped`**，所以按下之后
@@ -325,3 +471,20 @@ func _delta() -> float:
 ## 自检用：一帧都不用等，直接问「这层是不是已经撤掉了」
 func is_playing() -> bool:
 	return _playing
+
+
+## 自检用：这一遍播的是哪种正片（"video" / "frames" / "procedural"）
+func kind() -> String:
+	return _pick_kind()
+
+
+## 三条路共用的收尾：黑幕淡出。
+## ⚠️ 程序化标题卡那版在 `_animate_out()` 里已经把字撤干净了，这里只剩黑幕；
+##    CG 那两版是**画面还在、直接连黑幕一起淡**（CG 一般自己会淡到黑，不额外处理）。
+func _fade_black_out() -> void:
+	if _black == null or not is_instance_valid(_black):
+		return
+	var tw := create_tween()
+	tw.tween_property(_black, "color:a", 0.0, 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await tw.finished
