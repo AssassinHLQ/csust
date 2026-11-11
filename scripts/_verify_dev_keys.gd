@@ -86,7 +86,7 @@ func _run() -> void:
 	_check(float(player.get("_dev_speed_scale")) == 1.0, "刚开时倍速还是 1.0（要按 F6 才变）")
 
 	print("")
-	print("========== 3. F6 三倍速，真的作用到移动上 ==========")
+	print("========== 3. F6 五倍速，真的作用到移动上 ==========")
 	# 先量一遍正常速度
 	player.global_position = Vector3(0, 0.6, 0)
 	Input.action_press("move_forward")
@@ -94,12 +94,12 @@ func _run() -> void:
 		await physics_frame
 	var v1 := Vector2(player.velocity.x, player.velocity.z).length()
 	_check(bool(player.call("_dev_key", KEY_F6)), "F6 被吃掉")
-	_check(absf(float(player.get("_dev_speed_scale")) - 3.0) < 0.001, "倍速变成 ×3")
+	_check(absf(float(player.get("_dev_speed_scale")) - 5.0) < 0.001, "倍速变成 ×5")
 	for i in 90:
 		await physics_frame
-	var v3 := Vector2(player.velocity.x, player.velocity.z).length()
-	print("       移动速度：×1 = %.2f m/s   ×3 = %.2f m/s" % [v1, v3])
-	_check(v3 > v1 * 2.5, "三倍速真的更快（%.2f → %.2f）" % [v1, v3])
+	var v5 := Vector2(player.velocity.x, player.velocity.z).length()
+	print("       移动速度：×1 = %.2f m/s   ×5 = %.2f m/s" % [v1, v5])
+	_check(v5 > v1 * 4.0, "五倍速真的更快（%.2f → %.2f）" % [v1, v5])
 	# 再按一次恢复
 	player.call("_dev_key", KEY_F6)
 	_check(absf(float(player.get("_dev_speed_scale")) - 1.0) < 0.001, "再按 F6 恢复 ×1")

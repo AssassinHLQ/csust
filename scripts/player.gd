@@ -544,7 +544,7 @@ func _poll_mouse_buttons() -> void:
 ##   F3 → **不在本脚本处理**（见 `_input` 里那段注释，现在归 `game.gd`）
 ##   F4 → 直接切到另一个场景（在 `game.tscn` 就跳 `next_level.tscn`，反之亦然）
 ##   F5 → 秒杀场上所有 `bosses` 分组里的敌人
-##   F6 → 角色速度 ×3 / 恢复（调试用）
+##   F6 → 角色速度 ×5 / 恢复（调试用；2026-11-11 用户从 ×3 提到 ×5）
 ##
 ## F4/F5/F6 **只在开发者模式打开后生效**，避免正常玩的时候误触。
 ## 返回 true 表示这个键被吃掉了。
@@ -579,7 +579,8 @@ func _dev_key(key: int) -> bool:
 		KEY_F6:
 			if not DevMode.is_on():
 				return false
-			_dev_speed_scale = 1.0 if _dev_speed_scale > 1.5 else 3.0
+			# 2026-11-11：用户「改成 x5」（原来是 ×3）
+			_dev_speed_scale = 1.0 if _dev_speed_scale > 1.5 else 5.0
 			print("[Dev] F6 角色速度 ×%.1f" % _dev_speed_scale)
 			return true
 	return false

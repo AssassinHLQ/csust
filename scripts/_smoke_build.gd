@@ -1,9 +1,13 @@
 extends SceneTree
-## 打包前冒烟：主场景能起来、玩家能开火、激光机枪真的出光束。
+## 打包前冒烟：主场景能起来、玩家能开火、普通攻击打出来的**是飞行光点**。
 ##
 ## 用户 2026-11-09：「先打包有人要检查 exe」。打包前必须证明这一版不是坏版本 ——
-## 本喵刚把普通状态从实弹机枪改成激光机枪（`weapon.gd::laser_gun`），
+## 当时本喵刚把普通状态从实弹机枪改成激光机枪（`weapon.gd::laser_gun`），
 ## 这条冒烟就是「那一枪到底出的什么」的直接证据。
+##
+## ⚠️ 2026-11-11：普通攻击的**外观**又改了两轮（先关枪口/命中两颗球，再把光柱本身
+##    换成「发光光点」，见 README §14.1）。所以第 ⑥ 条现在断言的是
+##    **`_in_flight` 里有弹丸、`_beams` 是空的** —— 别再改回「光束 > 0」。
 ##
 ## 用法：
 ##   & <godot> --headless --path . --script res://scripts/_smoke_build.gd -- --no-capture
@@ -73,10 +77,20 @@ func _run() -> void:
 	print("  弹匣：%d → %d" % [ammo0, ammo1])
 	_check(ammo1 < ammo0, "开火后扣了弹（%d → %d）" % [ammo0, ammo1])
 
-	# ⑥ 真的画出了光束（`_spawn_beam` 会往 `_beams` 里塞 holder）
+	# ⑥ 普通攻击打出来的是**飞行光点**，不是光柱
+	#    （2026-11-11 用户：「这个光柱还是不好看，改成光点吧，就是发光子弹那种」——
+	#      `_spawn_laser_bolt()` 往 `_in_flight` 里塞弹丸；`_beams` 只剩机甲会用）
+	#
+	# ⚠️ 必须**打完当帧就读**：弹丸 260 m/s，等几帧它已经撞墙被回收了，读到 0 个
+	#    （出图探针那边就栽过这个跟头）。`shoot()` 是同步生成弹丸的。
+	wpn.set("_cooldown", 0.0)
+	var shot := bool(wpn.call("shoot"))
+	var bolts: int = (wpn.get("_in_flight") as Array).size()
 	var beams: int = (wpn.get("_beams") as Array).size()
-	print("  光束节点数 = %d" % beams)
-	_check(beams > 0, "开火生成了激光光束（%d 个节点）" % beams)
+	print("  又打一发 = %s   在飞光点 = %d   光束节点 = %d" % [str(shot), bolts, beams])
+	_check(shot, "还能再打出一发")
+	_check(bolts > 0, "开火打出飞行光点（%d 个弹丸）" % bolts)
+	_check(beams == 0, "普通攻击**没有**光柱（光束节点 %d，应为 0）" % beams)
 
 	# ⑦ 关键控件都在
 	_check(level.get_node_or_null("HUD") != null, "HUD 在场景里")
