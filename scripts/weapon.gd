@@ -336,8 +336,11 @@ func _fire_raycast() -> void:
 	#
 	# ⚠️ 2026-11-10：普通状态**不要枪口那个球**（用户：「普通爱丽丝普通攻击不要出现
 	#    那个圆球只要激光线就可以」）。第三个参数 `false` 就是关枪口闪光的。
+	# ⚠️ 2026-11-11：命中点那颗**也不要**（第四个参数）。用户第二次指了准星上那个
+	#    柔和蓝球 —— 枪口关了、命中点还在，看起来就像"球跑到靶子上去了"。
+	#    现在整条路上只有一条光柱。
 	if laser_gun:
-		_spawn_beam(fx_from, impact, false)
+		_spawn_beam(fx_from, impact, false, false)
 		return
 
 	_spawn_tracer(fx_from, impact)
@@ -545,12 +548,20 @@ const BEAM_MAX_VISUAL := 60.0
 var _beams: Array = []
 
 
-## `with_muzzle_flash`：要不要画枪口那个**发光球**。
+## 两个「要不要」开关，普通状态和机甲状态各要一半：
 ##
-## ⚠️ 2026-11-10 新增。用户：「普通爱丽丝普通攻击不要出现那个圆球只要激光线就可以」。
-##    普通状态的激光机枪传 `false` —— 只留一条光柱，枪口那个球去掉。
-##    机甲的双肩炮仍传默认 `true`（激光大炮的炮口闪光保留，那是它的"炮感"）。
-func _spawn_beam(from: Vector3, to: Vector3, with_muzzle_flash := true) -> void:
+## `with_muzzle_flash` —— 枪口那个**发光球**（`_muzzle_flash_beam()`）。
+## `with_impact`       —— 命中点那个**膨胀圆球 + 一盏灯**（`_spawn_beam_impact()`）。
+##
+## ⚠️ 2026-11-10。用户：「普通爱丽丝普通攻击不要出现那个圆球只要激光线就可以」。
+##    当时只关掉了**枪口**那颗，命中点那颗还在 —— 用户 2026-11-11 又指了一次
+##    （截图里准星上那个柔和蓝球就是它）。普通状态的激光机枪现在两个都传 `false`：
+##    **只有一条光柱**，从枪口到命中点，别处一颗球都没有。
+##
+##    机甲的双肩炮仍走默认 `true`：那是炮，炮口闪光和命中爆闪都是它的"炮感"，
+##    和「普通攻击只要激光线」是两回事。
+func _spawn_beam(from: Vector3, to: Vector3,
+		with_muzzle_flash := true, with_impact := true) -> void:
 	var total := from.distance_to(to)
 	if total < 0.05:
 		return
@@ -619,8 +630,9 @@ func _spawn_beam(from: Vector3, to: Vector3, with_muzzle_flash := true) -> void:
 	if with_muzzle_flash:
 		_muzzle_flash_beam(from)
 	# 命中点爆闪：只有**真的打到了**才炸（没打中时 `total` 会顶到 300，
-	# 在 300 m 外放一个爆闪没意义，玩家也看不见）
-	if total <= BEAM_MAX_VISUAL:
+	# 在 300 m 外放一个爆闪没意义，玩家也看不见）。
+	# ⚠️ `with_impact=false` 时这颗也去掉（普通状态的激光机枪就是 false）。
+	if with_impact and total <= BEAM_MAX_VISUAL:
 		_spawn_beam_impact(vis_end, -dir)
 
 	# 淡出：alpha 收到 0，同时半径缩到 60%（"光收束"而不是"图变透明"）
