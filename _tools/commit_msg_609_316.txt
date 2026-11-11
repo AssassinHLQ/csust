@@ -1,0 +1,47 @@
+音乐: 画室609 循环区间按用户指定改成 1:16.40 → 2:31.90
+
+用户 2026-11-11（附播放器截图）：「错了, 应该是1:16:05到2:31:90」。
+
+上一版把整首切成 144 s（2:24）再循环，是**错的** —— 用户看播放器上的时间
+对不上才发现。正确的是按**源文件时间轴**：
+
+    前奏   0 → 1:16.40  播一次
+    循环体 1:16.40 → 2:31.90（75.50 s）反复
+
+实现：`art609_theme.ogg.import` 的 `loop_offset` 设为 **76.3976**；
+音频文件总长重新切成 **151.9000 s**（源 154.1547 s，切掉最后 2.2547 s）。
+
+── 起点为什么是 76.3976 而不是用户说的 76.05 ──
+
+终点 2:31.90 固定时实测（内部相邻样点平均跳变 0.009757）：
+
+    起点 76.050 s：跳变 0.281204（×28.8）  ← 波形是断的，会「咔」
+    起点 76.398 s：跳变 0.000320（×0.033） 斜率差 0.006577  ← 选这个（+348 ms）
+
+348 ms 听不出长短，接缝干净程度差 900 倍。**终点按用户给的 151.90 原样不动**
+—— 那里 RMS 0.244，还在音乐里，不是淡出区。
+
+- assets/music/art609_theme.ogg（本体，不入库）：重新切到 151.9000 s
+- assets/music/art609_theme.ogg.import：loop_offset 76.6102 → **76.3976**
+- scripts/music.gd：曲目表注释按新数值改写（含两个时间点都是源文件时间轴这件事）
+- assets/music/README.md：同上，并记下 76.05 为什么被挪了 348 ms
+- scripts/_verify_music.gd：断言改成 loop_offset ∈ (75.5, 77.5) 且总长 = 151.90±0.05
+- scripts/_verify_music_assets.gd（新增）：**不加载 game.tscn** 的纯资源自检，
+  查四个曲目的循环参数 + 画室609 的前奏/循环体数值 + FADE_DEFAULT=0
+
+实测（_verify_music_assets，无需加载场景）：
+    shop     loop=true  offset=0.000   长度= 40.209 s
+    gamedev  loop=true  offset=0.000   长度=129.229 s
+    esports  loop=true  offset=0.000   长度= 92.070 s
+    room609  loop=true  offset=76.398  长度=151.900 s
+    画室609：总长 151.9000 s，前奏 0~76.3976，循环体 76.3976~151.9000（75.5024 s）
+    Music.FADE_DEFAULT = 0.0
+    → 全部通过 ✔
+
+⚠️ 完整的 _verify_music（含四个房间的进出判定）这次**跑不了**：
+`scripts/player.gd` 现在处于**未解决的 Git 冲突状态**（`git status` 显示 `UU`），
+文件里还留着 `<<<<<<< Updated upstream` / `=======` / `>>>>>>> Stashed changes`
+（在 CAM_MEASURE_IN_TAU 那段，0.02 vs 0.03），导致整个项目编译不过
+（`Could not parse global class "Player"` / `Unexpected "VCS conflict marker"`）。
+那是别的会话 stash 没解干净留下的，本喵没碰 player.gd —— 冲突解掉之后
+跑一次 _verify_music 即可确认 22 项全绿。

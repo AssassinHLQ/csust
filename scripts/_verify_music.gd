@@ -297,9 +297,10 @@ func _run() -> void:
 	print("  循环开关（游戏开发部）  %s" % ("✔" if gd_st.loop else "✘"))
 	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
 	print("  循环开关（画室609）     %s" % ("✔" if r609_st.loop else "✘"))
-	print("  画室609：接回 1:16      %s（loop_offset = %.4f s，应约 76.61）"
-		% [("✔" if r609_st.loop_offset > 70.0 and r609_st.loop_offset < 80.0 else "✘"),
-			r609_st.loop_offset])
+	print("  画室609：接回 1:16      %s（loop_offset = %.4f s，应约 76.40；全长 %.2f s，应 151.90）"
+		% [("✔" if r609_st.loop_offset > 75.5 and r609_st.loop_offset < 77.5
+				and absf(r609_st.get_length() - 151.90) < 0.05 else "✘"),
+			r609_st.loop_offset, r609_st.get_length()])
 	print("  商店：触发区盖住店面    %s" % ("✔" if shop_zone_ok else "✘"))
 	print("  商店：后半间也有音乐    %s" % ("✔" if shop_back else "✘"))
 	print("  商店：进店开始播放      %s" % ("✔" if shop_started else "✘"))
@@ -318,7 +319,8 @@ func _run() -> void:
 	print("  画室609：屋顶不算屋里   %s" % ("✔" if r609_roof else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
-		and r609_st.loop_offset > 70.0 and r609_st.loop_offset < 80.0 \
+		and r609_st.loop_offset > 75.5 and r609_st.loop_offset < 77.5 \
+		and absf(r609_st.get_length() - 151.90) < 0.05 \
 		and shop_zone_ok and shop_back and shop_started and shop_stopped \
 		and was_stopped and zone_ok and gd_started and gd_stopped \
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
