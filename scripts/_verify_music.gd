@@ -49,8 +49,19 @@ func _run() -> void:
 	print("\n=== 2. 商店触发区 ===")
 	var zone := shop.get_node_or_null("MusicZone") as Area3D
 	print("MusicZone：%s" % ("有" if zone != null else "**没有**"))
+	var shop_size := Vector3.ZERO
 	if zone != null:
-		_print_zone(zone)
+		shop_size = _print_zone(zone)
+	# ⚠️ 2026-11-11 用户报过：商店扩建了，音乐范围还是旧的（只盖住前半间）。
+	#    判据 = 触发区必须盖住店面地面（`InteriorFloor/FloorShape`）减去内缩量。
+	var foot := _aabb_of(shop.get_node_or_null("InteriorFloor/FloorShape") as CollisionShape3D)
+	print("  店面地面：%.2f × %.2f m（x × z）中心 (%.2f, %.2f)"
+		% [foot.size.x, foot.size.z, foot.get_center().x, foot.get_center().z])
+	print("  触发区  ：%.2f × %.2f m（x × z）"
+		% [shop_size.x, shop_size.z])
+	var shop_zone_ok := zone != null \
+		and shop_size.x >= foot.size.x - 2.0 and shop_size.z >= foot.size.z - 2.0 \
+		and shop_size.z >= 8.0      # 旧 bug 的 z 只有 5.0 —— 这条直接卡住回退
 
 	var sp := shop.global_position
 	print("\n=== 3. 商店：进店 / 出店 ===")
@@ -82,6 +93,31 @@ func _run() -> void:
 	print("[再出店]     current=「%s」 is_playing=%s（应为空/false）"
 		% [Music.current(), str(Music.is_playing())])
 	var shop_stopped := Music.current() == "" and not Music.is_playing()
+
+	# ⚠️ 回归：**商店后半间**也必须有音乐（用户 2026-11-11 报的就是这个：
+	#    扩建之后判定区还是旧的 5 m 进深，走到后半间音乐就停了）。
+	# 用一个「占位玩家」去测：不调 `move_and_slide`，所以不会被家具碰撞推来推去。
+	var back := Vector3(sp.x, 0.10, sp.z - 6.0)          # 店面中心 z=-2.6 的后侧
+	var shop_back := false
+	if zone != null:
+		var ghost := _make_probe_player()
+		root.add_child(ghost)
+		for _f in 10:
+			await process_frame
+		ghost.global_position = back
+		for _f in 60:
+			await process_frame
+		var in_zone := zone.overlaps_body(ghost)
+		print("[商店后半间 %s] current=「%s」 is_playing=%s  重叠=%s（应为 shop/true/true）"
+			% [str(back), Music.current(), str(Music.is_playing()), str(in_zone)])
+		shop_back = in_zone and Music.current() == "shop" and Music.is_playing()
+		# 撤走，别影响后面的房间测试
+		ghost.global_position = Vector3(sp.x, 0.10, sp.z + 30.0)
+		for _f in 60:
+			await process_frame
+		ghost.queue_free()
+		for _f in 10:
+			await process_frame
 
 	# ────────────────────── 游戏开发部活动室 ──────────────────────
 	print("\n=== 4. 游戏开发部：触发区 ===")
@@ -150,17 +186,7 @@ func _run() -> void:
 		% [es_size.x, es_size.y, es_size.z])
 
 	# 人造玩家：第 1 层 + `player` 组，正好是触发区认的目标
-	var probe := CharacterBody3D.new()
-	probe.name = "ProbePlayer"
-	probe.collision_layer = 1
-	probe.collision_mask = 0
-	probe.add_to_group("player")
-	var probe_cs := CollisionShape3D.new()
-	var probe_shape := CapsuleShape3D.new()
-	probe_shape.radius = 0.3
-	probe_shape.height = 1.6
-	probe_cs.shape = probe_shape
-	probe.add_child(probe_cs)
+	var probe := _make_probe_player()
 	root.add_child(probe)
 	for _f in 10:
 		await process_frame
@@ -198,6 +224,8 @@ func _run() -> void:
 	print("  循环开关（商店）        %s" % ("✔" if shop_st.loop else "✘"))
 	print("  循环开关（游戏开发部）  %s" % ("✔" if gd_st.loop else "✘"))
 	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
+	print("  商店：触发区盖住店面    %s" % ("✔" if shop_zone_ok else "✘"))
+	print("  商店：后半间也有音乐    %s" % ("✔" if shop_back else "✘"))
 	print("  商店：进店开始播放      %s" % ("✔" if shop_started else "✘"))
 	print("  商店：出店停止播放      %s" % ("✔" if shop_stopped else "✘"))
 	print("  商店：店外保持安静      %s" % ("✔" if was_stopped else "✘"))
@@ -208,7 +236,8 @@ func _run() -> void:
 	print("  电竞房：藏着时不出声    %s" % ("✔" if es_silent_hidden else "✘"))
 	print("  电竞房：现身才出声      %s" % ("✔" if es_started else "✘"))
 	print("  电竞房：出房停止播放    %s" % ("✔" if es_stopped else "✘"))
-	var all_ok := shop_st.loop and gd_st.loop and es_st.loop and shop_started and shop_stopped \
+	var all_ok := shop_st.loop and gd_st.loop and es_st.loop \
+		and shop_zone_ok and shop_back and shop_started and shop_stopped \
 		and was_stopped and zone_ok and gd_started and gd_stopped \
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
@@ -225,3 +254,38 @@ func _print_zone(zone: Area3D) -> Vector3:
 				% [b.size.x, b.size.y, b.size.z, str(sh.position), str(zone.global_position)])
 			return b.size
 	return Vector3.ZERO
+
+
+## 一个 `BoxShape3D` 的 `CollisionShape3D` → 它自己的**局部** AABB（含自身 transform）
+func _aabb_of(cs: CollisionShape3D) -> AABB:
+	if cs == null or not (cs.shape is BoxShape3D):
+		return AABB()
+	var b := cs.shape as BoxShape3D
+	var h := b.size * 0.5
+	var out := AABB()
+	var seen := false
+	for i in 8:
+		var p: Vector3 = cs.transform * Vector3(
+			h.x if (i & 1) != 0 else -h.x,
+			h.y if (i & 2) != 0 else -h.y,
+			h.z if (i & 4) != 0 else -h.z)
+		out = out.expand(p) if seen else AABB(p, Vector3.ZERO)
+		seen = true
+	return out
+
+
+## 造一个「占位玩家」：第 1 层 + `player` 组，正好是触发区认的目标。
+## 不调 `move_and_slide()`，所以放哪就是哪，不会被家具碰撞推走。
+func _make_probe_player() -> CharacterBody3D:
+	var p := CharacterBody3D.new()
+	p.name = "ProbePlayer"
+	p.collision_layer = 1
+	p.collision_mask = 0
+	p.add_to_group("player")
+	var cs := CollisionShape3D.new()
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.3
+	shape.height = 1.6
+	cs.shape = shape
+	p.add_child(cs)
+	return p

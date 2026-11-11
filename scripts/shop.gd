@@ -158,6 +158,10 @@ func _wire_baked() -> void:
 		zone.body_entered.connect(_on_music_body.bind(1))
 		zone.body_exited.connect(_on_music_body.bind(-1))
 		_music_area = zone
+		# ⚠️ 必须按**现在的**店面重新量一遍：烘焙进 `shop_baked.tscn` 的盒子
+		#    还是扩建前的小尺寸（z 只有 5 m、中心在原点），商店扩建后
+		#    后半间就没有音乐了（用户 2026-11-11 报的问题）。
+		_fit_music_zone(zone)
 	# 烘焙场景里的屋壳是 GLB 实例，材质修正必须**运行时**再做一遍 ——
 	# 烘进 tscn 的只是 instance 引用，材质来自导入缓存，改不到里面去。
 	var shell_node := get_node_or_null("Shell")
@@ -1081,7 +1085,21 @@ func _box_standing(node_name: String, xz: Vector2, size: Vector3, mat: Material)
 #   · 层设置和「召唤台」一致：`collision_layer = 0`（自己不被撞）、
 #     `collision_mask = 1`（只感应世界层，玩家在第 1 层）。
 #   · 盒子比墙**内缩 0.6 m**：贴着墙走不该忽开忽关，也给淡入淡出留一点余量。
+#
+# ⚠️⚠️ 2026-11-11 用户：「柴关电脑城播放音乐的判定范围有误，是之前的范围，
+#      但是现在扩大了商店，要音乐范围也扩大到这么大」。
+#
+#   病根：运行时走的是 `shop_baked.tscn`（见 `_wire_baked()`），而**盒子的尺寸
+#   在烘焙时就被写死进那个 tscn 了**（x 12.60、z 5.00、中心在原点）。
+#   商店后来扩建成了 13.6 × 11.0 m 的地面、中心还挪到 z = -2.6，
+#   于是触发区只盖住**前半间**，走到后半间音乐就停了。
+#
+#   修法：**烘焙来的尺寸一律不信**，运行时按 `InteriorFloor` 的地面盒重新量
+#   （见 `_fit_music_zone()`）。这样以后商店再怎么扩建，音乐范围自动跟上，
+#   不会再出现「改了房子忘了改音乐」。
 const MUSIC_TRACK := "shop"
+## 触发区相对店面地面再内缩多少米
+const MUSIC_INSET := 0.6
 
 var _music_area: Area3D
 var _music_inside := 0
@@ -1095,10 +1113,7 @@ func _build_music_zone() -> void:
 	area.monitoring = true
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	# 高度取墙高的 2 倍、中心抬到一半：玩家怎么跳都在里面
-	box.size = Vector3(shop_len - 0.6, shop_height * 2.0, shop_depth - 0.6)
 	cs.shape = box
-	cs.position = Vector3(0.0, shop_height, 0.0)
 	area.add_child(cs)
 	add_child(area)
 	# ⚠️ 用「计数」而不是布尔：玩家被瞬移时可能先 entered B 再 exited A，
@@ -1106,8 +1121,62 @@ func _build_music_zone() -> void:
 	area.body_entered.connect(_on_music_body.bind(1))
 	area.body_exited.connect(_on_music_body.bind(-1))
 	_music_area = area
-	print("[Shop] BGM 触发区：%.2f × %.2f × %.2f m（曲目 `%s`）" % [
-		box.size.x, box.size.y, box.size.z, MUSIC_TRACK])
+	_fit_music_zone(area)
+
+
+## 按**实际店面**重新定触发区的大小和位置。**幂等**，烘焙场景与程序化场景都调它。
+##
+## 尺寸从 `InteriorFloor/FloorShape`（店里那块地面碰撞盒）量 —— 那就是「玩家能站的
+## 范围」，比任何写在别处的长宽高都靠谱。量不到才退回 `shop_len` / `shop_depth`
+## （程序化路径 `build()` 出来的老场景没有 `InteriorFloor`）。
+func _fit_music_zone(area: Area3D) -> void:
+	if area == null:
+		return
+	var cs: CollisionShape3D = null
+	for c in area.get_children():
+		var s := c as CollisionShape3D
+		if s != null and s.shape is BoxShape3D:
+			cs = s
+			break
+	if cs == null:
+		return
+	var foot := _music_footprint()
+	var box := cs.shape as BoxShape3D
+	# 高度取墙高的 2 倍、中心抬到一半：玩家怎么跳都在里面
+	box.size = Vector3(
+		maxf(foot.size.x - MUSIC_INSET * 2.0, 0.5),
+		maxf(shop_height * 2.0, 1.0),
+		maxf(foot.size.z - MUSIC_INSET * 2.0, 0.5))
+	var c := foot.get_center()
+	cs.position = Vector3(c.x, shop_height, c.z)
+	print("[Shop] BGM 触发区：%.2f × %.2f × %.2f m，中心本地 (%.2f, %.2f, %.2f)（曲目 `%s`）"
+		% [box.size.x, box.size.y, box.size.z, cs.position.x, cs.position.y,
+			cs.position.z, MUSIC_TRACK])
+
+
+## 触发区该盖住的「地面范围」（**本节点空间**的 AABB）。
+func _music_footprint() -> AABB:
+	var floor_shape := get_node_or_null("InteriorFloor/FloorShape") as CollisionShape3D
+	if floor_shape != null and floor_shape.shape is BoxShape3D:
+		var b := floor_shape.shape as BoxShape3D
+		# 地面盒是轴对齐的（烘焙时没转过），但照样按 8 个角换过来，
+		# 免得以后谁给 InteriorFloor 加了旋转又踩坑
+		var xf := floor_shape.transform
+		var h := b.size * 0.5
+		var out := AABB()
+		var seen := false
+		for i in 8:
+			var p: Vector3 = xf * Vector3(
+				h.x if (i & 1) != 0 else -h.x,
+				h.y if (i & 2) != 0 else -h.y,
+				h.z if (i & 4) != 0 else -h.z)
+			out = out.expand(p) if seen else AABB(p, Vector3.ZERO)
+			seen = true
+		return out
+	# 退回：按量出来的店面尺寸，居中在原点（程序化路径）
+	return AABB(
+		Vector3(-shop_len * 0.5, 0.0, -shop_depth * 0.5),
+		Vector3(shop_len, 0.0, shop_depth))
 
 
 func _on_music_body(body: Node3D, delta: int) -> void:
