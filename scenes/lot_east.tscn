@@ -16,10 +16,10 @@ uv1_world_triplanar = true
 texture_filter = 5
 
 [sub_resource type="BoxMesh" id="Mesh_deck"]
-size = Vector3(24, 0.5, 40)
+size = Vector3(24, 0.5, 52)
 
 [sub_resource type="BoxShape3D" id="Shape_deck"]
-size = Vector3(24, 0.5, 40)
+size = Vector3(24, 0.5, 52)
 
 [node name="LotEast" type="StaticBody3D"]
 

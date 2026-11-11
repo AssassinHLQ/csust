@@ -50,10 +50,10 @@ adjustment_enabled = true
 adjustment_saturation = 1.06
 
 [sub_resource type="BoxShape3D" id="Shape_floor"]
-size = Vector3(40, 1, 40)
+size = Vector3(40, 1, 52)
 
 [sub_resource type="BoxMesh" id="Mesh_floor"]
-size = Vector3(40, 1, 40)
+size = Vector3(40, 1, 52)
 
 [sub_resource type="StandardMaterial3D" id="Mat_floor"]
 albedo_color = Color(0.21, 0.23, 0.27, 1)

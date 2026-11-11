@@ -16,10 +16,10 @@ uv1_world_triplanar = true
 texture_filter = 5
 
 [sub_resource type="BoxMesh" id="BoxMesh_miwgs"]
-size = Vector3(19.99, 0.5, 40)
+size = Vector3(19.99, 0.5, 52)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_dey76"]
-size = Vector3(19.99, 0.5, 40)
+size = Vector3(19.99, 0.5, 52)
 
 [node name="ShopDeck" type="StaticBody3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.3, 0, -15.5)
