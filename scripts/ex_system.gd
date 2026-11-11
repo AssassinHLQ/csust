@@ -326,6 +326,115 @@ const RAIL_TICK_SEC := 0.06
 const RAIL_RANGE := 220.0
 const RAIL_WIDTH := 0.95
 
+## ── 照碧蓝档案「临战」阿比·埃修改的观感（用户 2026-11-11 给了 8 张参考图）──
+##
+## 用户原话：「机甲爱丽丝普通攻击,图一图二,3 4,5 ex蓄力 678 ex技能,
+##            是**一开始超大然后缩减**的,这才是真正的机甲爱丽丝」。
+##
+## 参考图里 EX 其实是两段：
+##   ① **蓄力**（图 3/4/5）：一圈圈白色光环从枪口由小涨大、核心越来越亮；
+##   ② **发射**（图 6/7/8）：枪口那一端是**巨大**的光团，沿射线方向**迅速收细**成一条线，
+##      整体宽度还会随时间缩 —— 不是本喵以前那种「等半径圆管」。
+##
+## 所以这里两处改动：
+##   · 光柱从圆柱改成**锥形**（`bottom_radius` 在枪口那端更大，`top_radius` 远端更小）；
+##   · 发射瞬间再乘一个**收缩系数** `shrink`（1 → 0，0.45 s 内），
+##     让「一开始超大」那一下真的存在，而不是整段都一样粗。
+const RAIL_CHARGE_TIME := 0.55       # 蓄力时长（秒），期间不放伤害
+const RAIL_SHRINK_SEC := 0.45        # 枪口宽度从「超大」收到正常所用的时间
+const CHARGE_RING_MAX := 5.2         # 蓄力环涨到多大（米，半径）
+const CHARGE_RINGS := 3              # 几圈（错开相位，像参考图那样一层层）
+
+
+## ── 蓄力（图 3/4/5）──
+##
+## 在枪口前方竖着放几圈光环，半径由小涨大、透明度先亮后灭，中间一颗核心球越蓄越大。
+## 环面与射线方向**垂直**（用和光柱同一套 basis，环的局部 Y 轴对到 `dir`）。
+## 全部用加色透明材质 + 不投影，和光柱同一套观感；结束时统一淡出并释放。
+func _rail_charge(from: Vector3, dir: Vector3) -> void:
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var right := up.cross(dir).normalized()
+	var realup := dir.cross(right).normalized()
+	var basis := Basis(right, dir, realup)
+
+	var holder := Node3D.new()
+	holder.name = "RailCharge"
+	_fx_root.add_child(holder)
+	holder.global_position = from
+
+	# 光环
+	var rings: Array = []
+	for i in CHARGE_RINGS:
+		var mi := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.86
+		tm.outer_radius = 1.0
+		tm.rings = 32
+		tm.ring_segments = 6
+		mi.mesh = tm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := _add_mat(Color(0.70, 0.92, 1.00, 0.0), 5.0)
+		mi.material_override = mat
+		holder.add_child(mi)
+		# 进树之后才能写 global_*；环面与射线垂直（局部 Y 轴对到 dir）
+		mi.global_position = from + dir * 0.55
+		mi.global_basis = basis
+		rings.append({"mi": mi, "mat": mat, "phase": float(i) / float(CHARGE_RINGS)})
+
+	# 核心球（越蓄越亮）
+	var core := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 2.0
+	sm.radial_segments = 20
+	sm.rings = 10
+	core.mesh = sm
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var cmat := _add_mat(Color(0.85, 0.97, 1.00, 0.0), 8.0)
+	core.material_override = cmat
+	_fx_root.add_child(core)
+	core.global_position = from + dir * 0.55
+
+	var t0 := Time.get_ticks_msec()
+	var span := int(RAIL_CHARGE_TIME * 1000.0)
+	while is_instance_valid(self):
+		var el := Time.get_ticks_msec() - t0
+		if el >= span:
+			break
+		var t := float(el) / float(span)
+		for r in rings:
+			# 每圈错开相位循环吞吐：0→1 涨大，透明度先亮后灭
+			var k := fposmod(t + float(r["phase"]), 1.0)
+			var mi: MeshInstance3D = r["mi"]
+			var s := lerpf(0.35, CHARGE_RING_MAX, k)
+			mi.global_basis = basis.scaled(Vector3(s, s, s))
+			(r["mat"] as StandardMaterial3D).albedo_color.a = 0.75 * (1.0 - k)
+		var cs := lerpf(0.28, 1.25, t)
+		core.global_basis = Basis.from_scale(Vector3(cs, cs, cs))
+		cmat.albedo_color.a = 0.35 + 0.45 * t
+		await get_tree().process_frame
+	if not is_instance_valid(self):
+		return
+	# 收尾：干净地清掉（发射的光柱接上）
+	for r in rings:
+		(r["mi"] as Node3D).queue_free()
+	core.queue_free()
+	holder.queue_free()
+
+
+## 加色透明材质（光柱/蓄力共用），集中一处省得每层重复五行
+func _add_mat(c: Color, energy: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = c
+	mat.emission_enabled = true
+	mat.emission = Color(c.r, c.g, c.b)
+	mat.emission_energy_multiplier = energy
+	return mat
+
 
 func _fire_railgun() -> void:
 	var dir := _aim_dir()
@@ -341,8 +450,14 @@ func _fire_railgun() -> void:
 
 
 func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
+	# ① 先蓄力（图 3/4/5）：一圈圈光环涨大 + 核心变亮，期间不结算伤害
+	await _rail_charge(froms[0], dir)
+	if not is_instance_valid(self) or froms.is_empty():
+		return
+
 	var space := _fx_root.get_world_3d().direct_space_state
-	var t_end := Time.get_ticks_msec() + int(RAIL_DURATION * 1000.0)
+	var t_fire := Time.get_ticks_msec()
+	var t_end := t_fire + int(RAIL_DURATION * 1000.0)
 	var next_tick := 0
 	var tick_count := 0
 	var total_hits := 0
@@ -352,35 +467,35 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 		var holder := Node3D.new()
 		holder.name = "RailBeam%d" % f
 		_fx_root.add_child(holder)
+		# 每层的 `r` = 常态半径比；`m` = 发射瞬间枪口端额外放大倍数（图 6/7/8 那团大光）
+		#
+		# ⚠️ 透明度要**外层很淡、核心极亮**：加色混合会叠加，
+		#    第一版中间层给了 0.60，三层叠起来就成一块实心三角、没有发光感。
+		#    现在外两层只负责「雾」，真正的亮靠核心那层的高 emission。
 		var layer_specs := [
-			{"r": 1.8, "c": Color(0.28, 0.55, 1.00, 0.20), "e": 1.2},
-			{"r": 1.0, "c": Color(0.50, 0.80, 1.00, 0.60), "e": 3.5},
-			{"r": 0.42, "c": Color(0.90, 0.98, 1.00, 0.95), "e": 9.0},
+			{"r": 2.6, "m": 3.4, "c": Color(0.22, 0.45, 1.00, 0.07), "e": 1.0},
+			{"r": 1.5, "m": 4.0, "c": Color(0.35, 0.65, 1.00, 0.13), "e": 1.6},
+			{"r": 0.95, "m": 3.0, "c": Color(0.55, 0.85, 1.00, 0.22), "e": 3.0},
+			{"r": 0.42, "m": 1.7, "c": Color(1.00, 1.00, 1.00, 0.85), "e": 11.0},
 		]
 		var mats: Array = []
+		var cones: Array = []
 		for L in layer_specs:
 			var mi := MeshInstance3D.new()
 			var cm := CylinderMesh.new()
-			cm.top_radius = RAIL_WIDTH * float(L["r"])
+			# 锥形：枪口端（bottom，因为 holder 放在中点、-Y 朝枪口）粗，远端（top）细
 			cm.bottom_radius = RAIL_WIDTH * float(L["r"])
+			cm.top_radius = RAIL_WIDTH * float(L["r"]) * 0.55
 			cm.height = 1.0
 			cm.radial_segments = 16
 			cm.rings = 1
 			mi.mesh = cm
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var mat := StandardMaterial3D.new()
-			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-			mat.albedo_color = L["c"]
-			mat.emission_enabled = true
-			mat.emission = Color((L["c"] as Color).r, (L["c"] as Color).g, (L["c"] as Color).b)
-			mat.emission_energy_multiplier = float(L["e"])
-			mi.material_override = mat
+			mi.material_override = _add_mat(L["c"], float(L["e"]))
 			holder.add_child(mi)
-			mats.append(mat)
-		beams.append({"holder": holder, "mats": mats})
+			mats.append(mi.material_override)
+			cones.append({"cm": cm, "r": float(L["r"]), "m": float(L["m"])})
+		beams.append({"holder": holder, "mats": mats, "cones": cones})
 
 	while Time.get_ticks_msec() < t_end and is_instance_valid(self):
 		await get_tree().process_frame
@@ -430,6 +545,14 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 			for mi in holder.get_children():
 				if mi is MeshInstance3D:
 					(mi as MeshInstance3D).scale = Vector3(1.0, reach, 1.0)
+			# 枪口那团「超大」随时间收细（图 6/7/8 的关键手感）：
+			# shrink 从 1 掉到 0，每层枪口端半径 = 常态 × (1 + (m−1) × shrink)
+			var shrink := 1.0 - clampf(
+				float(now - t_fire) / (RAIL_SHRINK_SEC * 1000.0), 0.0, 1.0)
+			for cd in b["cones"]:
+				var cm2: CylinderMesh = cd["cm"]
+				var mult := 1.0 + (float(cd["m"]) - 1.0) * shrink
+				cm2.bottom_radius = RAIL_WIDTH * float(cd["r"]) * mult
 
 			if now >= next_tick and not hit.is_empty():
 				var col = hit.get("collider")
