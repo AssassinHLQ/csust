@@ -227,17 +227,23 @@ func _run() -> void:
 				_check(mat.billboard_mode == BaseMaterial3D.BILLBOARD_DISABLED,
 					"★ 材质**不面向相机**（billboard 关着）—— 开了就会永远像个圆斑")
 			var mesh := bolt_node.mesh
-			if mesh is CapsuleMesh:
-				var cap := mesh as CapsuleMesh
-				# ⚠️ 别拿"网格高 / 直径"当长宽比：网格高固定是 `TRACER_LEN`（0.55），
-				#    真正的长度靠 `scale.y` 拉出来（见 `weapon.gd::BOLT_LEN` 那段）。
-				#    这里只判"网格本身是细长的"，真正的世界张量看下面 `_world_extent()`。
-				print("  网格 = CapsuleMesh  radius %.3f  height %.3f（高/半径 = %.1f 倍）" % [
-					cap.radius, cap.height, cap.height / maxf(cap.radius, 0.0001)])
-				_check(cap.height > cap.radius * 4.0,
-					"★ 网格本身是**细长**的（高 %.2f > 半径×4 %.2f）"
-						% [cap.height, cap.radius * 4.0])
+			# 用户第三轮：「再拉长,细圆柱」——所以网格必须是**圆柱**，且明显细长。
+			# ⚠️ 注意这**不会**跟下面那条「没有光柱（0 个圆柱）」冲突：
+			#    子弹是按**材质** (`_bolt_mat`) 归类成"弹"的，归类在网格类型之前，
+			#    所以它不会同时被算进"柱"（= 机甲的 `_spawn_beam` 那 5 层）。
+			if mesh is CylinderMesh:
+				var cyl := mesh as CylinderMesh
+				print("  网格 = CylinderMesh  radius %.3f  height %.3f（高/半径 = %.1f 倍）" % [
+					cyl.top_radius, cyl.height,
+					cyl.height / maxf(cyl.top_radius, 0.0001)])
+				_check(cyl.height > cyl.top_radius * 4.0,
+					"★ 网格是**细长圆柱**（高 %.2f > 半径×4 %.2f）"
+						% [cyl.height, cyl.top_radius * 4.0])
+				_check(not cyl.cap_top and not cyl.cap_bottom,
+					"★ 圆柱**不封盖**（两端圆盘会糊成两块亮斑）")
 			else:
+				_check(false, "★ 网格是圆柱（实际 %s）"
+					% (mesh.get_class() if mesh != null else "null"))
 				_check(false, "★ 网格是胶囊（实际 %s）"
 					% (mesh.get_class() if mesh != null else "null"))
 			# 再看**世界空间**里的实际张量：沿弹道方向 vs 垂直方向

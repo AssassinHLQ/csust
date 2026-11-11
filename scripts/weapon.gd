@@ -94,14 +94,20 @@ const TRACER_LEN := 0.55
 ##    网格高度固定写成 `TRACER_LEN`（0.55），`BOLT_LEN` 才是**想要的世界长度**。
 ##    因为 `_advance_tracers()` 里 `scale.y = seg / TRACER_LEN`，稳态 seg = `BOLT_LEN`，
 ##    所以世界长度 = 网格高 0.55 × (BOLT_LEN / 0.55) = **BOLT_LEN**，正好抵消。
+##    ⚠️ 写成 `mesh.height = BOLT_LEN` 会变成 BOLT_LEN²/TRACER_LEN，长度翻倍错。
 ##
-## ⚠️ 为什么是 1.1 m 这么长（2026-11-11 第二轮）：
-##    第一版按 0.55 m 做，出图一看几乎看不见 —— **因为玩家是从背后看子弹飞走的**，
-##    弹道和相机视线几乎平行，胶囊永远被"看成一端"，屏幕上只剩一个小白点。
-##    所以长度必须给足（实测 1.1 m 在 10 m 外是一道看得清的光条），
-##    而不是靠"形状对了"就以为够了。
-const BOLT_LEN := 1.30
-const BOLT_RADIUS := 0.075
+## ── 三轮改出来的最终形状 ──
+##   用户①：「改成光点吧，就是发光子弹那种」→ 本喵做成圆斑（径向渐变+billboard）= 球
+##   用户②（附截图）：「这不是球吗,我要子弹,激光子弹,不是激光球也不是激光炮」
+##            → 换成沿弹道的胶囊光条（但只 0.55 m，几乎看不见）
+##   用户③：「再拉长,细圆柱」→ **现在这版**。
+##
+##   为什么第一版胶囊 0.55 m 看不见：**玩家是从背后看子弹飞走的**，弹道与相机视线
+##   几乎平行，长条永远被"看成一端"，屏幕上只剩一个小白点。所以长度必须给足。
+##   圆柱 + 长度 2.4 m，即使严重透视压缩，仍然是一道看得清的光条。
+const BOLT_LEN := 2.40
+## 细。20 面圆柱配 3.5 cm 半径，远看是"一根线"，近看才有体积。
+const BOLT_RADIUS := 0.035
 
 var current_ammo: int
 var _cooldown := 0.0
@@ -161,33 +167,39 @@ func _ready() -> void:
 	_tracer_mat.emission_energy_multiplier = 2.2
 
 	# ── 激光子弹的网格与材质（普通状态，见 `BOLT_LEN` 那段）──
-	# 细长胶囊 + **沿长度**的渐变 = 一道短光条；沿弹道躺着飞，不面相机。
+	# **细圆柱** + 沿长度渐隐 = 一道细细的光线；沿弹道躺着飞，不面相机。
 	var grad := Gradient.new()
-	# 两端收细、中段最亮：读起来是"一条光"，而不是"一个圆斑"。
+	# 两端透明、中段最亮：圆柱的硬切口被 alpha 渐隐吃掉，读起来是"一束光"而不是"一截管子"。
 	# ⚠️ 别改回 `FILL_RADIAL` —— 径向渐变在方片/圆片上必然是圆的，
 	#    那正是用户说的「这不是球吗」。
-	grad.offsets = PackedFloat32Array([0.0, 0.10, 0.5, 0.90, 1.0])
+	grad.offsets = PackedFloat32Array([0.0, 0.16, 0.5, 0.84, 1.0])
 	grad.colors = PackedColorArray([
-		Color(0.35, 0.80, 1.00, 0.00),      # 尾：透明（收尖）
-		Color(0.45, 0.90, 1.00, 0.95),
-		Color(0.85, 0.99, 1.00, 1.00),      # 中段：近白，最亮
-		Color(0.45, 0.90, 1.00, 0.95),
-		Color(0.35, 0.80, 1.00, 0.00)])     # 头：透明（收尖）
+		Color(0.35, 0.80, 1.00, 0.00),      # 尾：透明
+		Color(0.50, 0.92, 1.00, 0.90),
+		Color(0.90, 0.99, 1.00, 1.00),      # 中段：近白，最亮
+		Color(0.50, 0.92, 1.00, 0.90),
+		Color(0.35, 0.80, 1.00, 0.00)])     # 头：透明
 	var bolt_tex := GradientTexture2D.new()
 	bolt_tex.gradient = grad
-	# 沿 V（纵向）渐变：胶囊的 V 就是长度方向
+	# 沿 V（纵向）渐变：圆柱的 V 就是长度方向
 	bolt_tex.fill = GradientTexture2D.FILL_LINEAR
 	bolt_tex.fill_from = Vector2(0.5, 0.0)
 	bolt_tex.fill_to = Vector2(0.5, 1.0)
 	bolt_tex.width = 8
 	bolt_tex.height = 64
-	var bolt := CapsuleMesh.new()
-	bolt.radius = BOLT_RADIUS
+	var bolt := CylinderMesh.new()
+	bolt.top_radius = BOLT_RADIUS
+	bolt.bottom_radius = BOLT_RADIUS
 	# ⚠️ 高度写 `TRACER_LEN`（不是 `BOLT_LEN`）—— 长度靠 `scale.y` 拉，
 	#    见 `BOLT_LEN` 上面那段"两件事别混"。
 	bolt.height = TRACER_LEN
-	bolt.radial_segments = 8
-	bolt.rings = 4
+	# 面数给少一点：3.5 cm 半径在屏幕上就几个像素，20 面纯属浪费
+	bolt.radial_segments = 12
+	bolt.rings = 1
+	# ⚠️ **不要封盖**：圆柱两端的圆盘是朝内/朝外的实心面，配上加色会糊成两块亮斑。
+	#    没有盖子 + 两端 alpha 渐隐，才是"光束"该有的样子。
+	bolt.cap_top = false
+	bolt.cap_bottom = false
 	_bolt_mesh = bolt
 	_bolt_mat = StandardMaterial3D.new()
 	_bolt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
