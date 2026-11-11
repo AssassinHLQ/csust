@@ -27,7 +27,13 @@ const BYTES_PER_SPLAT := STRUCT_SIZE * 4          # 240
 const SH_COEFFS_PER_BAND := {1: 3, 2: 8, 3: 15}
 const SQRT2 := 1.4142135623730951
 const CHUNK := 262144                              # 进度回调粒度
-const CACHE_DIR := "user://splat_cache"
+## ⚠️ 2026-11-10：缓存目录从 `user://splat_cache` 挪到 **exe 同目录下的
+##   `_cache/splat/`**（见 `scripts/cache_dir.gd`）。
+##   理由：用户要求「不要抢用户磁盘的 AppData」，而这两个 `.gdgsrt` 实测占
+##   **2.1 GB**（`school_playable` + `room609` 的解码缓存）。
+##   它们是可再生成的，放 exe 旁边 = 删游戏目录就全清干净。
+const CACHE_SUBDIR := "splat"
+const CacheDir := preload("res://scripts/cache_dir.gd")
 const CACHE_MAGIC := "GDGSRT01"
 
 const SOURCE_NAMES := [
@@ -82,6 +88,12 @@ static func find_source(explicit: String = "") -> String:
 ##   progress : Callable(phase: String, done: int, total: int)  —— 进度回调（可选）
 ##   cache    : "off"（默认）| "auto" | "refresh"；应用始终使用 off
 ##   center   : Vector3 —— 跳过中心化第一遍，直接用给定中心（仅显式缓存模式使用）
+##   centroids: PackedByteArray —— 共享的 `shN_centroids.webp` 原始字节。
+##              **分块 SOG 用**：调色板整张 2.26 MB，切 97 块时如果每块都带一份
+##              就是 219 MB 纯重复（实测），所以 `_split_sog.gd --shared-centroids`
+##              只在旁边写一份，块里不带；调用方把它读进来传给我们。
+##              传 Vector3.ZERO 当 center 时，解出来的坐标是**未中心化的绝对坐标**，
+##              配合 `tools/fit_campus_frame.py` 解出的相似变换即可换到世界坐标。
 ##
 ## 返回：{ok, resource, count, aabb, source, elapsed_ms, from_cache, message, error}
 static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
@@ -89,6 +101,7 @@ static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
 	var progress: Callable = opts.get("progress", Callable())
 	var cache_mode := String(opts.get("cache", "off"))
 	var center_hint: Variant = opts.get("center", null)
+	var shared_centroids: PackedByteArray = opts.get("centroids", PackedByteArray())
 
 	if not FileAccess.file_exists(sog_path):
 		return _fail(ERR_FILE_NOT_FOUND, "找不到 SOG 文件：%s" % sog_path)
@@ -122,7 +135,7 @@ static func load_sog(sog_path: String, opts: Dictionary = {}) -> Dictionary:
 
 	# ---- 纹理解码 ----
 	_emit(progress, "textures", 0, 1)
-	var textures := _decode_textures(archive, info)
+	var textures := _decode_textures(archive, info, shared_centroids)
 	archive.close()
 	if not bool(textures.get("ok", false)):
 		return textures
@@ -308,7 +321,10 @@ static func cache_info(sog_path: String) -> Dictionary:
 
 
 static func clear_cache() -> int:
-	var dir := DirAccess.open(CACHE_DIR)
+	var path := CacheDir.dir_for(CACHE_SUBDIR)
+	if path.is_empty():
+		return 0
+	var dir := DirAccess.open(path)
 	if dir == null:
 		return 0
 	var removed := 0
@@ -397,7 +413,7 @@ static func _read_meta(archive: ZIPReader) -> Dictionary:
 
 # ---------------------------------------------------------------- 纹理
 
-static func _decode_textures(archive: ZIPReader, info: Dictionary) -> Dictionary:
+static func _decode_textures(archive: ZIPReader, info: Dictionary, shared_centroids := PackedByteArray()) -> Dictionary:
 	var count: int = info["count"]
 
 	var means_l := _load_image(archive, String(info["means_l_file"]), Image.FORMAT_RGB8)
@@ -446,7 +462,16 @@ static func _decode_textures(archive: ZIPReader, info: Dictionary) -> Dictionary
 	}
 
 	if bool(info.get("has_shn", false)):
-		var centroids := _load_image(archive, String(info["shn_centroids_file"]), Image.FORMAT_RGB8)
+		# 分块 SOG 不各自带调色板：块里没有就用调用方传进来的共享那份。
+		var centroids: Dictionary
+		if archive.file_exists(String(info["shn_centroids_file"])):
+			centroids = _load_image(archive, String(info["shn_centroids_file"]), Image.FORMAT_RGB8)
+		elif not shared_centroids.is_empty():
+			centroids = _decode_image_bytes(
+				shared_centroids, String(info["shn_centroids_file"]) + "（共享）", Image.FORMAT_RGB8)
+		else:
+			centroids = _fail(ERR_FILE_NOT_FOUND, "SOG 归档缺少条目 '%s'，也没有传共享调色板"
+				% String(info["shn_centroids_file"]))
 		if not bool(centroids.get("ok", false)):
 			return centroids
 		var labels := _load_image(archive, String(info["shn_labels_file"]), Image.FORMAT_RGBA8)
@@ -471,6 +496,12 @@ static func _load_image(archive: ZIPReader, filename: String, target_format: int
 	var bytes := archive.read_file(filename)
 	if bytes.is_empty():
 		return _fail(ERR_FILE_NOT_FOUND, "SOG 归档缺少条目 '%s'" % filename)
+	return _decode_image_bytes(bytes, filename, target_format)
+
+
+## WebP 字节 → 指定格式的像素数据。分块 SOG 的共享调色板也走这里
+## （它不在归档里，是调用方直接给的字节）。
+static func _decode_image_bytes(bytes: PackedByteArray, filename: String, target_format: int) -> Dictionary:
 	var image := Image.new()
 	var load_error := image.load_webp_from_buffer(bytes)
 	if load_error != OK:
@@ -507,11 +538,15 @@ static func _source_stamp(path: String) -> Dictionary:
 
 static func _cache_path(source: String, stamp: Dictionary) -> String:
 	var key := "%s-%s-%s" % [source.get_file().get_basename(), str(stamp["size"]), str(stamp["mtime"])]
-	return CACHE_DIR.path_join("%s.gdgsrt" % key)
+	var path := CacheDir.file_for(CACHE_SUBDIR, "%s.gdgsrt" % key)
+	if path.is_empty():
+		# 没有可写缓存目录：给一个必然不存在的路径，让上层走「无缓存」分支
+		return "user://splat_cache/%s.gdgsrt" % key
+	return path
 
 
 static func _write_cache(path: String, info: Dictionary, stamp: Dictionary, blob: PackedByteArray, xyz: PackedVector3Array, center: Vector3) -> void:
-	DirAccess.make_dir_recursive_absolute(CACHE_DIR)
+	CacheDir.dir_for(CACHE_SUBDIR)
 	var header := {
 		"source_size": int(stamp["size"]),
 		"source_mtime": int(stamp["mtime"]),

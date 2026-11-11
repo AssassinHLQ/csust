@@ -193,3 +193,16 @@ __pycache__/
 /_arisu_captures/
 /_sky_upscale/
 /_backup/
+
+# ---- 校园分块 SOG（2026-11-11）----
+# 由 `scripts/_split_sog.gd --nx=10 --nz=10 --shared-centroids ...` 从
+# splatdata/school_playable.sogdata 生成；是第三方的派生物，不入库。
+# 只留两个小清单：chunks.json（运行时读）和 frame.json（相似变换）。
+# 重新生成：
+#   & <godot> --headless --path . --script res://scripts/_split_sog.gd -- --input=res://splatdata/school_playable.sogdata --nx=10 --nz=10 --write --out-dir=res://splatdata/campus_sog/fine --scene=res://_log/campus_sog_fine.tscn --shared-centroids=res://splatdata/campus_sog/shn_centroids.webp
+#   & <godot> --headless --path . --script res://scripts/_split_sog.gd -- --input=res://splatdata/school_playable.sogdata --nx=1 --nz=1 --stride=4 --write --out-dir=res://splatdata/campus_sog/coarse --scene=res://_log/campus_sog_coarse.tscn --shared-centroids=res://splatdata/campus_sog/shn_centroids.webp
+#   python tools/fit_campus_frame.py
+#   python tools/make_campus_sog_manifest.py
+/splatdata/campus_sog/*
+!/splatdata/campus_sog/chunks.json
+!/splatdata/campus_sog/frame.json

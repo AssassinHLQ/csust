@@ -125,6 +125,16 @@ func _run() -> void:
 	var write := OS.get_cmdline_user_args().has("--write")
 	# 只重算偏移/重写场景，不动已经写好的 chunk 文件（保住它们的解码缓存戳）
 	var reuse := OS.get_cmdline_user_args().has("--reuse")
+	# 抽稀：只留裁剪序列里每 stride 个点里的第 1 个（与 decimate_ggs_bin.py 的
+	# `data[::stride]` 同序，所以 stride=4 + nx=nz=1 复刻的就是 campus_ggs_q4.bin）。
+	var stride := maxi(1, int(_arg("stride", "1")))
+	# 共享调色板：shN_centroids.webp 是**整张**调色板（实测 2.26 MB），
+	# 之前每个 chunk 都整份复制一遍 —— 97 块 = 219 MB 纯重复。
+	# 传了 --shared-centroids=<路径> 就只写一次，chunk 里不再带，
+	# 运行时由 SogRuntime.load_sog(..., {"centroids": bytes}) 补进来。
+	var shared_centroids := _arg("shared-centroids", "")
+	if shared_centroids != "" and shared_centroids.begins_with("res://"):
+		shared_centroids = ProjectSettings.globalize_path(shared_centroids)
 
 	var z := ZIPReader.new()
 	if z.open(input) != OK:
@@ -216,14 +226,19 @@ func _run() -> void:
 		buckets[k] = PackedInt32Array()
 	var gw := maxf(box.size.x, 0.001)
 	var gd := maxf(box.size.z, 0.001)
+	var seq := 0
 	for i in count:
 		if keep[i] == 0:
+			continue
+		seq += 1
+		if stride > 1 and (seq - 1) % stride != 0:
 			continue
 		var p := pos[i]
 		var ix := clampi(int((p.x - box.position.x) / gw * float(nx)), 0, nx - 1)
 		var iz := clampi(int((p.z - box.position.z) / gd * float(nz)), 0, nz - 1)
 		var b := iz * nx + ix
 		buckets[b].append(i)
+	print("[split] 裁剪后 %d 点 → 抽稀 stride=%d → 留约 %d 点" % [kept, stride, seq / stride])
 	# 索引升序 → 连续段复制
 	for b in buckets.size():
 		buckets[b].sort()
@@ -242,6 +257,7 @@ func _run() -> void:
 	var chunk_offsets: Array[Vector3] = []
 	chunk_offsets.resize(buckets.size())
 	var t_write := Time.get_ticks_msec()
+	var centroids_written := false
 	for b in buckets.size():
 		var idx := buckets[b]
 		var n := idx.size()
@@ -295,10 +311,21 @@ func _run() -> void:
 			zp.write_file(img.save_webp_to_buffer(false))   # 无损，像素逐位不变
 			zp.close_file()
 		if has_shn:
-			# 调色板整张复制
-			zp.start_file("shN_centroids.webp")
-			zp.write_file(centroids_bytes)
-			zp.close_file()
+			# 调色板：默认整张复制；给了 --shared-centroids 就全局只写一次
+			if shared_centroids == "":
+				zp.start_file("shN_centroids.webp")
+				zp.write_file(centroids_bytes)
+				zp.close_file()
+			elif not centroids_written:
+				centroids_written = true
+				var sc := FileAccess.open(shared_centroids, FileAccess.WRITE)
+				if sc == null:
+					push_error("写不了共享调色板 %s" % shared_centroids)
+				else:
+					sc.store_buffer(centroids_bytes)
+					sc.close()
+					print("[split] 共享调色板 %s（%.2f MB，全部块共用这一份）"
+						% [shared_centroids, float(centroids_bytes.size()) / 1048576.0])
 		zp.close()
 		chunk_files.append(out_path)
 		print("[split] 写 chunk_%d_%d：%d 点、%d×%d" % [ix, iz, n, w_f, h_f])
