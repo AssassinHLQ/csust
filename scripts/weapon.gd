@@ -70,6 +70,25 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var tracer_speed := 260.0       # 弹丸飞行速度（米/秒）
 const TRACER_LEN := 0.55
 
+## ── 激光子弹（普通状态，2026-11-11）──
+## 用户：「这个光柱还是不好看，改成光点吧，就是发光子弹那种……就是还是用以前的
+##       机枪，只不过改成了激光子弹」。所以弹丸要长得像**一个发光的光点**。
+##
+## 实现：一块**面向相机的方片** + 程序化生成的**径向渐变**贴图（中心白 → 青 → 全透明），
+## 于是它渲染出来就是一个软边的光点，而不是一颗硬边小球。
+## 贴图是 `GradientTexture2D` 现生成的，**不引用任何图片文件**
+## （和 BA 皮肤同一条规矩：不碰游戏原始素材，见 README §13.12.1）。
+##
+## ⚠️ 两个数字别随手改：
+##   · `BOLT_SIZE` 是光点的**视觉直径**（米）；0.30 在 12 m 外约 38 px，
+##     再大就变成一团糊住准星的光斑了。
+##   · `BOLT_LEN` 是飞行队列里的「弹丸段长」，这里**故意取成 `TRACER_LEN`**：
+##     `_advance_tracers()` 里 `scale.y = seg / TRACER_LEN`，段长等于分母时
+##     **稳态 `scale.y` 恒为 1.0**，网格就能保持自己设计好的正圆形状
+##     （我们做的是圆点，被拉长成椭圆就不叫光点了）。
+const BOLT_SIZE := 0.30
+const BOLT_LEN := TRACER_LEN
+
 var current_ammo: int
 var _cooldown := 0.0
 var _reloading := false
@@ -87,6 +106,8 @@ var _muzzle_bone := -1
 var _fx_root: Node = null
 var _tracer_mesh: Mesh
 var _tracer_mat: StandardMaterial3D
+var _bolt_mesh: Mesh
+var _bolt_mat: StandardMaterial3D
 
 @onready var muzzle: Marker3D = $Muzzle
 @onready var _player: Player = get_parent() as Player
@@ -124,6 +145,40 @@ func _ready() -> void:
 	_tracer_mat.emission_enabled = true
 	_tracer_mat.emission = Color(0.6, 0.88, 1.0)
 	_tracer_mat.emission_energy_multiplier = 2.2
+
+	# ── 激光子弹的网格与材质（普通状态，见 `BOLT_SIZE` 那段）──
+	# 一块方片 + 径向渐变贴图 = 软边光点；方片永远转向相机（`BILLBOARD_ENABLED`）。
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.30, 0.62, 1.0])
+	grad.colors = PackedColorArray([
+		Color(1.00, 1.00, 1.00, 1.00),      # 芯：纯白，最亮
+		Color(0.72, 0.95, 1.00, 0.95),      # 内圈：激光青
+		Color(0.35, 0.80, 1.00, 0.45),      # 外圈：更蓝更淡
+		Color(0.18, 0.55, 1.00, 0.00)])     # 边缘：透明
+	var bolt_tex := GradientTexture2D.new()
+	bolt_tex.gradient = grad
+	bolt_tex.fill = GradientTexture2D.FILL_RADIAL
+	bolt_tex.fill_from = Vector2(0.5, 0.5)
+	bolt_tex.fill_to = Vector2(0.5, 0.0)
+	bolt_tex.width = 64
+	bolt_tex.height = 64
+	var bolt := QuadMesh.new()
+	bolt.size = Vector2(BOLT_SIZE, BOLT_SIZE)
+	_bolt_mesh = bolt
+	_bolt_mat = StandardMaterial3D.new()
+	_bolt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# 混色（不是加色）：加色的光点打在亮墙/天上会直接消失，机枪看不见弹道很难受
+	_bolt_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_bolt_mat.albedo_texture = bolt_tex
+	_bolt_mat.emission_enabled = true
+	_bolt_mat.emission = Color(0.70, 0.95, 1.00)
+	_bolt_mat.emission_energy_multiplier = 2.4
+	_bolt_mat.emission_texture = bolt_tex
+	# 光点是"一团光"，不是一块板子：转到侧面看不见会很怪，所以永远面向相机
+	_bolt_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_bolt_mat.billboard_keep_scale = true
+	_bolt_mat.disable_receive_shadows = true
+	_bolt_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 	ammo_changed.emit(current_ammo, magazine_size)
 
@@ -330,17 +385,19 @@ func _fire_raycast() -> void:
 
 	_apply_hit(collider, impact, dir)
 
-	# ── 普通状态的激光机枪（2026-11-09）──
-	# 和机甲那条路走同一个 `_spawn_beam()`，区别只是**单枪口**、且不额外扣无限弹。
-	# 激光是「一瞬间到靶子上」的，所以不要 `_schedule_impact` 那个按飞行时间延迟的爆闪。
+	# ── 普通状态的激光机枪（2026-11-09 起，2026-11-11 换成光点弹丸）──
 	#
-	# ⚠️ 2026-11-10：普通状态**不要枪口那个球**（用户：「普通爱丽丝普通攻击不要出现
-	#    那个圆球只要激光线就可以」）。第三个参数 `false` 就是关枪口闪光的。
-	# ⚠️ 2026-11-11：命中点那颗**也不要**（第四个参数）。用户第二次指了准星上那个
-	#    柔和蓝球 —— 枪口关了、命中点还在，看起来就像"球跑到靶子上去了"。
-	#    现在整条路上只有一条光柱。
+	# ⚠️ 别再改回 `_spawn_beam()`：11-09 本喵把它做成了「一条光柱连到靶子上」，
+	#    用户看完实机 11-11 明确否掉 ——「这个光柱还是不好看，改成光点吧，
+	#    就是发光子弹那种，现在不像激光机枪像激光炮」。普通攻击要的是
+	#    **一梭子打出去的光点**（机枪手感），不是炮。
+	#    光柱仍然属于机甲（`use_beam()` → `_spawn_tracer()` → `_spawn_beam()`）。
+	#
+	# 命中火花按**飞行时间**延迟，和弹丸到达同一刻炸开 —— 老机枪就是这样的。
+	# 枪口那颗球仍然不要（2026-11-10 用户要求）。
 	if laser_gun:
-		_spawn_beam(fx_from, impact, false, false)
+		_spawn_laser_bolt(fx_from, impact)
+		_schedule_impact(impact, normal, fx_from.distance_to(impact) / maxf(tracer_speed, 1.0))
 		return
 
 	_spawn_tracer(fx_from, impact)
@@ -482,7 +539,14 @@ func use_beam() -> bool:
 ##
 ## 和机甲形态的区别：
 ##   · 机甲：`beam_mode = true` → **两门肩炮**齐射、无限弹、`beam_fire_interval` 0.10
-##   · 普通：`laser_gun = true` → **单枪口**一条激光、照常扣弹匣、用 `fire_interval`
+##   · 普通：`laser_gun = true` → **单枪口**、照常扣弹匣
+##
+## ⚠️ 2026-11-11 改：普通状态**不再画光柱**，回到「一颗颗飞行弹丸」的老机枪路径
+##    （`_spawn_laser_bolt()`），只把弹丸换成激光色的光点。用户原话：
+##    「这个光柱还是不好看，改成光点吧，就是发光子弹那种，现在不像激光机枪
+##      像激光炮，就是还是用以前的机枪，只不过改成了激光子弹」。
+##    所以 `laser_gun` 现在管的是**数值与音效**（射速 / 激光音 / 激光色弹丸），
+##    **不再代表"会画出光柱"** —— 光柱只剩机甲那条 `use_beam()` 了。
 ##
 ## 为什么不做成同一个 `beam_mode`：那条路会顺手把弹匣变成无限（`has_infinite_ammo()`
 ## 直接读 `beam_mode`），普通状态要是也无限子弹，整个弹药/换弹玩法就废了。
@@ -493,8 +557,12 @@ func set_laser_gun(on: bool) -> void:
 	laser_gun = on
 
 
-## 这一发该不该画激光（而不是飞行曳光）。
-## 普通状态看 `laser_gun`，机甲状态看 `use_beam()`（要炮口就位）。
+## 这一发该不该用**激光大炮那套参数与音效**（射速 `beam_fire_interval` + 激光音）。
+##
+## ⚠️ 名字里的 "beam visual" 已经是旧语义了：普通状态从 2026-11-11 起改回
+##    飞行弹丸，**只有机甲**（`use_beam()`）才会真的画出光柱。
+##    留着这个函数名是因为它已经被 `_verify_*` 引用，改名只会制造噪声；
+##    真要读代码时记住：**这个函数不代表画面里会出现光柱**。
 func uses_beam_visual() -> bool:
 	return use_beam() or laser_gun
 
@@ -548,18 +616,21 @@ const BEAM_MAX_VISUAL := 60.0
 var _beams: Array = []
 
 
-## 两个「要不要」开关，普通状态和机甲状态各要一半：
+## 两个「要不要」开关（本函数自己的 API，不是给某个形态专用的）：
 ##
 ## `with_muzzle_flash` —— 枪口那个**发光球**（`_muzzle_flash_beam()`）。
 ## `with_impact`       —— 命中点那个**膨胀圆球 + 一盏灯**（`_spawn_beam_impact()`）。
 ##
-## ⚠️ 2026-11-10。用户：「普通爱丽丝普通攻击不要出现那个圆球只要激光线就可以」。
-##    当时只关掉了**枪口**那颗，命中点那颗还在 —— 用户 2026-11-11 又指了一次
-##    （截图里准星上那个柔和蓝球就是它）。普通状态的激光机枪现在两个都传 `false`：
-##    **只有一条光柱**，从枪口到命中点，别处一颗球都没有。
+## ⚠️ 历史：这两个开关是 2026-11-10 / 11-11 连着两轮「不要那个球」逼出来的。
+##    11-10 先说「普通爱丽丝普通攻击不要出现那个圆球只要激光线就可以」→ 关枪口球；
+##    11-11 又指着准星上那个柔和蓝球说「不要这个命中特效圆球」→ 关命中球。
+##    结果普通攻击变成"只有一条光柱"，用户第二天再看完实机，把光柱本身也否了：
+##    **普通攻击现在完全不走这里**（见 `_spawn_laser_bolt()`）。
 ##
-##    机甲的双肩炮仍走默认 `true`：那是炮，炮口闪光和命中爆闪都是它的"炮感"，
-##    和「普通攻击只要激光线」是两回事。
+##    所以现在**唯一的调用点是机甲的双肩炮**（`_spawn_tracer()` → `use_beam()`），
+##    走的是默认 `true, true` —— 那是炮，炮口闪光和命中爆闪就是它的"炮感"。
+##    两个开关暂时没有调用方传 `false`；留着是因为它们是这个函数的正经参数，
+##    以后哪把武器不想带爆闪，改传参就行，不必再回来改函数体。
 func _spawn_beam(from: Vector3, to: Vector3,
 		with_muzzle_flash := true, with_impact := true) -> void:
 	var total := from.distance_to(to)
@@ -625,13 +696,13 @@ func _spawn_beam(from: Vector3, to: Vector3,
 				cap.scale = Vector3(1.0, 1.0, 1.0)
 
 	# 炮口那一点爆亮（激光「出膛」的闪）。
-	# ⚠️ 普通激光机枪**不要这个**（`with_muzzle_flash=false`）——
-	#    用户要的是「只要激光线」。机甲双肩炮仍保留（那是炮口闪光）。
+	# ⚠️ 11-10 用户嫌它是个"圆球"；但普通攻击 11-11 已经不走这条函数了，
+	#    现在只有机甲开炮会走到这里 —— 对炮来说这个闪光是要的。
 	if with_muzzle_flash:
 		_muzzle_flash_beam(from)
 	# 命中点爆闪：只有**真的打到了**才炸（没打中时 `total` 会顶到 300，
 	# 在 300 m 外放一个爆闪没意义，玩家也看不见）。
-	# ⚠️ `with_impact=false` 时这颗也去掉（普通状态的激光机枪就是 false）。
+	# ⚠️ `with_impact=false` 时这颗也去掉（当前没有调用方这么传，见函数头那段）。
 	if with_impact and total <= BEAM_MAX_VISUAL:
 		_spawn_beam_impact(vis_end, -dir)
 
@@ -755,6 +826,35 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	_in_flight.append([mi, total, to, 0.0, len0, dir, from])
 
 
+## 激光子弹（普通状态，2026-11-11）：一个**发光的光点**，以 `tracer_speed` 飞向靶子。
+##
+## 和 `_spawn_tracer()` 的关系：**同一套飞行队列**（`_in_flight` + `_advance_tracers()`），
+## 只有两处不同 ——
+##   1. 网格/材质换成光点（`_bolt_mesh` / `_bolt_mat`，见 `BOLT_SIZE` 那段）；
+##   2. 段长固定 `BOLT_LEN`，不随距离拉长（老曳光弹会拉到 1.65 m，连起来像光带）。
+##
+## 为什么复用队列而不是再写一套推进逻辑：弹丸「不会伸到起点身后」「到靶子就回收」
+## 这两个坑在 `_advance_tracers()` 里已经踩平了（见那边和 `_verify_mag` 第 4 节），
+## 另起一套只会把同样的坑再踩一遍。
+func _spawn_laser_bolt(from: Vector3, to: Vector3) -> void:
+	var total := from.distance_to(to)
+	if total < 0.05:
+		return
+	var dir := (to - from).normalized()
+	# 固定长度，但不能超过整条弹道（贴着墙开枪时）
+	var len0 := minf(BOLT_LEN, total)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _bolt_mesh
+	mi.material_override = _bolt_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_fx_root.add_child(mi)
+	_orient_tracer(mi, dir)
+	mi.scale = Vector3(1.0, maxf(len0, 0.02) / TRACER_LEN, 1.0)
+	# 球/圆柱都是**以节点为原点居中**的，所以节点放在这一段的中点
+	mi.global_position = from + dir * (len0 * 0.5)
+	_in_flight.append([mi, total, to, 0.0, len0, dir, from])
+
+
 ## 让圆柱的**轴向（局部 +Y）**对准飞行方向。
 ## ⚠️ 别用 `look_at()` + `rotate_object_local(RIGHT, PI/2)` 那一对：
 ##    它们合起来会把轴向转到**反方向**去（老版本的另一半 bug）。
@@ -780,10 +880,16 @@ func _advance_tracers(delta: float) -> void:
 	var done: Array = []
 	for i in _in_flight.size():
 		var item: Array = _in_flight[i]
-		var mi: MeshInstance3D = item[0]
-		if not is_instance_valid(mi):
+		# ⚠️ **先看有效性、再做类型转换**：`var mi: MeshInstance3D = item[0]` 这一句
+		#    在 `item[0]` 已经是「已释放实例」时会**自己**报错
+		#    （`Trying to assign invalid previously freed instance`），
+		#    根本走不到下面那句 `is_instance_valid()` —— 于是每帧刷一屏红字。
+		#    实测触发方式：外部（探针/场景卸载）先 `queue_free()` 了还在队列里的弹丸。
+		var raw: Variant = item[0]
+		if not is_instance_valid(raw):
 			done.append(i)
 			continue
+		var mi := raw as MeshInstance3D
 		var total: float = item[1]
 		var travel: float = float(item[3]) + step
 		item[3] = travel
