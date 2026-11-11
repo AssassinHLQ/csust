@@ -87,7 +87,8 @@ func _run() -> void:
 
 	_check_idle(level)
 	await _check_animated(level)
-	_check_sync_cost(level)
+	await _check_sync_cost(level)
+	await _check_follow_gate(level)
 
 	print("")
 	print("========== 结果 ==========")
@@ -113,19 +114,21 @@ func _check_idle(level: Node) -> void:
 		if boxes == null or boxes.is_empty():
 			continue
 		var box_aabb := _collision_aabb(boxes)
-		var bone_aabb := _bone_aabb(boss)
-		if bone_aabb.size == Vector3.ZERO:
-			_check(false, "%s 取得到骨骼（蒙皮模型必须走骨骼）" % nm)
+		# 参照量用**网格**，不用骨点：盒子是拿蒙皮顶点量的，而骨点（尤其
+		# `_end` / `_end_end` 那种瞄准骨）会长到网格外面去，拿它当分母会误判「盒子太小」。
+		var mesh_aabb := _points_aabb(_mesh_points(boss))
+		if mesh_aabb.size == Vector3.ZERO:
+			_check(false, "%s 取得到蒙皮顶点（蒙皮模型必须走顶点）" % nm)
 			continue
 
-		var drift := box_aabb.get_center().distance_to(bone_aabb.get_center())
-		var body_len := maxf(maxf(bone_aabb.size.x, bone_aabb.size.z), 0.5)
+		var drift := box_aabb.get_center().distance_to(mesh_aabb.get_center())
+		var body_len := maxf(maxf(mesh_aabb.size.x, mesh_aabb.size.z), 0.5)
 		var ratio := Vector3(
-			box_aabb.size.x / maxf(bone_aabb.size.x, 0.01),
-			box_aabb.size.y / maxf(bone_aabb.size.y, 0.01),
-			box_aabb.size.z / maxf(bone_aabb.size.z, 0.01))
-		print("        %s：盒子 %s ｜ 骨骼 %s" % [
-			nm, str(box_aabb.size.snappedf(0.01)), str(bone_aabb.size.snappedf(0.01))])
+			box_aabb.size.x / maxf(mesh_aabb.size.x, 0.01),
+			box_aabb.size.y / maxf(mesh_aabb.size.y, 0.01),
+			box_aabb.size.z / maxf(mesh_aabb.size.z, 0.01))
+		print("        %s：盒子 %s ｜ 网格 %s" % [
+			nm, str(box_aabb.size.snappedf(0.01)), str(mesh_aabb.size.snappedf(0.01))])
 		print("              中心偏移 %.2f m ｜ 尺寸比 %.2f × %.2f × %.2f" % [
 			drift, ratio.x, ratio.y, ratio.z])
 		_check(drift <= body_len * MAX_CENTER_DRIFT,
@@ -135,20 +138,24 @@ func _check_idle(level: Node) -> void:
 		_check(ratio.x >= MIN_SIZE_RATIO and ratio.y >= MIN_SIZE_RATIO and ratio.z >= MIN_SIZE_RATIO,
 			"%s 盒子也没有小得打不中（每维 ≥ %.1f 倍）" % [nm, MIN_SIZE_RATIO])
 		# 关键回归项：盒子不能把玩家整个罩住
-		_check(box_aabb.size.length() < bone_aabb.size.length() * 2.5,
+		_check(box_aabb.size.length() < mesh_aabb.size.length() * 2.5,
 			"%s 盒子整体不是「隐形大罩子」（%.1f m < %.1f m）" % [
-				nm, box_aabb.size.length(), bone_aabb.size.length() * 2.5])
+				nm, box_aabb.size.length(), mesh_aabb.size.length() * 2.5])
 
 
-## ── ② 技能动画中：盒子必须跟着走，而且仍然贴着身体 ──
+## ── ② 技能动画中：盒子必须跟着走，而且必须**盖住网格** ──
 func _check_animated(level: Node) -> void:
 	print("")
-	print("========== ② 五段技能动画中的跟随 ==========")
+	print("========== ② 五段技能动画中的跟随与贴合 ==========")
 	for nm in NAMES:
 		var boss := level.get_node_or_null(nm)
 		if boss == null:
 			_check(false, "%s 存在（动画段）" % nm)
 			continue
+		# ⚠️ 这一段测的是「跟随本身」，所以要**关掉距离门**：
+		#    默认 45 m 之外不刷新（`boss.gd::collision_follow_distance`），
+		#    而探针里玩家还在出生点、离这三只 130 多米，不关的话盒子根本不跟。
+		boss.set("collision_follow_distance", 0.0)
 		var anim := boss.get("_anim") as AnimationPlayer
 		if anim == null:
 			_check(false, "%s 有 AnimationPlayer（没动作就没得跟）" % nm)
@@ -162,7 +169,6 @@ func _check_animated(level: Node) -> void:
 			anim.play(clip)
 			anim.seek(IMPACTS[i], true)
 			await _settle()
-
 			var centers := _box_centers(boss)
 			var travel := 0.0
 			for k in mini(centers.size(), idle_centers.size()):
@@ -199,6 +205,13 @@ func _check_animated(level: Node) -> void:
 func _check_sync_cost(level: Node) -> void:
 	print("")
 	print("========== ③ 跟随更新的开销 ==========")
+	# ⚠️ 这里量的是**上界**：把距离门关掉（0 = 永不冻结），每帧都真刷新。
+	#    距离门本身由 ④ 段单独验，别把两件事混在一起量。
+	for nm in NAMES:
+		var b := level.get_node_or_null(nm)
+		if b != null:
+			b.set("collision_follow_distance", 0.0)
+	await _settle()
 	var total_us := 0.0
 	var counted := 0
 	for nm in NAMES:
@@ -215,7 +228,7 @@ func _check_sync_cost(level: Node) -> void:
 		var us := float(Time.get_ticks_usec() - t0) / float(n)
 		total_us += us
 		counted += 1
-		print("        %s：%.1f μs / 帧（%d 个盒子）" % [
+		print("        %s：%.1f μs / 帧（%d 个盒子，距离门关掉 = 上界）" % [
 			nm, us, (boss.get("_collisions") as Array).size()])
 	if counted == 0:
 		_check(false, "三只都在跑跟随更新")
@@ -227,6 +240,42 @@ func _check_sync_cost(level: Node) -> void:
 		"单只跟随开销 %.1f μs ≤ %.0f μs" % [avg, MAX_SYNC_US])
 	_check(total_us / 16700.0 < 0.01,
 		"三只合计吃掉不到一帧的 1%%（%.2f%%）" % [total_us / 16700.0 * 100.0])
+
+
+## ── ④ 距离门：玩家在远处时盒子冻结（省物理开销）──
+func _check_follow_gate(level: Node) -> void:
+	print("")
+	print("========== ④ 距离门（玩家远 → 冻结碰撞盒）==========")
+	var boss := level.get_node_or_null(NAMES[0])
+	var anim := boss.get("_anim") as AnimationPlayer
+	if boss == null or anim == null:
+		_check(false, "距离门：%s 可用" % NAMES[0])
+		return
+	# 默认 45 m，而玩家还在出生点（130 多米）→ 应当冻结
+	# ⚠️ ③段为了量上界把门限设成了 0，这里必须还原，否则测的是「门关着」。
+	boss.set("collision_follow_distance", 45.0)
+	anim.play("tail_sweep")
+	anim.seek(0.0, true)
+	await _settle()
+	var before := _box_centers(boss)
+	anim.seek(0.83, true)          # 摆到 impact，姿势大变
+	await _settle()
+	var after := _box_centers(boss)
+	var moved := 0.0
+	for k in mini(before.size(), after.size()):
+		moved = maxf(moved, after[k].distance_to(before[k]))
+	print("        玩家距离 %.1f m（门限 %.1f m）｜ 姿势大变后盒子只动了 %.2f m" % [
+		(boss as Node3D).global_position.distance_to(_player_pos(level)),
+		float(boss.get("collision_follow_distance")), moved])
+	_check(moved < 0.05,
+		"玩家在远处时盒子冻结（只动 %.2f m < 0.05 m，省掉物理开销）" % moved)
+	anim.play("idle")
+	await _settle()
+
+
+func _player_pos(level: Node) -> Vector3:
+	var p := level.get_tree().get_first_node_in_group("player") as Node3D
+	return p.global_position if p != null else Vector3.ZERO
 
 
 ## 等「骨骼已刷 + 物理已经跑过一帧」：跟随更新在 `_physics_process` 里

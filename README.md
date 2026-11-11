@@ -4769,7 +4769,30 @@ sidx = order_tex[og] * order_group + (sorted_pos % order_group);
 | **盒子并集 vs 网格并集**（胖不胖） | **1.03 ~ 1.08 倍**（只比龙本身大 3~8%） |
 | 每帧开销 | 单只 21~26 μs，三只合计 **65 μs ≈ 一帧的 0.39%** |
 
-#### ⚠️ 判据别拿骨头当分母
+#### 吃多少性能（用户问：「这样子会吃性能吗，ue 里地鸣那个超大巨碰撞每时每刻都变，卡死带不动」）
+
+**先说区别**：这里**不改碰撞体的形状**。`BoxShape3D.size` 一次建好，之后每帧只写
+`CollisionShape3D.transform` —— 只是「搬已有的形状」。UE 那种「碰撞每时每刻都变」
+如果指的是每帧重建/烘焙碰撞体，代价差着数量级。
+
+三段分开量（工具见文末）：
+
+| 开销 | 实测 | 说明 |
+|---|---|---|
+| ① **一次性建盒** | **17~20 ms / 只**（其中抽样 13~15 ms） | 在 `_boot()` 里，玩家走近 60 m 才触发；三只各一次 |
+| ② **每帧脚本**（三只，门关掉＝上界） | **47~54 μs ≈ 一帧 0.3%** | 单只 15~19 μs，每盒一次 `get_bone_global_pose` + 一次赋值 |
+| ③ **物理侧**（搬 72 个静止盒） | **≈ 0.22~0.25 ms ≈ 一帧 1.3~1.5%** | 隔离微基准 `_probe_static_shape_cost.gd`；144 个 ≈ 0.33 ms |
+
+**外加一道距离门**（`collision_follow_distance = 45 m`）：玩家在 45 m 外盒子就冻结，
+既不写变换也不让物理服务器动。实测玩家在出生点（离龙 130 多米）时，
+每只的 `_sync_bone_collisions()` 只要 **0.9 μs**（早退），而不是 18 μs。
+第二关三只龙通常只有一只在你眼前，所以实战通常只付「一只」的钱。
+
+> ⚠️ 在**这个关卡里**量物理侧会被噪声淹掉（`next_level.tscn` 自己有上千个碰撞形状，
+> `TIME_PHYSICS_PROCESS` 在 0.8~4.2 ms 之间乱跳，开/关差值正负号都出现过）。
+> 所以物理那一条是用干净的小场景单独测的，别拿大关卡的数当结论。
+
+
 
 盒子是拿**蒙皮顶点**量的，而 `_end` / `_end_end` 那种瞄准骨本来就长在网格外面、永远盖不到。
 第一版判据写「每根骨必须被某个盒子盖住」，结果恒定假红（实测恒定出格 2.9 m）。
@@ -4791,8 +4814,12 @@ bash _tools/run_probe.sh res://scripts/_probe_trex_boxes.gd -- --no-capture --sp
 bash _tools/run_probe.sh res://scripts/_probe_trex_bones.gd -- --no-capture --splat=off
 # 每根骨的真实粗细（蒙皮顶点在骨头空间里的 AABB）
 bash _tools/run_probe.sh res://scripts/_probe_trex_skin.gd -- --no-capture --splat=off
-# 62 项：静止贴合 + 五段技能跟随/覆盖 + 每帧开销
+# 62 项：静止贴合 + 五段技能跟随/覆盖 + 距离门 + 每帧开销
 bash _tools/run_probe.sh res://scripts/_verify_trex_hitbox.gd -- --no-capture --splat=off
+# 开销：一次性建盒 + 每帧脚本（物理侧请看下一条）
+bash _tools/run_probe.sh res://scripts/_probe_trex_collision_cost.gd -- --no-capture --splat=off
+# 物理侧隔离微基准：每帧搬 N 个静止盒子多少钱（0/72/144 对比）
+bash _tools/run_probe.sh res://scripts/_probe_static_shape_cost.gd -- --no-capture
 # 出图（真窗口，屏幕外）：idle / 冲锋 / 摆尾 三张，半透明绿盒 = 碰撞体积
 bash _tools/run_shot.sh res://scripts/_probe_trex_boxes_shot.gd -- --splat=off
 #   → _arisu_captures/_trex_boxes/01_idle.png、02_charge.png、03_tail_sweep.png

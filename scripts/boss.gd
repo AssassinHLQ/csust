@@ -135,6 +135,16 @@ const MAX_SKIN_BOXES := 24
 const MERGE_SIZE_RATIO := 0.30
 ## 对角线小于这个（m）的组直接不要 —— 那种本来就是毛刺。
 const MIN_BOX_DIAGONAL := 0.30
+## **离玩家超过这个距离就不刷新碰撞盒**（省掉物理服务器的钱）。
+##
+## 实测（`_probe_static_shape_cost.gd`）：每帧搬 72 个静止盒子 ≈ 0.22~0.25 ms，
+## 占一帧 1.3~1.5%；脚本侧再加 0.37%。第二关三只龙通常只有一只在你眼前，
+## 另外两只冻结之后这部分开销就省掉了。
+## 距离给 45 m：霸王龙身长 25 m、攻击距离 18 m，45 m 之外你既打不到它、
+## 它也够不到你，碰撞盒停在最后那个姿态完全没影响。
+@export var collision_follow_distance := 45.0
+var _follow_far := false
+var _cached_player: Node3D
 
 const BootGate := preload("res://scripts/boot_gate.gd")
 const BankCard := preload("res://scripts/bank_card.gd")
@@ -458,6 +468,7 @@ func _build_box_parts_collision() -> bool:
 ## 小骨会并进最近的祖先（`MERGE_SIZE_RATIO`）：不然 73 根骨能建出 50 多个形状，
 ## 物理侧每帧都要过一遍；脚趾那种小盒子并进去对结果没影响。
 func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
+	var t_all := Time.get_ticks_usec()
 	var to_body := global_transform.affine_inverse()
 	var xf := to_body * skel.global_transform
 	# 骨空间 → 身体空间 的统一缩放。**直接读 `model.scale`**：
@@ -478,7 +489,9 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 		bone_body.append(xf * skel.get_bone_global_pose(b))
 
 	# ⚠️ 采样点**直接在身体空间**算好（见 `_collect_skin` 里的三段乘积）。
+	var t_smp := Time.get_ticks_usec()
 	var smp := _skinned_samples(skel, bone_body)
+	var smp_us := Time.get_ticks_usec() - t_smp
 	var pts: PackedVector3Array = smp["pts"]
 	var bones: PackedInt32Array = smp["bones"]
 	if pts.size() < 64:
@@ -596,6 +609,9 @@ func _build_bone_cluster_collision(skel: Skeleton3D) -> bool:
 	collision_mask = 0
 	print("[Boss] 蒙皮盒碰撞：%d 个盒子（骨骼 %d 根 → 并成 %d 组，抽样 %d 顶点，跟随骨骼）" % [
 		made, n, groups.size(), pts.size()])
+	# 建盒是**一次性**开销（在 `_boot()` 里，玩家走近才建）。量出来方便盯性能。
+	print("[Boss]   建盒耗时：抽样 %.1f ms ｜ 合计 %.1f ms（一次性）" % [
+		smp_us / 1000.0, (Time.get_ticks_usec() - t_all) / 1000.0])
 	return true
 
 
@@ -710,6 +726,18 @@ func _collect_skin(mi: MeshInstance3D, skel: Skeleton3D,
 func _sync_bone_collisions() -> void:
 	if _slices.is_empty() or not is_instance_valid(_follow_skel):
 		return
+	# 距离门：玩家在远处时盒子停在最后那个姿态，物理服务器就没事干了。
+	# 只在「远离」稳定成立后才跳过；状态一转回近处或刚变远的那一帧仍然刷新一次，
+	# 所以不会出现「盒子停在很久以前那个姿势」的脏数据。
+	if collision_follow_distance > 0.0:
+		if not is_instance_valid(_cached_player):
+			_cached_player = get_tree().get_first_node_in_group("player") as Node3D
+		if is_instance_valid(_cached_player):
+			var far := global_position.distance_to(_cached_player.global_position) \
+				> collision_follow_distance
+			if far and _follow_far:
+				return
+			_follow_far = far
 	var skel := _follow_skel
 	var xf := global_transform.affine_inverse() * skel.global_transform
 	for s in _slices:
