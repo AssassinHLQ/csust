@@ -18,6 +18,9 @@ func _init() -> void:
 	attack_damage = 24.0               # 但一下很疼（满血 100 约 4 下）
 	attack_reach = 5.0
 	attack_radius = 4.8
+	# 本体实测高 4.50 m（_diag_boss_heights.gd）⇒ 容差 4.5 × 1.5 ≈ 7 m。
+	# 见 boss_attacker.gd::attack_max_height 的注释（另一处是固定 6 m 拦不住低空平飞）。
+	attack_max_height = 7.0
 	knockback_force = 8.0
 	telegraph_color = Color(1.0, 0.18, 0.06, 0.42)
 

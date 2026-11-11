@@ -207,10 +207,21 @@ func _land(center: Vector3) -> void:
 	if p != null:
 		var flat := Vector3(p.global_position.x - center.x, 0.0,
 			p.global_position.z - center.z)
-		if flat.length() <= attack_radius:
+		if flat.length() <= attack_radius and _in_height(p.global_position):
 			p.take_damage(slam_damage, center, slam_knockback)
 	print("[倭瓜优香] 天降落地（%.1f, %.1f）→ 圈内 %.0f 伤害 / %.0f 击退"
 		% [center.x, center.z, slam_damage, slam_knockback])
+
+
+## 高度判定：玩家比本体高出超过 `attack_max_height` 就打不到。
+##
+## ⚠️ 2026-11-11 用户：「飞起来还是打得到我,还有 boss 倭瓜也是」——
+##    本文件的三条技能（天降 `slam` / 冲撞 `dash` / 震地 `quake`）
+##    **全是自己算的**，根本不走 `boss_attacker.gd` 那条命中路径，
+##    所以上一版只给基类加高度判定，对倭瓜完全无效。
+##    现在三条全部改走这个函数。
+func _in_height(player_pos: Vector3) -> bool:
+	return absf(player_pos.y - global_position.y) <= attack_max_height
 
 
 ## 技能三：压扁蓄力 → 贴地冲向玩家 → 落点结算（红圈就是伤害区）
@@ -257,7 +268,7 @@ func _skill_dash(player: Player) -> void:
 	if p != null:
 		var flat := Vector3(p.global_position.x - dest.x, 0.0,
 			p.global_position.z - dest.z)
-		if flat.length() <= attack_radius:
+		if flat.length() <= attack_radius and _in_height(p.global_position):
 			p.take_damage(dash_damage, dest, dash_knockback)
 	print("[倭瓜优香] 冲撞到（%.1f, %.1f）→ 圈内 %.0f 伤害" % [dest.x, dest.z, dash_damage])
 	_squash_tween = create_tween()
@@ -292,7 +303,7 @@ func _skill_quake(_player: Player) -> void:
 		if q != null:
 			var flat := Vector3(q.global_position.x - center.x, 0.0,
 				q.global_position.z - center.z)
-			if flat.length() <= r:
+			if flat.length() <= r and _in_height(q.global_position):
 				q.take_damage(quake_damage, center, 8.0)
 		Sfx.play("ui_close", 4.0)
 		print("[倭瓜优香] 三连震第 %d 下（%.1f, %.1f）" % [i + 1, center.x, center.z])
