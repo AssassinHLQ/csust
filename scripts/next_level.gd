@@ -366,6 +366,29 @@ func _ready() -> void:
 			splats.append(c)
 	if not splats.is_empty() and _hud.has_method("bind_splats"):
 		_hud.bind_splats(splats)
+
+	# ── Boss 血条（2026-11-11 补）──
+	#
+	# ⚠️⚠️ 用户：「怎么没血条啊」（三只恐龙优香都在场上，但头顶/顶部一条都没有）。
+	#
+	# 病因和 F3 那个一模一样：**血条建在 `hud.gd::bind_bosses()` 里，
+	# 但只有 `game.gd` 调过它** —— `next_level.gd` 从来没调，
+	# 所以第二场景的三只 `TrexBossA/B/C` 就算活着也没人给它们建条。
+	#
+	# 这里照 `game.gd` 的同一套收：从 `bosses` 组（`boss.gd::_ready()` 里加的）
+	# 里挑出**属于本场景**的（`is_ancestor_of`，防止把别处的也算进来），
+	# 再交给 HUD 全量重绑。
+	var bosses: Array = []
+	for node in get_tree().get_nodes_in_group("bosses"):
+		var b := node as Boss
+		if b == null or not is_ancestor_of(b):
+			continue
+		bosses.append(b)
+	if not bosses.is_empty() and _hud.has_method("bind_bosses"):
+		_hud.bind_bosses(bosses)
+		print("[ConstructivistLevel] Boss 血条：绑了 %d 位（%s）"
+			% [bosses.size(), ", ".join(bosses.map(func(b): return String(b.name)))])
+
 	_set_goal_open(false)
 	_update_scoreboard()
 	_show_message("击破 %d 个机关 —— 北门会下沉，可以出去看校园" % _total, 5.0)
