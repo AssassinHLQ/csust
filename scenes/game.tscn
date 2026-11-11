@@ -183,6 +183,42 @@ shape = SubResource("Shape_art_chair_a")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
 shape = SubResource("Shape_art_chair_b")
 
+[node name="ArtChairB2" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091053]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB3" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091054]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB4" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091055]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB5" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091056]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB6" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091057]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB7" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091058]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB8" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091059]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB9" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091060]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
+[node name="ArtChairB10" type="CollisionShape3D" parent="Room609/RoomCollision" unique_id=2101091061]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5143056, 0.46421203, 1.0588816)
+shape = SubResource("Shape_art_chair_b")
+
 [node name="MeshHut" parent="." unique_id=864545597 instance=ExtResource("12_hut")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -15.5)
 
