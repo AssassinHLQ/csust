@@ -2,6 +2,7 @@ extends SceneTree
 ## 验数：BGM —— ① ogg 真的带循环 ② 商店：进店播、出店停
 ##                    ③ 游戏开发部：触发区量得对、进房播、出房停
 ##                    ④ 电竞房：房子藏着不响、现身才响、出房停
+##                    ⑤ 画室609：范围按「出门」定（屋里放、出门停、屋顶不算屋里）
 ##   godot --path . --headless --script res://scripts/_verify_music.gd -- --splat=off
 func _initialize() -> void:
 	_run.call_deferred()
@@ -15,8 +16,9 @@ func _run() -> void:
 	var shop_st := load("res://assets/music/shop_theme.ogg") as AudioStreamOggVorbis
 	var gd_st := load("res://assets/music/gamedev_theme.ogg") as AudioStreamOggVorbis
 	var es_st := load("res://assets/music/esports_theme.ogg") as AudioStreamOggVorbis
+	var r609_st := load("res://assets/music/art609_theme.ogg") as AudioStreamOggVorbis
 	for pair in [["shop_theme.ogg", shop_st], ["gamedev_theme.ogg", gd_st],
-			["esports_theme.ogg", es_st]]:
+			["esports_theme.ogg", es_st], ["art609_theme.ogg", r609_st]]:
 		var name: String = pair[0]
 		var st: AudioStreamOggVorbis = pair[1]
 		if st == null:
@@ -220,10 +222,74 @@ func _run() -> void:
 
 	probe.queue_free()
 
-	print("\n=== 7. 判定 ===")
+	# ─────────────────────────── 画室 609 ───────────────────────────
+	#
+	# 用户 2026-11-11：「Lemonade Diary 这个换画室609 的音乐，范围就是按照出门来定」。
+	# 这里放的 BGM 不建 Area3D，而是复用 `splat_scene.gd::_is_inside_room()` ——
+	# **和「出房间释放泼溅显存」同一套边界**（跨出门框就算出去）。
+	# 所以验的就是那套判据：屋里放、出门停、屋顶上不算屋。
+	print("\n=== 7. 画室 609 ===")
+	var r609 := game.get_node_or_null("Room609")
+	if r609 == null:
+		print("  **没有 Room609**")
+	var r609_track := "" if r609 == null else str(r609.get("room_bgm_track"))
+	print("  room_bgm_track =「%s」（应为 room609）" % r609_track)
+
+	var r609_in := false
+	var r609_out := false
+	var r609_roof := false
+	if r609 != null:
+		# 范围要等 `_room_xz` 量出来；它读的是 `RoomCollision` 里手摆的墙盒，
+		# 跟泼溅加载没关系（`_update_room_bgm()` 里会懒着补量一次）。
+		for _f in 240:
+			if (r609.get("_room_xz") as Rect2).size != Vector2.ZERO:
+				break
+			await process_frame
+		var rect: Rect2 = r609.get("_room_xz")
+		# ⚠️ Rect2 的 `.y` 装的是**世界 z**（见 `_room_xz_from_walls()`）
+		var cx := rect.position.x + rect.size.x * 0.5
+		var cz := rect.position.y + rect.size.y * 0.5
+		# ⚠️ `_room_y_lo` 是**墙盒底**（埋在地下），不是地板；609 地面在 y ≈ 0.03
+		var fy := 0.10
+		print("  _room_xz = x %.2f~%.2f, z %.2f~%.2f，高度窗口 y %.2f~%.2f"
+			% [rect.position.x, rect.position.x + rect.size.x,
+				rect.position.y, rect.position.y + rect.size.y,
+				float(r609.get("_room_y_lo")), float(r609.get("_room_y_hi"))])
+
+		player.global_position = Vector3(cx, fy, cz)
+		player.velocity = Vector3.ZERO
+		for _f in 20:
+			await process_frame
+		print("[画室里 %s] current=「%s」（应为 room609）"
+			% [str(player.global_position), Music.current()])
+		r609_in = Music.current() == "room609" and Music.is_playing()
+
+		# 出门：往门那一侧（`box_door_side = "z-"`）走出矩形
+		player.global_position = Vector3(cx, fy, rect.position.y - 2.0)
+		player.velocity = Vector3.ZERO
+		# 等过淡出（Music.stop 默认 1.2 s 才真的停）
+		for _f in 150:
+			await process_frame
+			if Music.current() == "" and not Music.is_playing():
+				break
+		print("[画室门外 %s] current=「%s」 is_playing=%s（应为空/false）"
+			% [str(player.global_position), Music.current(), str(Music.is_playing())])
+		r609_out = Music.current() == "" and not Music.is_playing()
+
+		# 屋顶上：横向还在矩形内，但高过墙顶 → 也算屋外
+		player.velocity = Vector3.ZERO
+		player.global_position = Vector3(cx, float(r609.get("_room_y_hi")) + 0.8, cz)
+		for _f in 3:
+			await process_frame          # 只等 3 帧，再等就被重力拽回屋里了
+		print("[画室屋顶 %s] current=「%s」（应为空）"
+			% [str(player.global_position), Music.current()])
+		r609_roof = Music.current() == ""
+
+	print("\n=== 8. 判定 ===")
 	print("  循环开关（商店）        %s" % ("✔" if shop_st.loop else "✘"))
 	print("  循环开关（游戏开发部）  %s" % ("✔" if gd_st.loop else "✘"))
 	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
+	print("  循环开关（画室609）     %s" % ("✔" if r609_st.loop else "✘"))
 	print("  商店：触发区盖住店面    %s" % ("✔" if shop_zone_ok else "✘"))
 	print("  商店：后半间也有音乐    %s" % ("✔" if shop_back else "✘"))
 	print("  商店：进店开始播放      %s" % ("✔" if shop_started else "✘"))
@@ -236,10 +302,15 @@ func _run() -> void:
 	print("  电竞房：藏着时不出声    %s" % ("✔" if es_silent_hidden else "✘"))
 	print("  电竞房：现身才出声      %s" % ("✔" if es_started else "✘"))
 	print("  电竞房：出房停止播放    %s" % ("✔" if es_stopped else "✘"))
-	var all_ok := shop_st.loop and gd_st.loop and es_st.loop \
+	print("  画室609：曲目接上了     %s" % ("✔" if r609_track == "room609" else "✘"))
+	print("  画室609：屋里放         %s" % ("✔" if r609_in else "✘"))
+	print("  画室609：出门停         %s" % ("✔" if r609_out else "✘"))
+	print("  画室609：屋顶不算屋里   %s" % ("✔" if r609_roof else "✘"))
+	var all_ok := shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and shop_zone_ok and shop_back and shop_started and shop_stopped \
 		and was_stopped and zone_ok and gd_started and gd_stopped \
-		and es_zone_ok and es_silent_hidden and es_started and es_stopped
+		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
+		and r609_track == "room609" and r609_in and r609_out and r609_roof
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 

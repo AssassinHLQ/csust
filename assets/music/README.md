@@ -11,6 +11,7 @@
 | `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
 | `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间淡入、走出去淡出） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
 | `esports_theme.ogg` | 电竞房的 BGM（走进房间淡入、走出去淡出；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
+| `art609_theme.ogg` | 画室 609 的 BGM（范围按「出门」定，与泼溅释放同一套边界） | 「碧蓝档案OST Vol.1」P37「Lemonade Diary（咖啡厅）」，© NEXON Games / Yostar |
 
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
@@ -124,6 +125,38 @@ y = ml.make_seamless(x, int(round(92.070 * ml.SR)), 25.0)   # 92.070 s
 
 切掉的末尾约 19.8 s 主要是收尾段落 —— 那一段本来也不是循环要的。
 
+## 画室 609 那首（`art609_theme.ogg`）
+
+源文件 154.1547 s（320 kbps MP3，`「碧蓝档案OST🎵」音乐合集~Vol.1（320K）_P37_Lemonade Diary（咖啡厅）_音频.mp3`）。
+
+```python
+import sys; sys.path.insert(0, "tools/audio")
+import make_loop as ml
+x = ml.load_audio(源文件)                     # 154.1547 s
+y = x[:int(round(143.9998 * ml.SR))]          # 硬裁，不 make_seamless
+# 再按 -1 dBFS 归一化成 16 bit wav，交给 ffmpeg 编码
+```
+
+实测数值：
+
+```
+自相关循环周期 P = 8.00000 s（零误差）
+选定 L = 143.9998 s = 18.00 × P（裁掉最后 10.1549 s）
+  → 环绕跳变 0.000015（= 内部相邻样点平均跳变 0.009757 的 ×0.002）
+  → 斜率差 0.002563
+  → 切点前后 0.3 s 的 RMS：0.163 / 0.207（切在乐句里，不是静音处）
+峰值归一化到 −1 dBFS
+```
+
+**为什么切在 144 s 而不是别处**：这首 154.15 s，但 153.6 s 之后就开始淡出到
+数字静音了（末 0.5 s 的 RMS 只有 0.0006~0.003），剩下的是收尾。
+143.9998 s 正好是 **18 个完整周期**，是歌曲自身的循环边界 —— 切在这里能整段循环，
+切在末尾静音里则会「先空半秒再跳回开头」。
+
+**范围怎么定**：不是 Area3D 盒子，而是复用 `splat_scene.gd::_is_inside_room()` ——
+也就是「出房间就释放泼溅显存」用的那套判据（`RoomCollision` 墙盒内沿 + 高度窗口
+只到墙顶）。所以**跨出门框音乐就停，和显存释放同进同出**；站在屋顶上也算屋外。
+
 ## 循环开关在哪
 
 `gamedev_theme.ogg.import` / `shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
@@ -146,5 +179,9 @@ y = ml.make_seamless(x, int(round(92.070 * ml.SR)), 25.0)   # 92.070 s
   `BakedCollision/AutoCol` 的 769 个烘焙盒量出来。**多一道可见性判断**：
   这栋房子默认藏着（`game.tscn` 里 `visible = false`，买完才从天而降），
   而 `Area3D` 的监测跟可见性无关 —— 不判的话玩家走过那块空地就会响起 BGM
-- `scripts/_verify_music.gd` —— 自检：三个房间的循环开关、进/出播放与停止
-  （电竞房那段还验「房子藏着时不出声、现身才出声」）
+- `scripts/splat_scene.gd::_update_room_bgm()` —— 画室 609 **不用 Area3D**：
+  复用 `_is_inside_room()`（和「出房间释放泼溅」同一套边界），
+  在 `game.tscn` 的 `Room609` 节点上填 `room_bgm_track = "room609"` 即可
+- `scripts/_verify_music.gd` —— 自检：四个房间的循环开关、进/出播放与停止
+  （电竞房那段还验「房子藏着时不出声、现身才出声」；画室 609 那段验
+  「屋里放 / 出门停 / 屋顶不算屋里」）

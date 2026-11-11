@@ -1,0 +1,38 @@
+音乐: 画室609 加 BGM「Lemonade Diary」，范围按「出门」定（_verify_music 20/20 全过，冒烟 12/12）
+
+用户 2026-11-11：「Lemonade Diary 这个换画室609 的音乐，范围就是按照出门来定」。
+
+素材：「碧蓝档案OST🎵」音乐合集 Vol.1（320K）P37「Lemonade Diary（咖啡厅）」。
+源 154.1547 s，取**前 143.9998 s**（裁掉最后 10.1549 s）：
+这首的循环周期是规整的 8.00000 s（自相关零误差），143.9998 = **18.00 × P**，
+而 153.6 s 之后原曲就开始淡出到数字静音了（末 0.5 s RMS 仅 0.0006~0.003）。
+硬裁、不做交叉淡化：环绕跳变 0.000015 = 内部相邻样点平均跳变的 ×0.002；
+切点前后 0.3 s 的 RMS 0.163 / 0.207 —— 确实切在乐句里，不是静音处。
+
+── 范围「按出门来定」怎么实现的 ──
+
+**不建 Area3D**，而是复用 `splat_scene.gd::_is_inside_room()` —— 也就是
+「出房间就释放泼溅显存」用的那一套判据（`RoomCollision` 墙盒内沿，
+逐面按真实墙厚内收 + `_WALL_INSET` + 高度窗口只到墙顶）。
+好处：
+  · 真的「跨出门框就停」——实测日志里音乐停止和 `释放泼溅显存` 是同一次判定；
+  · 站在屋顶上算屋外（高度窗口只到墙顶 5.65）；
+  · 不用再维护第二套坐标，不会跟房间改动对不上。
+
+`_room_xz` 平时只在 `_finish()` 里量，而 609 的泼溅是 start_delay=10 s 延后加载的
+——所以 `_update_room_bgm()` 里加了一次**懒补量**：空的话先自己量一次（那套判据读的
+是手摆的静态墙盒，跟泼溅无关）。量完还是空才放弃（宁可不响，也不要在全场响）。
+
+- scripts/music.gd：曲目表加 `room609`
+- scripts/splat_scene.gd：加 `@export room_bgm_track`（默认空 = 不填的房间行为不变）
+  + `_update_room_bgm()`，带 `_EDGE_FRAMES` 防抖
+- scenes/game.tscn：`Room609` 节点加一行 `room_bgm_track = "room609"`
+- assets/music/art609_theme.ogg.import：loop=true（音频本体按 .gitignore 不入库）
+- assets/music/README.md：曲目表 + 这首的循环推导 + 范围为什么不用盒子
+- scripts/_verify_music.gd：加画室609 一段（曲目接上了 / 屋里放 / 出门停 / 屋顶不算屋里）
+
+实测：_verify_music 20/20 全过；_smoke_build 12/12「可以打包」。
+
+注：跑探针时看到一个与本次无关的既有编译错误
+`Parse Error: Function "_board_anchor()" not found in base self.`（scripts/parkour.gd，
+该文件正被另一个会话改着、尚未提交），不是本次改动的产物。

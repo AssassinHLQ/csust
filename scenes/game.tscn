@@ -148,6 +148,7 @@ start_delay = 10.0
 start_distance = 22.0
 low_priority = true
 box_door_side = "z-"
+room_bgm_track = "room609"
 
 [node name="RoomCollision" type="StaticBody3D" parent="Room609" unique_id=2101091049]
 

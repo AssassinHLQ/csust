@@ -142,6 +142,25 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 ## 回到范围内之后多久才重载（秒）。同样归零：进门立刻开始后台解码。
 @export var reload_delay := 0.0
 
+@export_group("Room BGM")
+## 走进这个房间时放的 BGM（`scripts/music.gd` 里的逻辑名），空串 = 这间不放。
+##
+## 用户 2026-11-11：「Lemonade Diary 这个换画室609 的音乐，**范围就是按照出门来定**」。
+##
+## ── 为什么用这里现成的 `_is_inside_room()`，而不是另建一个 Area3D 盒子 ──
+## 「按出门来定」指的是**和「出房间释放泼溅」同一套边界**：跨出门框就算出去了。
+## 那个判据（`_room_xz`，逐面按真实墙厚收进内壁 + `_WALL_INSET`，再叠高度窗口）
+## 本来就是为「跨出门框就释放」量出来的，直接复用可以保证
+## **音乐和显存释放同进同出**，不会出现「音乐还响着但泼溅已经卸了」这种撕裂。
+## 另建盒子则会多一套坐标要维护，早晚对不上。
+##
+## 导出项默认为空 ⇒ 不填的房间（含将来的新泼溅场地）行为完全不变。
+@export var room_bgm_track := ""
+
+## 走进房间时放的 BGM（见 `room_bgm_track`）。空串 = 这间不放。
+var _bgm_inside_streak := 0
+var _bgm_outside_streak := 0
+
 @export_group("Render Distance")
 ## 泼溅**不受「渲染距离」限制**（2026-11-11 用户要求：
 ## 「设置高斯泼溅不受渲染距离限制，在学校区域就可以看见全貌」）。
@@ -404,7 +423,43 @@ func _process(delta: float) -> void:
 	_advance_dynamic(delta)
 	_update_inside_hide()
 	_update_room_exit_unload(delta)
+	_update_room_bgm()
 	_update_camera_far()
+
+
+## 「在不在屋里」决定 BGM 起停（用户 2026-11-11：范围按出门来定）。
+##
+## 判据与 `_update_room_exit_unload()` **完全同一套**（`_is_inside_room()`）：
+## 跨出门框 = 出屋 = 音乐停，走到屋顶上也算出屋（高度窗口只到墙顶）。
+## 带 `_EDGE_FRAMES` 防抖：脚踩在门框线上时不至于忽开忽关。
+##
+## ⚠️ `_room_xz` 还没量出来时**先懒着补量一次**：那套判据读的是
+##    `RoomCollision` 里**手摆的墙碰撞盒**（`game.tscn` 里的静态节点），
+##    和泼溅加没加载无关 —— 但 `_remember_room_xz()` 平时只在 `_finish()` 里被调，
+##    而画室 609 的泼溅是 `start_delay = 10 s` 延后加载的。
+##    不补这一下，玩家头 10 秒进门就没有音乐（fail-safe 是对的，但不该白等）。
+##    量完还是空（真的没有墙碰撞盒）才放弃 —— 那种情况下 `_is_inside_room()`
+##    会返回 true，直接信它就会「全场都在放 BGM」，所以宁可不响。
+func _update_room_bgm() -> void:
+	if room_bgm_track.is_empty():
+		return
+	if _room_xz.size == Vector2.ZERO:
+		_remember_room_xz()
+		if _room_xz.size == Vector2.ZERO:
+			return
+	var p := _player_node()
+	if p == null:
+		return
+	if _is_inside_room(p.global_position):
+		_bgm_inside_streak += 1
+		_bgm_outside_streak = 0
+		if _bgm_inside_streak >= _EDGE_FRAMES:
+			Music.play(room_bgm_track)
+	else:
+		_bgm_outside_streak += 1
+		_bgm_inside_streak = 0
+		if _bgm_outside_streak >= _EDGE_FRAMES and Music.current() == room_bgm_track:
+			Music.stop()
 
 
 ## 把我们改过的相机远平面还原掉（每帧 / 卸载时调用）。
