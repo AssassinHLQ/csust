@@ -14,9 +14,10 @@ extends RefCounted
 ## 一样走「preload + 全静态」，不动 `project.godot` 的 autoload —— 而且换场景时
 ## **任何挂在节点上的状态都会跟着节点一起没**，只有 static 活得过那一刀。
 ##
-## 目前记两样：
+## 目前记三样：
 ##   · `cpus`        —— 609 屋顶已经收走的 9950X3D，按**量化世界坐标**认（见 `cpu_key()`）
 ##   · `parkour_done`—— 跑酷是否通关过（决定跑道口那枚火箭 / 传送门在不在）
+##   · `carrier`     —— 机甲能量条：攒了几条 + 进度 + 已启用那几条的剩余秒数
 ##
 ## ⚠️ 为什么不按"第几颗"记：序号会随「在编辑器里删一颗 / 加一颗」整体错位，
 ##    于是玩家会莫名少掉几颗**没捡过的**。坐标只认"这一颗"；在编辑器里挪过的位置
@@ -24,6 +25,32 @@ extends RefCounted
 
 static var _cpus := {}
 static var _parkour_done := false
+## 机甲能量条状态。用户 2026-11-11：「为什么跨场景就清空了r的技能充能?」
+## 原来这些都是 `carrier_form.gd` 的**实例变量**，换场景（旧场景整棵释放）
+## 就跟着没了 —— 和 9950X3D 是同一个根因，所以走同一个地方。
+static var _carrier_bars := 0
+static var _carrier_fly_m := 0.0
+## 已启用那几条的剩余秒数（每条独立计时，见 `carrier_form.gd::use_energy_bar`）
+static var _carrier_timers: Array[float] = []
+
+
+## ── 机甲能量条 ────────────────────────────────────────────────────────
+
+static func carrier_snapshot() -> Dictionary:
+	return {
+		"bars": _carrier_bars,
+		"fly_m": _carrier_fly_m,
+		"timers": _carrier_timers.duplicate(),
+	}
+
+
+## 只在**真正有变化**时写：`carrier_form.gd` 每帧都会调，别每帧拷数组。
+static func set_carrier(bars: int, fly_m: float, timers: Array) -> void:
+	_carrier_bars = bars
+	_carrier_fly_m = fly_m
+	_carrier_timers.clear()
+	for t in timers:
+		_carrier_timers.append(float(t))
 
 
 ## 一颗 CPU 的稳定身份：世界坐标量化到 1 cm。
@@ -59,3 +86,6 @@ static func set_parkour_done(v: bool) -> void:
 static func wipe() -> void:
 	_cpus.clear()
 	_parkour_done = false
+	_carrier_bars = 0
+	_carrier_fly_m = 0.0
+	_carrier_timers.clear()

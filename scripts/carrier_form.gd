@@ -36,6 +36,10 @@ extends Node3D
 ## 按 G 只打一条 warning，**不崩、也不影响本体**。
 
 const MechState := preload("res://scripts/mech_state.gd")
+## 跨场景记忆（能量条要活过换场景）。见 `run_memory.gd`。
+const RunMemory := preload("res://scripts/run_memory.gd")
+## BA 皮肤：能量条 HUD 不再自己画，用这套现成的控件（见 `_ensure_power_hud()`）。
+const UiSkin := preload("res://scripts/ui_skin.gd")
 
 const CARRIER_GLB := "res://models/Arisu_Battle_Carrier.glb"
 ## 交叉淡化时长（秒）
@@ -155,6 +159,11 @@ var rate_scale := 1.0
 ## HUD 上那行能量条（运行时自己建，不动 `hud.tscn`）
 var _power_layer: CanvasLayer
 var _power_label: Label
+## BA 皮肤那几件（见 `_ensure_power_hud()`）
+var _power_panel: PanelContainer
+var _power_title: Label
+var _power_chip: PanelContainer
+var _power_active: Label
 
 # ── 飞行机身俯仰（2026-11-08 用户：「飞行姿势为什么这么奇怪，仰头，应该平视前方」）──
 #
@@ -493,6 +502,11 @@ func _ready() -> void:
 	set_physics_process(true)
 	# 预热（见 `_prewarm_carrier_assets()`）—— 别把 290 ms 的冷启动留到玩家按 G 那一刻。
 	_prewarm_carrier_assets()
+	# 换场景回来：把上次攒的能量条捡回来。
+	# 用户 2026-11-11：「为什么跨场景就清空了r的技能充能?」
+	# 根因和 9950X3D 一样 —— 这些都是本节点的**实例变量**，旧场景整棵释放就没了。
+	# 现在存在 `RunMemory`（进程内 static，重开游戏才清空）。
+	_restore_power_memory()
 
 
 ## ── 第一次变身卡顿（2026-11-11，用户：「机甲爱丽丝为什么第一次变身总是卡顿」）──
@@ -1598,10 +1612,39 @@ func use_energy_bar() -> bool:
 		return false
 	energy_bars -= 1
 	_bar_timers.append(BAR_SECONDS)
+	# 立刻存一次：玩家可能在**同一帧**里按完 R 就换场景（`_update_power()` 这一帧
+	# 还没来得及跑），不存就丢一条。见 `_save_power_memory()`。
+	_save_power_memory()
 	print("[Carrier] 启用能量条：剩 %d 条，攻速 ×%.1f（%d 条在计时）"
 		% [energy_bars, 1.0 + float(_bar_timers.size()), _bar_timers.size()])
 	Sfx.play("ui_toggle", -1.0)
 	return true
+
+
+## 从 `RunMemory` 捡回跨场景的能量条状态（见 `_ready()` 里那段）。
+##
+## ⚠️ 只捡「存的条数 + 攒条进度 + 已启用那几条的剩余秒数」，**不捡** `rate_scale`
+##    —— 它是 `1 + _bar_timers.size()` 的派生值，重建时会自己算对，
+##    手动恢复反而可能和 timers 对不上（那种 bug 极难发现）。
+func _restore_power_memory() -> void:
+	var snap := RunMemory.carrier_snapshot()
+	energy_bars = int(snap.get("bars", 0))
+	fly_distance_m = float(snap.get("fly_m", 0.0))
+	_bar_timers.clear()
+	var timers: Array = snap.get("timers", [])
+	for t in timers:
+		_bar_timers.append(float(t))
+	rate_scale = 1.0 + float(_bar_timers.size())
+	if energy_bars > 0 or not _bar_timers.is_empty():
+		print("[Carrier] 恢复跨场景能量：%d/%d 条，进度 %.0f%%，%d 条生效中（攻速 ×%.1f）" % [
+			energy_bars, MAX_BARS,
+			int(clampf(fly_distance_m / ENERGY_PER_BAR_M, 0.0, 1.0) * 100.0),
+			_bar_timers.size(), rate_scale])
+
+
+## 把当前状态写进 `RunMemory`。**每帧都调**（值变了才有实际写入）。
+func _save_power_memory() -> void:
+	RunMemory.set_carrier(energy_bars, fly_distance_m, _bar_timers)
 
 
 ## 能量条 / 飞行的每帧维护。**必须在 `_tick_flight()` 里、`_sync_face()` 附近调**。
@@ -1656,29 +1699,84 @@ func _update_power(delta: float) -> void:
 
 	# ④ HUD
 	_update_power_hud()
+	# ⑤ 存进跨场景记忆（换场景回来还要有）。放在最后：上面几条的任何变化都覆盖到了。
+	_save_power_memory()
 
 
-## 能量条 HUD：**运行时自己建**一个 CanvasLayer + Label。
+## 能量条 HUD：用**工程里现成的 BA 皮肤**（`UiSkin`）拼，不自己画控件。
+##
+## 用户 2026-11-11：「不要自己建,用别人做好的蔚蓝档案ui」。
+## 上一版这里是 `Label.new()` + 描边，纯裸字，和整套 BA 界面完全不搭。
+##
+## 现在用 `UiSkin` 已经做好的三样（和 `hud.gd` / `settings_menu.gd` 同一套）：
+##   · `panel_style` —— 白底浅蓝描边圆角面板（BA 的菜单板）
+##   · `name_tag_style` —— 斜切青蓝小牌（BA 的名牌），用来放「机甲能量」标题
+##   · `chip_style` —— `#252F41` 深蓝黑圆角片（BA 的数值片），放进度/攻速这些数
+## 字体走 `UiSkin.ui_font()`（CJK），配色一律取 `_skin[...]`，不写死颜色。
 ##
 ## 为什么不写进 `hud.tscn`：那是别的会话也在碰的场景文件，而且这里只是几行字，
 ## 自己建能保证「机甲这套东西」都在本文件里，改动不外溢。
 func _ensure_power_hud() -> void:
 	if _power_layer != null and is_instance_valid(_power_layer):
 		return
+	var skin: Dictionary = UiSkin.pick()
+	var font := UiSkin.ui_font()
+
 	_power_layer = CanvasLayer.new()
 	_power_layer.name = "CarrierPowerHUD"
 	_power_layer.layer = 50
 	add_child(_power_layer)
+
+	# 外层：BA 的白板。用 PanelContainer 而不是裸 Control，
+	# 这样它会长到内容大小，不用手算宽高（手算过一版，右边总差几个像素）。
+	var panel := PanelContainer.new()
+	panel.name = "Panel"
+	panel.add_theme_stylebox_override("panel", UiSkin.panel_style(skin))
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_power_layer.add_child(panel)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	panel.offset_left = 36
+	panel.offset_top = -128
+	_power_panel = panel
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	panel.add_child(col)
+
+	# 标题：BA 的斜切青蓝小牌
+	var tag := PanelContainer.new()
+	tag.add_theme_stylebox_override("panel", UiSkin.name_tag_style(skin))
+	tag.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(tag)
+	_power_title = Label.new()
+	_power_title.text = "机甲能量"
+	if font != null:
+		_power_title.add_theme_font_override("font", font)
+	_power_title.add_theme_font_size_override("font_size", 18)
+	# 斜切青牌上是白字（BA 就这么写的）
+	_power_title.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	tag.add_child(_power_title)
+
+	# 数值片：BA 的深蓝黑圆角片，一行放「◆◇ + n/5 + 进度 + 攻速」
+	var chip := PanelContainer.new()
+	chip.add_theme_stylebox_override("panel", UiSkin.chip_style(skin))
+	col.add_child(chip)
+	_power_chip = chip
 	_power_label = Label.new()
-	_power_label.add_theme_font_size_override("font_size", 26)
-	_power_label.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
-	_power_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	_power_label.add_theme_constant_override("outline_size", 6)
-	_power_label.position = Vector2(40, 0)
-	_power_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_power_label.offset_left = 40
-	_power_label.offset_top = -150
-	_power_layer.add_child(_power_label)
+	if font != null:
+		_power_label.add_theme_font_override("font", font)
+	_power_label.add_theme_font_size_override("font_size", 20)
+	# 深蓝黑底上用浅青白，和 BA 的数值片一致
+	_power_label.add_theme_color_override("font_color", Color(0.86, 0.95, 1.0, 1.0))
+	chip.add_child(_power_label)
+
+	# 已启用那几条的「★」单独一行：BA 里这种状态提示是**亮黄**
+	_power_active = Label.new()
+	if font != null:
+		_power_active.add_theme_font_override("font", font)
+	_power_active.add_theme_font_size_override("font_size", 17)
+	_power_active.add_theme_color_override("font_color", skin["yellow"])
+	col.add_child(_power_active)
 
 
 ## 藏掉机甲能量条 HUD。**状态切换处要直接调**，别指望 `_update_power_hud()`
@@ -1700,14 +1798,19 @@ func _update_power_hud() -> void:
 	var active := ""
 	for i in _bar_timers.size():
 		active += "★"
-	if active == "":
-		active = "—"
 	# 满条时进度显示 100%（实际累计已冻结，见 `_update_power`）
 	var pct := 100 if energy_bars >= MAX_BARS \
 		else int(clampf(fly_distance_m / ENERGY_PER_BAR_M, 0.0, 1.0) * 100.0)
-	_power_label.text = "%s  %d/%d   进度 %d%%   攻速 ×%.1f   %s%s" % [
-		filled, energy_bars, MAX_BARS, pct,
-		rate_scale, ("巡航者模式（武器关闭） " if cruise else ""), active]
+	# 数值片：存的条数 + 攒条进度 + 当前攻速。巡航状态也塞这一行（它要紧）。
+	if _power_label != null:
+		_power_label.text = "%s  %d/%d    进度 %d%%    攻速 ×%.1f%s" % [
+			filled, energy_bars, MAX_BARS, pct, rate_scale,
+			"    巡航者模式（武器关闭）" if cruise else ""]
+	# 已启用那几条单独一行亮黄（BA 里状态提示就是黄色），没有就不显形
+	if _power_active != null:
+		_power_active.visible = active != ""
+		_power_active.text = "%s  %d 条生效中（%.1f s）" % [
+			active, _bar_timers.size(), BAR_SECONDS] if active != "" else ""
 
 
 
