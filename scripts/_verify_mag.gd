@@ -242,7 +242,14 @@ func _run() -> void:
 	_check(checked > 0, "确实抓到了刚生成的光弹")
 	_check(behind == 0, "没有任何光弹伸到起点之后（%d 个）" % behind)
 
-	# 光弹从真实枪口附近出发；它不再被强制投影到相机前方，避免视觉上突然出现在角色前面。
+	# 视觉起点必须**在枪口**（拐弯的根因是枪没指向准星，不是起点位置）。
+	#
+	# ⚠️ 2026-11-11 试过「把起点投影到瞄准射线上」（`fx_on_aim_line = true`），
+	#    几何上完美（偏离准星 48.62° → 0.00°、起点到射线 0.0000 m），但**实机不可用**：
+	#    瞄准射线上的任何一点投影到屏幕都在正中央 ⇒ 光弹从屏幕中心飞出去，
+	#    而且沿着视线方向直接飞离相机，2.4 m 的细杆被透视压成一个点，屏幕上几乎看不见。
+	#    所以起点必须留在枪口，拐弯要从「让枪指向准星」那边解决
+	#    （`anim_driver.gd::aim_while_standing`，但那会让手脱枪，见那边的注释）。
 	var cam3 := player.cam
 	var ray_o := cam3.global_position
 	var ray_d := player.camera_forward()
@@ -253,7 +260,7 @@ func _run() -> void:
 		off_axis = minf(off_axis, (v - ray_d * v.dot(ray_d)).length())
 	print("  光弹起点离射线 %.3f m（fx_on_aim_line = %s）" % [off_axis, str(weapon.fx_on_aim_line)])
 	_check(off_axis < 2.0, "光弹起点仍在角色枪口附近（偏离 %.3f m）" % off_axis)
-	_check(not weapon.fx_on_aim_line, "默认不把视觉起点推到射线前方")
+	_check(not weapon.fx_on_aim_line, "起点留在枪口（投影到射线会让光弹沿视线飞、几乎看不见）")
 
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)

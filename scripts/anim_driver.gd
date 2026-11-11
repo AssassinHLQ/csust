@@ -296,6 +296,19 @@ const HAND_L_BONE := "Bip001 L Hand"
 const HAND_R_BONE := "Bip001 R Hand"
 ## 每秒收敛速度（1/s）：14 ≈ 0.07 s 掰到位。扣扳机那一瞬间不要「啪」地跳过去。
 @export var gun_aim_speed := 14.0
+## **站定开火时要不要也把枪掰向准星**（默认 false）。
+##
+## 背景（用户 2026-11-11：「这个子弹对齐了准星，但是看起来是枪打出的子弹**锐角拐弯**」）：
+## 素材的站桩开火姿势把枪**抱在胸前**，枪管和准星方向差 **70~98°**，
+## 而子弹的视觉起点在枪口、终点在准星命中点 —— 于是那颗弹丸看着是斜着拐过去的。
+## 实测（`_probe_bolt_kink.gd`，6 m 距离）：枪口离瞄准射线 1.47 m，
+## 「枪口 → 命中点」偏离准星方向 **48.62°**。
+##
+## ⚠️ 打开它不是纯赚：素材那套手臂是照着「抱枪」摆的，把枪硬掰到准星方向之后
+##    **两只手会离开枪**（`_aim_gun()` 里 2026-10 那句注释说的就是这个）。
+##    所以这是**观感取舍**：留着拐弯（手贴着枪） vs 掰直枪管（子弹顺了、手离枪）。
+##    默认 false = 保持原样，等用户拿主意。
+@export var aim_while_standing := false
 ## 当前枪管离准星差多少度（掰之前量的；探针 / 自检读数）
 var gun_aim_deg := 0.0
 ## 当前实际掰了多少度（探针 / 自检读数；0 = 没掰）
@@ -474,7 +487,8 @@ func _aim_gun(delta: float) -> void:
 	#    站定开火走的是叠加层，素材那套站桩开火姿势把枪抱在胸前 70~98°，
 	#    硬掰成朝向准星会让两只手整个离开枪 —— 那个动作本来就是风格化的，
 	#    用户也没提过它，所以不动（探针里量得到它仍然是斜的）。
-	var want := 1.0 if (state == State.FIRE and (_runfire_playing or _walk_fire)) else 0.0
+	var want := 1.0 if (state == State.FIRE and (_runfire_playing or _walk_fire
+		or aim_while_standing)) else 0.0
 	_gun_aim_weight = move_toward(_gun_aim_weight, want, maxf(gun_aim_speed, 0.001) * delta)
 	if _gun_aim_weight <= 0.0001:
 		_gun_aim_weight = 0.0

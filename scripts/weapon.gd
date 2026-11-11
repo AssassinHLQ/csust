@@ -57,13 +57,22 @@ signal hit_confirmed(collider: Object, position: Vector3)
 @export var recoil_yaw := 0.003
 
 @export var skeleton_path: NodePath
-## 光弹 / 枪口火光的**视觉**起点：true = 把枪口骨投影到弹道那条线上（推荐）。
-## 为什么需要：这个模型的枪**不在手上**（README §1.9），枪口骨在腰侧，
-## 实测离弹道 **1.3 m**、高度只有 0.25 m。直接拿枪口当起点，光弹会从角色身侧
-## 斜着飞出去，看起来就是「子弹不是从枪口出来的」。投影到弹道上之后，
-## 光弹沿着准星方向从角色身体里飞出去，观感才对。
+## 光弹的**视觉**起点是否落在「瞄准射线」上。
+##
+## ⚠️⚠️ **必须是 false。2026-11-11 实测过打开它，结果是更糟 —— 别重开。**
+## 用户当天报：「这个子弹对齐了准星，但是看起来是枪打出的子弹锐角拐弯」。
+## 本喵当时以为是这个开关没开，于是把 `clampf(...)` 的上限从 0.25 m 修成
+## 「枪口自己的投影进深」再打开它。几何上确实完美（偏离准星 48.62° → 0.00°，
+## 新起点到射线的垂直距离 0.0000 m），但出图一看：
+##   **瞄准射线上的任何一点，投影到屏幕都在正中央** —— 所以
+##   ① 光弹会从屏幕中心（角色头顶/背后）飞出去，不像从枪口出来；
+##   ② 光弹沿着视线方向**直接飞离相机**，2.4 m 的细杆被透视压成一个点，
+##      屏幕上几乎看不见了（原来能看见，正是因为它斜着飞）。
+## 所以这条路的结论是：**起点必须在枪口，拐弯必须从别处解决**。
+## 真正的根因在 `anim_driver.gd::_aim_gun()`：站定开火时素材把枪抱在胸前
+## 70~98°，枪根本没指向准星，子弹只能从枪口斜着拐过去。
 @export var fx_on_aim_line := false
-## 视觉起点沿射线最多向前偏移多少米；默认保持在枪口附近
+## 视觉起点再沿射线往前推多少米（默认 0：就放在枪口那个进深）
 @export var fx_forward := 0.0
 
 # --- 弹丸视觉 ---
@@ -398,24 +407,27 @@ func _fire_raycast() -> void:
 	# 保证「准星压着靶子就一定打得中」，不会因为双炮而各打各的）。
 	# 视觉上从**每个炮口**各牵一条弹道到同一个命中点：观感是齐射，判定是单发。
 	if _carrier_muzzles.size() > 0:
+		# ⚠️ 机甲这里**故意不用** `fx_on_aim_line` 的投影。
+		#    投影会把两个炮口都压到同一条瞄准射线上 → 两条光束完全重叠，
+		#    双肩齐射看起来就只剩一条光柱，机甲的味道全丢了。
+		#    而且机甲是「两门炮各牵一条光束汇到同一个命中点」，
+		#    那个**收敛角本来就是设计**，不像单枪口那样是 bug。
 		for mp in _carrier_muzzles:
-			var from_i := mp
-			if fx_on_aim_line:
-				from_i = origin + dir * clampf((mp - origin).dot(dir), 0.0, 0.25) + dir * fx_forward
-			_spawn_tracer(from_i, impact)
-			_muzzle_flash(from_i)
+			_spawn_tracer(mp, impact)
+			_muzzle_flash(mp)
 		_schedule_impact(impact, normal, muzzle_pos.distance_to(impact) / maxf(tracer_speed, 1.0))
 		_apply_hit(collider, impact, dir)
 		return
 
-	# 视觉起点默认就在**真实枪口**（fx_on_aim_line = false）。
-	# 打开时把枪口挪到瞄准射线上：沿射向投影，且最多落在射线起点之后 0.25 m。
-	# ⚠️ 老版本是「投影到相机前方、再往前推」，表现就是「子弹从角色前面冒出来」
-	#    —— 用户报的「位置太靠前」正是这个，所以默认改成了 false。
+	# 视觉起点：默认落在「瞄准射线上、和枪口同一进深」的位置。
+	# `along` = 枪口沿视线方向离相机多远 —— 直接拿它当射线上的进深。
+	# ⚠️ **不要再 clamp 到 0.25 m**：那会把起点砍到玩家脸前面（老 bug，见
+	#    `fx_on_aim_line` 的注释）。这里只挡两种退化：负值（枪口在相机背后）
+	#    和过近（贴着相机时脏镜头）。
+	var along := maxf((muzzle_pos - origin).dot(dir), 0.35)
 	var fx_from := muzzle_pos
 	if fx_on_aim_line:
-		fx_from = origin + dir * clampf((muzzle_pos - origin).dot(dir), 0.0, 0.25) \
-			+ dir * fx_forward
+		fx_from = origin + dir * along + dir * fx_forward
 
 	_apply_hit(collider, impact, dir)
 
