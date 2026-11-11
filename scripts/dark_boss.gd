@@ -320,6 +320,10 @@ func _animate_bones(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# `Boss::_physics_process()` 负责**每帧按骨骼当前位置重算**骨骼切片的碰撞盒
+	# （2026-11-11 修「霸王龙碰撞没跟着技能变」）。这里覆盖了它，必须显式调一次，
+	# 否则本类一旦用 BOX_PARTS，盒子就会冻在 `_boot()` 那一刻。
+	super._physics_process(delta)
 	if _player == null:
 		_player = get_tree().get_first_node_in_group("player") as Player
 	if _killed or _dead or _player == null:
