@@ -71,7 +71,15 @@ var _bin_path := BIN
 ## 这才是 3×3 窗口看起来像浮空地皮的真正原因。重新切法：
 ##   python _tools/split_ggs_bin.py campus_ggs.bin splatdata/campus_chunks10w 10 10
 ## 回退对照：`--ggs-chunks=res://splatdata/campus_chunks10/chunks.json`
-var chunks_json := "res://splatdata/campus_chunks10w/chunks.json"
+## 默认走哪套由 `_resolve_chunks_json()` 决定（空串 = 自动挑）。
+var chunks_json := ""
+## ⚠️ 2026-11-11：新那套 = **分块 SOG**（`splatdata/campus_sog/chunks.json`）。
+##   旧那套 `campus_chunks10w/*.bin` 合计 1,406 MB 的世界坐标 raw，占了整个包的
+##   一半以上；新那套只有 85 MB，运行时现场解码、再套一个**从数据反解出来**的
+##   相似变换（`tools/fit_campus_frame.py`，残差 10 µm；`_verify_campus_sog.gd` 13/13）。
+##   新那套不在时自动退回旧那套 —— 两台机器都能跑。
+const CHUNKS_JSON_SOG := "res://splatdata/campus_sog/chunks.json"
+const CHUNKS_JSON_RAW := "res://splatdata/campus_chunks10w/chunks.json"
 const CHUNKS_JSON_OLD := "res://splatdata/campus_chunks10/chunks.json"
 const WINDOW_SIDE := 3
 ## 实际使用的窗口边长，`--ggs-window=N` 可以临时改（量「多大才够看」用）。
@@ -128,6 +136,37 @@ var _write_bytes := 0
 var _write_path := ""
 var _pending_window := PackedStringArray()
 var _window_slot := 0
+
+## ── 分块 SOG（2026-11-11）──
+##
+## SOG 块里是 `SogRuntime` 解出来的**模型绝对坐标**，而 GGS 光栅器要的是
+## **世界坐标**（旧 `.bin` 是离线用 `Campus.splat_node.global_transform` 烘过的）。
+## 两者差一个相似变换 A（旋转 × 75 倍均匀缩放 + 平移）：
+##     p_world = A·p + origin        C_world = A·C·Aᵀ（A 已含 scale，别再乘 scale²）
+## A 不是手算的 —— 手算要处理 `world_scale=75` 之外的 1.2° 节点旋转（500 m 上
+## 就是 10 m），见 `tools/fit_campus_frame.py`。
+##
+## 解码与变换都在**已有的后台写窗口线程**里做，主线程一次都不停；每块变换完
+## 落到 exe 旁边 `_cache/campus_<清单指纹>/`，下次回到这片区域直接字节拷贝
+## （和 `.gdgsrt` 一个思路）。
+const CACHE_SUBDIR_CAMPUS := "campus"
+const SogRuntimeScript := preload("res://scripts/sog_runtime.gd")
+const BYTES_PER_SPLAT := 240
+var _frame_basis := Basis.IDENTITY
+var _frame_origin := Vector3.ZERO
+var _frame_scale := 1.0
+## 分块共用的 shN 调色板（整张 2.26 MB；97 块各带一份会白多 219 MB）
+var _palette := PackedByteArray()
+## 缓存子目录（名字里带清单指纹：清单一变，旧缓存自然作废）
+var _cache_subdir := ""
+## 粗层也走 SOG 时的源文件与后台准备状态
+var _coarse_sog := ""
+var _coarse_points := 0
+var _coarse_thread: Thread = null
+var _coarse_mutex := Mutex.new()
+var _coarse_flag := false
+var _coarse_ok := false
+var _coarse_cache := ""
 
 ## ── 粗层常驻 + 细层叠加（2026-11-05）──
 ##
@@ -239,11 +278,22 @@ func _ready() -> void:
 		_bin_path = _bin_override
 		print("[campus_ggs] 指定 bin：%s" % _bin_path)
 	else:
+		if chunks_json.is_empty():
+			chunks_json = _resolve_chunks_json()
 		_use_chunks = _load_manifest()
 	if _use_chunks:
-		print("[campus_ggs] 分块模式：%d 块，窗口 %d×%d" % [
-			_chunk_list.size(), window_side, window_side])
-		if _coarse_path == "" and not _coarse_off:
+		print("[campus_ggs] 分块模式：%d 块，窗口 %d×%d，源=%s" % [
+			_chunk_list.size(), window_side, window_side,
+			"SOG 块（运行时解码）" if not _palette.is_empty() else "raw bin"])
+		if _coarse_sog != "" and not _coarse_off:
+			# 粗层也是 SOG：先看有没有缓存好的 raw bin（有就直接用），
+			# 否则起后台线程解（154 万点，实测约 8 s），解完再挂光栅器。
+			_coarse_cache = CacheDir.file_for(_cache_subdir, "coarse.bin")
+			if _coarse_cache != "" and FileAccess.file_exists(_coarse_cache):
+				_coarse_path = _coarse_cache
+			else:
+				_start_coarse_prep()
+		elif _coarse_path == "" and not _coarse_off:
 			if FileAccess.file_exists(COARSE_BIN):
 				_coarse_path = COARSE_BIN
 			elif _is_dev_build() and FileAccess.file_exists(COARSE_BIN_DEV):
@@ -257,7 +307,10 @@ func _ready() -> void:
 				_coarse_path, _coarse_total, float(_coarse_total) * 240.0 / 1048576.0])
 		else:
 			_coarse_path = ""
-			push_warning("[campus_ggs] 没有粗层 bin，退回单层分块（窗外会空）")
+			if _coarse_sog != "":
+				print("[campus_ggs] 粗层改由后台解码（%d 点），就绪前由细层顶着" % _coarse_points)
+			else:
+				push_warning("[campus_ggs] 没有粗层 bin，退回单层分块（窗外会空）")
 	elif _bin_override == "":
 		# ⚠️ 2026-11-10：发布版**不再打包** `campus_ggs.bin`（1.4 GB），只在分块失败时
 		# 才会走到这里。这时候全量 bin 在 pck 里通常也不存在 —— 明确说明原因，
@@ -394,6 +447,7 @@ func debug_state() -> Dictionary:
 
 func _exit_tree() -> void:
 	_join_window_write()
+	_join_coarse()
 	# ⚠️ 退出时 `queue_free()` 要等到这一帧末尾才真正释放，而 `_release_campus()`
 	#    会立刻把纹理 RID 还掉 —— 中间那一瞬 quad 还活着、材质还指着已释放的纹理，
 	#    渲染管线重建 uniform set 时就会报
@@ -455,31 +509,41 @@ func _make_bundle() -> bool:
 	rasterizer.cov_limit[1] = _cov_ref
 	rasterizer.idle_skip = _idle_skip
 
-	# 粗层：和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换。
-	# 注意它必须是**独立的一份**（独立 bin_path / 独立纹理），否则换窗口时会被一起丢掉。
-	if _coarse_path != "" and coarse_rasterizer == null and _coarse_total > 0:
-		var cply = PlyFileScript.new()
-		cply.size = _coarse_total
-		var vs2: Vector2i = get_viewport().get_size()
-		# `_release_campus()` 会把 coarse_tex 丢掉（见那里的说明），这里补回来。
-		if coarse_tex == null:
-			coarse_tex = Texture2DRD.new()
-			if _quad_mat != null:
-				_quad_mat.set_shader_parameter("coarse_texture", coarse_tex)
-		coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
-		coarse_rasterizer.bin_path = _coarse_path
-		coarse_rasterizer.model_scale[0] = 1.0
-		coarse_rasterizer.cov_scale[0] = _cov_scale
-		coarse_rasterizer.cov_limit[0] = _cov_cap
-		coarse_rasterizer.cov_limit[1] = _cov_ref
-		coarse_rasterizer.idle_skip = _idle_skip
-		var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
-		coarse_rasterizer.render_scale = [sc2]
-		coarse_rasterizer.texture_size = vs2
-		_coarse_done = true
+	_ensure_coarse_raster()
 
 	_ready_done = true
 	return true
+
+
+## 建粗层光栅器（和细层同一个相机、同一个视口尺寸，只是点少、且不随窗口换）。
+## 注意它必须是**独立的一份**（独立 bin_path / 独立纹理），否则换窗口时会被一起丢掉。
+##
+## 单独抽成函数，是因为粗层现在可能比细层**晚**就绪：分块 SOG 那套里粗层也要
+## 现场解码（后台线程），`_process` 每帧 poll，解好了直接挂上，不用重建细层。
+func _ensure_coarse_raster() -> void:
+	if coarse_rasterizer != null or _coarse_path == "" or _coarse_total <= 0:
+		return
+	if cam == null or tex == null or not is_inside_tree():
+		return
+	var cply = PlyFileScript.new()
+	cply.size = _coarse_total
+	var vs2: Vector2i = get_viewport().get_size()
+	# `_release_campus()` 会把 coarse_tex 丢掉（见那里的说明），这里补回来。
+	if coarse_tex == null:
+		coarse_tex = Texture2DRD.new()
+		if _quad_mat != null:
+			_quad_mat.set_shader_parameter("coarse_texture", coarse_tex)
+	coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
+	coarse_rasterizer.bin_path = _coarse_path
+	coarse_rasterizer.model_scale[0] = 1.0
+	coarse_rasterizer.cov_scale[0] = _cov_scale
+	coarse_rasterizer.cov_limit[0] = _cov_cap
+	coarse_rasterizer.cov_limit[1] = _cov_ref
+	coarse_rasterizer.idle_skip = _idle_skip
+	var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
+	coarse_rasterizer.render_scale = [sc2]
+	coarse_rasterizer.texture_size = vs2
+	_coarse_done = true
 
 ## scene_flow 在黑屏期间调它，把点云加载提前开始（本来 _process 第一帧也会做）。
 func force_start() -> void:
@@ -617,6 +681,9 @@ func _make_quad() -> void:
 	quad.visible = false
 
 func _process(_dt: float) -> void:
+	# 粗层后台解码的 poll 放在最前面：玩家在厅里时这条路径才会走到，
+	# 而粗层恰好就是「出厅之前要准备好」的东西。
+	_poll_coarse_prep()
 	var inside := player != null and hide_inside_aabb.size != Vector3.ZERO \
 			and hide_inside_aabb.has_point(player.global_position)
 	if inside:
@@ -734,34 +801,75 @@ func _is_dev_build() -> bool:
 ##   `push_warning` 就跳过）—— 表现为「校园有一部分是空的」，不崩、难查。
 ##   现在缺块就直接返回 false，让上层回退 `campus_ggs.bin` 全量，画面至少完整。
 func _load_manifest() -> bool:
+	_frame_basis = Basis.IDENTITY
+	_frame_origin = Vector3.ZERO
+	_frame_scale = 1.0
+	_palette = PackedByteArray()
+	_cache_subdir = ""
+	_coarse_sog = ""
+	_coarse_points = 0
+	_chunk_list.clear()
 	if not FileAccess.file_exists(chunks_json):
 		return false
-	var parsed = JSON.parse_string(FileAccess.get_file_as_string(chunks_json))
+	var text := FileAccess.get_file_as_string(chunks_json)
+	var parsed = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
-	var arr: Array = (parsed as Dictionary).get("chunks", [])
+	var man: Dictionary = parsed
+	var arr: Array = man.get("chunks", [])
 	if arr.is_empty():
 		return false
-	_chunk_list.clear()
+
+	# ---- 相似变换（只有分块 SOG 那套清单才带）----
+	var fr: Dictionary = man.get("frame", {})
+	var axes: Array = fr.get("axes", [])
+	if axes.size() == 3:
+		_frame_basis = Basis(
+			_v3(axes[0]), _v3(axes[1]), _v3(axes[2]))
+		_frame_origin = _v3(fr.get("origin", [0.0, 0.0, 0.0]))
+		_frame_scale = float(fr.get("scale", 1.0))
+	var pal_rel := String(man.get("centroids", ""))
+	if pal_rel != "":
+		_palette = FileAccess.get_file_as_bytes("res://" + pal_rel)
+		if _palette.is_empty():
+			push_error("[campus_ggs] 清单里的共享调色板读不到：%s" % pal_rel)
+			return false
+
+	# ---- 缓存子目录名带清单指纹：清单一变，旧缓存自然作废 ----
+	_cache_subdir = "%s_%d" % [CACHE_SUBDIR_CAMPUS, text.hash()]
+
 	for d in arr:
 		var dd: Dictionary = d
 		var c: Array = dd.get("center", [0.0, 0.0, 0.0])
 		_chunk_list.append({
 			"name": String(dd.get("name", "")),
 			"center": Vector3(float(c[0]), float(c[1]), float(c[2])),
+			"sog": String(dd.get("sog", "")),
 			"bin": String(dd.get("bin", "")),
+			"points": int(dd.get("points", 0)),
 			"bytes": int(dd.get("bytes", 0)),
 		})
 	if _chunk_list.is_empty():
 		return false
-	# 块文件存在性自检：空块（bytes == 0）允许不存在 —— 那是 10×10 网格里
-	# 落在校园范围外的格子，`split_ggs_bin.py` 会写 0 字节占位。
+
+	# ---- 粗层（SOG 那套才有）----
+	var co: Dictionary = man.get("coarse", {})
+	if not co.is_empty():
+		_coarse_sog = String(co.get("sog", ""))
+		_coarse_points = int(co.get("points", 0))
+
+	# 块文件存在性自检：空块允许不存在 —— 那是 10×10 网格里落在校园范围外的
+	# 格子，切分脚本会写 0 字节占位。
 	var missing: PackedStringArray = PackedStringArray()
 	for c in _chunk_list:
+		var sog := String(c["sog"])
+		if sog != "":
+			if not FileAccess.file_exists("res://" + sog):
+				missing.append(sog)
+			continue
 		if int(c["bytes"]) <= 0:
 			continue
-		var p := "res://" + String(c["bin"])
-		if not FileAccess.file_exists(p):
+		if not FileAccess.file_exists("res://" + String(c["bin"])):
 			missing.append(String(c["bin"]))
 	if not missing.is_empty():
 		push_error("[campus_ggs] 分块清单里有 %d 块找不到文件（pck 漏打包了？），回退全量 bin。前 3 个：%s"
@@ -769,6 +877,156 @@ func _load_manifest() -> bool:
 		_chunk_list.clear()
 		return false
 	return true
+
+
+## 挑用哪套分块清单：优先分块 SOG，没有就退回旧的 raw 分块。
+## `--ggs-chunks=` 显式给了路径时不走这里（调用方已经设好了）。
+func _resolve_chunks_json() -> String:
+	for p in [CHUNKS_JSON_SOG, CHUNKS_JSON_RAW]:
+		if FileAccess.file_exists(p):
+			return p
+	return CHUNKS_JSON_SOG
+
+
+func _v3(a: Array) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
+
+
+## `Basis` → 9 个标量的行主序矩阵（`p' = M·p`）。
+## 逐点建 Basis/Vector3 会分配对象，600 万点会被拖死，所以展开成标量。
+static func _frame_matrix(b: Basis) -> PackedFloat32Array:
+	return PackedFloat32Array([
+		b.x.x, b.y.x, b.z.x,
+		b.x.y, b.y.y, b.z.y,
+		b.x.z, b.y.z, b.z.z])
+
+
+## 原地把一块 SOG 解码结果从模型坐标换到世界坐标：
+##   p' = M·p + o        C' = M·C·Mᵀ（M 已含 scale，别再乘 scale²）
+static func _transform_blob(blob: PackedByteArray, count: int, m: PackedFloat32Array, o: Vector3) -> void:
+	var m00 := m[0]; var m01 := m[1]; var m02 := m[2]
+	var m10 := m[3]; var m11 := m[4]; var m12 := m[5]
+	var m20 := m[6]; var m21 := m[7]; var m22 := m[8]
+	for i in count:
+		var off := i * BYTES_PER_SPLAT
+		var px := blob.decode_float(off)
+		var py := blob.decode_float(off + 4)
+		var pz := blob.decode_float(off + 8)
+		blob.encode_float(off, m00 * px + m01 * py + m02 * pz + o.x)
+		blob.encode_float(off + 4, m10 * px + m11 * py + m12 * pz + o.y)
+		blob.encode_float(off + 8, m20 * px + m21 * py + m22 * pz + o.z)
+
+		var c00 := blob.decode_float(off + 16)
+		var c01 := blob.decode_float(off + 20)
+		var c02 := blob.decode_float(off + 24)
+		var c11 := blob.decode_float(off + 28)
+		var c12 := blob.decode_float(off + 32)
+		var c22 := blob.decode_float(off + 36)
+		var d00 := m00 * c00 + m01 * c01 + m02 * c02
+		var d01 := m00 * c01 + m01 * c11 + m02 * c12
+		var d02 := m00 * c02 + m01 * c12 + m02 * c22
+		var d10 := m10 * c00 + m11 * c01 + m12 * c02
+		var d11 := m10 * c01 + m11 * c11 + m12 * c12
+		var d12 := m10 * c02 + m11 * c12 + m12 * c22
+		var d20 := m20 * c00 + m21 * c01 + m22 * c02
+		var d21 := m20 * c01 + m21 * c11 + m22 * c12
+		var d22 := m20 * c02 + m21 * c12 + m22 * c22
+		blob.encode_float(off + 16, d00 * m00 + d01 * m01 + d02 * m02)
+		blob.encode_float(off + 20, d00 * m10 + d01 * m11 + d02 * m12)
+		blob.encode_float(off + 24, d00 * m20 + d01 * m21 + d02 * m22)
+		blob.encode_float(off + 28, d10 * m10 + d11 * m11 + d12 * m12)
+		blob.encode_float(off + 32, d10 * m20 + d11 * m21 + d12 * m22)
+		blob.encode_float(off + 36, d20 * m20 + d21 * m21 + d22 * m22)
+
+
+## 取一块解好码、变换到世界坐标的 240 B/点记录。
+## 优先读缓存；没有就解码 + 变换，然后写缓存（写失败不影响本次结果）。
+## ⚠️ 这个函数**在工作线程里被调**：只碰传进来的参数和自己开的内存，
+##    不读主线程状态、也不 push_warning / print（那会从 worker 写主线程日志）。
+static func _decode_and_transform(sog_path: String, points: int, m: PackedFloat32Array,
+		o: Vector3, palette: PackedByteArray, cache_path: String) -> PackedByteArray:
+	if cache_path != "" and FileAccess.file_exists(cache_path):
+		var cf := FileAccess.open(cache_path, FileAccess.READ)
+		if cf != null:
+			var cached := cf.get_buffer(cf.get_length())
+			cf.close()
+			if cached.size() == points * BYTES_PER_SPLAT:
+				return cached
+	var r: Dictionary = SogRuntimeScript.load_sog(sog_path, {
+		"cache": "off", "center": Vector3.ZERO, "centroids": palette})
+	if not bool(r.get("ok", false)):
+		return PackedByteArray()
+	var blob: PackedByteArray = r["resource"].get("point_data_byte")
+	var n := int(r.get("count", 0))
+	if n <= 0 or blob.size() < n * BYTES_PER_SPLAT:
+		return PackedByteArray()
+	_transform_blob(blob, n, m, o)
+	if cache_path != "" and n == points:
+		var wf := FileAccess.open(cache_path, FileAccess.WRITE)
+		if wf != null:
+			wf.store_buffer(blob)
+			wf.close()
+	return blob
+
+
+## 分块解码的并行度上限。
+## 权衡的是**瞬时内存**：一块 33 万点的块，解码时同时存在 240 B×n 的 blob
+## 和同一份 float 展开数组，单条约 160 MB。6 条 ≈ 1 GB 峰值，本机 16 逻辑核
+## 实测 4 条拿 2.1×、6 条拿到 ~2.5×（再往上被内存带宽吃掉了）。
+const MAX_DECODE_THREADS := 6
+
+
+## 把 job 里需要解码的块摊到几个工作线程上，返回与 `jobs` **同序**的 blob 数组
+## （raw bin 那几项留空，由调用方自己拷）。
+##
+## ⚠️ 线程之间**不共享任何可写结构**：每个线程只拿到自己那几块，
+##    结果通过 `Thread.wait_to_finish()` 的返回值汇总。
+##    （踩过的坑：Packed*Array 跨线程写同一容器是不安全的。）
+static func _decode_jobs_parallel(jobs: Array, m: PackedFloat32Array,
+		origin: Vector3, palette: PackedByteArray) -> Array:
+	var out: Array = []
+	out.resize(jobs.size())
+	var todo: Array = []
+	for i in jobs.size():
+		if jobs[i].has("sog"):
+			todo.append([i, jobs[i]])
+	if todo.is_empty():
+		return out
+	if todo.size() == 1:
+		var only: Array = todo[0]
+		out[int(only[0])] = _decode_and_transform(String(only[1]["sog"]), int(only[1]["points"]),
+			m, origin, palette, String(only[1].get("cache", "")))
+		return out
+	var n := mini(MAX_DECODE_THREADS, todo.size())
+	var slices: Array = []
+	slices.resize(n)
+	for w in n:
+		slices[w] = []
+	for k in todo.size():
+		slices[k % n].append(todo[k])
+	var threads: Array = []
+	for w in n:
+		var t := Thread.new()
+		threads.append(t)
+		t.start(_decode_slice.bind(slices[w], m, origin, palette), Thread.PRIORITY_NORMAL)
+	var merged: Array = []
+	for t in threads:
+		merged.append_array(t.wait_to_finish())
+	for pair in merged:
+		out[int(pair[0])] = pair[1]
+	return out
+
+
+## 一个工作线程负责的那几块。返回 `[[job 下标, blob], …]`，顺序无所谓 —— 调用方按下标归位。
+static func _decode_slice(items: Array, m: PackedFloat32Array,
+		origin: Vector3, palette: PackedByteArray) -> Array:
+	var res: Array = []
+	for it in items:
+		var job: Dictionary = it[1]
+		res.append([int(it[0]), _decode_and_transform(
+			String(job["sog"]), int(job["points"]), m, origin, palette,
+			String(job.get("cache", "")))])
+	return res
 
 
 ## 以玩家所在格子为中心取 `window_side`² 块（10×10 网格的 ±1 邻域）。
@@ -846,9 +1104,19 @@ func _write_window(names: PackedStringArray) -> int:
 		push_error("[campus_ggs] 写不了 %s" % dst)
 		return 0
 	var written := 0
+	var m := _frame_matrix(_frame_basis)
 	for nm in names:
 		var e := _chunk_entry(nm)
 		if e.is_empty():
+			continue
+		if String(e["sog"]) != "":
+			var blob := _decode_and_transform("res://" + String(e["sog"]), int(e["points"]),
+				m, _frame_origin, _palette, _chunk_cache_path(e))
+			if blob.is_empty():
+				push_warning("[campus_ggs] SOG 块解不出来：%s" % String(e["sog"]))
+				continue
+			f.store_buffer(blob)
+			written += blob.size()
 			continue
 		var path := "res://" + String(e["bin"])
 		var src := FileAccess.open(path, FileAccess.READ)
@@ -869,18 +1137,33 @@ func _write_window(names: PackedStringArray) -> int:
 	return written
 
 
-## 后台线程：把 job 列表里的分块按字节拷进目标 bin。
-## ⚠️ 这里**只做文件 I/O**：`_chunk_list` / `_chunk_entry()` 这些主线程数据结构一概不碰
-##    （跨线程读不安全），路径与字节数都在主线程先解析好塞进 job。
+## 后台线程：把 job 列表里的分块写进目标 bin。
+## ⚠️ 这里**只做文件 I/O 和数据变换**：`_chunk_list` / `_chunk_entry()` 这些主线程
+##    数据结构一概不碰（跨线程读不安全），路径 / 点数 / 相似变换 / 调色板都在
+##    主线程先解析好塞进 job 或参数。
 ## ⚠️ 也不在这里 `push_warning`：那会从 worker 线程写主线程的日志，会炸。
-func _write_worker(jobs: Array, path: String) -> void:
+func _write_worker(jobs: Array, path: String, m: PackedFloat32Array,
+		origin: Vector3, palette: PackedByteArray) -> void:
 	var written := 0
 	var failed := false
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		failed = true
 	else:
-		for j in jobs:
+		# ⚠️ 实测：3×3 窗口最密的一份是 184 万点，单线程解码+变换要 **12.2 s**。
+		#    解码是纯 CPU、各块之间零共享，所以这里把它摊到几个工作线程上，
+		#    主线程只按原顺序写盘（顺序不能变，否则块会错位）。
+		var blobs := _decode_jobs_parallel(jobs, m, origin, palette)
+		for i in jobs.size():
+			var j: Dictionary = jobs[i]
+			if j.has("sog"):
+				var blob: PackedByteArray = blobs[i]
+				if blob.is_empty():
+					failed = true
+					continue
+				f.store_buffer(blob)
+				written += blob.size()
+				continue
 			var src := FileAccess.open(String(j["path"]), FileAccess.READ)
 			if src == null:
 				failed = true
@@ -911,7 +1194,14 @@ func _start_window_write(names: PackedStringArray) -> bool:
 		var e := _chunk_entry(nm)
 		if e.is_empty():
 			continue
-		jobs.append({"path": "res://" + String(e["bin"]), "bytes": int(e["bytes"])})
+		if String(e["sog"]) != "":
+			jobs.append({
+				"sog": "res://" + String(e["sog"]),
+				"points": int(e["points"]),
+				"cache": _chunk_cache_path(e),
+			})
+		else:
+			jobs.append({"path": "res://" + String(e["bin"]), "bytes": int(e["bytes"])})
 	if jobs.is_empty():
 		return false
 	# 双缓冲：写另一槽，当前渲染的那份不动
@@ -923,8 +1213,77 @@ func _start_window_write(names: PackedStringArray) -> bool:
 	_write_mutex.unlock()
 	_pending_window = names
 	_write_thread = Thread.new()
-	_write_thread.start(_write_worker.bind(jobs, _write_path))
+	_write_thread.start(_write_worker.bind(jobs, _write_path,
+		_frame_matrix(_frame_basis), _frame_origin, _palette))
 	return true
+
+
+## 某一块变换后 raw bin 的缓存路径（exe 旁边 `_cache/campus_<指纹>/`）。
+## 空串 = 缓存不可用（只影响速度，不影响正确性）。
+func _chunk_cache_path(e: Dictionary) -> String:
+	if _cache_subdir.is_empty():
+		return ""
+	return CacheDir.file_for(_cache_subdir, "%s.bin" % String(e["name"]))
+
+
+## ── 粗层后台准备（只有 SOG 那套才需要）──
+##
+## 粗层是「全校园的底」，154 万点。同步解会卡启动约 8 s，所以起个线程解完写进
+## `_cache/campus_<指纹>/coarse.bin`，`_process` 里 poll 到就挂光栅器。
+func _start_coarse_prep() -> void:
+	if _coarse_sog == "" or _coarse_points <= 0:
+		return
+	# 路径自己兜底算一次（`_ready` 的早期返回路径不会走到那里）
+	if _coarse_cache.is_empty():
+		_coarse_cache = CacheDir.file_for(_cache_subdir, "coarse.bin")
+	_coarse_flag = false
+	_coarse_ok = false
+	_coarse_thread = Thread.new()
+	_coarse_thread.start(_coarse_worker.bind(
+		"res://" + _coarse_sog, _coarse_points, _coarse_cache,
+		_frame_matrix(_frame_basis), _frame_origin, _palette), Thread.PRIORITY_LOW)
+	print("[campus_ggs] 粗层：后台解码 %s（%d 点）" % [_coarse_sog.get_file(), _coarse_points])
+
+
+func _coarse_worker(sog_path: String, points: int, cache_path: String,
+		m: PackedFloat32Array, origin: Vector3, palette: PackedByteArray) -> void:
+	var blob := _decode_and_transform(sog_path, points, m, origin, palette, cache_path)
+	_coarse_mutex.lock()
+	_coarse_ok = not blob.is_empty()
+	_coarse_flag = true
+	_coarse_mutex.unlock()
+
+
+## 主线程 poll：粗层解好了就把路径/点数定下来，下一帧 `_ensure_coarse_raster()` 会挂上。
+func _poll_coarse_prep() -> void:
+	if _coarse_thread == null:
+		return
+	_coarse_mutex.lock()
+	var done := _coarse_flag
+	var ok := _coarse_ok
+	_coarse_mutex.unlock()
+	if not done:
+		return
+	_coarse_thread.wait_to_finish()
+	_coarse_thread = null
+	if not ok:
+		push_warning("[campus_ggs] 粗层 SOG 解码失败，本次只有细层分块")
+		return
+	_coarse_path = _coarse_cache
+	if _coarse_path == "" or not FileAccess.file_exists(_coarse_path):
+		push_warning("[campus_ggs] 粗层解出来了但缓存文件不在，跳过粗层")
+		return
+	_coarse_total = _coarse_points
+	print("[campus_ggs] 粗层就绪：%s（%d 点 / %.0f MB）" % [
+		_coarse_path, _coarse_total, float(_coarse_total) * 240.0 / 1048576.0])
+	_coarse_off = false
+	_ensure_coarse_raster()
+
+
+func _join_coarse() -> void:
+	if _coarse_thread != null:
+		_coarse_thread.wait_to_finish()
+		_coarse_thread = null
 
 
 ## 后台写完了吗？写完了就切 `_bin_path` 并让下一帧重建细层。
