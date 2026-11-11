@@ -856,6 +856,23 @@ func _found_cannon_bones() -> int:
 ##   · 一盏 OmniLight3D（照亮脚下地面，飞行时最抓眼）
 ##   · 一个 GPUParticles3D（喷气拖尾）
 ##   · 一个 OmniLight 的**开关**由推力控制
+const PARTICLE_AMOUNT_BASE := 96
+## 高速时的上限。19 m/s 全速时约 3.2 倍基准 ⇒ 每米粒子数不掉。
+## 取值理由：粒子直径 0.30~0.80 m（`pm.scale_*`）、寿命 0.5 s；
+## 要让人眼看不到断点，每米至少要 ~30 颗 ⇒ 19 m/s 约需 285 颗在场。
+## 取 420 是为了让**极速**（25 m/s，加速加巡航叠加时会出现）也守住 30 颗/米；
+## 代价只是 2 组推进器 × 420 颗的粒子数，对这个档次的 GPU 不算什么。
+const PARTICLE_AMOUNT_MAX := 420
+
+
+## 按当前水平速度算尾迹该用多少粒子。
+## 线性跟随速度：低速/悬停 → BASE，全速 → 上限。
+func _particle_amount_for_speed(speed: float) -> int:
+	var k := clampf(speed / 6.0, 1.0,
+		float(PARTICLE_AMOUNT_MAX) / float(PARTICLE_AMOUNT_BASE))
+	return int(round(float(PARTICLE_AMOUNT_BASE) * k))
+
+
 func _build_boost_fx() -> void:
 	var targets: Array[int] = []
 	for bn in BOOST_BONES:
@@ -993,7 +1010,19 @@ func _build_boost_fx() -> void:
 		# 原来是 amount 72 / lifetime 0.34 / 初速 1.6~4.2 / 阻尼 3~6：
 		# 粒子刚出去就被阻尼刹住，堆在喷口附近 = 一团雾，看不出「在飞」。
 		# 现在拉长寿命、提高初速、减小阻尼 —— 粒子会**拖着一条尾巴走**。
-		gp.amount = 96
+		#
+		# ── 2026-11-11：高速时尾迹断成「一串珠子」（用户：「飞行太快后面
+		#    蓝色小粒子特效跟不上了」+ 截图里那条断续的蓝点链）──
+		#
+		# 真因是**发射量写死**：`amount` = 96 是「同时在场的粒子数上限」，
+		# 寿命 0.5 s ⇒ 每秒最多吐 96/0.5 = 192 颗。
+		# 飞 19 m/s 时这 96 颗要铺 19×0.5 = **9.5 m**，每米只有 10 颗，
+		# 粒子直径才 0.3~0.8 m ⇒ 中间大段空白，看上去就是断开的链子。
+		# 速度越快铺得越长、断得越开 —— 正是用户看到的样子。
+		#
+		# 修法：**按速度提发射量**（上限 `PARTICLE_AMOUNT_MAX`），
+		# 让「每米粒子数」大体恒定，高速时尾巴也连得上。
+		gp.amount = PARTICLE_AMOUNT_BASE
 		gp.lifetime = 0.5
 		gp.local_coords = false
 		gp.emitting = false
@@ -1998,6 +2027,13 @@ func _run_effects(delta: float) -> void:
 		var gp := fx["particles"] as GPUParticles3D
 		gp.emitting = t > 0.25
 		gp.speed_scale = lerpf(0.6, 1.8, t)
+		# ── 按速度提发射量，别让高速时尾迹断成串珠 ──
+		# 见 `PARTICLE_AMOUNT_BASE/MAX` 与 `_build_boost_fx()` 里那段长注释。
+		# ⚠️ 只在**真的变了**的时候写（改 `amount` 会重建粒子缓冲，每帧写会掉帧）。
+		var want_amount := _particle_amount_for_speed(flight_speed)
+		if want_amount != int(fx.get("_amount", 0)):
+			fx["_amount"] = want_amount
+			gp.amount = want_amount
 		# 喷口柔光：跟着推力长出来，中心亮、边缘散。
 		# ⚠️ 这一层是「硬边三角」变「一团喷焰」的关键：锥体底边是直线，
 		#    光晕把那条直线糊掉。
