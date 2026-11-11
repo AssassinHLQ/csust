@@ -375,39 +375,68 @@ func _hide_message() -> void:
 	_message.visible = false
 
 
-## 校园渲染：默认走 GGS 光栅器（2026-10-30 起，打包也是这套）。
-## 回退老 GDGS Compute：`-- --ggs-campus=off` 或 `-- --no-ggs-campus`。
+## 校园渲染：**默认走 GDGS（Compute）全量点**。
 ##
-## ⚠️ 2026-11-11：用户要求「**先去掉校园泼溅**」⇒ 现在**默认两套都不挂**。
-##    `campus_ggs.gd::CAMPUS_SPLAT_ENABLED = false` 管 GGS，
-##    这里管 GDGS（`Campus` 那个 `campus_venue.tscn` 实例）。
-##    打开：`-- --ggs-campus=on`（GGS）或 `-- --campus-splat=on`（GDGS）。
-##    校园区的实体网格（地板 / 桥 / 平台 / 碰撞）不受影响，照常在那儿。
+## ── 2026-11-11 重大转向：从 GGS 改回 GDGS ──
+##
+## 用户点破了本喵一直搞错的一件事：
+##   「校园改回 gdgs,raster 这么快,原来是把点全部砍掉了,也不要 lod 了」
+##
+## 当年（2026-10-28）拿来对比的那组 fps 根本**不可比**：
+##     Compute  3.2 fps  ← **全量 615 万点**全画
+##     Raster  50.1 fps  ← 只画 3×3 窗口内约 120 万点 + 粗层（q4，153 万点铺满全场）
+## GGS 的「快」是**砍点换来的**：窗口外的点一个都不画，远处靠 1/4 抽稀的粗层顶。
+## 于是画面稀疏、远近不一致、还容易出白屏 —— 那些都是"省点"的代价，不是画质调参能救的。
+##
+## 现在：**GDGS 全量**，不切窗口、不用粗层 LOD。一次解码 6,144,827 点全在显存里。
+##
+## 代价（实测，如实说）：
+##   · 首次解码约 **115 s**（有 `.gdgsrt` 缓存时约 0.5 s；缓存 1.5 GB 在 exe 旁边 `_cache/splat/`）
+##   · 显存约 **2.9 GB**（615 万点 × 240 B ≈ 1.47 GB，GDGS 还要一份合并缓冲）
+##   · 8 GB 的 4060 Laptop 上要留意和画室 609 同时加载
+##
+## 开关：
+##   `-- --ggs-campus=on`   改用旧的 GGS 分块窗口（快，但砍点）
+##   `-- --campus-splat=off` 完全不画校园泼溅（只留实体网格）
 var campus_ggs_mode := false
 
 
-## 校园泼溅总开关。false = 不渲染任何泼溅（只留实体网格）。
-var campus_splat_enabled := false
+## 校园泼溅总开关。现在默认**开**（走 GDGS）。
+var campus_splat_enabled := true
 
 
 func _wants_campus_splat() -> bool:
 	for a in OS.get_cmdline_user_args():
+		if a == "--campus-splat=off" or a == "--no-campus-splat":
+			return false
 		if a == "--ggs-campus=on" or a == "--campus-splat=on":
 			return true
-		if a == "--ggs-campus=off" or a == "--no-ggs-campus" \
-				or a == "--campus-splat=off":
-			return false
 	return campus_splat_enabled
+
+
+## 要不要用 GGS（分块窗口）那套。默认 **false** = 走 GDGS 全量点。
+func _wants_campus_ggs() -> bool:
+	for a in OS.get_cmdline_user_args():
+		if a == "--ggs-campus=on":
+			return true
+		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
+			return false
+	return false
 
 
 func _maybe_enable_campus_ggs() -> void:
 	var want := _wants_campus_splat()
-	# GDGS 那份（`Campus` 节点）：不要就整棵放掉，省显存也省那 8 s 解码
+	# GDGS 那份（`Campus` 节点）：不画就整棵放掉，省显存也省那 115 s 解码
 	if not want and is_instance_valid(_campus):
 		_campus.queue_free()
 		_campus = null
 		print("[NextLevel] 校园泼溅已关闭（只留实体网格）")
+		return
 	if not want:
+		return
+	# 走 GGS 才挂 `CampusGGS`，并把 GDGS 那份藏起来/放掉（`campus_ggs.gd` 自己会处理）
+	if not _wants_campus_ggs():
+		print("[NextLevel] 校园泼溅：GDGS（Compute）全量 615 万点，不切窗口、不用粗层 LOD")
 		return
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
