@@ -1401,11 +1401,11 @@ func _tick_flight(delta: float) -> void:
 		_jump_consumed = false          # 新的一次按下：允许再次起飞
 	_rise_held = rise_now
 	var hold_ms := now_ms - _rise_pressed_at
+	# `_air_since` 仍然维护（别的判定要用），但**不再当起飞门槛**，见下面。
 	if not on_floor and _was_on_floor:
 		_air_since = now_ms
-	var grounded_grace := on_floor or (now_ms - _air_since) <= COYOTE_MS
 
-	# 起飞：在地面（或刚离地）按了一下上升键
+	# 起飞：按上升键就能进飞行态。
 	#
 	# ⚠️ **不要把 `_rise_pressed_at` 清掉**（原来写的是 `= -99999.0`）：
 	#    它同时被下面「按住够久 = 持续上升」用着。清掉之后按住空格一路飞，
@@ -1413,7 +1413,21 @@ func _tick_flight(delta: float) -> void:
 	#    表现就是「起飞了但爬不上去」，只有那一下 `LIFT_KICK` 的初速。
 	#    这个坑是 `_probe_carrier_fly.gd` 打逐帧 `vert` 打出来的（一直是 +0.0）。
 	#    起飞只需要保证「这一次按下已经消费掉」，用 `_jump_consumed` 单独记。
-	if not _airborne and grounded_grace and hold_ms <= JUMP_BUFFER_MS and not _jump_consumed:
+	#
+	# ── 2026-11-11：**掉落中也要能起飞**（用户：「爱丽丝机甲高空掉落仍然起飞」）──
+	#
+	# 原来条件是 `not _airborne and grounded_grace and ...`，而
+	#     grounded_grace = on_floor or (now − _air_since) <= COYOTE_MS(110ms)
+	# 于是从高处掉下来时：`on_floor` 是 false，`_air_since` 又早过 110 ms
+	# ⇒ **永远起不了飞**，而且 `_apply_flight()` 只在 `_airborne` 才跑，
+	# 所以掉下去就是纯自由落体、按空格完全没反应。
+	# （上一轮只修了「空中**变身**那一下直接进飞行态」，那只覆盖了
+	#   「在飞行态之间切换」；从地面走出去摔下来的情形根本没进过飞行态。）
+	#
+	# 现在放宽成「**不在飞行态 + 这一次按下还没消费**」就起飞 ——
+	# 地面起跳、半空掉下来、从平台边缘走下去，三种都走同一条路，
+	# 手感也一致（都给一次 `LIFT_KICK`）。
+	if not _airborne and hold_ms <= JUMP_BUFFER_MS and not _jump_consumed:
 		_take_off()
 		_jump_consumed = true
 
