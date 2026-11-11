@@ -123,6 +123,27 @@ const ARM_KEYWORDS := ["clavicle", "shoulder", "upperarm", "forearm",
 ## 那一大块白枪斜在身后，正是「后仰」剪影最显眼的那一笔。
 const WEAPON_KEYWORDS := ["weapon", "railgun", "magazine", "muzzle", "point"]
 
+## **二次动态骨**：头发 / 领带 / 丝带 / 链条 / 衣摆 / 翻领 / 挂饰。
+##
+## 这一批**不能**进站桩叠加层（`UpperBody`）。原因是一次实测（`_probe_aris_reload_eyes.gd`）：
+## 用户 2026-11-11 报「爱丽丝普通换弹动画最后一帧跳动幅度剧烈」。
+## 逐帧量完，换弹收招那一帧（t=1.083 s，state 回 LOCOMOTION）**单帧跳 64.62°**，
+## 下一帧 45.62°，跳的是 `bone_hair_m_r_05` / `bone_hair_m_r_02` —— **不是手枪、不是身体**。
+##
+## 机理：站着换弹时基础层播 `Normal_Idle`、叠加层播 `Normal_Reload`。叠加层后写、后赢，
+## 所以头发跟着换弹动作甩到某个姿势；收招时 `stop_upper_layer()` 一停，
+## 头发立刻被基础层的 idle 姿势接管 → 一帧 64° 的「啪」。
+## 头发是**悬挂型骨链**（5~7 段串联），尖端 64° 看起来就是甩了一下。
+##
+## 修法照抄已经验证过的 **`skirt` 先例**（`LOWER_KEYWORDS` 里早就有 `skirt`）：
+## 二次动态骨**根本不进叠加层**，全程由基础层驱动 ⇒ 收招前后是同一个数据源 ⇒ 跳变恒为 0。
+## 代价是换弹时头发走的是 idle 的轻微摆动、不是换弹自带的甩动 —— 比一帧抽搐好得多。
+##
+## ⚠️ 只加给**站桩层** `UpperBody`。跑打层 `UpperBodyMove` 是**故意**保留头发/眼/领子的
+##    （见 `_setup_upper_layer()` 的注释），别顺手改那边。
+const SECONDARY_KEYWORDS := ["hair", "necktie", "ribbon", "chain", "cloth",
+	"tail", "hooh", "lapel", "deco"]
+
 ## ⚠️ 为什么移动层连手臂都滤（用户第二轮报「跑打还是后仰」「还是没变呢」）：
 ##
 ##   前两轮修的是「躯干被站桩层掰走」（滤 spine/chest/neck/head + 中途换层），
@@ -212,12 +233,17 @@ var roll_fix := {}
 var blink_fix := {}
 ## `AnimSpikeFix.fix()`：消掉孤点关键帧（f25 那一下手臂抽搐）的报告
 var spike_fix := {}
+## `AnimTailSettle.fix()`：一次性动作末段收敛回 `Normal_Idle@0` 的报告
+## （消掉换弹收招那一帧 `Bip001 Head` 43.1° 的硬切）
+var tail_settle := {}
 ## `FaceFix.separate_face_layers()`：脸皮/眼睛共面推开的报告
 var face_fix := {}
 ## `FaceFix.simplify_brows()`：多层眉毛只留最前面那层的报告
 var brow_fix := {}
 ## `HaloFix.polish()`：头顶光环改成自发光、不投阴影的报告
 var halo_fix := {}
+## `EyeFix.kill_eye_clearcoat()`：眼睛去掉了几个材质的清漆高光
+var eye_fix := {}
 ## 「单独一条跑打开火动作」的并入报告（`AnimExtra.merge_glb()`）
 var runfire := {}
 
@@ -354,7 +380,26 @@ func _ready() -> void:
 		print("[AnimDriver] 光环抛光：%d 个网格 / %d 个材质（%s）" % [
 			int(halo_fix["meshes"]), int(halo_fix["applied"]),
 			str(halo_fix.get("names", []))])
+	# 眼睛：去掉清漆高光（用户 2026-11-11「为什么眼睛有时候右眼反光些？」）。
+	# 左右眼共用同一份材质，所以不可能是参数不同 —— 是 `clearcoat = 1.0` 这层
+	# 「跟着法线走的实时镜面反射」在两只球面上落点不同。见 `eye_fix.gd` 文件头。
+	eye_fix = EyeFix.kill_eye_clearcoat(get_parent())
+	if int(eye_fix.get("materials", 0)) > 0:
+		print("[AnimDriver] 眼睛去清漆高光：%d 个材质（%s，原 clearcoat=%s）" % [
+			int(eye_fix["materials"]), str(eye_fix["names"]), str(eye_fix["before"])])
 	_check_face_morphs()
+	# 一次性动作的**末段收敛**（用户 2026-11-11：「爱丽丝普通换弹动画最后一帧跳动幅度剧烈」）。
+	# 实测收招那一帧 **`Bip001 Head` 拧了 43.1°**（身体/腿 0.0°），头发整条链跟着，
+	# 因为 `Normal_Reload` 结尾还低着头。这里把最后 0.18 s 收敛回 `Normal_Idle` 的姿势。
+	# ⚠️ 必须配 `_return_to_locomotion(seek_idle=true)`（收招时把基础层拨回 0），
+	#    单做这一半还会剩「idle 相位差」的残差。理由见 `anim_tail_settle.gd` 文件头。
+	# ⚠️ 必须在 `_setup_upper_layer()` **之前**：叠加层是从 `player` 复制动作的，
+	#    顺序反了叠加层拿到的就是没修过的版本。
+	tail_settle = AnimTailSettle.fix(player)
+	if int(tail_settle.get("tracks", 0)) > 0:
+		print("[AnimDriver] 收招末段收敛：%s 最后 %.2f s → %s（%d 条轨道）" % [
+			str(tail_settle["clips"]), float(tail_settle["seconds"]),
+			AnimTailSettle.TARGET, int(tail_settle["tracks"])])
 	_setup_upper_layer()
 	# 跑打开火：把 Blender 拼好的**单条**动作并进动作库（见 `extra_glb` 上面那段）。
 	# 只并进基础层，两个叠加层不复制它 —— 它本来就是整身动作。
@@ -577,7 +622,19 @@ func _setup_upper_layer() -> void:
 	var host := player.get_parent()
 	if host == null:
 		return
-	upper = _make_overlay(host, "UpperBody", [])
+	# 站桩层：滤下半身 + **二次动态骨**（见 `SECONDARY_KEYWORDS`）+ **丢掉节点轨道**。
+	#
+	# ⚠️ 最后那个 `true`（`drop_node_tracks`）是 2026-11-11 补的，**这是真正的元凶**：
+	#    用户报「爱丽丝普通换弹动画最后一帧跳动幅度剧烈」。逐帧量完，
+	#    收招那一帧有 **146 根骨同时跳 ~43.1°**，且幅度几乎完全一致
+	#    —— 整条发链从根（挂 `Bip001 Head` 下）到尖端都是 43.1x°，
+	#    这说明**不是骨骼动画在跳，是整个模型根节点被转了一下**。
+	#    原因：`Normal_Reload` 的**节点轨道**（模型根的 position / rotation）
+	#    和 `Normal_Idle` 的差了 43°；叠加层后写后赢，一 `stop()` 就整具模型转回去。
+	#    `UpperBodyMove` 早就用 `true` 挡掉了这件事（见下面那三行注释，跑打时同样的坑），
+	#    站桩层一直漏着 —— 站桩开火动作的根节点接近中立，所以以前没暴露；
+	#    换弹动作的根节点偏得多，一跳就看得出来。
+	upper = _make_overlay(host, "UpperBody", SECONDARY_KEYWORDS, [], true)
 	# 移动层：躯干 + **手臂 + 武器**都滤掉（只剩头发/眼/领子/挂饰），见 `ARM_FREEZE_WHY`
 	# 最后那个 `true` = 连**节点轨道**（模型根节点的 position / rotation）一起丢掉，
 	# 否则跑着换弹时整个模型会被根节点轨道掰歪。见 `_make_overlay()` 里那段注释。
@@ -1006,16 +1063,24 @@ func _on_finished(anim_name: StringName) -> void:
 	if state == State.FIRE and anim_name == "Normal_Attack_Ing":
 		_return_to_locomotion()
 	elif state == State.RELOAD and anim_name == "Normal_Reload":
-		_return_to_locomotion()
+		# 换弹收招要「相位对齐」：`AnimTailSettle` 已把动作末帧收敛到 `Normal_Idle@0`，
+		# 这里再把基础层拨回 0，两边逐骨相等 ⇒ 硬切也看不出跳。
+		_return_to_locomotion(true)
 
 
-func _return_to_locomotion() -> void:
+func _return_to_locomotion(seek_idle := false) -> void:
 	state = State.LOCOMOTION
 	_auto_return = false
 	_walk_fire = false
 	# 停掉叠加层：它的骨头立刻会被基础层（每帧写全部骨）覆盖回去，不会留残影
 	stop_upper_layer()
 	_update_locomotion()
+	# `seek_idle`：配合 `AnimTailSettle` 的「末段收敛到 Normal_Idle@0」，
+	# 把基础层相位也拨回 0 —— 两边逐骨相等，硬切也看不出跳变。
+	# 原来这里硬切的是 **`Bip001 Head` 43.1°**（用户 2026-11-11 报的「最后一帧剧烈跳动」），
+	# 完整推导见 `anim_tail_settle.gd` 文件头。
+	if seek_idle and player != null and String(player.current_animation) == "Normal_Idle":
+		player.seek(0.0, true)
 
 
 ## 停叠加层（自检也会用；不在树里时 `stop()` 会报一串 ERROR，所以在这里挡一道）

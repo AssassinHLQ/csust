@@ -91,6 +91,9 @@ func feed_key(key: int) -> bool:
 
 ## 最大功率发射（按形态分流）。**没有蓄力，直接满威力。**
 func _fire_max() -> void:
+	# 声音：爱丽丝本人的 EX 技能原声（切掉前 2 s 蓄力，见 `sfx.gd` 的 `ex_fire` 那条）。
+	# 放在分流**之前**：两种形态都是同一发 EX，音效不该跟着形态变。
+	Sfx.play("ex_fire")
 	if is_mech():
 		print("[EX] 机甲 → 巨型轨道炮（满功率，COST -%d，剩 %d）" % [
 			EX_COST, CostGauge.display()])
@@ -239,17 +242,28 @@ func _can_hurt_take_damage(n: Object) -> bool:
 	return false
 
 
+## 这个节点能不能被 EX 的**光球**溅到（`_orb_explode` 走的是另一条路径）。
+## 判据和前一个函数一样：只认「敌人签名」的 take_damage。
+func _can_hurt_orb(n: Object) -> bool:
+	return _can_hurt_take_damage(n)
+
+
+## 这个节点是不是「不该挨自己 EX」的玩家？（光球路径也要挡）
+func _is_player_node(n: Object) -> bool:
+	return n != null and _player != null and n == _player
+
+
 func _orb_explode(holder: Node3D, at: Vector3) -> void:
 	var hurt := 0
 	for n in get_tree().get_nodes_in_group("bosses"):
 		var b := n as Node3D
 		if b != null and b.global_position.distance_to(at) <= ORB_AOE \
-				and b.has_method("take_damage"):
+				and _can_hurt_orb(b):
 			b.call("take_damage", ORB_DAMAGE, at, Vector3.UP)
 			hurt += 1
 	for n in get_tree().get_nodes_in_group("targets"):
 		var t := n as Node3D
-		if t != null and t.has_method("take_damage") \
+		if t != null and _can_hurt_orb(t) \
 				and t.global_position.distance_to(at) <= ORB_AOE:
 			t.call("take_damage", ORB_DAMAGE, at, Vector3.UP)
 			hurt += 1

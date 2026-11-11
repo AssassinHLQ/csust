@@ -22,13 +22,25 @@
 
 | 文件 | 来源 | 裁决 | 用于 |
 |---|---|---|---|
-| `SFX_Public_Aris_shot.wav` | `SFX_Public_Aris.wav` 峰 1.297 s 起切 0.130 s，高通 200 Hz | 质心 3205 Hz、RMS −14.6 dBFS、起振 0 ms | `fire`（变体①） |
-| `SFX_Aris_Hit_shot.wav` | `SFX_Aris_Hit.wav` 0.000 s 起切 0.130 s，高通 200 Hz | 质心 3551 Hz、RMS −14.8 dBFS、起振 0 ms | `fire`（变体②） |
 | `SFX_Common_RG_aris_Reload_out.wav` | `SFX_Common_RG_aris_Reload.wav` 0.100~0.590 s | RMS −9.0 dBFS（不过滤，保留机械 body） | `reload_out` |
 | `SFX_Common_RG_aris_Reload_in.wav` | `SFX_Common_RG_aris_Reload.wav` 1.160~1.640 s | RMS −12.7 dBFS（不过滤） | `reload_in` |
+| `SFX_Skill_Aris_Ex_blast.wav` | `SFX_Skill_Aris_Ex.wav` 2.050 s 起切 1.200 s | RMS −9.9 dBFS、质心 1712 Hz（大招该有的厚度） | `ex_fire` |
+| `SFX_Public_Aris_shot.wav` | `SFX_Public_Aris.wav` 峰 1.297 s 起切 0.130 s，高通 200 Hz | 质心 3205 Hz、RMS −14.6 dBFS、0 ms 起振 | **暂时没接线**（见下） |
+| `SFX_Aris_Hit_shot.wav` | `SFX_Aris_Hit.wav` 0.000 s 起切 0.130 s，高通 200 Hz | 质心 3551 Hz、RMS −14.8 dBFS、0 ms 起振 | **暂时没接线**（见下） |
 
 全部 **22050 Hz 单声道 16-bit**，峰值归一化到 −1 dBFS（变体之间响度必须一致，
 否则 13 发/秒连发会「忽大忽小声」）。
+
+## ⚠️ 两条 `*_shot.wav` 现在没接线（2026-11-11 用户裁决）
+
+用户先报「普通爱丽丝攻击太难听」，本喵换成上面这两条（指标全部对齐被替换的合成枪声：
+质心 3205/3551 Hz vs 基准 3404、连发 RMS −18.0 vs −18.2），**并做了 A/B 试听文件**。
+用户听完的原话：「**枪声还是前面 1.5 秒好听**」—— 前 1.5 秒就是原来那批合成枪声。
+
+所以 `fire` **回退到 `gunshot_000..004.wav`**。结论记在这里，别再重复试：
+**轨道炮原声不适合当 13 发/秒的连发枪声**，问题不在音质而在素材形状
+（一发是「充能 → 放电 → 轰鸣」，天然 1.8 s、89.6% 能量压在 250 Hz 以下，怎么裁都不像机枪）。
+文件留着不删 —— 想再试随时改 `sfx.gd` 的 `SPEC.fire.files` 即可。
 
 ## 被淘汰的候选（留档，别重复试）
 

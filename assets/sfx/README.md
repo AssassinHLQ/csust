@@ -19,18 +19,23 @@
 
 | 逻辑名 | 文件 | 响在哪 |
 |---|---|---|
-| `fire` | `aris/SFX_Public_Aris_shot`、`aris/SFX_Aris_Hit_shot`（随机挑一条 + 音高抖动） | `weapon.gd::shoot()` 开火 |
+| `fire` | `gunshot_000` ~ `004`（随机挑一条 + 音高抖动） | `weapon.gd::shoot()` 开火 |
 | `fire_beam` | `laserSmall_000` ~ `004`（`pitch_base 0.78` 压低成炮） | 机甲形态的激光大炮 |
 | `empty` | `click_001` | 空仓扣扳机（150 ms 节流，不然按住不放会「咔咔咔」） |
 | `reload_out` | `aris/SFX_Common_RG_aris_Reload_out` | 换弹开始（`reload_started`） |
 | `reload_in` | `aris/SFX_Common_RG_aris_Reload_in` | 换弹完成（`reload_finished`） |
+| `ex_fire` | `aris/SFX_Skill_Aris_Ex_blast` | EX 必杀发射（`ex_system.gd::_fire_max()`，连按 E→X） |
 | `ui_press` | `click_002` | 设置菜单里的按钮（含画质分段按钮） |
 | `ui_toggle` | `toggle_001` | 开关（同伴开火 / Boss 攻击） |
 | `ui_slider` | `tick_002` | 滑条值变化（音量压得很低，-14 dB） |
 | `ui_open` / `ui_close` | `open_001` / `close_001` | 菜单开 / 关 |
 
-> `gunshot_000..004.wav` 现在**没有接线**了（2026-11-11 起 `fire` 换成爱丽丝原声）。
-> 文件留在根目录不删：既是备份，也方便 A/B 对比 —— 想回退就把 `SPEC.fire.files` 改回去。
+> **`fire` 为什么用回合成枪声**：2026-11-11 试过换成爱丽丝的轨道炮原声（裁短 + 高通，
+> 裁好的文件还留在 `aris/*_shot.wav` 里），用户听完 A/B 说「枪声还是前面 1.5 秒好听」，
+> 于是回到合成那批。取舍的完整量化记录在 `scripts/sfx.gd` 的 `fire` 注释与
+> `aris/README.md` 里 —— 别再重复试一轮。
+>
+> `reload_out` / `reload_in` / `ex_fire` 用的仍是爱丽丝原声（用户对换弹音效表示满意）。
 
 ## 加一条新音效
 

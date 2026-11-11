@@ -505,7 +505,7 @@ const ENTRIES := [
 		"distributed": false,
 		"source": "",
 		"license_file": "",
-		"note": "由 _godot_editor_data/make_aris_sfx.py 从 SFX_Public_Aris / SFX_Aris_Hit / SFX_Common_RG_aris_Reload 裁出并高通滤波（谱质心与 RMS 对齐被替换的合成枪声）；逐条裁决见 assets/sfx/aris/README.md。音频本体被 .gitignore 排除，只留 *.wav.import",
+		"note": "由 _godot_editor_data/make_aris_sfx.py 从 SFX_Public_Aris / SFX_Aris_Hit / SFX_Common_RG_aris_Reload / SFX_Skill_Aris_Ex 裁出（前两条是连发枪声的候选，2026-11-11 用户听完 A/B 决定 fire 仍用合成枪声，故暂未接线）；逐条裁决见 assets/sfx/aris/README.md。音频本体被 .gitignore 排除，只留 *.wav.import",
 	},
 
 	# ---------- 剧情与图标 ----------
