@@ -97,6 +97,14 @@ const STORY_DIR := "res://story/"
 ##    「初始没有暂停」当场就红。想「进关卡直接开打」用 `-- --story=off`。
 const PLAY_OPENING := true
 
+## ── 开场标题卡（2026-11-11）──
+## 见 `scripts/title_intro.gd` 文件头。这里只管「什么时候播」：
+##   · 只在**第一次**进这个场景时播（`_entered_via_gate` 为假）；
+##   · `--script`（自检 / 探针）**一律不播**，理由和 `PLAY_OPENING` 一样；
+##   · `-- --intro=off` 可以手动关掉。
+const TitleIntroScript := preload("res://scripts/title_intro.gd")
+const PLAY_TITLE_INTRO := true
+
 var _floor_carved := false
 ## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
 var _room_scene: SplatScene = null
@@ -671,6 +679,9 @@ func _ready() -> void:
 	if _entered_via_gate:
 		print("[Game] 从别的场景返回：跳过开场剧情")
 	else:
+		# 标题卡 → 剧情。`await` 是关键：标题卡淡出之后画面才干净，
+		# 剧情接上去才不会和黑幕打架（两边都在 fades，叠起来会闪）。
+		await _play_title_intro()
 		_play_opening()
 
 
@@ -788,6 +799,45 @@ func _apply_scene_entry() -> bool:
 	print("[Game] 从别的场景返回：落点 = 门「%s」前 %s"
 		% [gate_id, str(point.snappedf(0.01))])
 	return true
+
+
+## 播开场标题卡。返回时画面已经干净（可以接着演剧情）。
+##
+## 用户 2026-11-11：「现在 做开始动画,开始动画怎么做合适呢」→
+## 选了「先只做标题卡」+「任意键可跳过」。做法见 `scripts/title_intro.gd` 文件头。
+##
+## 三个"不播"：
+##   ① `--script`（自检 / 探针）—— 和 `PLAY_OPENING` 同一条理由；
+##   ② `-- --intro=off`；
+##   ③ 从别的场景走门回来（`_entered_via_gate`）—— 调用方已经判了。
+func _play_title_intro() -> void:
+	if not PLAY_TITLE_INTRO:
+		return
+	if OS.get_cmdline_args().has("--script"):
+		return
+	for a in OS.get_cmdline_user_args():
+		if a == "--intro=off":
+			print("[Game] --intro=off：跳过开场标题卡")
+			return
+	var intro := TitleIntroScript.new() as Node
+	intro.name = "TitleIntro"
+	add_child(intro)
+	# 黑幕盖着的时候人还在场上：不锁住的话，玩家在看不见的情况下按 WASD /
+	# 空格能把自己走到悬崖边或者掉下去，淡出那一刻画面就是"人已经在别处"。
+	# `set_ride_lock(true)` 正好是现成的语义 —— 不落重力、不吃移动输入、
+	# 不做 `move_and_slide`（见 `player.gd::_physics_process`），和火箭骑乘同一条路。
+	var locked := false
+	if _player != null and _player.has_method("set_ride_lock"):
+		_player.call("set_ride_lock", true)
+		locked = true
+	print("[Game] 开场标题卡：开始（玩家已锁 %s）" % str(locked))
+	# 传 `_splats_ready`：标题卡会一直盖着黑幕，直到世界真的能看为止
+	# （冷缓存解 615 万点要 50 s，那段时间正好用来当载入画面）
+	await intro.call("play", Callable(self, "_splats_ready"))
+	if locked and _player != null and is_instance_valid(_player) \
+			and _player.has_method("set_ride_lock"):
+		_player.call("set_ride_lock", false)
+	print("[Game] 开场标题卡：结束")
 
 
 func _play_opening() -> void:
