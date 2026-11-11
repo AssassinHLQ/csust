@@ -44,6 +44,16 @@ extends Node
 ## 一个簇的包围盒对角线上限（m）。60 m ≈ 跑酷路线里两个检查点之间，
 ## 也远大于商店（对角 ≈ 15 m）和任何一只角色（≈ 2 m），所以它们各自成簇。
 const CLUSTER_DIAGONAL := 60.0
+## **完全由别的系统每帧接管 `visible` 的节点名**：本节点一个都不碰、不切簇。
+##
+## `game.gd::_update_room_swap()` 每帧都在写 `RoomProxy.visible`，而本节点的
+## `_process` 排在 `game._process` **之后**（子节点后跑）。只要 RoomProxy 被记进
+## `_hidden`，之后每 tick 就可能拿记下的旧 `visible` 去覆盖它 —— 这正是文件头
+## 2026-10-22 那次事故的近亲。2026-11-11 用户报「出609 → 进去 → 再出来墙没了」，
+## 本喵复现不出来（见 `game.gd::_update_room_swap()` 的注释），但这一类互相抢写的
+## 风险直接排除最干净：代理房子就一间、永远在玩家附近（场景才 52 m 宽，
+## 渲染距离最小 100 m），裁它没有收益。
+const MANAGED_BY_GAME := ["RoomProxy"]
 ## 递归深度上限：防止病态的深层链把栈吃穿
 const MAX_DEPTH := 16
 ## 判据刷新频率（10 Hz）。每帧算也行，但人走路时 0.1 s 的滞后完全看不出来，
@@ -218,6 +228,9 @@ func _total_meshes() -> int:
 
 ## 返回「这个子树里有没有切出至少一个簇」（用来兜底：切不动就当自己一簇）。
 func _collect(n: Node3D, depth: int) -> bool:
+	# 别的系统自己管 `visible` 的节点：不切簇、不进 `_hidden`（见 MANAGED_BY_GAME）
+	if String(n.name) in MANAGED_BY_GAME:
+		return false
 	var r := _subtree_aabb(n)
 	if not r["ok"]:
 		return false

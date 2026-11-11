@@ -1882,9 +1882,43 @@ func _dress_empty_lot() -> void:
 
 ## 每帧：在屋里 → 泼溅显示、代理藏；出屋 → 反过来。
 ## 泼溅**没就位之前**代理一直显示（宁可先看到一个实心房间，也别看到黑洞）。
+##
+## ── 自愈 + 切换日志（2026-11-11 用户：「为什么609出来,进去,再出来就失去了墙?」）──
+## 本喵按「出 → 进（重载）→ 再出」跑了两轮验证：headless 断言 5 步状态机全对，
+## 幕外窗口两张固定机位（屋内平视 / 屋顶俯视）出图也全对，把用户的真实
+## `settings.cfg`（`render_distance=100`、`splat_unload_outside=true`）拷进沙盒跑同样正常
+## —— **复现不出来**。所以这里加三件事，让下次真出问题时**不会静默**：
+##   ① 代理节点失效 → 现场重建（不再需要重启游戏）；
+##   ② `_room_box` 没体积 → 从碰撞盒重量；量不出来就**强制显示代理**，
+##      绝不让人站在空地上看见「没有墙的房间」；
+##   ③ 可见性**一变就打一行** `[609] 代理 … ↔ …`，带上玩家坐标 / 在不在屋里 /
+##      泼溅就绪与否 / 房间矩形尺寸 —— 用户下次复现时这行就是判据。
+## ⚠️ 没有 ② 的时候有个隐蔽死法：`_room_box` 一旦退化成空 AABB，
+##    `grow(±0.25).has_point()` 两边都是 false ⇒ `_room_inside` **卡在上一次的值**，
+##    出屋时卡在 true ⇒ 代理被永久藏起来 = 「墙没了」。这里堵掉它。
 func _update_room_swap() -> void:
-	if _room_proxy == null or _player == null:
+	if _player == null:
 		return
+	# ① 代理节点没了（被别的系统 queue_free / 场景里被删）→ 现场重建
+	if _room_proxy == null or not is_instance_valid(_room_proxy):
+		_room_proxy = null
+		_build_room_proxy()
+		_room_proxy = get_node_or_null(ROOM_PROXY_NAME) as Node3D
+		if _room_proxy == null:
+			return
+		print("[609] 代理网格不见了 → 已现场重建（%d 个子节点）" % _room_proxy.get_child_count())
+	# ② 房间矩形没体积 → 重新量；量不出来就别藏代理
+	if _room_box.size.length() <= 0.01:
+		var again := _room_box_from_collisions()
+		if again.size.length() > 0.01:
+			_room_box = again
+			print("[609] 房间矩形丢了 → 从碰撞盒重新量到 %s" % str(again.size.snappedf(0.01)))
+		else:
+			if not _room_proxy.visible:
+				_room_proxy.visible = true
+				push_warning("[609] 房间矩形量不出来（%s 下没有高于 %.1f m 的墙盒）→ 强制显示代理墙"
+					% [ROOM_COLLISION_PATH, ROOM_WALL_MIN_HEIGHT])
+			return
 	var p := _player.global_position
 	if _room_box.grow(-ROOM_SWAP_HYSTERESIS).has_point(p):
 		_room_inside = true
@@ -1892,7 +1926,15 @@ func _update_room_swap() -> void:
 		_room_inside = false
 
 	var ready := _room_scene != null and _room_scene.is_ready()
-	_room_proxy.visible = not _room_inside or not ready
+	var want_proxy := not _room_inside or not ready
+	# ③ 只在这一帧真的变了才写 + 打日志（每帧都写会盖掉别的系统，也没法排查）
+	if _room_proxy.visible != want_proxy:
+		_room_proxy.visible = want_proxy
+		print("[609] 代理%s ↔ %s（玩家 %s，在屋里=%s，泼溅就绪=%s，房间矩形 %s）" % [
+			"显示" if want_proxy else "隐藏",
+			"外景" if want_proxy else "内景",
+			str(p.snappedf(0.01)), str(_room_inside), str(ready),
+			str(_room_box.size.snappedf(0.01))])
 	if _room_scene != null and _room_scene.splat_node != null:
 		_room_scene.splat_node.visible = _room_inside and ready
 
