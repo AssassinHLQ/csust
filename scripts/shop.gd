@@ -46,6 +46,11 @@ extends Node3D
 ## 一律让它们**互相插进去 2 cm**（墙插进地板/屋顶、门柱插进横梁、家具插进地板）。
 const TUCK := 0.02
 
+## 营业灯的昼夜控制器（20:00 开 / 06:00 熄）。
+## ⚠️ 一律走这个 preload 常量，**不要**写全局类名 `ShopNightLights` ——
+##    `--script` 探针模式下类名表还没建好，写类名会让整个 shop.gd 编译不过。
+const SHOP_NIGHT_LIGHTS := preload("res://scripts/shop_night_lights.gd")
+
 ## ── 地块参照（找不到就退回默认值，不会崩）──
 @export_group("地块参照")
 @export var hut_path: NodePath = ^"../MeshHut"
@@ -159,6 +164,12 @@ func _wire_baked() -> void:
 	if shell_node != null:
 		var glb_root := shell_node.get_child(0) as Node3D if shell_node.get_child_count() > 0 else null
 		_fix_glb_materials(glb_root)
+	# 营业灯跟着昼夜走：20:00 开、06:00 熄（用户 2026-11-11）。
+	# ⚠️ 必须在 `_fix_glb_materials()` **之后**挂 —— 灯管材质是那个函数临时打开的，
+	#    早挂一帧就收集不到它了（`shop_night_lights.gd` 里等一帧才扫子节点）。
+	# ⚠️ 用 preload 而不是全局类名：`--script` 探针模式下类名表还没建好，
+	#    写 `ShopNightLights.attach()` 会让**整个 shop.gd 编译不过**（踩过）。
+	SHOP_NIGHT_LIGHTS.attach(self)
 	_build_clerk()
 
 
@@ -187,6 +198,9 @@ func build() -> void:
 	_build_clerk()
 	_build_lights()
 	_build_music_zone()
+	# 营业灯昼夜控制。上面 `_build_lights()` 刚把灯建出来，`_build_shell_from_glb()`
+	# 也已经把灯管自发光打开了 —— 到这里收集，两样都能扫到。
+	SHOP_NIGHT_LIGHTS.attach(self)
 	_report()
 
 
@@ -515,17 +529,92 @@ func _fix_glb_materials(inst: Node3D) -> void:
 				mat.emission_energy_multiplier = 1.8
 				print("[Shop]   材质 %-16s 保留自发光（灯带）" % key)
 			elif is_glass:
-				print("[Shop]   材质 %-16s 玻璃，保持半透明原样" % key)
+				# ⚠️ 2026-11-10 用户：「玻璃看不清，调低透明度」。
+				#    查下来根因**不是** alpha 太高（GLB 原值只有 0.081），
+				#    而是 `transparency` 被导成了 4 = `ALPHA_DEPTH_PRE_PASS`：
+				#    它先按不透明写深度再混色，远处看就是一块实心白板，
+				#    玻璃后面的东西全被深度挡住 —— 这才是「看不清」的真因。
+				#    改回普通 `ALPHA`（逐三角排序、真混合），alpha 再压到 0.060。
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				# 用户 2026-11-10 定稿：「alpha 调 0.5，浑浊度调高，想要磨砂玻璃」。
+				#
+				# 磨砂玻璃在 Godot 里要两个开关一起开，只调 roughness 是不够的：
+				#   ① `roughness` 高 → 高光被摊开（这是「表面粗糙」）
+				#   ② `refraction_enabled` + 高的 `refraction_roughness`
+				#      → 背景**通过玻璃时被模糊**（这才是「磨砂」的观感）
+				# 只开 ① 的话，玻璃还是能清清楚楚看到后面，只是反光变糊 —— 不像磨砂。
+				#
+				# ⚠️ 折射模糊依赖屏幕空间 shader，Forward+ 渲染器下效果最好；
+				#    Compatibility 下 `refraction_roughness` 会被忽略（仍能渲染，只是不糊）。
+				mat.albedo_color = Color(0.88, 0.93, 0.96, 0.5)
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				# 磨砂：表面粗糙 + 背景透过时模糊
+				mat.roughness = 0.85
+				mat.metallic = 0.0
+				mat.metallic_specular = 0.35
+				# 折射 = 背景经过玻璃时被采样并模糊，磨砂观感主要靠这一组
+				mat.refraction_enabled = true
+				mat.refraction_scale = 0.04          # 轻微折射，不要扭曲成水波纹
+				mat.refraction_roughness = 0.9       # ← 磨砂的「浑浊」就在这里
+				mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+				print("[Shop]   材质 %-16s 玻璃 → ALPHA（alpha=%.3f，原 transparency=%d）" % [
+					key, mat.albedo_color.a, src.transparency])
 			else:
 				# 结构件：关自发光。那张 lightmap 不能继续当底色 ——
 				# 当底色的话「烘焙阴影」会被真实光照再乘一次 = 双重阴影。
 				mat.emission_enabled = false
 				mat.albedo_texture = null
 				mat.vertex_color_use_as_albedo = false
-				mat.albedo_color = Color(0.95, 0.96, 0.97)
-				mat.metallic = 0.0
-				mat.roughness = 0.55
-				print("[Shop]   材质 %-16s 关自发光 → 普通受光白（粗糙 0.55）" % key)
+				# ⚠️ 2026-11-11 用户：「店里白墙改混凝土的质感，现在是不是反射高了」。
+				#
+				# 先回答"反射高"：查下来 **不是镜面反射高**，是**反照率高**：
+				#     旧值 albedo (0.95, 0.96, 0.97) → 反照率 95%，白纸式全反射
+				#     metallic = 0.0（镜面反射其实几乎没有）
+				#     roughness = 0.55（偏高光）
+				# 白墙把天空环境光（`Env_arena` 的 ambient_light_source = 3）
+				# 几乎全反射回来 → 白天过曝 **57.74%**（`_probe_shop_concrete.gd` 实测）。
+				#
+				# 混凝土的真实值：反照率 0.30~0.45、粗糙度 0.80~0.95，两者都要降。
+				# A/B 四档实测（12:00，朝店里深处的同一机位）：
+				#     A 现状 (0.95) rough 0.55  → 过曝 57.74%  平均 223.5
+				#     B 浅灰 (0.62) rough 0.88  → 过曝  1.67%  平均 183.8
+				#     C 中灰 (0.48) rough 0.90  → 过曝  1.64%  平均 155.8  ← 采用
+				#     D 深灰 (0.36) rough 0.92  → 过曝  1.37%  平均 128.3
+				# 选 C：白天有层次、夜里（21:00 平均 121.3）也有体积感，
+				# B 太接近白、D 在夜里偏沉。图在 `_arisu_captures/_shop_concrete/`。
+				#
+				# 另外挂了程序化混凝土贴图（`_gen_concrete_tex.gd` 生成，512²）：
+				#   · albedo 灰度斑驳 → 大尺度明暗，不像纯色塑料
+				#   · normal 细颗粒   → 光照下才有"混凝土"的表面凹凸
+				#   · rough 变化      → 抹子痕那种不均匀的哑光
+				# 贴图叠在 albedo_color 上，所以上面的色值仍是基准色。
+				var is_wall := key.contains("PLASTIK") or key.contains("Rectangle")
+				if is_wall:
+					mat.albedo_color = Color(0.48, 0.47, 0.45)
+					mat.roughness = 0.90
+					mat.metallic = 0.0
+					mat.metallic_specular = 0.30
+					var tex_a := load("res://assets/tex/concrete_albedo.png")
+					var tex_r := load("res://assets/tex/concrete_rough.png")
+					var tex_n := load("res://assets/tex/concrete_normal.png")
+					if tex_a != null:
+						mat.albedo_texture = tex_a
+						mat.uv1_scale = Vector3(3.0, 3.0, 1.0)
+					if tex_r != null:
+						mat.roughness_texture = tex_r
+						mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+					if tex_n != null:
+						mat.normal_enabled = true
+						mat.normal_texture = tex_n
+						mat.normal_scale = 0.85
+					print("[Shop]   材质 %-16s → 混凝土（albedo 0.48 / rough 0.90 / 带贴图 %s）"
+						% [key, "有" if tex_a != null else "无"])
+				else:
+					# 非墙非地的结构件（柜台等）：保守给中性灰，保持可读
+					mat.albedo_color = Color(0.80, 0.80, 0.79)
+					mat.metallic = 0.0
+					mat.roughness = 0.70
+					print("[Shop]   材质 %-16s 关自发光 → 中性灰（粗糙 0.70）" % key)
 			seen[key] = mat
 			mi.set_surface_override_material(s, mat)
 
