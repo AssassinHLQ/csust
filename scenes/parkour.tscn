@@ -322,23 +322,6 @@ mesh = SubResource("Cyl_post")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
 shape = SubResource("Shape_post")
 
-[node name="SignText" type="Label3D" parent="SignPost" unique_id=638101266]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
-pixel_size = 0.008
-billboard = 1
-alpha_cut = 1
-text = "跑酷 · 12 段 →"
-font_size = 64
-outline_size = 14
-
-[node name="StartSign" type="Label3D" parent="SignPost" unique_id=1625035280]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
-pixel_size = 0.01
-billboard = 1
-alpha_cut = 1
-text = "第 1 段 · 起点"
-font_size = 48
-
 [node name="Route" type="Node3D" parent="." unique_id=473777661]
 
 [node name="P1" type="StaticBody3D" parent="Route" unique_id=1580377109]

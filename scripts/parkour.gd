@@ -1255,17 +1255,11 @@ func _spawn_finish_portal() -> void:
 	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	door.add_child(panel)
 
-	var label := Label3D.new()
-	label.text = "坐火箭 · 去结算屋"
-	label.font_size = 64
-	label.pixel_size = 0.008
-	label.modulate = Color(0.75, 0.92, 1.0, 1.0)
-	label.outline_modulate = Color(0.05, 0.05, 0.08, 1.0)
-	label.outline_size = 18
-	# 往 +X 让开 2.4 m：火箭直径 1.51 m 正好卡在门框正中，招牌压在箭体上会糊成一团
-	# （出图 `_arisu_captures/_rocket/4_engines.png` 里能看到）。
-	label.position = Vector3(2.4, 3.05, 0.0)
-	door.add_child(label)
+	# ── 招牌文字：**已按用户要求去掉**（2026-11-11「文字去除」）──
+	# 原来这里生成一个 `Label3D`「坐火箭 · 去结算屋」，架在门框右上方。
+	# 用户看实机后要求删掉这些大招牌字（连同 `parkour.tscn` 里
+	# `SignPost` 的「跑酷 · 12 段 →」「第 1 段 · 起点」一起）。
+	# 门框/光板/触发区都保留 —— 只是不再立字。
 
 	var area := Area3D.new()
 	area.name = "Trigger"
