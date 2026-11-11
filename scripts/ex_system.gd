@@ -211,6 +211,38 @@ func _muzzle_point() -> Vector3:
 	return global_position
 
 
+## 准星对准点：从**相机中心**打一条 300 m 射线，命中就以命中点为目标。
+##
+## 用户 2026-11-11：「也很难打中,总是打偏」。
+## 根因：以前光球是从**炮口**沿 `camera_forward()` 方向射出 —— 炮口在角色身侧、
+## 和准星不在同一条线上，于是几百米外就看出偏差（近距离看不出来）。
+## 正确做法：先把准星指到的东西找到，再让「炮口 → 那个点」成方向。
+func _crosshair_point() -> Vector3:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return Vector3.ZERO
+	var from := cam.global_position
+	var to := from - cam.global_transform.basis.z * 300.0
+	var space := _fx_root.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(from, to)
+	q.exclude = [_player]
+	var hit := space.intersect_ray(q)
+	if not hit.is_empty():
+		return hit["position"]
+	return to
+
+
+## `dir` 用准星点算；准星点算不出来才退回相机朝向。
+func _aim_dir_to_crosshair(from: Vector3) -> Vector3:
+	var pt := _crosshair_point()
+	if pt == Vector3.ZERO:
+		return _aim_dir()
+	var d := pt - from
+	if d.length_squared() < 0.0001:
+		return _aim_dir()
+	return d.normalized()
+
+
 func _aim_dir() -> Vector3:
 	if _player != null and _player.has_method("camera_forward"):
 		var d: Vector3 = _player.call("camera_forward")
@@ -229,7 +261,8 @@ func _fire_laser_orb() -> void:
 		return
 	# 蓄力这 0.42 s 里枪口可能已经跟着走位挪了，重取一次
 	origin = _muzzle_point()
-	dir = _aim_dir()
+	# ⚠️ 方向改成「炮口 → 准星点」，否则远距离必然打偏（用户：「总是打偏」）
+	dir = _aim_dir_to_crosshair(origin)
 
 	var holder := Node3D.new()
 	holder.name = "LaserOrb"
@@ -289,6 +322,23 @@ func _fire_laser_orb() -> void:
 	_orb_fly(holder, origin, dir)
 
 
+## 光球拖尾的一节：一片小光晕，0.22 s 内缩+淡出后自删。
+##
+## 为什么不用 GPUParticles：那要额外配 ParticleProcessMaterial / Mesh，
+## 而且这股 EX 是「偶尔放一次」，每帧一个 tween 的开销可以忽略（约 2 帧寿命内几十个）。
+## 颜色跟着球走（粉紫），所以整条尾是同一个色系。
+func _spawn_trail(at: Vector3, dir: Vector3) -> void:
+	var h := _halo(ORB_RADIUS * 5.0, Color(0.92, 0.62, 1.00, 0.42), 6.0)
+	_fx_root.add_child(h)
+	# 稍微往回拖一点，尾巴才在球后面而不是和球重合
+	h.global_position = at - dir * 0.15
+	var tw := h.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(h, "scale", Vector3.ONE * 0.45, 0.22)
+	tw.tween_property(h.material_override, "albedo_color:a", 0.0, 0.22)
+	tw.chain().tween_callback(h.queue_free)
+
+
 func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 	var space := _fx_root.get_world_3d().direct_space_state
 	var pos := origin
@@ -312,7 +362,10 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 		pos = next
 		travelled += step
 		holder.global_position = pos
-		# 弯月扫掠：每 0.09 s 在球的位置甩一片扩张的青色弧（参考图 1/2）
+		# 拖尾（用户 2026-11-11：「为什么这个普通状态的 ex 没有光球拖尾?」）：
+		# 每帧在球的位置留一片小光晕，短促淡出 —— 便宜、且和球同色，读起来就是一条尾。
+		_spawn_trail(pos, dir)
+		# 弯月扫掠：每 3.8 m 在球的位置甩一片扩张的青色弧（参考图 1/2）
 		if travelled - last_crescent >= 3.8:
 			last_crescent = travelled
 			_crescent(pos, dir, randf_range(2.2, 3.4), ORB_ARC)
@@ -471,7 +524,7 @@ const RAIL_WIDTH := 0.95
 ##   · 发射瞬间再乘一个**收缩系数** `shrink`（1 → 0，0.45 s 内），
 ##     让「一开始超大」那一下真的存在，而不是整段都一样粗。
 const RAIL_CHARGE_TIME := 0.55       # 蓄力时长（秒），期间不放伤害
-const RAIL_SHRINK_SEC := 0.45        # 枪口宽度从「超大」收到正常所用的时间
+const RAIL_SHRINK_SEC := 0.22        # 枪口宽度从「超大」收到正常所用的时间
 const CHARGE_RING_MAX := 5.2         # 蓄力环涨到多大（米，半径）
 const CHARGE_RINGS := 3              # 几圈（错开相位，像参考图那样一层层）
 
@@ -751,12 +804,16 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 		#
 		# ⚠️ 透明度要**外层很淡、核心极亮**：加色混合会叠加，
 		#    第一版中间层给了 0.60，三层叠起来就成一块实心三角、没有发光感。
-		#    现在外两层只负责「雾」，真正的亮靠核心那层的高 emission。
+		# ⚠️ 2026-11-11 用户实机反馈：「我这个视角只能够看见一坨光」——
+		#    因为 `m` 给到 4.2 时枪口端半径 7.66 m，站在炮口后面那是**糊满屏幕的一团**。
+		#    现在 `m` 全部压到 1.5~1.9，收缩时间也从 0.45 s 缩到 0.22 s：
+		#    仍然「一开始粗一点」，但不再糊屏。
+		# ⚠️ 配色改**紫**（用户：「原作开大因为是超载会有紫色特效」）。
 		var layer_specs := [
-			{"r": 2.6, "m": 3.4, "c": Color(0.22, 0.45, 1.00, 0.07), "e": 1.0},
-			{"r": 1.5, "m": 4.0, "c": Color(0.35, 0.65, 1.00, 0.13), "e": 1.6},
-			{"r": 0.95, "m": 3.0, "c": Color(0.55, 0.85, 1.00, 0.22), "e": 3.0},
-			{"r": 0.42, "m": 1.7, "c": Color(1.00, 1.00, 1.00, 0.85), "e": 11.0},
+			{"r": 2.6, "m": 1.9, "c": Color(0.30, 0.15, 0.75, 0.07), "e": 1.0},
+			{"r": 1.5, "m": 1.8, "c": Color(0.45, 0.22, 0.95, 0.14), "e": 1.8},
+			{"r": 0.95, "m": 1.5, "c": Color(0.62, 0.45, 1.00, 0.24), "e": 3.2},
+			{"r": 0.42, "m": 1.3, "c": Color(0.92, 0.88, 1.00, 0.88), "e": 11.0},
 		]
 		var mats: Array = []
 		var cones: Array = []
@@ -781,7 +838,7 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 			mats.append(lmat)
 			cones.append({"cm": cm, "r": float(L["r"]), "m": float(L["m"])})
 		beams.append({"holder": holder, "mats": mats, "cones": cones,
-			"halo": _halo(RAIL_WIDTH * 11.0, Color(0.80, 0.92, 1.00, 0.50), 5.5), "from": froms[f]})
+			"halo": _halo(RAIL_WIDTH * 7.0, Color(0.72, 0.45, 1.00, 0.45), 5.5), "from": froms[f]})
 		_fx_root.add_child(beams[beams.size() - 1]["halo"])
 
 	while Time.get_ticks_msec() < t_end and is_instance_valid(self):
@@ -844,7 +901,7 @@ func _rail_fire(froms: Array[Vector3], dir: Vector3) -> void:
 			var mh: MeshInstance3D = b.get("halo")
 			if mh != null and is_instance_valid(mh):
 				mh.global_position = from + dir * 0.5
-				mh.scale = Vector3.ONE * (1.0 + 4.2 * shrink)
+				mh.scale = Vector3.ONE * (1.0 + 1.6 * shrink)
 				(mh.material_override as StandardMaterial3D).albedo_color.a = \
 					0.28 + 0.45 * shrink
 			# 流线条纹滚动：UV 沿轴向推，看起来能量在往外流

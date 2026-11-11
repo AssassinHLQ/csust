@@ -1035,6 +1035,11 @@ func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	tw.chain().tween_callback(flash.queue_free)
 
 	# ── 枪口扩散环 + 光晕（用户 2026-11-11 照参考图要「图 1/2」那种）──
+	# ⚠️ 机甲形态**不要这个环** —— 用户 2026-11-11：「机甲状态这个普通攻击不要圆环」。
+	#    机甲本身就是两条炮管连射，再加扩散环会糊成一圈白，所以只给本体形态加。
+	var carrier := _carrier_muzzles.size() > 0
+	if carrier:
+		return
 	# 参考图里炮口除了亮点，还有一圈**向外扩散的光环**跳出去。
 	# 环面与射线方向垂直（倾斜环在透视里就是一圈扩散的光）。
 	# ⚠️ 不依赖场景 glow（game.tscn 只有 0.25、next_level 只有 0.12），
