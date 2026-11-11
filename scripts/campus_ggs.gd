@@ -508,6 +508,16 @@ func _make_bundle() -> bool:
 	rasterizer.cov_limit[0] = _cov_cap
 	rasterizer.cov_limit[1] = _cov_ref
 	rasterizer.idle_skip = _idle_skip
+	# ⚠️ 2026-11-11 修「换窗口后整屏白」的**真因**之一：
+	#    这里必须按**当前视口**重设一次尺寸，不能让 `_process` 那段补。
+	#    `_process` 的写法是 `if _want_size != vs:` 才补 —— 而换窗口时
+	#    `_want_size` 早就等于 vs 了，整段被跳过 ⇒ 新建的光栅器**一直带着
+	#    构造时的旧尺寸**，按 2560×1334 算投影却贴到 1727×900 的画面上，
+	#    每颗泼溅被放大 1.48 倍、位置全偏 ⇒ 铺满整屏的白。
+	#    实测（`_probe_campus_white_walk.gd`）：白屏那一格
+	#      `视口=(1727,900)` 而 `rasterizer.texture_size=(2560,1334)`，
+	#      分层诊断显示「只有细层 97.9% 白、只有粗层 3.7%」—— 白的就是细层。
+	_sync_raster_size(rasterizer)
 
 	_ensure_coarse_raster()
 
@@ -543,7 +553,24 @@ func _ensure_coarse_raster() -> void:
 	var sc2 := minf(1.0, max_render_w / maxf(float(vs2.x), 1.0))
 	coarse_rasterizer.render_scale = [sc2]
 	coarse_rasterizer.texture_size = vs2
+	_sync_raster_size(coarse_rasterizer)
 	_coarse_done = true
+
+
+## 按**当前视口**把某个光栅器的渲染尺寸同步过去（新建之后必须调一次）。
+## 见 `_make_bundle()` 里那段长注释：`_process` 的补丁只在 `_want_size` 变化时触发，
+## 换窗口 = 新建光栅器而 `_want_size` 没变 —— 那条路径补不到。
+func _sync_raster_size(r) -> void:
+	if r == null or not is_inside_tree():
+		return
+	var vs: Vector2i = get_viewport().get_size()
+	if vs.x <= 0 or vs.y <= 0:
+		return
+	var sc := minf(1.0, max_render_w / maxf(float(vs.x), 1.0))
+	r.render_scale = [sc]
+	r.texture_size = vs
+	# 顺手把 `_want_size` 对齐，免得 `_process` 里立刻又跑一遍重复赋值
+	_want_size = vs
 
 ## scene_flow 在黑屏期间调它，把点云加载提前开始（本来 _process 第一帧也会做）。
 func force_start() -> void:
@@ -577,6 +604,22 @@ func is_ready() -> bool:
 func _release_campus(keep_coarse := false) -> void:
 	_released = true
 	_active = false
+	# ── 2026-11-11 修「再往前一步就整屏白」（本次复现：z = −124 处近白 97.8%）──
+	#
+	# 下面紧跟着会 `ctx.free()` 把**旧光栅器的纹理 RID 当帧还掉**，而 `keep_coarse`
+	# 这条路径**故意不拆 quad/tex**（好让粗层顶着、不黑一下）。于是 quad 会在
+	# 接下来若干帧里采一个**已释放的纹理 RID** —— 除非着色器整段跳过细层采样。
+	#
+	# 那个"跳过"靠的是 `fine_ready == 0`。但置 0 的代码在 `_process` 更后面，
+	# 一旦那次 `_make_bundle()` 没走到那一步（早退 / cam 为空 / bin 打不开），
+	# `fine_ready` 就**还停在 1.0**，正好落进上面那个坑 ⇒ 整屏白。
+	# 实测证据：`_probe_campus_white_walk.gd` 长距离走位复现时，
+	# 白屏那一格 `_window_names` 从 6 块变成 9 块（正在换窗口），而 `_fine_ready = 1.0`。
+	#
+	# ⇒ 不依赖后面那步：**在释放的这一瞬就把开关关掉**。
+	if _quad_mat != null and _fine_ready != 0.0:
+		_fine_ready = 0.0
+		_quad_mat.set_shader_parameter("fine_ready", 0.0)
 	if not keep_coarse:
 		# 换窗口时**不动 quad / tex**：quad 继续画着，粗层那张纹理还在，
 		# 新细层传好之前玩家看到的就是粗层 —— 不会黑一下（实测从空 4 帧降到 0 帧）。
@@ -742,6 +785,12 @@ func _process(_dt: float) -> void:
 	if rasterizer.render_texture != null 			and tex.texture_rd_rid != rasterizer.render_texture.texture_rd_rid:
 		tex.texture_rd_rid = rasterizer.render_texture.texture_rd_rid
 	# 粗层：同一套相机/尺寸，独立纹理。它**不随窗口换**，所以画面永远有底。
+	# ⚠️ 粗层也可能是**后来才就绪**的（分块 SOG 那套要后台解码）：那时 `_make_bundle()`
+	#    早就跑完了。这里补一次创建 —— 但**只在 `_ready_done` 之后**，
+	#    也就是细层已经在位、处于已知安全的状态，不在释放/重建的中间态里动手。
+	if coarse_rasterizer == null and _ready_done \
+			and _coarse_path != "" and _coarse_total > 0 and not _coarse_off:
+		_ensure_coarse_raster()
 	if coarse_rasterizer != null:
 		coarse_rasterizer.update_camera_matrices()
 		if coarse_rasterizer.is_loaded:
@@ -1277,7 +1326,12 @@ func _poll_coarse_prep() -> void:
 	print("[campus_ggs] 粗层就绪：%s（%d 点 / %.0f MB）" % [
 		_coarse_path, _coarse_total, float(_coarse_total) * 240.0 / 1048576.0])
 	_coarse_off = false
-	_ensure_coarse_raster()
+	# ⚠️ 2026-11-11：这里**不要**直接 `_ensure_coarse_raster()`。
+	#    原版粗层只在 `_make_bundle()` 里建 —— 那是「和细层一起、顺序已知安全」的时机。
+	#    本喵一开始在 poll 里就地建，等于给 `coarse_tex` 的创建/绑定开了第二条路径；
+	#    虽然没抓到它出问题，但半死光栅器正是上一次「整屏白」的病灶
+	#    （见 742a15f），不该在释放/重建的中间态里再插一条。现在只把路径挂上，
+	#    由 `_process` 里那段「粗层段」在 `_ready_done` 之后再建。
 
 
 func _join_coarse() -> void:
