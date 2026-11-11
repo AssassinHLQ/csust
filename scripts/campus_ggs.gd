@@ -228,8 +228,27 @@ const COV_REF := 0.036     # 中位数特征值（m²）⇒ σ_ref 0.19 m
 var _cov_cap := COV_CAP
 var _cov_ref := COV_REF
 
+## ── 2026-11-11：校园泼溅**默认关闭**（用户：「先去掉校园泼溅」）──
+##
+## 背景：校园泼溅的画质一直没调好（稀疏成点云 / 与知天下同类数据差一截），
+## 而它又是包体最大的一块（细层 85 MB + 粗层 21 MB + 底层 SOG 87 MB）。
+## 用户要求先去掉，把校园留成空景。
+##
+## 做法：**默认 `false`，命令行可开回来**（`--ggs-campus=on`），
+## 不删代码、不动场景结构 —— 画质调好之后一行就能恢复。
+##
+## 关掉之后的行为：
+##   · 本节点直接 `_gave_up`，不建光栅器、不占显存、不解码
+##   · `next_level.gd` 会把 `Campus`（GDGS 那份）也一起关掉（见那里的 `_campus_splat_enabled()`）
+##   · 校园区只剩实体网格（地板 / 桥 / 平台 / 碰撞），不会花屏也不会白屏
+const CAMPUS_SPLAT_ENABLED := false
+
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
+		if a == "--ggs-campus=on" or a == "--ggs-campus":
+			# 显式要求打开：把下面的默认关闭顶掉
+			set_meta("force_on", true)
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
 			_gave_up = true
 			set_process(false)
@@ -271,6 +290,15 @@ func _ready() -> void:
 		_gave_up = true
 		set_process(false)
 		return
+	# ── 2026-11-11：**默认关闭**（见 `CAMPUS_SPLAT_ENABLED` 那段）──
+	# 必须放在参数解析**之后**：`--ggs-campus=on` 会先 set_meta("force_on")，
+	# 放在前面的话会被这次默认关闭顶掉。
+	if not CAMPUS_SPLAT_ENABLED and not has_meta("force_on"):
+		_gave_up = true
+		set_process(false)
+		print("[campus_ggs] 校园泼溅默认关闭（要开：-- --ggs-campus=on）")
+		return
+
 	# 粗层：只有在分块模式下才有意义（单层全量本身就是「粗层」了）。
 	# `--ggs-coarse=` 显式给了空串就关掉，方便对照。
 	if _bin_override != "":

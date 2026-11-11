@@ -377,9 +377,38 @@ func _hide_message() -> void:
 
 ## 校园渲染：默认走 GGS 光栅器（2026-10-30 起，打包也是这套）。
 ## 回退老 GDGS Compute：`-- --ggs-campus=off` 或 `-- --no-ggs-campus`。
+##
+## ⚠️ 2026-11-11：用户要求「**先去掉校园泼溅**」⇒ 现在**默认两套都不挂**。
+##    `campus_ggs.gd::CAMPUS_SPLAT_ENABLED = false` 管 GGS，
+##    这里管 GDGS（`Campus` 那个 `campus_venue.tscn` 实例）。
+##    打开：`-- --ggs-campus=on`（GGS）或 `-- --campus-splat=on`（GDGS）。
+##    校园区的实体网格（地板 / 桥 / 平台 / 碰撞）不受影响，照常在那儿。
 var campus_ggs_mode := false
 
+
+## 校园泼溅总开关。false = 不渲染任何泼溅（只留实体网格）。
+var campus_splat_enabled := false
+
+
+func _wants_campus_splat() -> bool:
+	for a in OS.get_cmdline_user_args():
+		if a == "--ggs-campus=on" or a == "--campus-splat=on":
+			return true
+		if a == "--ggs-campus=off" or a == "--no-ggs-campus" \
+				or a == "--campus-splat=off":
+			return false
+	return campus_splat_enabled
+
+
 func _maybe_enable_campus_ggs() -> void:
+	var want := _wants_campus_splat()
+	# GDGS 那份（`Campus` 节点）：不要就整棵放掉，省显存也省那 8 s 解码
+	if not want and is_instance_valid(_campus):
+		_campus.queue_free()
+		_campus = null
+		print("[NextLevel] 校园泼溅已关闭（只留实体网格）")
+	if not want:
+		return
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":
 			return
