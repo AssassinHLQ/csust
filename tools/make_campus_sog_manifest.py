@@ -22,9 +22,13 @@
   coarse            粗层那一份（1×1、stride=4 抽稀）
 
 用法：
+    # 默认：细层 14×14 + 粗层
     python tools/make_campus_sog_manifest.py
+    # A/B 对照用：全量 1×1（stride=1）单独出一份清单，不带粗层
+    python tools/make_campus_sog_manifest.py --fine=full --out=chunks_full.json --no-coarse
 """
 
+import argparse
 import json
 import os
 import sys
@@ -39,13 +43,7 @@ except Exception:
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOG_DIR = os.path.join(ROOT, "splatdata", "campus_sog")
-FINE_DIR = os.path.join(SOG_DIR, "fine")
-COARSE_DIR = os.path.join(SOG_DIR, "coarse")
 FRAME = os.path.join(SOG_DIR, "frame.json")
-OUT = os.path.join(SOG_DIR, "chunks.json")
-
-EXPECT_FINE_TOTAL = 6144827      # = school_playable 裁剪后（见 fit_campus_frame.py）
-EXPECT_COARSE_TOTAL = 1536207    # = 每 4 点留 1（与原 campus_ggs_q4.bin 同序）
 
 
 def rel(p):
@@ -58,7 +56,18 @@ def sog_count(path):
 
 
 def main():
-    for p in (FRAME, FINE_DIR, COARSE_DIR):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fine", default="fine", help="细层子目录名（相对 splatdata/campus_sog）")
+    ap.add_argument("--coarse", default="coarse", help="粗层子目录名")
+    ap.add_argument("--out", default="chunks.json", help="输出清单文件名")
+    ap.add_argument("--no-coarse", action="store_true", help="不写粗层条目")
+    args = ap.parse_args()
+
+    fine_dir = os.path.join(SOG_DIR, args.fine)
+    coarse_dir = os.path.join(SOG_DIR, args.coarse)
+    out_path = os.path.join(SOG_DIR, args.out)
+    need = [FRAME, fine_dir] + ([] if args.no_coarse else [coarse_dir])
+    for p in need:
         if not os.path.exists(p):
             print("缺 %s" % p)
             return 1
@@ -72,7 +81,7 @@ def main():
     box_max = np.array(frame["content_max"], dtype=np.float64)
     box_size = box_max - box_min
 
-    fine = sorted(f for f in os.listdir(FINE_DIR) if f.endswith(".sogdata"))
+    fine = sorted(f for f in os.listdir(fine_dir) if f.endswith(".sogdata"))
     if not fine:
         print("fine 目录里没有 .sogdata")
         return 1
@@ -86,7 +95,7 @@ def main():
     for name in fine:
         _, sx, sz = name.split("_")
         i, j = int(sx), int(sz.split(".")[0])
-        p = os.path.join(FINE_DIR, name)
+        p = os.path.join(fine_dir, name)
         n = sog_count(p)
         total += n
         if n <= 0:
@@ -107,43 +116,57 @@ def main():
         })
     chunks.sort(key=lambda c: (c["j"], c["i"]))
 
-    coarse_files = [f for f in os.listdir(COARSE_DIR) if f.endswith(".sogdata")]
-    if len(coarse_files) != 1:
-        print("coarse 目录里应当恰好 1 个 .sogdata，实际 %d" % len(coarse_files))
-        return 1
-    coarse_path = os.path.join(COARSE_DIR, coarse_files[0])
-    coarse_n = sog_count(coarse_path)
-
-    print("[man] fine 点数合计 %d（期望 %d）" % (total, EXPECT_FINE_TOTAL))
-    print("[man] coarse 点数   %d（期望 %d）" % (coarse_n, EXPECT_COARSE_TOTAL))
-    if total != EXPECT_FINE_TOTAL or coarse_n != EXPECT_COARSE_TOTAL:
-        print("[man] ★ 点数对不上，说明切分参数或裁剪规则变了 —— 先查清楚再往下走")
+    # ⚠️ 期望值**从 frame.json 的 `kept` 取**，不要写死常数：
+    #    切分参数（nx/nz）一变，有些格子会变空、旧文件不被覆盖，
+    #    写死的常数会把「残留把总点数顶多」这种情况放过去。
+    expect_fine = int(frame["kept"])
+    print("[man] fine 点数合计 %d（frame.json 的 kept = %d）" % (total, expect_fine))
+    if total != expect_fine:
+        print("[man] ★ 点数对不上 —— 切分参数或裁剪规则变了，先查清楚再往下走")
         return 1
 
-    sizes = sum(os.path.getsize(os.path.join(FINE_DIR, f)) for f in fine)
-    sizes += os.path.getsize(coarse_path) + os.path.getsize(os.path.join(SOG_DIR, "shn_centroids.webp"))
+    coarse_entry = None
+    sizes = sum(os.path.getsize(os.path.join(fine_dir, f)) for f in fine)
+    if not args.no_coarse:
+        coarse_files = [f for f in os.listdir(coarse_dir) if f.endswith(".sogdata")]
+        if len(coarse_files) != 1:
+            print("coarse 目录里应当恰好 1 个 .sogdata，实际 %d" % len(coarse_files))
+            return 1
+        coarse_path = os.path.join(coarse_dir, coarse_files[0])
+        coarse_n = sog_count(coarse_path)
+        expect_coarse = expect_fine // 4
+        print("[man] coarse 点数   %d（每 4 点留 1 ⇒ 期望约 %d）" % (coarse_n, expect_coarse))
+        if abs(coarse_n - expect_coarse) > 2:
+            print("[man] ★ 粗层点数对不上，先查清楚再往下走")
+            return 1
+        coarse_entry = {"points": coarse_n, "sog": rel(coarse_path)}
+        sizes += os.path.getsize(coarse_path)
+    sizes += os.path.getsize(os.path.join(SOG_DIR, "shn_centroids.webp"))
     print("[man] 合计体积 %.1f MB" % (sizes / 1048576.0))
 
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump({
-            "_comment": "由 tools/make_campus_sog_manifest.py 生成。SOG 分块 + "
-                        "fit_campus_frame.py 解出的相似变换。",
-            "grid": {
-                "nx": nx, "nz": nz,
-                "box_min": [float(v) for v in box_min],
-                "box_max": [float(v) for v in box_max],
-            },
-            "frame": {
-                "axes": frame["axes"],
-                "origin": frame["origin"],
-                "scale": frame["scale"],
-                "residual_rms": frame["residual_rms"],
-            },
-            "centroids": rel(os.path.join(SOG_DIR, "shn_centroids.webp")),
-            "chunks": chunks,
-            "coarse": {"points": coarse_n, "sog": rel(coarse_path)},
-        }, f, ensure_ascii=False, indent=1)
-    print("[man] 写出 %s（%d 块）" % (OUT, len(chunks)))
+    doc = {
+        "_comment": "由 tools/make_campus_sog_manifest.py 生成。SOG 分块 + "
+                    "fit_campus_frame.py 解出的相似变换。",
+        "grid": {
+            "nx": nx, "nz": nz,
+            "box_min": [float(v) for v in box_min],
+            "box_max": [float(v) for v in box_max],
+        },
+        "frame": {
+            "axes": frame["axes"],
+            "origin": frame["origin"],
+            "scale": frame["scale"],
+            "residual_rms": frame["residual_rms"],
+        },
+        "centroids": rel(os.path.join(SOG_DIR, "shn_centroids.webp")),
+        "chunks": chunks,
+    }
+    if coarse_entry is not None:
+        doc["coarse"] = coarse_entry
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=1)
+    tail = "，含粗层" if coarse_entry is not None else "，无粗层"
+    print("[man] 写出 " + str(out_path) + "（" + str(len(chunks)) + " 块" + tail + "）")
     return 0
 
 

@@ -208,3 +208,4 @@ __pycache__/
 /splatdata/campus_sog/*
 !/splatdata/campus_sog/chunks.json
 !/splatdata/campus_sog/frame.json
+!/splatdata/campus_sog/chunks_full.json
