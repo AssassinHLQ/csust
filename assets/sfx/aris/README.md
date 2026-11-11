@@ -22,8 +22,8 @@
 
 | 文件 | 来源 | 裁决 | 用于 |
 |---|---|---|---|
-| `SFX_Common_RG_aris_Reload_out.wav` | `SFX_Common_RG_aris_Reload.wav` 0.100~0.590 s | RMS −9.0 dBFS（不过滤，保留机械 body） | `reload_out` |
-| `SFX_Common_RG_aris_Reload_in.wav` | `SFX_Common_RG_aris_Reload.wav` 1.160~1.640 s | RMS −12.7 dBFS（不过滤） | `reload_in` |
+| `SFX_Common_RG_aris_Reload_out.wav` | `SFX_Common_RG_aris_Reload.wav` 0.120~0.580 s（**切掉静音头尾**） | 0.460 s、RMS −8.7 dBFS（不过滤，保留机械 body） | `reload_out` |
+| `SFX_Common_RG_aris_Reload_in.wav` | `SFX_Common_RG_aris_Reload.wav` 1.195~1.560 s（**切掉静音头尾**） | 0.365 s、RMS −11.9 dBFS（不过滤） | `reload_in` |
 | `SFX_Skill_Aris_Ex_blast.wav` | `SFX_Skill_Aris_Ex.wav` 2.050 s 起切 1.200 s | RMS −9.9 dBFS、质心 1712 Hz（大招该有的厚度） | `ex_fire` |
 | `SFX_Public_Aris_shot.wav` | `SFX_Public_Aris.wav` 峰 1.297 s 起切 0.130 s，高通 200 Hz | 质心 3205 Hz、RMS −14.6 dBFS、0 ms 起振 | **暂时没接线**（见下） |
 | `SFX_Aris_Hit_shot.wav` | `SFX_Aris_Hit.wav` 0.000 s 起切 0.130 s，高通 200 Hz | 质心 3551 Hz、RMS −14.8 dBFS、0 ms 起振 | **暂时没接线**（见下） |

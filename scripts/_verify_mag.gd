@@ -169,7 +169,7 @@ func _run() -> void:
 	_check(saw_reload, "打空后自动进入换弹（没让玩家手动按 R）")
 	_check(weapon._trigger, "换弹期间左键仍是「按住」状态")
 
-	# 阶段 C：等换弹结束（reload_time 1.05 s + 收招余量）
+	# 阶段 C：等换弹结束（按 weapon.reload_time 等，别写死秒数 —— 2026-11-11 从 1.05 改成了 0.55）
 	guard = 0
 	var t_c := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t_c < 5000:
@@ -261,6 +261,23 @@ func _run() -> void:
 	print("  光弹起点离射线 %.3f m（fx_on_aim_line = %s）" % [off_axis, str(weapon.fx_on_aim_line)])
 	_check(off_axis < 2.0, "光弹起点仍在角色枪口附近（偏离 %.3f m）" % off_axis)
 	_check(not weapon.fx_on_aim_line, "起点留在枪口（投影到射线会让光弹沿视线飞、几乎看不见）")
+
+	# ── 换弹时长 ↔ 动作倍速必须对得上（跨文件的一对数字）──
+	# `weapon.reload_time`（计时用）和 `anim_driver.RELOAD_SPEED`（动作倍速）是两个文件里的
+	# 两个数字，关系是 RELOAD_SPEED = clip 长度 / reload_time。
+	# 只改一边就会出现「枪已经能打了、换弹动作还在播」或者「动作停了还在干等」。
+	# 2026-11-11 换弹从 1.05 提速到 0.55 时就是靠这条确保两边一起改。
+	var drv2: Node = player.get_node_or_null("Arisu/Model/AnimDriver")
+	if drv2 != null and drv2.has_method("reload_clip_length"):
+		var clip_len := float(drv2.call("reload_clip_length"))
+		var consts: Dictionary = (drv2.get_script() as Script).get_script_constant_map()
+		var speed := float(consts.get("RELOAD_SPEED", 0.0))
+		var real := clip_len / maxf(speed, 0.001)
+		var want := float(weapon.get("reload_time"))
+		print("  换弹：clip %.3f s ÷ 倍速 %.3f = %.3f s（weapon.reload_time = %.3f s）"
+			% [clip_len, speed, real, want])
+		_check(absf(real - want) < 0.06,
+			"换弹动作时长与 reload_time 对得上（差 %.3f s）" % absf(real - want))
 
 	print("\n================ 结果 ================")
 	print("失败 %d 项" % _fail)

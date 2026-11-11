@@ -68,7 +68,14 @@ const FADE := 0.18               # 交叉淡入时间
 ## 原速播的话一次射击动作要 2.67 秒才收招，手感「卡卡的」。
 ## 加速到 2.5 倍后约 1.07 s 收招，跟打空一梭 2.25 s 的节奏对得上。
 const FIRE_SPEED := 2.5
-const RELOAD_SPEED := 1.9
+## 换弹动作的播放倍速。**必须等于 `Normal_Reload` 的 clip 长度 ÷ `weapon.reload_time`**。
+##
+## 当前 `Normal_Reload` 长 **2.0 s**，`weapon.reload_time` = **0.55 s**
+## （2026-11-11 用户「换弹加快」）⇒ 2.0 / 0.55 = **3.636**。
+## ⚠️ 这两个数字是**跨文件**的，靠这条注释和 `_verify_mag.gd` 的断言绑在一起；
+##    只改一边会出现「枪能打了但动作还在播」或者「动作停了还在等」。
+##    历史：原来 reload_time 1.05 → 1.9。
+const RELOAD_SPEED := 3.636
 
 ## 一次性动作（开火 / 换弹）**只叠上半身** —— 见下面 `_setup_upper_layer()` 那段。
 ##
@@ -296,6 +303,16 @@ const HAND_L_BONE := "Bip001 L Hand"
 const HAND_R_BONE := "Bip001 R Hand"
 ## 每秒收敛速度（1/s）：14 ≈ 0.07 s 掰到位。扣扳机那一瞬间不要「啪」地跳过去。
 @export var gun_aim_speed := 14.0
+## 换弹收招时，把基础层的 `Normal_Idle` **相位拨回 0**（配合 `AnimTailSettle`）。
+##
+## `AnimTailSettle` 把动作末帧收敛到 `Normal_Idle@0`，所以拨回 0 之后
+## 「动作末帧」和「基础层此刻」逐骨相等，硬切看不出跳。
+## ⚠️ 但拨相位本身就是一次**瞬移**：基础层原本在 idle 的任意相位 X，
+##    拨到 0 会让身体从 idle(X) 跳到 idle(0) —— 如果 idle 在这段里变化明显，
+##    这就是用户说的「换弹动画总是闪一下」。
+##    所以留成开关，用 `_probe_aris_reload_eyes.gd` 量「拨 vs 不拨」的收招跳变再定。
+@export var seek_idle_on_reload := true
+
 ## **站定开火时要不要也把枪掰向准星**（默认 false）。
 ##
 ## 背景（用户 2026-11-11：「这个子弹对齐了准星，但是看起来是枪打出的子弹**锐角拐弯**」）：
@@ -408,9 +425,12 @@ func _ready() -> void:
 	#    单做这一半还会剩「idle 相位差」的残差。理由见 `anim_tail_settle.gd` 文件头。
 	# ⚠️ 必须在 `_setup_upper_layer()` **之前**：叠加层是从 `player` 复制动作的，
 	#    顺序反了叠加层拿到的就是没修过的版本。
-	tail_settle = AnimTailSettle.fix(player)
+	tail_settle = AnimTailSettle.fix(player, {
+		"Normal_Reload": RELOAD_SPEED,
+		"Normal_Attack_Ing": FIRE_SPEED,
+	})
 	if int(tail_settle.get("tracks", 0)) > 0:
-		print("[AnimDriver] 收招末段收敛：%s 最后 %.2f s → %s（%d 条轨道）" % [
+		print("[AnimDriver] 收招末段收敛：%s 各 %.2f s（真实时间）→ %s（%d 条轨道）" % [
 			str(tail_settle["clips"]), float(tail_settle["seconds"]),
 			AnimTailSettle.TARGET, int(tail_settle["tracks"])])
 	_setup_upper_layer()
@@ -1075,7 +1095,11 @@ func _on_finished(anim_name: StringName) -> void:
 		_return_from_runfire()
 		return
 	if state == State.FIRE and anim_name == "Normal_Attack_Ing":
-		_return_to_locomotion()
+		# 开火收招同样要「相位对齐」：`AnimTailSettle` 已把开火动作末帧收敛到
+		# `Normal_Idle@0`，这里再把基础层拨回 0，两边逐骨相等 ⇒ 不闪。
+		# 用户 2026-11-11：「**攻击动画**总是闪一下」—— 原来这条传的是默认 false，
+		# 所以开火每播完一次就硬切回 idle 闪一下；2× 攻速下每 0.4 s 闪一次。
+		_return_to_locomotion(true)
 	elif state == State.RELOAD and anim_name == "Normal_Reload":
 		# 换弹收招要「相位对齐」：`AnimTailSettle` 已把动作末帧收敛到 `Normal_Idle@0`，
 		# 这里再把基础层拨回 0，两边逐骨相等 ⇒ 硬切也看不出跳。
@@ -1093,7 +1117,8 @@ func _return_to_locomotion(seek_idle := false) -> void:
 	# 把基础层相位也拨回 0 —— 两边逐骨相等，硬切也看不出跳变。
 	# 原来这里硬切的是 **`Bip001 Head` 43.1°**（用户 2026-11-11 报的「最后一帧剧烈跳动」），
 	# 完整推导见 `anim_tail_settle.gd` 文件头。
-	if seek_idle and player != null and String(player.current_animation) == "Normal_Idle":
+	if seek_idle and seek_idle_on_reload and player != null \
+			and String(player.current_animation) == "Normal_Idle":
 		player.seek(0.0, true)
 
 

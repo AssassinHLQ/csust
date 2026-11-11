@@ -36,11 +36,147 @@ func _run() -> void:
 	_sk = _drv.get("skeleton") as Skeleton3D if _drv != null else null
 
 	await _measure_transition()
+	await _measure_fire()
 	_analyze_eyes()
 
 	game.queue_free()
 	await process_frame
 	quit()
+
+
+# --- ①b 开火收招（用户 2026-11-11：「攻击动画总是闪一下」）----------------------
+
+func _measure_fire() -> void:
+	print("\n================ ①b 开火收招时的跳变 ================")
+	if _drv == null or _sk == null:
+		print("  ❌ 拿不到 AnimDriver / Skeleton3D")
+		return
+	# 先让基础层稳定
+	for _i in 20:
+		await process_frame
+	var bones := _sk.get_bone_count()
+	var prev := _snapshot()
+	var frames: Array = []
+	var t0 := Time.get_ticks_msec()
+	var tp := 0.0
+	var finished := -1.0
+	_drv.call("request_fire")
+	while Time.get_ticks_msec() - t0 < 4000:
+		await process_frame
+		var t := (Time.get_ticks_msec() - t0) / 1000.0
+		var dt := maxf(t - tp, 0.0001)
+		var cur := _snapshot()
+		var worst := 0.0
+		var wb := ""
+		for i in bones:
+			var d := rad_to_deg((prev[i] as Quaternion).angle_to(cur[i] as Quaternion))
+			if d > worst:
+				worst = d
+				wb = _sk.get_bone_name(i)
+		frames.append({"t": t, "dt": dt, "deg": worst, "rate": worst * (0.016667 / dt),
+			"bone": wb})
+		prev = cur
+		tp = t
+		if finished < 0.0 and int(_drv.get("state")) == 0 and t > 0.05:
+			finished = t
+	if finished < 0.0:
+		print("  ⚠️ 4 s 内没看到开火收招")
+		return
+	print("  收招时刻 t = %.3f s「%s」" % [finished, String(_ap.current_animation)])
+	# 收招前后 ±3 帧
+	print("  ── 收招点前后 ±3 帧 ──")
+	for f in frames:
+		if absf(float(f["t"]) - finished) < 0.07:
+			print("    t=%6.3f  %6.2f°  归一%6.2f  dt=%5.1fms  %s"
+				% [float(f["t"]), float(f["deg"]), float(f["rate"]),
+					float(f["dt"]) * 1000.0, String(f["bone"])])
+	var peak := {"rate": 0.0, "deg": 0.0, "t": 0.0, "bone": ""}
+	for f in frames:
+		if float(f["rate"]) > float(peak["rate"]):
+			peak = f
+	print("  全程归一化最大跳变：%.2f°/帧@60fps（原始 %.2f°，%s，t=%.3f）"
+		% [float(peak["rate"]), float(peak["deg"]), String(peak["bone"]), float(peak["t"])])
+	# 收招那一帧的前 10 名（含父骨），并检查目标动作里有没有这些骨的轨道
+	print("  ── 决定性对照：弹匣骨三处取值 ──")
+	var lay_u = _drv.get("upper")
+	if lay_u != null and lay_u.has_animation("Normal_Attack_Ing"):
+		var ac: Animation = lay_u.get_animation("Normal_Attack_Ing")
+		var ic: Animation = _ap.get_animation("Normal_Idle")
+		var q_atk_end = _rot_at(ac, "bone_magazine", ac.length)
+		var q_atk_pre = _rot_at(ac, "bone_magazine", maxf(ac.length - 0.05, 0.0))
+		var q_idle0 = _rot_at(ic, "bone_magazine", 0.0)
+		print("      叠加层 clip 末帧  %s" % _q(q_atk_end))
+		print("      叠加层 clip 末前  %s" % _q(q_atk_pre))
+		print("      idle@0            %s   差 %.1f°"
+			% [_q(q_idle0), _qd(q_atk_end, q_idle0)])
+		print("      叠加层里有 magazine 旋转轨道 = %s"
+			% str(_idle_has_rot(ac, "bone_magazine")))
+	await _measure_fire_top10()
+
+
+func _q(v) -> String:
+	if v == null:
+		return "(没有)"
+	var q := v as Quaternion
+	return "(%.3f, %.3f, %.3f, %.3f)" % [q.x, q.y, q.z, q.w]
+
+
+func _qd(a, b) -> float:
+	if a == null or b == null:
+		return -1.0
+	return rad_to_deg((a as Quaternion).angle_to(b as Quaternion))
+
+
+func _rot_at(a: Animation, bone: String, t: float):
+	for i in a.get_track_count():
+		if a.track_get_type(i) != Animation.TYPE_ROTATION_3D:
+			continue
+		if a.track_get_path(i).get_concatenated_subnames() == bone:
+			return a.rotation_track_interpolate(i, t)
+	return null
+## 再跑一次开火，在「收招那一帧」抓跳变最大的 10 根骨（含父骨，
+## 以及目标动作 `Normal_Idle` 里到底有没有这些骨的旋转轨道）
+func _measure_fire_top10() -> void:
+	var bones := _sk.get_bone_count()
+	print("  ── 收招那一帧跳变最大的 10 根骨 ──")
+	for _i in 12:
+		await process_frame
+	_drv.call("request_fire")
+	var prev2 := _snapshot()
+	var t1 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t1 < 4000:
+		await process_frame
+		var cur2 := _snapshot()
+		if int(_drv.get("state")) == 0:
+			var rows: Array = []
+			for i in bones:
+				var d := rad_to_deg((prev2[i] as Quaternion).angle_to(cur2[i] as Quaternion))
+				if d > 1.0:
+					rows.append([d, i])
+			rows.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
+			var idle: Animation = _ap.get_animation("Normal_Idle") if _ap.has_animation("Normal_Idle") else null
+			for k in mini(10, rows.size()):
+				var idx := int(rows[k][1])
+				var bn := _sk.get_bone_name(idx)
+				var par := _sk.get_bone_parent(idx)
+				var pn := _sk.get_bone_name(par) if par >= 0 else "(无)"
+				var has := "—"
+				if idle != null:
+					has = "有" if _idle_has_rot(idle, bn) else "**无**"
+				print("      %6.2f°  %-26s 父=%-22s idle里有旋转轨道=%s"
+					% [float(rows[k][0]), bn, pn, has])
+			return
+		prev2 = cur2
+
+
+## 目标动作里有没有这根骨的旋转轨道
+func _idle_has_rot(a: Animation, bone: String) -> bool:
+	for i in a.get_track_count():
+		if a.track_get_type(i) != Animation.TYPE_ROTATION_3D:
+			continue
+		if a.track_get_path(i).get_concatenated_subnames() == bone:
+			return true
+	return false
 
 
 # --- ① 真实过渡测量 -----------------------------------------------------------
