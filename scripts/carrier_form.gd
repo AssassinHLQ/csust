@@ -1669,49 +1669,83 @@ func _update_lean(delta: float) -> void:
 	_lean = lerpf(_lean, want, clampf(6.0 * delta, 0.0, 1.0))
 
 
-## 每帧把「脸」掰回水平（只在飞行中）。原理与实测数据见 `HEAD_FIX_ENABLE` 那段。
+## 每帧把「头」掰回端正（`_on` 时都生效，不只飞行中）。
+##
+## ── 2026-11-11：从「只掰俯仰」升级成「三轴归位」 ──
+##
+## 用户报「机甲常态是歪着头的」，`_diag_carrier_head_tilt.gd` 量出来是：
+##
+##   基准 = 机甲自己的 `Idle`（头是端正的）      头「上轴」偏角 / 脸偏角
+##     机甲自己的 Idle / Walk                        0.00° /  0.24°
+##     借来的 Normal_Idle（**地面常态播的就是它**）  33.53° / 21.96°
+##     借来的 Move_Ing（空中播的）                  39.42° / 38.44°
+##     实机·地面（Normal_Idle）                      **29.04° / 23.98°**  ← 玩家看到的
+##     实机·空中（Move_Ing）                          6.74° /  5.36°
+##
+## 两件事说清楚了：
+##   ① 歪的**全是借来的爱丽丝战斗动作** —— 头骨在机甲骨架上重定向后差 30~40°，
+##      而且每条动作差的方向还不一样（不是常数偏移，补不掉）。
+##   ② 原来只掰俯仰（绕 `UP × fwd` 一个角），偏航/侧倾两个自由度没人管，
+##      所以地面上还剩下 29° 的歪。
+##
+## 头骨三轴在机体系里的指向（`_diag_carrier_head_tilt.gd` 实测，基准姿态）：
+##   **local Y = 脸朝前**（+Z）｜**local X = 上**（+Y）｜local Z = 右
+##   （⚠️ 2026-11-11 本喵一度把两者写反，实机偏差从 29° 涨到 84° ——
+##     探针的 `③` 段会把三根轴的实测指向打出来，改错了一眼能看见。）
+##
+## 现在依次归位三个自由度：俯仰 → 偏航 → 侧倾，每步重新读骨姿势。
+## 代价：**头部不再跟着动画动**（会一直保持端正）—— 机甲的头本来也不该
+## 跟着爱丽丝的动画乱拧，这正是用户要的。
 func _fix_head_face() -> void:
 	if not HEAD_FIX_ENABLE or _skel == null or _model == null:
 		return
-	# ⚠️ 2026-11-10：判据从 `not _on or not _airborne` 改成 `not _on`
-	#    （同一个 bug 的另一半，见 `_update_lean()` 里的说明）。
-	#    原来地上不掰头 ⇒ 机甲站在地上时下巴抬着、脸朝斜上方。
 	if not _on:
 		return
 	var hi := _skel.find_bone(HEAD_BONE)
 	if hi < 0:
 		return
-	# 头骨的**世界**基（实测 local Y = 脸朝前）
-	var xf := _skel.global_transform * _skel.get_bone_global_pose(hi)
-	var dir := xf.basis.y.normalized()
+	# 头骨的父母骨：骨姿势是**局部**的，要精确换算必须知道父骨的朝向（见下）
+	var pi := _skel.get_bone_parent(hi)
+	if pi < 0:
+		return
 	# 模型水平正面（`_model` 是 `Arisu` 节点，`player.gd` 每帧写它的 yaw）
 	var fwd := _model.global_transform.basis.z
 	fwd.y = 0.0
 	if fwd.length_squared() < 1e-6:
 		return
 	fwd = fwd.normalized()
-	var face := dir.dot(fwd)
-	# 仰角：用 atan2(竖直分量, 水平前向分量)。
-	# ⚠️ 不能只看 `dir.y`：`Move_Ing` 里脸既朝上、又偏到侧面 45°
-	#    （前向分量 0.694），所以必须带上前向分量一起算，否则角度会偏大。
-	var elev := atan2(dir.y, absf(face))
-	# ⚠️ 符号是**实测**定的，不是推出来的：本喵第一版写成 `-elev`，
-	#    结果验收量到 +72.33°（比修前的 46° 还大）—— 正好是「补偿量加了两次」，
-	#    说明旋转方向与推导相反。改成 `+elev` 后闭环收敛到 0。
-	var want := clampf(elev * HEAD_FIX_GAIN, -deg_to_rad(HEAD_FIX_MAX_DEG),
-		deg_to_rad(HEAD_FIX_MAX_DEG))
-	if absf(want) < deg_to_rad(0.3):
+
+	# ── 目标朝向 D：头的 local Y 指模型前方、local X 指世界上方、local Z 指右侧 ──
+	# （轴序是实测的：基准姿态下 local Y 与机体前方点积 +1.000、local X 与上方 +0.999）
+	var up := Vector3.UP
+	var d_world := Basis(up, fwd, up.cross(fwd)).orthonormalized()
+
+	# ── 一次算准，不逐轴试符号 ──
+	# 记 Hs = 头骨的全局姿势（骨架空间）、Ps = 父骨的全局姿势、Ls = 头骨的局部姿势，
+	# 则 Hs = Ps·Ls。设我们写入 Ls' = Q·Ls，于是
+	#     Hs' = Ps·Q·Ls = (Ps·Q·Ps⁻¹)·Hs
+	# 想让它等于目标 D（换算到骨架空间），就需要
+	#     Ps·Q·Ps⁻¹ = R_s = Ds·Hs⁻¹      ⇒      Q = Ps⁻¹·R_s·Ps
+	var skel_inv := _skel.global_transform.basis.inverse()
+	var hs := _skel.get_bone_global_pose(hi).basis
+	var ps := _skel.get_bone_global_pose(pi).basis
+	var ds := skel_inv * d_world                     # 目标换算到骨架空间
+	var r_s := ds * hs.inverse().orthonormalized()
+	# 九个分量逐个比对：R_s 与「当前朝向 → 目标」的差就是偏差本身
+	var q := (ps.inverse() * r_s * ps).orthonormalized().get_rotation_quaternion()
+	var ang := absf(q.get_angle())
+	if ang < deg_to_rad(0.3):
 		return
-	# 绕「水平横轴」转。`UP × fwd` 对 fwd = +Z 是 +X，配合上面的符号即可掰平。
-	var ax_world := Vector3.UP.cross(fwd)
-	if ax_world.length_squared() < 1e-6:
-		return
-	# 世界轴 → 头骨局部轴（骨骼姿势是局部的，必须换过去再乘）
-	var ax_local := (xf.basis.inverse() * ax_world.normalized()).normalized()
-	var cur := _skel.get_bone_pose_rotation(hi)
-	# ⚠️ 读的是**动画刚写进去的**当前姿势，再乘补偿 —— 不能读静止姿势，
-	#    那样每帧都会从绑定姿势重算，动画本身的动作就被抹掉了。
-	_skel.set_bone_pose_rotation(hi, Quaternion(ax_local, want) * cur)
+	# 保留原来的两个旋钮：`HEAD_FIX_GAIN`（1.0 = 完全掰正，调小则留一部分动画）
+	# 与 `HEAD_FIX_MAX_DEG`（单帧最大修正角）。默认值下就是精确归位。
+	var cap := deg_to_rad(HEAD_FIX_MAX_DEG)
+	if ang > cap:
+		q = Quaternion.IDENTITY.slerp(q, cap / ang)
+	if HEAD_FIX_GAIN < 1.0:
+		q = Quaternion.IDENTITY.slerp(q, clampf(HEAD_FIX_GAIN, 0.0, 1.0))
+	# 与当前局部姿势相乘（读的是动画刚写进去的姿势，不能读静止姿势，
+	# 否则每帧都从绑定姿势重算，动画本身的动作会被抹掉）
+	_skel.set_bone_pose_rotation(hi, (q * _skel.get_bone_pose_rotation(hi)).normalized())
 
 
 ## 每帧：推力 → 火焰长度 / 亮度 / 粒子 / 骨姿态

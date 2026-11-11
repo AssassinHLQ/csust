@@ -58,6 +58,21 @@ func _run() -> void:
 		return
 	print("头骨 index=%d｜载具节点 %s" % [hi, _carrier.name])
 
+	# 先看一眼：机甲自己那两条动作（头是正的）下，头骨三根轴在机体系里指向哪
+	_form.call("set_process", false)
+	_form.call("set_physics_process", false)
+	player.set_physics_process(false)
+	player.call("set_flight_lock", true)
+	await _play("Idle", 0.5)
+	print("")
+	print("③ 机甲自己的 `Idle`（基准，头是正的）—— 头骨三轴在机体系里：")
+	var d0 := _dirs(hi)
+	var names := ["local Y = 脸", "local X = 上", "local Z = 右"]
+	for k in 3:
+		var v: Vector3 = d0[k]
+		print("   %-8s (%+.3f, %+.3f, %+.3f)   与机体上方点积 %+.3f｜与机体前方 %+.3f"
+			% [names[k], v.x, v.y, v.z, v.dot(Vector3.UP), v.dot(Vector3.FORWARD)])
+
 	# ---------- ① 裸动作 ----------
 	_form.call("set_process", false)
 	_form.call("set_physics_process", false)
@@ -84,7 +99,6 @@ func _run() -> void:
 		var a_up := rad_to_deg(up.angle_to(base_up)) if have_base else 0.0
 		print("   %-20s %+10.2f %+10.2f   (%.2f, %.2f, %.2f)"
 			% [clip, a_face, a_up, face.x, face.y, face.z])
-
 	# ---------- ② 实机 ----------
 	print("")
 	print("② 实机（`_process` 开着，玩家真正看到的）")
@@ -106,9 +120,11 @@ func _run() -> void:
 	quit(0)
 
 
-## 头在**机体坐标系**里的两个方向向量：脸朝前的那根轴、以及头的「上」轴。
-## 用向量夹角判断歪没歪 —— 比在本探针里做欧拉分解可靠：
-## 头骨的绑定朝向与机体轴差 ~90°（基准姿态 yaw≈90/roll≈89），
+## 头在**机体坐标系**里的三个方向：脸(=local Y)、上(=local X)、右(=local Z)。
+## 轴序是**实测**定的（基准姿态下 local Y 与机体前方点积 +1.000、local X 与上方 +0.999）——
+## ⚠️ 2026-11-11 本喵一度按「local X = 脸」去改 `_fix_head_face()`，
+##    结果实机偏差从 29° 涨到 84°。下面 `③` 段会把三根轴的实测指向打出来，改错了一眼能看见。
+## 用向量夹角判断歪没歪 —— 比在这里做欧拉分解可靠：头骨绑定朝向与机体轴差约 90°，
 ## 那种姿态下机体系里的 YXZ 分解会把物理俯仰显示成 roll，读数会骗人。
 func _dirs(hi: int) -> Array:
 	var inv := _carrier.global_transform.basis.inverse()
