@@ -255,10 +255,18 @@ shape = SubResource("Shape_fall")
 
 ; 校园：world_scale=75（2026-10-28 用户要求「放大三倍」），地面 576×484 m。
 ; 同时把量出来的 1.16°/0.43° 扫描倾角转平：basis ≈ Rx(1.163°)·Rz(0.429°)，
-; y 让拟合地面落在 −0.02 附近；CampusCollision 的盒碰撞是从**同一变换**下的
-; 点云烘出来的（scripts/_bake_campus_collision.gd），改这里之后要重烘。
+; y 让拟合地面落在 −0.02 附近（实测见 `scripts/_probe_campus_place.gd`）；
+; CampusCollision 的墙碰撞是从**同一变换**下的点云烘出来的
+; （scripts/_bake_campus_collision.gd），改这里之后要重烘。
+;
+; ⚠️ 2026-11-11 移除 `use_default_orientation = true`：
+;    那一项是 `Basis.from_euler(0, 0, -PI)`，即**绕 Z 转 180°**（上下 + 左右同时翻）。
+;    用户报「什么都看不见」，实测点云整片**倒挂**在玩家头顶（路面在上、树朝下），
+;    而且 X 中心被翻成 −62.4（应为 0，正好是 `-center.x*75` 被取反的两倍）。
+;    碰撞网格本身是正的，所以玩家踩在看不见的正版校园上、看着一份翻过来又偏 60 m 的副本。
+;    移除后路面回到 y≈−0.02（与碰撞网格、与「主路 45 个落点全踩 −0.02」一致）。
 [node name="Campus" parent="." instance=ExtResource("8_campus")]
-transform = Transform3D(0.999972, -0.00749, 0, 0.007488, 0.999766, -0.020299, 0.000152, 0.020298, 0.999794, 0, 49.81, -316.7)
+transform = Transform3D(0.999972, -0.00749, 0, 0.007488, 0.999766, -0.020299, 0.000152, 0.020298, 0.999794, 0, 64.4, -316.7)
 crop_enabled = true
 crop_margin = 0.5
 crop_max_scale = 0.5
@@ -267,7 +275,6 @@ start_distance = 0.0
 low_priority = true
 preload_on_gate = false
 hide_inside_aabb = AABB(-17, -3, -11, 33, 19, 25)
-use_default_orientation = true
 
 ; 校园碰撞：campus_collision_walls_final.scn（2026-10-29 默认）
 ;   = collider-forge 的 Poisson 网格经 _tools/campus_collision_refine.py 三步处理：

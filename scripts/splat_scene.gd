@@ -412,8 +412,20 @@ func _apply_unload_setting() -> void:
 ##    ⚠️ 这个盒比真实房间大得多（609：x −16~14.4 / z −12.6~20.5），
 ##       拿它当判据会「永远走不出去」，只在没有手摆墙的场地里当粗略兜底。
 ##
-## ⚠️ 变换要用 `_local_basis()` + `_resolve_offset()` —— 这是给**源空间**点云盒
-##    换算世界坐标用的。碰撞盒已经在世界空间了，**不要**再过一遍，否则会缩放两次。
+## ⚠️ 变换要用 `global_transform × (_local_basis(), _resolve_offset())` —— 这是给
+##    **源空间**点云盒换算**世界**坐标用的。碰撞盒已经在世界空间了，**不要**再过一遍，
+##    否则会缩放两次。
+##
+## ⚠️ 2026-11-11 实测翻车：这里原来只乘 `_local_basis() * corner + _resolve_offset()`，
+##    **漏了节点自己的 `global_transform`**，算出来的是「局部空间盒」。
+##    画室 609 的节点摆在世界原点，所以这个错误一直没暴露；
+##    校园节点带 `(0, 49.81, -316.7)` + 1.16°/0.43° 倾角，于是：
+##      判据高度窗口 = y -110.6 ~ -71.4（真实世界点是 -29.1 ~ +31.7，玩家站 y=0）
+##      ⇒ 玩家永远判成「屋外」，泼溅一显示就被 `_unload_for_vram()` 放掉 ——
+##        用户看到的是「什么都看不见」。
+##      XZ 也一起歪了（z -278~+274，把大厅都算进校园）。
+##    `content_world_aabb()` 一直是**对的**（它乘了 `global_transform`），
+##    所以探针量出来的盒子和判据对不上时，先怀疑这里。
 func _remember_room_xz() -> void:
 	var wall_rect := _room_xz_from_walls()
 	if wall_rect.size != Vector2.ZERO:
@@ -427,11 +439,23 @@ func _remember_room_xz() -> void:
 	# （比如 reload 时节点还没挂回树）可能读不到，这时候退回大盒会让判据失效。
 	if _room_xz_is_walls and _room_xz.size != Vector2.ZERO:
 		return
-	var a: AABB = splat_aabb
+	# ── 用哪一份盒？──
+	# `splat_aabb` 是 `SogRuntime.load_sog()` 返回的 `aabb`，**已经过模型朝向校正**；
+	# `content_min/content_max` 是**原始 SOG 空间**的内容盒（裁剪后）。
+	# `use_default_orientation = true` 时两者差一个 180° 翻转，混用就会错一整个内容高度
+	# （校园实测：splat_aabb 映射到 y −69.7~−29.1，content 盒映射到 y −29.1~+31.7，
+	#  玩家站 y=0 —— 拿前者当判据必然判成「屋外」）。
+	# 所以这里统一走 content 盒，和 `content_world_aabb()` 完全同一套坐标。
+	var a := AABB()
+	if content_max.y > content_min.y:
+		a = AABB(content_min, content_max - content_min)
+	if a.size == Vector3.ZERO:
+		a = splat_aabb
 	if a.size == Vector3.ZERO:
 		return
-	var basis := _local_basis()
-	var offset := _resolve_offset()
+	# 源空间 → 世界空间：先 `_local_basis()`/`_resolve_offset()` 出局部盒，
+	# 再乘节点自己的 `global_transform`。两步都不能少（见上面 2026-11-11 那段）。
+	var xf := global_transform * Transform3D(_local_basis(), _resolve_offset())
 	var lo := Vector3(INF, INF, INF)
 	var hi := Vector3(-INF, -INF, -INF)
 	for i in 8:
@@ -439,21 +463,19 @@ func _remember_room_xz() -> void:
 			a.size.x * float(i & 1),
 			a.size.y * float((i >> 1) & 1),
 			a.size.z * float((i >> 2) & 1))
-		var w := basis * corner + offset
+		var w := xf * corner
 		lo = lo.min(w)
 		hi = hi.max(w)
 	_room_xz = Rect2(lo.x - unload_pad, lo.z - unload_pad,
 		(hi.x - lo.x) + unload_pad * 2.0, (hi.z - lo.z) + unload_pad * 2.0)
 	# 兜底路径也要给高度窗口，否则 `_room_y_lo == _room_y_hi == 0` 会被当成
 	# 「没算出来」而只按 XZ 判 —— 那正是「站屋顶也加载」的老毛病。
-	# 点云盒含屋顶离群点（609：−5.50~7.87），上限同样要收到「内容顶」下面。
-	# 这里没有墙盒可用，就用 `content_max`（裁剪后的内容顶，609 = 5.41）当屋顶线。
-	var roof_y: float = hi.y
-	if content_max.y > content_min.y:
-		var cmax_w := basis * content_max + offset
-		roof_y = cmax_w.y
+	# 上面已经改用 content 盒，`hi.y` 就是**内容顶**（不含离群椭球），
+	# 所以上限直接用它可以，不需要再从 `content_max` 单独换算一次
+	# （2026-11-11：那次换算是按「splat_aabb + 原始 content_max」写的，
+	#  朝向校正一介入就换错了轴，校园整片被判到地下）。
 	_room_y_lo = lo.y
-	_room_y_hi = roof_y
+	_room_y_hi = hi.y
 	print("[SplatScene] 房间水平范围（点云整体 + %.1f m 余量，无墙碰撞盒兜底）：x %.1f~%.1f，z %.1f~%.1f，y %.1f~%.1f" % [
 		unload_pad,
 		_room_xz.position.x, _room_xz.position.x + _room_xz.size.x,
