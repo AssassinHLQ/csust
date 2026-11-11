@@ -1,0 +1,23 @@
+音乐: 去掉所有淡入淡出，进/出房间直接硬切（_verify_music 22/22 全过，冒烟 12/12）
+
+用户 2026-11-11：「不要淡入淡出了，所有的」。
+
+- scripts/music.gd：`FADE_DEFAULT` 1.2 → **0.0**。`play()` 不再从 -40 dB 起步再
+  淡上来到基准音量，直接设成基准音量；`stop()` 直接 `stop()`。
+  淡化的机器（`_fade_to()` / tween 分支 / `fade` 参数）**都留着** ——
+  以后想给某个场景单独恢复淡化，调用时传个秒数就行，不用改结构。
+  顺手把打印行加上「跳回 %.2f s」，一眼能看出某首的 loop_offset。
+- scripts/gamedev_room.gd / scripts/esports_collision.gd：`Music.stop(0.6)`
+  → `Music.stop()`（那两处是「房间被释放时收尾」，原来夹带了 0.6 s 淡出）。
+- scripts/shop.gd / gamedev_room.gd / esports_collision.gd：注释里「淡入/淡出」
+  的说法改成「开/停」，别让描述和行为对不上。
+- assets/music/README.md：曲目表同步；新增「不做淡入淡出」一节
+- scripts/_verify_music.gd：加断言 `Music.FADE_DEFAULT <= 0`（防止谁手一滑改回去）；
+  画室609 的「出门停」改成必须 **30 帧内**停住
+
+实测：_verify_music **22/22 全过**（含「默认不淡化 FADE_DEFAULT=0.0 ✔」）；
+画室门外实测 **1 帧**就 `current="" && is_playing=false`（原来是等满 1.2 s 淡出）；
+_smoke_build 12/12「可以打包」。
+
+（上一轮被另一个会话未提交改动挡住的完整回归，这次跑通了 —— 那边的
+`splat_scene.gd` 改动已提交。）

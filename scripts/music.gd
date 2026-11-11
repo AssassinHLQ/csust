@@ -1,9 +1,9 @@
 class_name Music
 extends RefCounted
-## 背景音乐：**逻辑名 → 文件**，同一时刻只放一首，带淡入淡出。
+## 背景音乐：**逻辑名 → 文件**，同一时刻只放一首。
 ##
 ## ── 为什么和 `sfx.gd` 分开 ──
-## 音效是「一次响一声、允许叠、池子里轮转」；音乐是「一首循环、独占、要淡入淡出」，
+## 音效是「一次响一声、允许叠、池子里轮转」；音乐是「一首循环、独占」，
 ## 两者的生命周期完全不同。混在一个类里会让 `play()` 的语义变成两种。
 ##
 ## ── 和 `sfx.gd` 一样的三个取舍（理由见那个文件开头）──
@@ -13,9 +13,15 @@ extends RefCounted
 ##   3. 宿主 `process_mode = ALWAYS` —— 设置菜单/剧情把世界暂停时，音乐照常播。
 ##
 ## ── 循环从哪来 ──
-## **不在代码里设**：循环是 Godot 的 ogg 导入选项（`.import` 里的 `loop=true`）。
-## 代码只负责「播放 / 停止 / 交叉淡入淡出」。理由：导入期就定好循环点，
+## **不在代码里设**：循环是 Godot 的 ogg 导入选项（`.import` 里的 `loop=true`，
+## 以及 `loop_offset` —— 画室609 用它做「前奏播一次、之后跳回 1:16 反复」）。
+## 代码只负责「播放 / 停止」。理由：导入期就定好循环点，
 ## 运行期不用每帧盯 `finished` 信号再 `play()` 一次，也不会有那一帧的空隙。
+##
+## ── 不淡入淡出（用户 2026-11-11：「不要淡入淡出了，所有的」）──
+## `FADE_DEFAULT` 改成 0：进/出房间都是**硬切**，一秒都不拖。
+## 淡化的机器还留着（`play()` / `stop()` 的 `fade` 参数仍然有效），
+## 以后要局部恢复某个场景，传个秒数就行，不用改结构。
 
 ## 音乐文件目录
 const DIR := "res://assets/music/"
@@ -74,8 +80,9 @@ const TRACKS := {
 	"room609": {"file": "art609_theme.ogg", "db": -13.0},
 }
 
-## 默认淡入/淡出时长（秒）
-const FADE_DEFAULT := 1.2
+## 默认淡化时长（秒）。**0 = 不淡化**（用户 2026-11-11：「不要淡入淡出了，所有的」）。
+## 想给某处单独恢复淡化，调用时传个秒数即可，不用改这里。
+const FADE_DEFAULT := 0.0
 
 static var _host: Node
 static var _player: AudioStreamPlayer
@@ -86,11 +93,13 @@ static var _missing := {}
 
 
 ## 播一首。同一首已经在放就什么都不做（不会重头开始）。
+##
+## `fade` 默认 0（用户 2026-11-11：「不要淡入淡出了，所有的」）—— 直接出声。
 static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
 	if not TRACKS.has(track):
 		push_warning("[Music] 没有这首：%s" % track)
 		return false
-	if track == _current and _player != null and _player.playing:
+	if track == _current and is_instance_valid(_player) and _player.playing:
 		return true
 	if not _ensure_host():
 		return false
@@ -100,20 +109,24 @@ static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
 	var info: Dictionary = TRACKS[track]
 	var db := float(info.get("db", -12.0))
 	_player.stream = stream
-	# 先开声再淡入：`volume_db` 从很低起步，避免第一帧「啪」地全音量出来
 	if _player.playing:
-		# 换曲：先停旧的（这里不做交叉淡化，直接切 + 淡入，听感上够用）
+		# 换曲：直接切（不交叉淡化）
 		_player.stop()
-	_player.volume_db = db - 40.0
+	if fade <= 0.0:
+		_player.volume_db = db
+	else:
+		# 显式要求淡化时才从很低起步，避免第一帧「啪」地全音量出来
+		_player.volume_db = db - 40.0
 	_player.play()
 	_fade_to(db, fade)
 	_current = track
-	print("[Music] 播放 `%s`（%s，音量 %.1f dB，淡入 %.1f s，循环 %s）" % [
-		track, String(info.get("file", "?")), db, fade, str(_is_looping(stream))])
+	print("[Music] 播放 `%s`（%s，音量 %.1f dB，淡入 %.1f s，循环 %s，跳回 %.2f s）" % [
+		track, String(info.get("file", "?")), db, fade, str(_is_looping(stream)),
+		_loop_offset_of(stream)])
 	return true
 
 
-## 停。`fade` 秒内降到静音再真的 `stop()`。
+## 停。`fade` 秒内降到静音再真的 `stop()`；默认 0 = 立刻停。
 static func stop(fade: float = FADE_DEFAULT) -> void:
 	# ⚠️ 这里必须用 `is_instance_valid`，不能写 `== null`：被 `queue_free()` 的节点
 	#    **引用还在、但不是 null**，读 `.playing` 会抛 "previously freed instance"。
@@ -126,7 +139,6 @@ static func stop(fade: float = FADE_DEFAULT) -> void:
 		_player.stop()
 		_current = ""
 		return
-	var from_db := _player.volume_db
 	if fade <= 0.0:
 		_player.stop()
 		_current = ""
@@ -203,6 +215,12 @@ static func _is_looping(stream: AudioStream) -> bool:
 	if wav != null:
 		return wav.loop_mode != AudioStreamWAV.LOOP_DISABLED
 	return false
+
+
+## 只是打印用：循环时跳回的秒数（0 = 从头）。
+static func _loop_offset_of(stream: AudioStream) -> float:
+	var ogg := stream as AudioStreamOggVorbis
+	return ogg.loop_offset if ogg != null else 0.0
 
 
 static func _ensure_host() -> bool:

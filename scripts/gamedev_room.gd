@@ -115,8 +115,8 @@ func _sync_room_mesh() -> void:
 
 # ══════════════════════════ BGM 触发区 ══════════════════════════
 #
-# 用户 2026-11-11：「音乐需要增加」—— 走进游戏开发部活动室淡入
-# 「碧蓝档案OST」P70「Pixel Time（游戏开发部）」，走出去淡出。
+# 用户 2026-11-11：「音乐需要增加」—— 走进游戏开发部活动室开
+# 「碧蓝档案OST」P70「Pixel Time（游戏开发部）」，走出去停（不淡化）。
 #
 # ── 为什么盒子尺寸是**运行时量出来的**，不是写死在 .tscn 里 ──
 # 房间的墙 / 地板碰撞是 24 个手工拖出来的 `CollisionShape3D`，尺寸一直在微调
@@ -205,4 +205,4 @@ func _on_music_body(body: Node3D, delta: int) -> void:
 ## 房间被释放 / 换场景时别把 BGM 留在空气里飘。
 func _exit_tree() -> void:
 	if _music_inside > 0 and Music.current() == MUSIC_TRACK:
-		Music.stop(0.6)
+		Music.stop()

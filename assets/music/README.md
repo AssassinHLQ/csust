@@ -8,14 +8,24 @@
 
 | 文件名 | 用在哪 | 来源 |
 |---|---|---|
-| `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
-| `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间淡入、走出去淡出） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
-| `esports_theme.ogg` | 电竞房的 BGM（走进房间淡入、走出去淡出；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
+| `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去开、走出去停） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
+| `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间开、走出去停） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
+| `esports_theme.ogg` | 电竞房的 BGM（走进房间开、走出去停；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
 | `art609_theme.ogg` | 画室 609 的 BGM（范围按「出门」定，与泼溅释放同一套边界） | 「碧蓝档案OST Vol.1」P37「Lemonade Diary（咖啡厅）」，© NEXON Games / Yostar |
 
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
 （和 `assets/ui_sprout/`、`assets/ui_font/` 一样的处理）。
+
+## 不做淡入淡出（2026-11-11）
+
+用户：「不要淡入淡出了，所有的」。
+
+`scripts/music.gd` 的 `FADE_DEFAULT` 从 1.2 s 改成 **0**：进/出房间都是**硬切**。
+实测出门那一帧就停（原来要等 1.2 s 淡完）。`play()` / `stop()` 的 `fade` 参数
+还留着 —— 以后想给某个场景单独恢复淡化，调用时传秒数即可，不用改结构。
+
+自检里有一条断言盯着这件事（`Music.FADE_DEFAULT` 必须 ≤ 0），防止谁手一滑改回去。
 
 ## 怎么生成这个循环
 
@@ -204,7 +214,7 @@ headless 下播放位置升到 3.997 s（文件尾）后准确落回 1.000 s。
 
 ## 代码在哪
 
-- `scripts/music.gd` —— 曲目表（逻辑名 → 文件 + 音量）、播放 / 停止 / 交叉淡入淡出
+- `scripts/music.gd` —— 曲目表（逻辑名 → 文件 + 音量）、播放 / 停止（默认不淡化）
 - `scripts/shop.gd::_build_music_zone()` —— 店里的 `Area3D`，玩家进出时开 / 关音乐
   （烘焙场景 `shop_baked.tscn` 里的 `MusicZone` 节点走 `_wire_baked()` 接信号）
 - `scripts/gamedev_room.gd::_build_music_zone()` —— 活动室同理；盒子尺寸是**运行时**

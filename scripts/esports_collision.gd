@@ -78,7 +78,7 @@ func build_collision() -> void:
 # ══════════════════════════ BGM 触发区 ══════════════════════════
 #
 # 用户 2026-11-11：「Colorful Mess 这个放电竞房里面」——
-# 走进电竞房淡入，走出去淡出。曲目在 `scripts/music.gd`（逻辑名 `esports`）。
+# 走进电竞房开，走出去停（不淡化）。曲目在 `scripts/music.gd`（逻辑名 `esports`）。
 #
 # ── 和部室（`scripts/gamedev_room.gd`）的做法一样的地方 ──
 # 用 `Area3D` 而不是每帧算距离、用**计数**而不是布尔（理由见
@@ -178,4 +178,4 @@ func _refresh_music() -> void:
 ## 房间被释放 / 换场景时别把 BGM 留在空气里飘。
 func _exit_tree() -> void:
 	if _music_inside > 0 and Music.current() == MUSIC_TRACK:
-		Music.stop(0.6)
+		Music.stop()

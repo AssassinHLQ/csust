@@ -267,14 +267,17 @@ func _run() -> void:
 		# 出门：往门那一侧（`box_door_side = "z-"`）走出矩形
 		player.global_position = Vector3(cx, fy, rect.position.y - 2.0)
 		player.velocity = Vector3.ZERO
-		# 等过淡出（Music.stop 默认 1.2 s 才真的停）
+		# 不淡化之后**应该立刻就停**；留几帧给判据的防抖，并断言「停得快」
+		var stop_frames := -1
 		for _f in 150:
 			await process_frame
 			if Music.current() == "" and not Music.is_playing():
+				stop_frames = _f
 				break
-		print("[画室门外 %s] current=「%s」 is_playing=%s（应为空/false）"
-			% [str(player.global_position), Music.current(), str(Music.is_playing())])
-		r609_out = Music.current() == "" and not Music.is_playing()
+		print("[画室门外 %s] current=「%s」 is_playing=%s（应为空/false，用了 %d 帧）"
+			% [str(player.global_position), Music.current(), str(Music.is_playing()), stop_frames])
+		r609_out = Music.current() == "" and not Music.is_playing() \
+			and stop_frames >= 0 and stop_frames < 30
 
 		# 屋顶上：横向还在矩形内，但高过墙顶 → 也算屋外
 		player.velocity = Vector3.ZERO
@@ -286,6 +289,10 @@ func _run() -> void:
 		r609_roof = Music.current() == ""
 
 	print("\n=== 8. 判定 ===")
+	# ⚠️ 用户 2026-11-11：「不要淡入淡出了，所有的」—— 默认淡化必须为 0
+	var no_fade := float(Music.FADE_DEFAULT) <= 0.0
+	print("  默认不淡化（FADE_DEFAULT=%.1f）%s" % [
+		float(Music.FADE_DEFAULT), "✔" if no_fade else "✘"])
 	print("  循环开关（商店）        %s" % ("✔" if shop_st.loop else "✘"))
 	print("  循环开关（游戏开发部）  %s" % ("✔" if gd_st.loop else "✘"))
 	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
@@ -309,7 +316,8 @@ func _run() -> void:
 	print("  画室609：屋里放         %s" % ("✔" if r609_in else "✘"))
 	print("  画室609：出门停         %s" % ("✔" if r609_out else "✘"))
 	print("  画室609：屋顶不算屋里   %s" % ("✔" if r609_roof else "✘"))
-	var all_ok := shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
+	var all_ok := no_fade \
+		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and r609_st.loop_offset > 70.0 and r609_st.loop_offset < 80.0 \
 		and shop_zone_ok and shop_back and shop_started and shop_stopped \
 		and was_stopped and zone_ok and gd_started and gd_stopped \
