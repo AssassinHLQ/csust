@@ -57,6 +57,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	build_collision()
 	_build_music_zone()
+	_build_base_steps()
 
 
 ## 对外入口（探针也调）。**幂等**：只报一次。
@@ -188,3 +189,164 @@ func _refresh_music() -> void:
 func _exit_tree() -> void:
 	if _music_inside > 0 and Music.current() == MUSIC_TRACK:
 		Music.stop()
+
+
+# ══════════════════════ 底座外沿 → 台阶环 ══════════════════════
+#
+# 用户 2026-11-11：「电竞房下面那个碰撞的最大的底座，应该改成台阶而不是长方体」
+#                    → 选「底座四边外沿做成台阶环」。
+#
+# ── 这块「底座」是什么 ──
+# `AutoCol/P0000_0` = **9.20 × 0.30 × 10.73 m，y 0.06~0.36**，就是 `esports_parts.json`
+# 里的 `物件_1` —— **房间地板**（比屋外地面高 30 cm）。烘焙脚本 `_bake_esports_parts.gd`
+# 的 `FLOOR_LIFT` 又把它整体抬了 0.06 m（让角色的脚露在地板之上）。
+# 所以玩家现在进屋是**一步跨 36 cm** —— 接近 `step_climb.gd` 的 0.38 m 上限，
+# 手感是「卡一下再上去」。
+#
+# ── 做成什么 ──
+# 在底座四周**外沿**铺一圈 3 级踏步（每级 0.10 m 高、0.22 m 深），
+# 从屋外地面一级级走到台面高度。台阶**不覆盖**底座本身（底座保持原样当平台），
+# 所以室内走动、家具、门洞全都不受影响。
+#
+# ⚠️ 只加**水平外沿**的台阶，不动 `AutoCol` 里任何一个原盒子：
+#    动原盒子等于重新烘焙碰撞，门洞/家具那些刚调好的东西全得重验一遍。
+#
+# ⚠️ 台阶在底座**外沿之外**，所以三面会被墙压住（墙就立在底座外沿上，0.21 m 厚）——
+#    那三面的台阶玩家实际走不到，但留着无害（撞墙前先踩上台阶，反而更自然）。
+#    真正有用的那面是 **+Z 门那一侧**：底座在那边本来就短一截（z 只到 2.91，
+#    而门墙在 2.70~2.91），台阶正好补在门口外头。
+
+## 台阶级数
+const STEP_COUNT := 3
+## 每级进深（米）。0.22 m 比常见脚掌长（约 26 cm）略窄，但碰撞体的胶囊半径 0.30，
+## 实际踩上去很稳；再放宽会和门洞、家具挤在一起。
+const STEP_DEPTH := 0.22
+## 台阶命名，自检按名字找
+const STEP_NODE := "BaseSteps"
+
+
+## 找出「玩家脚下那块底座」，**按世界坐标认**。
+##
+## ⚠️⚠️ 别按局部 y 认 —— 这间房在 `game.tscn` 里是 **`Y=-1` 翻转**的
+## （`Transform3D(1,0,0, 0,-1,0, 0,0,-1, …)`，模型是倒着建的），
+## 所以「局部 y 大」= 「世界 y 小」：
+##
+##     局部 y 0.06~0.36（烘焙脚本里叫「地板」物件_1）→ 世界 y 3.25~3.55   ← 跑顶上去了
+##     局部 y 3.27~3.57（烘焙脚本里叫「天花板」物件_8）→ 世界 y 0.04~0.34  ← 玩家踩的是这块
+##
+## 本喵第一版按局部 y 找，正好找反：台阶被铺在了玩家够不着的顶层板边上
+## （探针量出来的 —— 射线在门口上方 3.55 m 处才命中台阶）。
+##
+## 判据（**世界空间**，相对「全部碰撞盒的最低处」算，不写死绝对高度）：
+##   顶面离最低处不超过 0.80 m + 水平投影最大（> 4 m²）。
+## 用相对量而不是 `y < 0.8`：独立加载 `esports_room.tscn` 时房间摆在世界原点、
+## 局部坐标直接就是世界坐标（底座在 y 0.06~0.36），绝对判据也成立；
+## 但放在 game.tscn 里、或以后有人把它抬高/放低，相对量都不会误判。
+func _find_base_box() -> AABB:
+	var auto_col := get_node_or_null(BAKED_AUTOCOL) as Node3D
+	if auto_col == null:
+		return AABB()
+	# 先求所有盒子的世界范围，拿到「最低处」
+	var all_boxes: Array[AABB] = []
+	var lowest := INF
+	for child in auto_col.get_children():
+		var node := child as CollisionShape3D
+		if node == null or node.disabled:
+			continue
+		var box := node.shape as BoxShape3D
+		if box == null:
+			continue
+		var a: AABB = node.global_transform * AABB(-box.size * 0.5, box.size)
+		all_boxes.append(a)
+		lowest = minf(lowest, a.position.y)
+	if all_boxes.is_empty() or lowest == INF:
+		return AABB()
+	# 顶面在「最低处 + 0.80 m」以内、水平投影最大的那块 = 底座台面
+	var best := AABB()
+	var best_area := 4.0
+	for a in all_boxes:
+		if a.end.y > lowest + 0.80:
+			continue
+		var area := a.size.x * a.size.z
+		if area > best_area:
+			best_area = area
+			best = a
+	return best
+
+
+## 绕底座外沿铺一圈台阶。**幂等**：已经有了就不再建。
+##
+## 全部按**世界坐标**摆，最后再换算回本节点空间（`global_transform.affine_inverse()`）——
+## 因为房间是翻转的，直接在局部空间里「往上加 y」会变成往下（见 `_find_base_box` 的说明）。
+##
+## ⚠️ 只在**房间真的摆进场地时**才建台阶：这栋房子在 `game.tscn` 里带 `Y=-1` 翻转
+## （`basis.y.y < 0`），翻转之后「哪块板在玩家脚下」才确定。独立加载
+## `esports_room.tscn`（探针/自检常这么干）时没有那个翻转，两块大板上下互换，
+## 「底座」根本不存在 —— 那种情况下建出来的台阶会挂在半空中
+## （实测：每级只有 0.018 m 高，因为选中的是另一块薄板）。
+func _build_base_steps() -> void:
+	if global_basis.y.y >= 0.0:
+		return                      # 没摆进场地（未翻转），不建
+	var base := _find_base_box()
+	if base.size == Vector3.ZERO:
+		push_warning("[EsportsCol] 找不到底座盒，台阶环不建")
+		return
+	if get_node_or_null(STEP_NODE) != null:
+		return
+
+	var body := StaticBody3D.new()
+	body.name = STEP_NODE
+	add_child(body)
+
+	var inv := global_transform.affine_inverse()
+	var bottom := base.position.y
+	var top := base.end.y
+	# 每级高度 = 底座厚度 ÷ 级数（0.30 ÷ 3 = 0.10），不写死 ——
+	# 写死会在底座厚度变化时让最内圈比台面高出一截。
+	var step_h := (top - bottom) / float(STEP_COUNT)
+	var cx := base.get_center().x
+	var cz := base.get_center().z
+
+	var made := 0
+	for j in STEP_COUNT:                       # j=0 最内圈（最高、齐平台面）→ j=2 最外圈（最矮）
+		var step_top := top - float(j) * step_h
+		var outer_grow := float(j + 1) * STEP_DEPTH
+		var inner_grow := float(j) * STEP_DEPTH
+		# 竖直方向：每一级都从底座**底边**一直立到自己的顶面（台阶是实心的裙边，
+		# 底下不悬空，玩家从外面看也不会看到缝）
+		var h := step_top - bottom
+		var y_c := bottom + h * 0.5
+		# 四片围成一圈（南北两片铺满外框，东西两片夹在中间 —— 避免四角叠两层）
+		var out_x := base.size.x + outer_grow * 2.0
+		var out_z := base.size.z + outer_grow * 2.0
+		var in_x := base.size.x + inner_grow * 2.0
+		var in_z := base.size.z + inner_grow * 2.0
+		var half_d := STEP_DEPTH * 0.5
+		# 南 / 北
+		_add_step_box_world(body, inv, Vector3(out_x, h, STEP_DEPTH),
+			Vector3(cx, y_c, cz - base.size.z * 0.5 - inner_grow - half_d))
+		_add_step_box_world(body, inv, Vector3(out_x, h, STEP_DEPTH),
+			Vector3(cx, y_c, cz + base.size.z * 0.5 + inner_grow + half_d))
+		# 西 / 东
+		_add_step_box_world(body, inv, Vector3(STEP_DEPTH, h, in_z),
+			Vector3(cx - base.size.x * 0.5 - inner_grow - half_d, y_c, cz))
+		_add_step_box_world(body, inv, Vector3(STEP_DEPTH, h, in_z),
+			Vector3(cx + base.size.x * 0.5 + inner_grow + half_d, y_c, cz))
+		made += 4
+
+	print("[EsportsCol] 底座台阶环：%d 级 × 每级 %.3f m 高 / %.2f m 深，共 %d 个碰撞盒"
+		% [STEP_COUNT, step_h, STEP_DEPTH, made])
+	print("[EsportsCol]   底座世界 y %.2f ~ %.2f，台阶外扩到 %.2f m（最外圈顶面 y=%.2f）"
+		% [bottom, top, float(STEP_COUNT) * STEP_DEPTH, top - float(STEP_COUNT - 1) * step_h])
+
+
+## 按**世界**尺寸/位置加一个台阶盒（内部换算回本节点空间）。
+## ⚠️ 房间 basis 是纯旋转（Y、Z 各 −1，行列式 +1），所以尺寸不用缩放，只需换中心点。
+func _add_step_box_world(body: StaticBody3D, inv: Transform3D,
+		size_world: Vector3, centre_world: Vector3) -> void:
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size_world
+	cs.shape = box
+	cs.position = inv * centre_world
+	body.add_child(cs)
