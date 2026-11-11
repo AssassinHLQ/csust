@@ -266,7 +266,7 @@ shape = SubResource("Shape_fall")
 ;    碰撞网格本身是正的，所以玩家踩在看不见的正版校园上、看着一份翻过来又偏 60 m 的副本。
 ;    移除后路面回到 y≈−0.02（与碰撞网格、与「主路 45 个落点全踩 −0.02」一致）。
 [node name="Campus" parent="." instance=ExtResource("8_campus")]
-transform = Transform3D(0.999972, -0.00749, 0, 0.007488, 0.999766, -0.020299, 0.000152, 0.020298, 0.999794, 0, 64.4, -316.7)
+transform = Transform3D(0.999972, -0.00749, 0, 0.007488, 0.999766, -0.020299, 0.000152, 0.020298, 0.999794, 0, 44.8, -316.7)
 crop_enabled = true
 crop_margin = 0.5
 crop_max_scale = 0.5
@@ -275,6 +275,7 @@ start_distance = 0.0
 low_priority = true
 preload_on_gate = false
 hide_inside_aabb = AABB(-17, -3, -11, 33, 19, 25)
+use_default_orientation = true
 
 ; 校园碰撞：campus_collision_walls_final.scn（2026-10-29 默认）
 ;   = collider-forge 的 Poisson 网格经 _tools/campus_collision_refine.py 三步处理：
