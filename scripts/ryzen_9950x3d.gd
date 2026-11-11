@@ -2,6 +2,7 @@ class_name Ryzen9950x3d
 extends Node3D
 
 const BankCard := preload("res://scripts/bank_card.gd")
+const RunMemory := preload("res://scripts/run_memory.gd")
 ## 609 画室桌子上的 **AMD Ryzen 9 9950X3D**（2026-11 用户：
 ## 「在 609 上面放十颗，按市场价算，这是隐藏的福利」）。
 ##
@@ -54,6 +55,17 @@ var _model_lod: Node3D
 
 func _ready() -> void:
 	add_to_group("ryzen9950x3d")
+	# ── 本次运行里已经被收走了 → 直接消失（2026-11-11）──
+	# 用户报「切换场景会重置 9950X3D」：那 149 颗是 `room609_cpus.tscn` 里的节点，
+	# 每次进 609 都重新实例化一份新的，而"已捡走"只写在节点自己的 `_taken` 里。
+	# 现在改成问 `RunMemory`（进程内 static，重开游戏才清空）。
+	#
+	# ⚠️ 必须在 `_build()` **之前**判：单颗 12,386 面 × 149 颗，白建一遍纯属浪费；
+	#    而且建出来再 `queue_free()` 会有一帧"模型闪一下又没了"。
+	if RunMemory.cpu_taken(RunMemory.cpu_key(self)):
+		_taken = true
+		queue_free()
+		return
 	_build()
 
 
@@ -280,6 +292,9 @@ func _futures() -> ParkourFutures:
 func _take() -> void:
 	_taken = true
 	_prompting = false
+	# 先登记"这颗没了"（换场景之后不再出现），再发钱 —— 顺序反了万一中途报错，
+	# 会出现「钱到手了、下次进 609 它还在」这种最烦人的组合。
+	RunMemory.mark_cpu(RunMemory.cpu_key(self))
 	var fut := _futures()
 	if fut != null:
 		fut.clear_prompt(self)

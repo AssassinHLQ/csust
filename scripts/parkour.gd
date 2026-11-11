@@ -53,6 +53,8 @@ const BankCard := preload("res://scripts/bank_card.gd")
 ## 可骑乘火箭的控制器。用 `preload` 而不是全局类名 —— 探针在 `--script` 下
 ## 解析不到 `class_name`（`RenderEnv` 那次栽过），这样最稳。
 const RocketRideScript := preload("res://scripts/rocket_ride.gd")
+## 「本次运行里已经发生过的事」（跨场景记得、重开游戏清空）。见 `run_memory.gd`。
+const RunMemory := preload("res://scripts/run_memory.gd")
 
 ## 跑道口那一头**唯一的停机位**（相对 `Launch`，往 +Z 挪 4.5 m ——
 ## 离开跑道 z 2.5~5.5，又还在主平台上）。
@@ -221,6 +223,13 @@ func _ready() -> void:
 	_spawn_settlement()
 	_ensure_roof_solid()
 	_spawn_ride_rockets()
+	# 本次运行里通关过 → 火箭和传送门**直接就在**（用户 2026-11-11：
+	# 「记住，当且仅当重开游戏」）。没有这一段，换个场景回来门就没了，
+	# 玩家站在跑道口只能看着火箭干瞪眼（「火箭飞回来怎么飞不回去了」）。
+	if RunMemory.parkour_done():
+		_home_rocket_revealed = true
+		_apply_home_rocket_visibility()
+		_spawn_finish_portal()
 	# 立即扫一遍（覆盖 .tscn 里摆好的招牌），再延迟扫一遍 —— 子场景
 	# `parkour_futures.gd` 会在运行时动态生成「第 N 段」规则牌，第一遍扫不到。
 	_gate_world_labels()
@@ -611,6 +620,7 @@ func _physics_process(_delta: float) -> void:
 		# 复活点由场景（game.gd）统一设成「本场景唯一的存档点」，跑酷不再自己改。
 		if not _player.died.is_connected(_on_player_died):
 			_player.died.connect(_on_player_died)
+	_update_board_prompt()
 	var p := _player.global_position
 	# 只有**脚踏实地站在大平台台面**上才算岛上存档：存档坐标写死成平台上的安全点，
 	# 不再记玩家踩上去的那一点（那可能是平台边缘 / 半空，y 压到 7.75 会生成在板子底下）。
@@ -671,6 +681,50 @@ func _physics_process(_delta: float) -> void:
 			print("[Parkour] 回到主平台：停表、**保留进度**（最近踩过第 %d 站 %s）"
 				% [checkpoint + 1, label_at(checkpoint)])
 			_disarm()
+
+
+## 站在跑道口那枚火箭脚下时，挂一条「按 F 上箭」的提示（见 `BOARD_RADIUS` 那段）。
+## 提示由跑酷 HUD（`parkour_futures.gd`，`futures` 分组）显示；取不到就只是没提示，
+## 功能不受影响（`_input` 那边同样会再查一次 owner）。
+func _update_board_prompt() -> void:
+	var want := _player != null and _home_rocket_revealed and not _riding \
+		and _player.global_position.distance_to(_home_spot()) <= BOARD_RADIUS
+	if want == _board_prompting:
+		return
+	_board_prompting = want
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut == null:
+		return
+	if want:
+		fut.call("ask_prompt", self, "按 F 上箭 —— 去终点岛（结算屋）")
+	else:
+		fut.call("clear_prompt", self)
+
+
+## 「上箭」的按键分支（见 `BOARD_RADIUS` 那段）。
+##
+## ⚠️ 只在**提示归本节点**时才吃 F：F 是好几个系统共用的（9950X3D 拾取、5090、
+##    商店…），谁挂着提示谁说了算 —— 判据和 `ryzen_9950x3d.gd::_input` 一致。
+func _input(event: InputEvent) -> void:
+	if not enabled or _riding or not _board_prompting:
+		return
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or key.keycode != KEY_F:
+		return
+	var fut := get_tree().get_first_node_in_group("futures")
+	if fut != null and fut.call("prompt_owner") != self:
+		return
+	var rocket := _rocket_at(_home_spot())
+	if rocket == null:
+		return
+	_board_prompting = false
+	if fut != null:
+		fut.call("clear_prompt", self)
+	_portal_cooldown = 2.0
+	get_viewport().set_input_as_handled()
+	print("[Parkour] 上箭（按 F）→ 坐火箭去结算屋（火箭 %s）"
+		% str(rocket.global_position.snappedf(0.1)))
+	_start_ride(rocket, _island_spot(), _island_exit_point(), _player, "去程", false)
 
 
 ## 脚下是第几站（不在任何一站上 → −1）。有重叠时取**靠后**的那一站。
@@ -952,6 +1006,23 @@ var _return_rocket: Node3D
 ##    `_start_ride()` / `depart_to()` 起飞前会强制 `set_visible(true)` 兜底，
 ##    免得将来有别的入口提前触发骑乘，出现「看不见的火箭把人送走」。
 var _home_rocket_revealed := false
+
+## ── 跑道口「上箭」（2026-11-11）────────────────────────────────────────
+## 用户报「火箭飞回来怎么飞不回去了」。
+##
+## 原来跑道口**只有** `FinishPortal` 那个 0.9 m 厚的门能触发起飞，而回程的落点
+## `return_target` **就在门里那一格** —— 人一落地就站在门中，
+## `Area3D.body_entered` 不会再响第二次，看起来就是「火箭回来了、却上不去」。
+##
+## 所以补一条**提示 + F**（和 9950X3D 拾取同一套说法）：
+##   · 站在火箭脚下 → HUD 出「按 F 上箭」，按了才走 —— 不会"站着不动被再送一趟"；
+##   · 门那个"踩上去就走"的触发**保持原样没动**（`_verify_rocket` 还盯着它）。
+##
+## ⚠️ 只在**通关过**之后才给提示（`_home_rocket_revealed`）：没通关时跑道口那枚
+##    火箭是隐藏的，用户 2026-11-08 的原话是「没完成跑酷的时候不要出现」。
+##    而"通关过"这件事本身现在是跨场景记住的（见 `_ready()` 里那段）。
+const BOARD_RADIUS := 9.0
+var _board_prompting := false
 ## 正在飞。防止降落动画途中又踩一次触发盒，重复起飞
 var _riding := false
 ## 这次骑乘结束后要不要 `reset_run()`（回程要清检查点/计时，去程不要）
@@ -1126,6 +1197,8 @@ func _spawn_avenger(pad: Node3D) -> void:
 func _on_run_finished(_seconds: float, _best: float) -> void:
 	# 通关这一刻，跑道口那枚火箭才显形（用户 2026-11-08「没完成跑酷的时候不要出现」）。
 	# 顺序很重要：先亮火箭再立传送门，玩家看到的是「门开了，火箭就在门口」。
+	# 「通关过」这件事记进 `RunMemory`（进程内 static）：换场景回来照样亮着。
+	RunMemory.set_parkour_done(true)
 	_home_rocket_revealed = true
 	_apply_home_rocket_visibility()
 	_spawn_finish_portal()
