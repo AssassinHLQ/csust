@@ -142,6 +142,29 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 ## 回到范围内之后多久才重载（秒）。同样归零：进门立刻开始后台解码。
 @export var reload_delay := 0.0
 
+@export_group("Render Distance")
+## 泼溅**不受「渲染距离」限制**（2026-11-11 用户要求：
+## 「设置高斯泼溅不受渲染距离限制，在学校区域就可以看见全貌」）。
+##
+## ── 为什么需要 ──
+## GDGS 的 Compute 后端是拿相机的**视投影矩阵**去投影每个高斯的
+## （`gaussian_compositor_effect.gd` → `scene_data.get_view_projection(view)`），
+## 而 `render_env.gd` 把 `Camera3D.far` 直接设成 `render_distance`。
+## 于是 `far` 以外的点被远平面切掉 —— 校园是 576×484 m，站在一头时另一头
+## 距离 > 700 m，默认 300 m 的渲染距离就把大半个校园剪没了。
+##
+## ── 做法 ──
+## 只在**本泼溅就绪期间**，按 `content_world_aabb()` 的 8 个角点到相机的
+## 最远距离去撑 `far`；卸掉就还原成设置值。
+## ⚠️ 不去改全局 `render_distance`：那会连带把网格/阴影/裁切距离一起放大。
+## ⚠️ 也不改 `addons/gdgs`：插件是共用的，改动面太大。
+@export var splat_ignore_render_distance := true
+## 撑出去的余量（米），别让内容边缘正好贴在远平面上。
+@export var splat_far_margin := 40.0
+## 上限（米）。开太大伤深度精度（`near` 0.05 时的比值），够用就行：
+## 校园对角线约 752 m，留一点余量。
+@export var splat_far_max := 2000.0
+
 @export_group("Collapse")
 ## 动态 3DGS「坍缩」：所有高斯同时等比变小，并向锚点收敛，最终在一点上塌掉。
 ##
@@ -381,6 +404,58 @@ func _process(delta: float) -> void:
 	_advance_dynamic(delta)
 	_update_inside_hide()
 	_update_room_exit_unload(delta)
+	_update_camera_far()
+
+
+## 把我们改过的相机远平面还原掉（每帧 / 卸载时调用）。
+## `id -> 我们改之前它自己的 far`，只还原**自己动过的**，绝不碰别人设的值。
+var _far_saved := {}
+
+
+## 泼溅不受渲染距离限制：把当前相机的 `far` 撑到「装得下整个内容盒」。
+##
+## 背景与取舍见 `splat_ignore_render_distance` 那段注释。
+## 只在就绪期间生效；没就绪 / 关掉开关 / 内容盒还没算出来时，把改过的值还回去。
+func _update_camera_far() -> void:
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var cam := vp.get_camera_3d()
+	if cam == null:
+		return
+	var key := cam.get_instance_id()
+
+	if not splat_ignore_render_distance or splat_node == null or not is_inside_tree():
+		if _far_saved.has(key):
+			# 还原时**不低于当前设置值**：撑大期间用户可能在设置里把渲染距离改大，
+			# 直接写回旧值会把它顶回去。取两者较大的那个，既尊重现有设置，
+			# 也不会把别人（探针 / 其它系统）设过的更大 `far` 压低。
+			cam.far = maxf(float(_far_saved[key]), maxf(GameSettings.render_distance(), 1.0))
+			_far_saved.erase(key)
+		return
+
+	var need := _cover_distance(cam.global_position) + splat_far_margin
+	if need <= cam.far:
+		return
+	if not _far_saved.has(key):
+		_far_saved[key] = cam.far
+	cam.far = minf(need, maxf(splat_far_max, 1.0))
+
+
+## 相机到内容盒最远角点的距离（内容盒为空时返回 0）。
+func _cover_distance(p: Vector3) -> float:
+	if splat_node == null:
+		return 0.0
+	var box := content_world_aabb()
+	var far_d := 0.0
+	for i in 8:
+		var corner := box.position + Vector3(
+			box.size.x * float(i & 1),
+			box.size.y * float((i >> 1) & 1),
+			box.size.z * float((i >> 2) & 1))
+		far_d = maxf(far_d, p.distance_to(corner))
+	return far_d
+
 
 
 ## 读设置：「出房间就释放泼溅显存」。设置面板改完立刻生效，不用重启。
