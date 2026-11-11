@@ -688,7 +688,7 @@ func _physics_process(_delta: float) -> void:
 ## 功能不受影响（`_input` 那边同样会再查一次 owner）。
 func _update_board_prompt() -> void:
 	var want := _player != null and _home_rocket_revealed and not _riding \
-		and _player.global_position.distance_to(_home_spot()) <= BOARD_RADIUS
+		and _player.global_position.distance_to(_board_anchor()) <= BOARD_RADIUS
 	if want == _board_prompting:
 		return
 	_board_prompting = want
@@ -699,6 +699,27 @@ func _update_board_prompt() -> void:
 		fut.call("ask_prompt", self, "按 F 上箭 —— 去终点岛（结算屋）")
 	else:
 		fut.call("clear_prompt", self)
+
+
+## 提示的圆心。**不是** `_home_spot()` —— 那只是「火箭停机的那一格」。
+##
+## ⚠️ 2026-11-11 用户报「火箭怎么做不了了，不出提示」：
+##    `_home_spot()` 取的是 `Launch + PORTAL_OFFSET`，而 `_spawn_finish_portal()`
+##    把门放在**同一个点**上（两者世界坐标完全一样，实测相距 0.00 m）。
+##    于是玩家要么站在门里（被门自动拉走，不需要提示），要么站在周围一圈 ——
+##    那时 `_riding` 已经是 true，提示当然挂不上。
+##
+##    真正该问的是「人是不是站在门**外面**、门附近」，而不是「离火箭轴线多近」。
+##    所以圆心挪到门的东侧 2 m：门内（会被带走）落在半径内照样不出提示（`_riding`
+##    兜住），圆盘剩下的部分全是「门旁边」的立足点。
+##
+##    这个偏移量必须 < `BOARD_RADIUS`：否则贴着门边站也够不着，提示又没了。
+##    2.0 + 玩家能站的距离，实测门侧 3 m 处正好在圈里（`_probe_board_prompt_paths`）。
+const BOARD_ANCHOR_OFFSET := Vector3(2.0, 0.0, 0.0)
+
+
+func _board_anchor() -> Vector3:
+	return _home_spot() + BOARD_ANCHOR_OFFSET
 
 
 ## 「上箭」的按键分支（见 `BOARD_RADIUS` 那段）。
