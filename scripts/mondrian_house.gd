@@ -174,7 +174,7 @@ func _make_materials() -> void:
 	var lamp := _std(Color(0.96, 0.94, 0.86), 0.60)
 	lamp.emission_enabled = true
 	lamp.emission = Color(1.0, 0.92, 0.74)
-	lamp.emission_energy_multiplier = 2.0
+	lamp.emission_energy_multiplier = LAMP_EMISSION
 	_mat["lamp"] = lamp
 
 
@@ -747,6 +747,9 @@ func _build_interior() -> void:
 ## 两层各两盏（关阴影：本项目对功耗敏感，shop.gd 里也是这么做的）。
 ## 没有实体灯管的话，8 m 高的室内白天也是一片灰，看不出红/蓝/黄。
 ##
+## ⚠️ 关阴影有个副作用：**一层那两盏会穿过二层楼板照到二层**（见 `LIGHT_ENERGY` 那段）。
+##    所以能量不能按"照亮一层"来给，得按"天花板离灯只有 0.11 m"来给。
+##
 ## ⚠️⚠️ 2026-10-26 用户：「灯又没有挂到天花板上而是浮空了」——**又**踩了小屋吊灯那个坑。
 ##    灯管原来固定挂在 y = 3.40 / 7.20，而两层天花板的下表面分别是
 ##    **3.950**（二层楼板底）和 **8.000**（屋顶底）：
@@ -761,6 +764,36 @@ func _build_interior() -> void:
 const TUBE_T := 0.08
 const TUBE_EMBED := 0.02
 
+## 单盏天花板灯的能量 / 照明半径。
+##
+## ⚠️⚠️ 调参记录（2026-11-11 用户：「为什么蒙德里安大楼这么亮堂，瞎死我了」+ 室内截图）──
+##   旧值 **2.4 / 13.0** 实测：二层过曝像素（RGB 全 ≥245）**14.25%**、平均亮度 **222/255**，
+##   而同一场景**室外**只有 169/255 —— 屋里比屋外还亮，所以"瞎"。
+##
+##   根因（不是"灯太多"，是**灯离天花板太近 + 没有阴影**）：
+##     · 灯挂在天花板下 **0.11 m** → 距离衰减系数 (1 − 0.11/13) ≈ **0.99**，
+##       两盏各给天花板 2.38，**合计 4.76**；
+##     · 一层那两盏在二层楼板**下面**、`shadow_enabled = false` → 光**穿过楼板**
+##       照到二层天花板（距 4.0 m，系数 (1−4/9) = 0.56，再补 0.85×0.56×2）。
+##       实测（探针里的 `B2_2fonly`）：只把二层两盏降到 0.85、一层留旧值 2.4，
+##       二层平均亮度**仍有 198.2/255**；四盏一起降才是 171.9 —— **差的 26 点
+##       全部来自穿楼板的一层灯**。所以只降二层那两盏是没用的。
+##     · 天花板一共拿到 **≈ 8 个光单位**，乘 0.945 的接近纯白反照率 → 必爆。
+##     · 二层地面同样被正上方 3.69 m 的两盏打到 3.4 个单位 → 也爆。
+##
+##   现在 **0.85 / 9.0**：二层过曝降到 **1.50%**（剩下的基本就是窗外天空 + 灯管本身）、
+##   平均亮度 **172/255**，和室外 169 齐平。
+##   实测图 `_arisu_captures/_mondrian_light/{A_now,F_085}_2f.png`，
+##   探针 `scripts/_probe_mondrian_bright.gd`（会同时打一二层 + 室外对照）。
+##   想更暗 → 0.65 / 8.5（G）；想更亮 → 1.05 / 10（E）。两档都出过图。
+const LIGHT_ENERGY := 0.85
+const LIGHT_RANGE := 9.0
+## 门口那盏：只在门口补一点，别把整个门厅一起照亮（原值 2.0）
+const DOOR_ENERGY := 1.0
+## 灯管自发光强度。原值 2.0，配 `glow_intensity = 0.25` 会在天花板上糊成一大团白。
+## 1.3 之后灯管仍然明显是"发光体"，但不再糊成一坨。
+const LAMP_EMISSION := 1.3
+
 func _build_lights() -> void:
 	# [天花板下表面 y, 标签]
 	for row in [[FLOOR_H - SLAB_T, "1"], [TOP_H, "2"]]:
@@ -772,8 +805,8 @@ func _build_lights() -> void:
 			l.name = "Light%s%s" % [tag, "W" if sx < 0.0 else "E"]
 			l.position = Vector3(sx * 3.20, tube_y - TUBE_T * 0.5 - 0.05, 0.40)
 			l.light_color = Color(1.0, 0.94, 0.84)
-			l.light_energy = 2.4
-			l.omni_range = 13.0
+			l.light_energy = LIGHT_ENERGY
+			l.omni_range = LIGHT_RANGE
 			l.shadow_enabled = false
 			add_child(l)
 			_deco("Tube%s%s" % [tag, "W" if sx < 0.0 else "E"],
@@ -786,7 +819,7 @@ func _build_lights() -> void:
 	door_light.name = "DoorLight"
 	door_light.position = Vector3(0.0, DOOR_H + 0.55, -HALF_D - 0.90)
 	door_light.light_color = Color(1.0, 0.95, 0.86)
-	door_light.light_energy = 2.0
+	door_light.light_energy = DOOR_ENERGY
 	door_light.omni_range = 7.5
 	door_light.shadow_enabled = false
 	add_child(door_light)

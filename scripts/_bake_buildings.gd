@@ -114,7 +114,13 @@ func _run() -> void:
 		var deck_root := Node3D.new()
 		deck_root.name = "ShopDeck"
 		deck_root.transform = shop.global_transform
-		game.get_root().add_child(deck_root)
+		# ⚠️ 2026-11-11 修：原来写的是 `game.get_root()` —— `Node` 上**没有**这个方法
+		#    （只有 `SceneTree` 有），一跑到这里就 `Invalid call`。
+		#    后果不只是 Deck 拆不出来：`_run()` 是协程，报错后**下面的 quit() 再也不会执行**，
+		#    整个 Godot 进程**挂住不退**，MONDRIAN_OUT 也就永远烘不出来
+		#    （`173db37` 引进的，之后每次烘大楼都静默失败）。
+		#    本脚本 `extends SceneTree`，直接用 `root`。
+		root.add_child(deck_root)
 		# Deck 摘过来，**局部坐标不动**。
 		shop.remove_child(deck_node)
 		deck_root.add_child(deck_node)
