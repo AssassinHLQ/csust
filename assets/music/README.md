@@ -10,6 +10,7 @@
 |---|---|---|
 | `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去淡入、走出去淡出） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
 | `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间淡入、走出去淡出） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
+| `esports_theme.ogg` | 电竞房的 BGM（走进房间淡入、走出去淡出；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
 
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
@@ -77,6 +78,43 @@ ffmpeg -i "$TEMP/gamedev_loop.wav" -c:a libvorbis -q:a 5 -ar 44100 assets/music/
 所以宁可短一点、让整首在 120 s 上无缝回转。40 s（5 × P）也能无缝接，
 但那样同一段素材重复得太密，房间待久了会腻。
 
+## 电竞房那首（`esports_theme.ogg`）
+
+源文件 111.8293 s（320 kbps MP3，`「碧蓝档案OST🎵」音乐合集~Vol.1（320K）_P8_Colorful Mess_音频.mp3`）。
+
+**这首不能用「周期整数倍」那套直接套**，原因有两个：
+
+1. 自相关最强峰在 22.3256 s，但相关系数只有 **0.40** —— 曲子不是严格周期结构；
+2. **结尾没有淡出**：末 10 s 的 RMS 0.145，和全曲 0.155 差不多。
+   直接整首循环会从响亮的结尾硬切回安静的前奏（开头 5 s 的 RMS 只有 0.100）。
+
+所以改成「在曲子内部找一个接缝本来就干净的点」：先按 `--target 40` 让工具报出周期，
+再用 `make_loop.py` 里的函数（`load_audio` / `make_seamless`）扫一遍候选长度，
+判据不是「周期整数倍」而是**环绕交叉淡化之后还剩多大的跳变**。
+
+```python
+import sys; sys.path.insert(0, "tools/audio")
+import make_loop as ml
+x = ml.load_audio(源文件)
+y = ml.make_seamless(x, int(round(92.070 * ml.SR)), 25.0)   # 92.070 s
+# 再按 -1 dBFS 归一化成 16 bit wav，交给 ffmpeg 编码
+```
+
+实测数值：
+
+```
+自相关周期候选：P = 22.3256 s（ac 0.40）/ 5.5814 s（0.39）/ 11.1628 s（0.37）
+   —— 都不是干净的整数周期，所以不走「整数倍」那条路
+选定 L = 92.0700 s（全曲的 82.33%，4.124 × P）
+  → 与开头 4 s 的相关系数 r = +0.5647（20~106 s 全长度扫描里最高的一档）
+  → 淡化前接缝跳变 0.005445（曲子内部相邻样点平均跳变 0.0413，×0.13）
+环绕交叉淡化 25 ms（等功率 sqrt 曲线）
+  → 淡化后环绕断点 0.002878（内部平均的 ×0.07）
+峰值归一化到 −1 dBFS
+```
+
+切掉的末尾约 19.8 s 主要是收尾段落 —— 那一段本来也不是循环要的。
+
 ## 循环开关在哪
 
 `gamedev_theme.ogg.import` / `shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
@@ -95,4 +133,9 @@ ffmpeg -i "$TEMP/gamedev_loop.wav" -c:a libvorbis -q:a 5 -ar 44100 assets/music/
   （烘焙场景 `shop_baked.tscn` 里的 `MusicZone` 节点走 `_wire_baked()` 接信号）
 - `scripts/gamedev_room.gd::_build_music_zone()` —— 活动室同理；盒子尺寸是**运行时**
   从 `Model/Collision` 的碰撞盒量出来的，房间尺寸怎么改都不会漂
-- `scripts/_verify_music.gd` —— 自检：两个房间的循环开关、进/出播放与停止
+- `scripts/esports_collision.gd::_build_music_zone()` —— 电竞房同理，盒子从
+  `BakedCollision/AutoCol` 的 769 个烘焙盒量出来。**多一道可见性判断**：
+  这栋房子默认藏着（`game.tscn` 里 `visible = false`，买完才从天而降），
+  而 `Area3D` 的监测跟可见性无关 —— 不判的话玩家走过那块空地就会响起 BGM
+- `scripts/_verify_music.gd` —— 自检：三个房间的循环开关、进/出播放与停止
+  （电竞房那段还验「房子藏着时不出声、现身才出声」）

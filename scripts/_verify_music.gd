@@ -1,6 +1,7 @@
 extends SceneTree
 ## 验数：BGM —— ① ogg 真的带循环 ② 商店：进店播、出店停
 ##                    ③ 游戏开发部：触发区量得对、进房播、出房停
+##                    ④ 电竞房：房子藏着不响、现身才响、出房停
 ##   godot --path . --headless --script res://scripts/_verify_music.gd -- --splat=off
 func _initialize() -> void:
 	_run.call_deferred()
@@ -13,7 +14,9 @@ func _run() -> void:
 
 	var shop_st := load("res://assets/music/shop_theme.ogg") as AudioStreamOggVorbis
 	var gd_st := load("res://assets/music/gamedev_theme.ogg") as AudioStreamOggVorbis
-	for pair in [["shop_theme.ogg", shop_st], ["gamedev_theme.ogg", gd_st]]:
+	var es_st := load("res://assets/music/esports_theme.ogg") as AudioStreamOggVorbis
+	for pair in [["shop_theme.ogg", shop_st], ["gamedev_theme.ogg", gd_st],
+			["esports_theme.ogg", es_st]]:
 		var name: String = pair[0]
 		var st: AudioStreamOggVorbis = pair[1]
 		if st == null:
@@ -120,17 +123,94 @@ func _run() -> void:
 		% [Music.current(), str(Music.is_playing())])
 	var gd_stopped := Music.current() == "" and not Music.is_playing()
 
-	print("\n=== 6. 判定 ===")
+	# ─────────────────────────── 电竞房 ───────────────────────────
+	#
+	# 单独把 `esports_room.tscn` 摘出来测，不走 `game.tscn`——
+	# 那边的电竞房要「买下 → 从天而降」才现身，演出会挪房间、抢相机，
+	# 测音乐会被这些干扰。这里直接用一个人造的 `player` 探房间，
+	# 顺带把「房子藏着的时候不能出声」这条也验了。
+	print("\n=== 6. 电竞房 ===")
+	var es_room := (load("res://scenes/esports_room.tscn") as PackedScene).instantiate() as Node3D
+	es_room.visible = false          # 和 game.tscn 一样：默认藏着
+	root.add_child(es_room)
+	for _f in 30:
+		await process_frame
+	var es_zone := es_room.get_node_or_null("MusicZone") as Area3D
+	print("MusicZone：%s" % ("有" if es_zone != null else "**没有**"))
+	var es_size := Vector3.ZERO
+	var es_centre := Vector3.ZERO
+	if es_zone != null:
+		es_size = _print_zone(es_zone)
+		es_centre = es_zone.global_transform * (es_zone.get_child(0) as CollisionShape3D).position
+	# 触发区应当和房间同量级：这栋房子实测长边约 16.8 m（见 game.gd 的 8.42 半深）
+	var es_zone_ok := es_zone != null \
+		and es_size.x > 4.0 and es_size.z > 4.0 \
+		and es_size.x < 40.0 and es_size.z < 40.0
+	print("  盒子 %.2f × %.2f × %.2f（应在 4~40 m 之间，房子长边约 16.8 m）"
+		% [es_size.x, es_size.y, es_size.z])
+
+	# 人造玩家：第 1 层 + `player` 组，正好是触发区认的目标
+	var probe := CharacterBody3D.new()
+	probe.name = "ProbePlayer"
+	probe.collision_layer = 1
+	probe.collision_mask = 0
+	probe.add_to_group("player")
+	var probe_cs := CollisionShape3D.new()
+	var probe_shape := CapsuleShape3D.new()
+	probe_shape.radius = 0.3
+	probe_shape.height = 1.6
+	probe_cs.shape = probe_shape
+	probe.add_child(probe_cs)
+	root.add_child(probe)
+	for _f in 10:
+		await process_frame
+
+	# ① 房子还藏着，人已经站在里面 → 必须不出声
+	probe.global_position = es_centre
+	probe.velocity = Vector3.ZERO
+	for _f in 60:
+		await process_frame
+	var es_overlap := es_zone != null and es_zone.overlaps_body(probe)
+	print("[藏着·人在里面] current=「%s」 is_playing=%s  重叠=%s（应为空/false/true）"
+		% [Music.current(), str(Music.is_playing()), str(es_overlap)])
+	var es_silent_hidden := es_overlap and Music.current() == "" and not Music.is_playing()
+
+	# ② 房子现身（同 game.gd 的 `_reveal_east_rooms`：只翻 visible）→ 当场补上
+	es_room.visible = true
+	for _f in 60:
+		await process_frame
+	print("[现身·人还在里面] current=「%s」 is_playing=%s（应为 esports/true）"
+		% [Music.current(), str(Music.is_playing())])
+	var es_started := Music.current() == "esports" and Music.is_playing()
+
+	# ③ 走出去 → 停
+	probe.global_position = es_centre + Vector3(0.0, 0.0, 60.0)
+	probe.velocity = Vector3.ZERO
+	for _f in 90:
+		await process_frame
+	print("[出房] current=「%s」 is_playing=%s（应为空/false）"
+		% [Music.current(), str(Music.is_playing())])
+	var es_stopped := Music.current() == "" and not Music.is_playing()
+
+	probe.queue_free()
+
+	print("\n=== 7. 判定 ===")
 	print("  循环开关（商店）        %s" % ("✔" if shop_st.loop else "✘"))
 	print("  循环开关（游戏开发部）  %s" % ("✔" if gd_st.loop else "✘"))
+	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
 	print("  商店：进店开始播放      %s" % ("✔" if shop_started else "✘"))
 	print("  商店：出店停止播放      %s" % ("✔" if shop_stopped else "✘"))
 	print("  商店：店外保持安静      %s" % ("✔" if was_stopped else "✘"))
 	print("  开发部：触发区量得对    %s" % ("✔" if zone_ok else "✘"))
 	print("  开发部：进房开始播放    %s" % ("✔" if gd_started else "✘"))
 	print("  开发部：出房停止播放    %s" % ("✔" if gd_stopped else "✘"))
-	var all_ok := shop_st.loop and gd_st.loop and shop_started and shop_stopped \
-		and was_stopped and zone_ok and gd_started and gd_stopped
+	print("  电竞房：触发区量得对    %s" % ("✔" if es_zone_ok else "✘"))
+	print("  电竞房：藏着时不出声    %s" % ("✔" if es_silent_hidden else "✘"))
+	print("  电竞房：现身才出声      %s" % ("✔" if es_started else "✘"))
+	print("  电竞房：出房停止播放    %s" % ("✔" if es_stopped else "✘"))
+	var all_ok := shop_st.loop and gd_st.loop and es_st.loop and shop_started and shop_stopped \
+		and was_stopped and zone_ok and gd_started and gd_stopped \
+		and es_zone_ok and es_silent_hidden and es_started and es_stopped
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 

@@ -1,0 +1,31 @@
+音乐: 电竞房加 BGM「Colorful Mess」（_verify_music 13/13 全过，冒烟 12/12）
+
+素材：「碧蓝档案OST🎵」音乐合集 Vol.1（320K）P8「Colorful Mess」。
+这首**不是**规整周期曲（自相关最强峰 22.3256 s 但相关只有 0.40），而且
+**结尾没有淡出**（末 10 s RMS 0.145 ≈ 全曲 0.155）—— 直接整首循环会从响亮的
+结尾硬切回安静的前奏（开头 5 s RMS 只有 0.100）。
+所以不走「周期整数倍」，改成按「环绕交叉淡化后还剩多大跳变」扫候选长度：
+取 L = 92.0700 s（全曲 111.8293 s 的 82.33%，4.12 × P），与开头 4 s 的
+相关系数 +0.5647（20~106 s 全长度扫描里最高的一档），尾部 25 ms 环绕交叉淡化
+后环绕断点 0.002878 = 曲子内部相邻样点平均跳变的 0.07 倍。
+
+- scripts/music.gd：曲目表加 `esports`
+- scripts/esports_collision.gd：加 `_build_music_zone()`。这脚本挂在 `EsportsRoom`
+  根上，所以 BGM 跟着这栋房子走：
+    · 盒子尺寸从 `BakedCollision/AutoCol` 的 769 个烘焙盒**量出来**，不写死
+    · **多一道可见性判断** —— 房子默认藏着（game.tscn 里 visible=false，买完才
+      天降），而 Area3D 的监测跟可见性无关；不判的话玩家走过那块空地就响 BGM。
+      除了进出时判 `is_visible_in_tree()`，还接 `visibility_changed`：
+      万一玩家已经站在那块地上、房子才落地，也能当场补上
+- assets/music/esports_theme.ogg.import：loop=true（音频本体按 .gitignore 不入库）
+- assets/music/README.md：曲目表 + 这首为什么要换一套选长度的方法 + 实测数值
+- scripts/_verify_music.gd：加电竞房一段（独立加载 esports_room.tscn + 人造玩家），
+  验「触发区量得对 / 藏着脸不出声 / 现身才出声 / 出房停」
+
+实测：_verify_music 13/13 全过；_smoke_build 12/12「可以打包」；
+_verify_esports_collision 硬失败 0 项 —— 它量出房间 AABB 长边 16.84 m，
+本喵的触发区 15.64 m（内缩 0.6×2 = 1.2 m），两边对得上。
+
+注：_verify_esports_room.gd 是**早就过时**的脚本（`room.get_node("RoomBody")`
+返回 null 后抛错并卡在渲染循环）：`RoomBody` 在 f8e5770「电竞房换新 GLB」里
+就被删了，那个自检没跟着改。与本次改动无关，本喵没动它。
