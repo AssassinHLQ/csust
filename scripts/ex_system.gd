@@ -124,6 +124,76 @@ const ORB_LIFE := 3.0
 const ORB_RADIUS := 0.34
 const ORB_AOE := 4.5
 
+## ── 普通爱丽丝 EX 的观感（用户 2026-11-11 二次给图：「这个是普通爱丽丝的 ex 技能,
+##    3、4 这是蓄力,有点糊你凑合看」）──
+##
+## 参考图里这一发是**紫粉色能量爆 + 一圈圈蓝色电光**，不是本喵以前那颗青白色小球：
+##   图 3/4（蓄力）：枪口一颗粉色光球，外面有蓝色电弧乱窜、越蓄越大；
+##   图 1/2（发射）：主体是**紫红/品红**的爆团，外面包着**青色蓝**的弧形电光。
+## 所以配色改成「粉紫核心 + 青蓝外壳」，并在球外面挂几根抖动旋转的蓝色电弧细杆。
+const ORB_CHARGE_TIME := 0.42       # 蓄力时长（秒），期间不放球
+const ORB_CORE := Color(1.00, 0.55, 0.92, 0.95)   # 粉紫核心
+const ORB_MID := Color(0.72, 0.42, 1.00, 0.55)    # 紫
+const ORB_SHELL := Color(0.35, 0.80, 1.00, 0.32)  # 青蓝外壳
+const ORB_ARC := Color(0.55, 0.95, 1.00, 0.85)    # 蓝色电弧
+
+
+## 蓄力：枪口一颗粉色光球由小涨大，外面几根蓝色电弧抖动旋转（图 3/4）。
+## 结束后光球就地销毁，交给 `_fire_laser_orb()` 的飞行球接上。
+func _orb_charge(origin: Vector3, dir: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.name = "OrbCharge"
+	_fx_root.add_child(holder)
+	holder.global_position = origin
+
+	var core := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 2.0
+	sm.radial_segments = 20
+	sm.rings = 12
+	core.mesh = sm
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var cmat := _add_mat(Color(ORB_CORE.r, ORB_CORE.g, ORB_CORE.b, 0.0), 9.0)
+	core.material_override = cmat
+	holder.add_child(core)
+
+	# 蓝色电弧：几根细杆，每帧随机旋转、随机长度，做出「乱窜」的抖动感
+	var arcs: Array = []
+	for i in 5:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.05, 0.05, 1.0)
+		mi.mesh = bm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.material_override = _add_mat(Color(ORB_ARC.r, ORB_ARC.g, ORB_ARC.b, 0.0), 8.0)
+		holder.add_child(mi)
+		arcs.append(mi)
+
+	var t0 := Time.get_ticks_msec()
+	var span := int(ORB_CHARGE_TIME * 1000.0)
+	while is_instance_valid(self):
+		var el := Time.get_ticks_msec() - t0
+		if el >= span:
+			break
+		var t := float(el) / float(span)
+		var cs := lerpf(0.18, 0.62, t)
+		core.scale = Vector3(cs, cs, cs)
+		cmat.albedo_color.a = 0.25 + 0.6 * t
+		for a in arcs:
+			var mi2 := a as MeshInstance3D
+			var rr := randf() * TAU
+			var tilt := randf_range(-1.1, 1.1)
+			mi2.global_position = origin
+			mi2.global_basis = Basis(dir, rr) * Basis(Vector3.RIGHT, tilt)
+			var ln := randf_range(0.35, 0.85) * lerpf(0.6, 1.4, t)
+			mi2.scale = Vector3(1.0, 1.0, ln)
+			(mi2.material_override as StandardMaterial3D).albedo_color.a = \
+				randf_range(0.35, 0.9) * (1.0 - t * 0.5)
+		await get_tree().process_frame
+	if is_instance_valid(holder):
+		holder.queue_free()
+
 
 func _muzzle_point() -> Vector3:
 	if _weapon != null:
@@ -147,15 +217,24 @@ func _fire_laser_orb() -> void:
 	var origin := _muzzle_point()
 	var dir := _aim_dir()
 
+	# ① 先蓄力（参考图 3/4：枪口粉色光球 + 蓝色电弧乱窜），期间不放球
+	await _orb_charge(origin, dir)
+	if not is_instance_valid(self):
+		return
+	# 蓄力这 0.42 s 里枪口可能已经跟着走位挪了，重取一次
+	origin = _muzzle_point()
+	dir = _aim_dir()
+
 	var holder := Node3D.new()
 	holder.name = "LaserOrb"
 	_fx_root.add_child(holder)
 	holder.global_position = origin
 
+	# ② 飞行球配色改成参考图 1/2 的「粉紫核心 + 青蓝外壳」
 	var layers := [
-		{"r": 1.00, "c": Color(0.55, 0.90, 1.00, 0.85), "e": 6.0},
-		{"r": 0.62, "c": Color(0.85, 0.97, 1.00, 0.95), "e": 9.0},
-		{"r": 0.30, "c": Color(1.00, 1.00, 1.00, 1.00), "e": 14.0},
+		{"r": 1.00, "c": Color(ORB_SHELL.r, ORB_SHELL.g, ORB_SHELL.b, 0.42), "e": 5.0},
+		{"r": 0.66, "c": Color(ORB_MID.r, ORB_MID.g, ORB_MID.b, 0.72), "e": 8.0},
+		{"r": 0.34, "c": Color(ORB_CORE.r, ORB_CORE.g, ORB_CORE.b, 1.00), "e": 13.0},
 	]
 	for L in layers:
 		var mi := MeshInstance3D.new()
@@ -179,11 +258,24 @@ func _fire_laser_orb() -> void:
 		holder.add_child(mi)
 
 	var light := OmniLight3D.new()
-	light.light_color = Color(0.55, 0.85, 1.0)
+	light.light_color = Color(0.85, 0.55, 1.0)
 	light.light_energy = 5.6
 	light.omni_range = 6.0
 	light.shadow_enabled = false
 	holder.add_child(light)
+
+	# ③ 球外面挂几根抖动的蓝色电弧（参考图 1/2 那圈青色电光）
+	var arc_meshes: Array = []
+	for i in 6:
+		var ami := MeshInstance3D.new()
+		var abm := BoxMesh.new()
+		abm.size = Vector3(0.045, 0.045, 1.0)
+		ami.mesh = abm
+		ami.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ami.material_override = _add_mat(ORB_ARC, 9.0)
+		holder.add_child(ami)
+		arc_meshes.append(ami)
+	holder.set_meta("arcs", arc_meshes)
 
 	_orb_fly(holder, origin, dir)
 
@@ -210,6 +302,16 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 		pos = next
 		travelled += step
 		holder.global_position = pos
+		# 电弧每帧抖一下：绕球随机朝向 + 随机长度（参考图里那圈乱窜的青色电光）
+		if holder.has_meta("arcs"):
+			for a in (holder.get_meta("arcs") as Array):
+				var ami := a as MeshInstance3D
+				var rr := randf() * TAU
+				var tt := randf_range(-1.2, 1.2)
+				ami.global_position = pos
+				ami.global_basis = Basis(Vector3.FORWARD, rr) * Basis(Vector3.RIGHT, tt)
+				ami.scale = Vector3(1.0, 1.0, randf_range(0.30, 0.75))
+				(ami.material_override as StandardMaterial3D).albedo_color.a = randf_range(0.45, 1.0)
 	holder.queue_free()
 
 
@@ -281,10 +383,10 @@ func _orb_explode(holder: Node3D, at: Vector3) -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = Color(0.75, 0.94, 1.0, 0.9)
+	mat.albedo_color = Color(ORB_MID.r, ORB_MID.g, ORB_MID.b, 0.9)
 	mat.emission_enabled = true
-	mat.emission = Color(0.5, 0.85, 1.0)
-	mat.emission_energy_multiplier = 10.0
+	mat.emission = Color(ORB_CORE.r, ORB_CORE.g, ORB_CORE.b)
+	mat.emission_energy_multiplier = 11.0
 	burst.material_override = mat
 	_fx_root.add_child(burst)
 	burst.global_position = at

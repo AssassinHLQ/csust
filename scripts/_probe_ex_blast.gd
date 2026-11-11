@@ -102,13 +102,21 @@ func _run() -> void:
 	for _i in 20:
 		await process_frame
 
+	# `--form=normal` = 普通爱丽丝（不近机甲形态），用来验激光球那条线
+	var want_normal := OS.get_cmdline_user_args().has("--form=normal")
 	var cf = player.get_node_or_null("Arisu/CarrierForm")
-	if cf == null or not cf.call("set_form", true):
-		push_error("[blast] 进不了机甲形态")
+	if cf == null:
+		push_error("[blast] 没有 CarrierForm")
 		quit(1)
 		return
-	for _i in 40:
-		await process_frame
+	if not want_normal:
+		if not cf.call("set_form", true):
+			push_error("[blast] 进不了机甲形态")
+			quit(1)
+			return
+		for _i in 40:
+			await process_frame
+	print("[blast] 形态 = %s" % ("机甲" if not want_normal else "普通"))
 
 	var ex := player.get_node_or_null("ExSystem")
 	if ex == null:
@@ -147,7 +155,9 @@ func _run() -> void:
 		return
 
 	var t0 := Time.get_ticks_msec()
-	# 时间轴（ms）：蓄力 0~550、发射 550~1450（枪口收缩发生在前 450 ms）
+	# 时间轴（ms）
+	#   机甲：蓄力 0~550、发射 550~1450（枪口收缩发生在前 450 ms）
+	#   普通：蓄力 0~420、光球飞行 ~42 m/s，抓蓄力 + 飞行 + 命中
 	var marks := [
 		{"t": 300, "name": "1_charge_a"},
 		{"t": 500, "name": "2_charge_b"},
@@ -155,6 +165,14 @@ func _run() -> void:
 		{"t": 780, "name": "4_fire_narrow"},
 		{"t": 1100, "name": "5_fire_steady"},
 	]
+	if want_normal:
+		marks = [
+			{"t": 200, "name": "1_charge_a"},
+			{"t": 380, "name": "2_charge_b"},
+			{"t": 460, "name": "3_orb_out"},
+			{"t": 620, "name": "4_orb_fly"},
+			{"t": 900, "name": "5_orb_far"},
+		]
 	for mk in marks:
 		while Time.get_ticks_msec() - t0 < int(mk["t"]):
 			await process_frame
