@@ -1,8 +1,8 @@
 {
  "_comment": "由 tools/make_campus_sog_manifest.py 生成。SOG 分块 + fit_campus_frame.py 解出的相似变换。",
  "grid": {
-  "nx": 14,
-  "nz": 14,
+  "nx": 13,
+  "nz": 11,
   "box_min": [
    -3.40828450301286,
    -0.22360575218021816,
@@ -47,11 +47,11 @@
    "i": 2,
    "j": 0,
    "center": [
-    -173.3688,
-    19.1875,
-    -540.6963
+    -164.6536,
+    19.1577,
+    -536.0156
    ],
-   "points": 7,
+   "points": 79,
    "sog": "splatdata/campus_sog/fine/chunk_2_0.sogdata"
   },
   {
@@ -59,11 +59,11 @@
    "i": 3,
    "j": 0,
    "center": [
-    -128.0496,
-    19.5268,
-    -540.6894
+    -115.8483,
+    19.5232,
+    -536.0082
    ],
-   "points": 1621,
+   "points": 7649,
    "sog": "splatdata/campus_sog/fine/chunk_3_0.sogdata"
   },
   {
@@ -71,11 +71,11 @@
    "i": 4,
    "j": 0,
    "center": [
-    -82.7304,
-    19.8662,
-    -540.6825
+    -67.0429,
+    19.8886,
+    -536.0008
    ],
-   "points": 15844,
+   "points": 23425,
    "sog": "splatdata/campus_sog/fine/chunk_4_0.sogdata"
   },
   {
@@ -83,11 +83,11 @@
    "i": 5,
    "j": 0,
    "center": [
-    -37.4111,
-    20.2055,
-    -540.6756
+    -18.2376,
+    20.2541,
+    -535.9934
    ],
-   "points": 11054,
+   "points": 12905,
    "sog": "splatdata/campus_sog/fine/chunk_5_0.sogdata"
   },
   {
@@ -95,11 +95,11 @@
    "i": 6,
    "j": 0,
    "center": [
-    7.9081,
-    20.5449,
-    -540.6687
+    30.5677,
+    20.6196,
+    -535.9859
    ],
-   "points": 5243,
+   "points": 7921,
    "sog": "splatdata/campus_sog/fine/chunk_6_0.sogdata"
   },
   {
@@ -107,11 +107,11 @@
    "i": 7,
    "j": 0,
    "center": [
-    53.2273,
-    20.8843,
-    -540.6618
+    79.373,
+    20.985,
+    -535.9785
    ],
-   "points": 3614,
+   "points": 1685,
    "sog": "splatdata/campus_sog/fine/chunk_7_0.sogdata"
   },
   {
@@ -119,11 +119,11 @@
    "i": 8,
    "j": 0,
    "center": [
-    98.5465,
-    21.2236,
-    -540.6549
+    128.1783,
+    21.3505,
+    -535.9711
    ],
-   "points": 25,
+   "points": 1,
    "sog": "splatdata/campus_sog/fine/chunk_8_0.sogdata"
   },
   {
@@ -131,11 +131,11 @@
    "i": 10,
    "j": 0,
    "center": [
-    189.1849,
-    21.9023,
-    -540.6412
+    225.7889,
+    22.0814,
+    -535.9563
    ],
-   "points": 1,
+   "points": 7,
    "sog": "splatdata/campus_sog/fine/chunk_10_0.sogdata"
   },
   {
@@ -143,35 +143,35 @@
    "i": 11,
    "j": 0,
    "center": [
-    234.5042,
-    22.2417,
-    -540.6343
+    274.5942,
+    22.4469,
+    -535.9488
    ],
-   "points": 6,
+   "points": 2,
    "sog": "splatdata/campus_sog/fine/chunk_11_0.sogdata"
   },
   {
-   "name": "Chunk_12_0",
-   "i": 12,
-   "j": 0,
+   "name": "Chunk_1_1",
+   "i": 1,
+   "j": 1,
    "center": [
-    279.8234,
-    22.5811,
-    -540.6274
+    -213.4589,
+    17.9055,
+    -492.3493
    ],
-   "points": 1,
-   "sog": "splatdata/campus_sog/fine/chunk_12_0.sogdata"
+   "points": 28,
+   "sog": "splatdata/campus_sog/fine/chunk_1_1.sogdata"
   },
   {
    "name": "Chunk_2_1",
    "i": 2,
    "j": 1,
    "center": [
-    -173.3688,
-    18.4907,
-    -506.3812
+    -164.6536,
+    18.271,
+    -492.3418
    ],
-   "points": 529,
+   "points": 1894,
    "sog": "splatdata/campus_sog/fine/chunk_2_1.sogdata"
   },
   {
@@ -179,11 +179,11 @@
    "i": 3,
    "j": 1,
    "center": [
-    -128.0496,
-    18.8301,
-    -506.3743
+    -115.8483,
+    18.6365,
+    -492.3344
    ],
-   "points": 2350,
+   "points": 12962,
    "sog": "splatdata/campus_sog/fine/chunk_3_1.sogdata"
   },
   {
@@ -191,11 +191,11 @@
    "i": 4,
    "j": 1,
    "center": [
-    -82.7304,
-    19.1695,
-    -506.3674
+    -67.0429,
+    19.0019,
+    -492.327
    ],
-   "points": 31499,
+   "points": 63587,
    "sog": "splatdata/campus_sog/fine/chunk_4_1.sogdata"
   },
   {
@@ -203,11 +203,11 @@
    "i": 5,
    "j": 1,
    "center": [
-    -37.4111,
-    19.5088,
-    -506.3605
+    -18.2376,
+    19.3674,
+    -492.3196
    ],
-   "points": 30034,
+   "points": 48380,
    "sog": "splatdata/campus_sog/fine/chunk_5_1.sogdata"
   },
   {
@@ -215,11 +215,11 @@
    "i": 6,
    "j": 1,
    "center": [
-    7.9081,
-    19.8482,
-    -506.3536
+    30.5677,
+    19.7329,
+    -492.3122
    ],
-   "points": 16992,
+   "points": 16036,
    "sog": "splatdata/campus_sog/fine/chunk_6_1.sogdata"
   },
   {
@@ -227,35 +227,35 @@
    "i": 7,
    "j": 1,
    "center": [
-    53.2273,
-    20.1875,
-    -506.3467
+    79.373,
+    20.0983,
+    -492.3048
    ],
-   "points": 4856,
+   "points": 74,
    "sog": "splatdata/campus_sog/fine/chunk_7_1.sogdata"
   },
   {
-   "name": "Chunk_8_1",
-   "i": 8,
+   "name": "Chunk_10_1",
+   "i": 10,
    "j": 1,
    "center": [
-    98.5465,
-    20.5269,
-    -506.3398
+    225.7889,
+    21.1947,
+    -492.2825
    ],
-   "points": 3,
-   "sog": "splatdata/campus_sog/fine/chunk_8_1.sogdata"
+   "points": 5,
+   "sog": "splatdata/campus_sog/fine/chunk_10_1.sogdata"
   },
   {
    "name": "Chunk_11_1",
    "i": 11,
    "j": 1,
    "center": [
-    234.5042,
-    21.545,
-    -506.3192
+    274.5942,
+    21.5602,
+    -492.2751
    ],
-   "points": 8,
+   "points": 10,
    "sog": "splatdata/campus_sog/fine/chunk_11_1.sogdata"
   },
   {
@@ -263,35 +263,35 @@
    "i": 12,
    "j": 1,
    "center": [
-    279.8234,
-    21.8843,
-    -506.3123
+    323.3996,
+    21.9256,
+    -492.2677
    ],
-   "points": 3,
+   "points": 84,
    "sog": "splatdata/campus_sog/fine/chunk_12_1.sogdata"
   },
   {
-   "name": "Chunk_13_1",
-   "i": 13,
-   "j": 1,
+   "name": "Chunk_0_2",
+   "i": 0,
+   "j": 2,
    "center": [
-    325.1426,
-    22.2237,
-    -506.3054
+    -262.2642,
+    16.6533,
+    -448.6829
    ],
-   "points": 1,
-   "sog": "splatdata/campus_sog/fine/chunk_13_1.sogdata"
+   "points": 17,
+   "sog": "splatdata/campus_sog/fine/chunk_0_2.sogdata"
   },
   {
    "name": "Chunk_1_2",
    "i": 1,
    "j": 2,
    "center": [
-    -218.688,
-    17.4547,
-    -472.073
+    -213.4589,
+    17.0188,
+    -448.6755
    ],
-   "points": 31,
+   "points": 737,
    "sog": "splatdata/campus_sog/fine/chunk_1_2.sogdata"
   },
   {
@@ -299,11 +299,11 @@
    "i": 2,
    "j": 2,
    "center": [
-    -173.3688,
-    17.794,
-    -472.0661
+    -164.6536,
+    17.3843,
+    -448.6681
    ],
-   "points": 1634,
+   "points": 2793,
    "sog": "splatdata/campus_sog/fine/chunk_2_2.sogdata"
   },
   {
@@ -311,11 +311,11 @@
    "i": 3,
    "j": 2,
    "center": [
-    -128.0496,
-    18.1334,
-    -472.0592
+    -115.8483,
+    17.7497,
+    -448.6607
    ],
-   "points": 7107,
+   "points": 39502,
    "sog": "splatdata/campus_sog/fine/chunk_3_2.sogdata"
   },
   {
@@ -323,11 +323,11 @@
    "i": 4,
    "j": 2,
    "center": [
-    -82.7304,
-    18.4728,
-    -472.0523
+    -67.0429,
+    18.1152,
+    -448.6532
    ],
-   "points": 49772,
+   "points": 72063,
    "sog": "splatdata/campus_sog/fine/chunk_4_2.sogdata"
   },
   {
@@ -335,11 +335,11 @@
    "i": 5,
    "j": 2,
    "center": [
-    -37.4111,
-    18.8121,
-    -472.0454
+    -18.2376,
+    18.4807,
+    -448.6458
    ],
-   "points": 43481,
+   "points": 51119,
    "sog": "splatdata/campus_sog/fine/chunk_5_2.sogdata"
   },
   {
@@ -347,11 +347,11 @@
    "i": 6,
    "j": 2,
    "center": [
-    7.9081,
-    19.1515,
-    -472.0385
+    30.5677,
+    18.8461,
+    -448.6384
    ],
-   "points": 30558,
+   "points": 11756,
    "sog": "splatdata/campus_sog/fine/chunk_6_2.sogdata"
   },
   {
@@ -359,11 +359,11 @@
    "i": 7,
    "j": 2,
    "center": [
-    53.2273,
-    19.4908,
-    -472.0316
+    79.373,
+    19.2116,
+    -448.631
    ],
-   "points": 1385,
+   "points": 515,
    "sog": "splatdata/campus_sog/fine/chunk_7_2.sogdata"
   },
   {
@@ -371,11 +371,11 @@
    "i": 8,
    "j": 2,
    "center": [
-    98.5465,
-    19.8302,
-    -472.0247
+    128.1783,
+    19.5771,
+    -448.6236
    ],
-   "points": 27,
+   "points": 965,
    "sog": "splatdata/campus_sog/fine/chunk_8_2.sogdata"
   },
   {
@@ -383,11 +383,11 @@
    "i": 9,
    "j": 2,
    "center": [
-    143.8657,
-    20.1696,
-    -472.0178
+    176.9836,
+    19.9425,
+    -448.6161
    ],
-   "points": 22,
+   "points": 597,
    "sog": "splatdata/campus_sog/fine/chunk_9_2.sogdata"
   },
   {
@@ -395,11 +395,11 @@
    "i": 10,
    "j": 2,
    "center": [
-    189.1849,
-    20.5089,
-    -472.011
+    225.7889,
+    20.308,
+    -448.6087
    ],
-   "points": 8,
+   "points": 56,
    "sog": "splatdata/campus_sog/fine/chunk_10_2.sogdata"
   },
   {
@@ -407,11 +407,11 @@
    "i": 11,
    "j": 2,
    "center": [
-    234.5042,
-    20.8483,
-    -472.0041
+    274.5942,
+    20.6735,
+    -448.6013
    ],
-   "points": 28,
+   "points": 503,
    "sog": "splatdata/campus_sog/fine/chunk_11_2.sogdata"
   },
   {
@@ -419,35 +419,23 @@
    "i": 12,
    "j": 2,
    "center": [
-    279.8234,
-    21.1876,
-    -471.9972
+    323.3996,
+    21.0389,
+    -448.5939
    ],
-   "points": 6,
+   "points": 111,
    "sog": "splatdata/campus_sog/fine/chunk_12_2.sogdata"
-  },
-  {
-   "name": "Chunk_13_2",
-   "i": 13,
-   "j": 2,
-   "center": [
-    325.1426,
-    21.527,
-    -471.9903
-   ],
-   "points": 160,
-   "sog": "splatdata/campus_sog/fine/chunk_13_2.sogdata"
   },
   {
    "name": "Chunk_0_3",
    "i": 0,
    "j": 3,
    "center": [
-    -264.0072,
-    16.4186,
-    -437.7647
+    -262.2642,
+    15.7666,
+    -405.0091
    ],
-   "points": 23,
+   "points": 3102,
    "sog": "splatdata/campus_sog/fine/chunk_0_3.sogdata"
   },
   {
@@ -455,11 +443,11 @@
    "i": 1,
    "j": 3,
    "center": [
-    -218.688,
-    16.758,
-    -437.7578
+    -213.4589,
+    16.1321,
+    -405.0017
    ],
-   "points": 695,
+   "points": 8618,
    "sog": "splatdata/campus_sog/fine/chunk_1_3.sogdata"
   },
   {
@@ -467,11 +455,11 @@
    "i": 2,
    "j": 3,
    "center": [
-    -173.3688,
-    17.0973,
-    -437.751
+    -164.6536,
+    16.4976,
+    -404.9943
    ],
-   "points": 1677,
+   "points": 16850,
    "sog": "splatdata/campus_sog/fine/chunk_2_3.sogdata"
   },
   {
@@ -479,11 +467,11 @@
    "i": 3,
    "j": 3,
    "center": [
-    -128.0496,
-    17.4367,
-    -437.7441
+    -115.8483,
+    16.863,
+    -404.9869
    ],
-   "points": 23250,
+   "points": 76505,
    "sog": "splatdata/campus_sog/fine/chunk_3_3.sogdata"
   },
   {
@@ -491,11 +479,11 @@
    "i": 4,
    "j": 3,
    "center": [
-    -82.7304,
-    17.7761,
-    -437.7372
+    -67.0429,
+    17.2285,
+    -404.9795
    ],
-   "points": 56732,
+   "points": 99023,
    "sog": "splatdata/campus_sog/fine/chunk_4_3.sogdata"
   },
   {
@@ -503,11 +491,11 @@
    "i": 5,
    "j": 3,
    "center": [
-    -37.4111,
-    18.1154,
-    -437.7303
+    -18.2376,
+    17.594,
+    -404.9721
    ],
-   "points": 41563,
+   "points": 79080,
    "sog": "splatdata/campus_sog/fine/chunk_5_3.sogdata"
   },
   {
@@ -515,11 +503,11 @@
    "i": 6,
    "j": 3,
    "center": [
-    7.9081,
-    18.4548,
-    -437.7234
+    30.5677,
+    17.9594,
+    -404.9646
    ],
-   "points": 21266,
+   "points": 42762,
    "sog": "splatdata/campus_sog/fine/chunk_6_3.sogdata"
   },
   {
@@ -527,11 +515,11 @@
    "i": 7,
    "j": 3,
    "center": [
-    53.2273,
-    18.7941,
-    -437.7165
+    79.373,
+    18.3249,
+    -404.9572
    ],
-   "points": 1545,
+   "points": 15417,
    "sog": "splatdata/campus_sog/fine/chunk_7_3.sogdata"
   },
   {
@@ -539,11 +527,11 @@
    "i": 8,
    "j": 3,
    "center": [
-    98.5465,
-    19.1335,
-    -437.7096
+    128.1783,
+    18.6903,
+    -404.9498
    ],
-   "points": 1255,
+   "points": 12139,
    "sog": "splatdata/campus_sog/fine/chunk_8_3.sogdata"
   },
   {
@@ -551,11 +539,11 @@
    "i": 9,
    "j": 3,
    "center": [
-    143.8657,
-    19.4729,
-    -437.7027
+    176.9836,
+    19.0558,
+    -404.9424
    ],
-   "points": 1335,
+   "points": 11486,
    "sog": "splatdata/campus_sog/fine/chunk_9_3.sogdata"
   },
   {
@@ -563,11 +551,11 @@
    "i": 10,
    "j": 3,
    "center": [
-    189.1849,
-    19.8122,
-    -437.6959
+    225.7889,
+    19.4213,
+    -404.935
    ],
-   "points": 672,
+   "points": 1309,
    "sog": "splatdata/campus_sog/fine/chunk_10_3.sogdata"
   },
   {
@@ -575,11 +563,11 @@
    "i": 11,
    "j": 3,
    "center": [
-    234.5042,
-    20.1516,
-    -437.689
+    274.5942,
+    19.7867,
+    -404.9275
    ],
-   "points": 291,
+   "points": 75,
    "sog": "splatdata/campus_sog/fine/chunk_11_3.sogdata"
   },
   {
@@ -587,35 +575,23 @@
    "i": 12,
    "j": 3,
    "center": [
-    279.8234,
-    20.4909,
-    -437.6821
+    323.3996,
+    20.1522,
+    -404.9201
    ],
-   "points": 333,
+   "points": 5,
    "sog": "splatdata/campus_sog/fine/chunk_12_3.sogdata"
-  },
-  {
-   "name": "Chunk_13_3",
-   "i": 13,
-   "j": 3,
-   "center": [
-    325.1426,
-    20.8303,
-    -437.6752
-   ],
-   "points": 22,
-   "sog": "splatdata/campus_sog/fine/chunk_13_3.sogdata"
   },
   {
    "name": "Chunk_0_4",
    "i": 0,
    "j": 4,
    "center": [
-    -264.0072,
-    15.7219,
-    -403.4496
+    -262.2642,
+    14.8799,
+    -361.3354
    ],
-   "points": 1697,
+   "points": 15825,
    "sog": "splatdata/campus_sog/fine/chunk_0_4.sogdata"
   },
   {
@@ -623,11 +599,11 @@
    "i": 1,
    "j": 4,
    "center": [
-    -218.688,
-    16.0613,
-    -403.4427
+    -213.4589,
+    15.2454,
+    -361.328
    ],
-   "points": 6772,
+   "points": 44556,
    "sog": "splatdata/campus_sog/fine/chunk_1_4.sogdata"
   },
   {
@@ -635,11 +611,11 @@
    "i": 2,
    "j": 4,
    "center": [
-    -173.3688,
-    16.4006,
-    -403.4359
+    -164.6536,
+    15.6108,
+    -361.3205
    ],
-   "points": 9031,
+   "points": 53325,
    "sog": "splatdata/campus_sog/fine/chunk_2_4.sogdata"
   },
   {
@@ -647,11 +623,11 @@
    "i": 3,
    "j": 4,
    "center": [
-    -128.0496,
-    16.74,
-    -403.429
+    -115.8483,
+    15.9763,
+    -361.3131
    ],
-   "points": 47266,
+   "points": 106897,
    "sog": "splatdata/campus_sog/fine/chunk_3_4.sogdata"
   },
   {
@@ -659,11 +635,11 @@
    "i": 4,
    "j": 4,
    "center": [
-    -82.7304,
-    17.0794,
-    -403.4221
+    -67.0429,
+    16.3418,
+    -361.3057
    ],
-   "points": 67278,
+   "points": 151273,
    "sog": "splatdata/campus_sog/fine/chunk_4_4.sogdata"
   },
   {
@@ -671,11 +647,11 @@
    "i": 5,
    "j": 4,
    "center": [
-    -37.4111,
-    17.4187,
-    -403.4152
+    -18.2376,
+    16.7072,
+    -361.2983
    ],
-   "points": 70734,
+   "points": 122045,
    "sog": "splatdata/campus_sog/fine/chunk_5_4.sogdata"
   },
   {
@@ -683,11 +659,11 @@
    "i": 6,
    "j": 4,
    "center": [
-    7.9081,
-    17.7581,
-    -403.4083
+    30.5677,
+    17.0727,
+    -361.2909
    ],
-   "points": 38754,
+   "points": 86485,
    "sog": "splatdata/campus_sog/fine/chunk_6_4.sogdata"
   },
   {
@@ -695,11 +671,11 @@
    "i": 7,
    "j": 4,
    "center": [
-    53.2273,
-    18.0974,
-    -403.4014
+    79.373,
+    17.4382,
+    -361.2834
    ],
-   "points": 21539,
+   "points": 86924,
    "sog": "splatdata/campus_sog/fine/chunk_7_4.sogdata"
   },
   {
@@ -707,11 +683,11 @@
    "i": 8,
    "j": 4,
    "center": [
-    98.5465,
-    18.4368,
-    -403.3945
+    128.1783,
+    17.8036,
+    -361.276
    ],
-   "points": 11334,
+   "points": 50487,
    "sog": "splatdata/campus_sog/fine/chunk_8_4.sogdata"
   },
   {
@@ -719,11 +695,11 @@
    "i": 9,
    "j": 4,
    "center": [
-    143.8657,
-    18.7762,
-    -403.3876
+    176.9836,
+    18.1691,
+    -361.2686
    ],
-   "points": 10196,
+   "points": 20668,
    "sog": "splatdata/campus_sog/fine/chunk_9_4.sogdata"
   },
   {
@@ -731,11 +707,11 @@
    "i": 10,
    "j": 4,
    "center": [
-    189.1849,
-    19.1155,
-    -403.3807
+    225.7889,
+    18.5346,
+    -361.2612
    ],
-   "points": 5590,
+   "points": 5226,
    "sog": "splatdata/campus_sog/fine/chunk_10_4.sogdata"
   },
   {
@@ -743,11 +719,11 @@
    "i": 11,
    "j": 4,
    "center": [
-    234.5042,
-    19.4549,
-    -403.3739
+    274.5942,
+    18.9,
+    -361.2538
    ],
-   "points": 953,
+   "points": 698,
    "sog": "splatdata/campus_sog/fine/chunk_11_4.sogdata"
   },
   {
@@ -755,11 +731,11 @@
    "i": 12,
    "j": 4,
    "center": [
-    279.8234,
-    19.7942,
-    -403.367
+    323.3996,
+    19.2655,
+    -361.2464
    ],
-   "points": 31,
+   "points": 1421,
    "sog": "splatdata/campus_sog/fine/chunk_12_4.sogdata"
   },
   {
@@ -767,11 +743,11 @@
    "i": 0,
    "j": 5,
    "center": [
-    -264.0072,
-    15.0252,
-    -369.1345
+    -262.2642,
+    13.9932,
+    -317.6616
    ],
-   "points": 8079,
+   "points": 40824,
    "sog": "splatdata/campus_sog/fine/chunk_0_5.sogdata"
   },
   {
@@ -779,11 +755,11 @@
    "i": 1,
    "j": 5,
    "center": [
-    -218.688,
-    15.3646,
-    -369.1276
+    -213.4589,
+    14.3587,
+    -317.6542
    ],
-   "points": 27123,
+   "points": 106305,
    "sog": "splatdata/campus_sog/fine/chunk_1_5.sogdata"
   },
   {
@@ -791,11 +767,11 @@
    "i": 2,
    "j": 5,
    "center": [
-    -173.3688,
-    15.7039,
-    -369.1208
+    -164.6536,
+    14.7241,
+    -317.6468
    ],
-   "points": 25403,
+   "points": 128749,
    "sog": "splatdata/campus_sog/fine/chunk_2_5.sogdata"
   },
   {
@@ -803,11 +779,11 @@
    "i": 3,
    "j": 5,
    "center": [
-    -128.0496,
-    16.0433,
-    -369.1139
+    -115.8483,
+    15.0896,
+    -317.6394
    ],
-   "points": 57531,
+   "points": 122883,
    "sog": "splatdata/campus_sog/fine/chunk_3_5.sogdata"
   },
   {
@@ -815,11 +791,11 @@
    "i": 4,
    "j": 5,
    "center": [
-    -82.7304,
-    16.3826,
-    -369.107
+    -67.0429,
+    15.4551,
+    -317.6319
    ],
-   "points": 104388,
+   "points": 135459,
    "sog": "splatdata/campus_sog/fine/chunk_4_5.sogdata"
   },
   {
@@ -827,11 +803,11 @@
    "i": 5,
    "j": 5,
    "center": [
-    -37.4111,
-    16.722,
-    -369.1001
+    -18.2376,
+    15.8205,
+    -317.6245
    ],
-   "points": 99548,
+   "points": 133156,
    "sog": "splatdata/campus_sog/fine/chunk_5_5.sogdata"
   },
   {
@@ -839,11 +815,11 @@
    "i": 6,
    "j": 5,
    "center": [
-    7.9081,
-    17.0614,
-    -369.0932
+    30.5677,
+    16.186,
+    -317.6171
    ],
-   "points": 71569,
+   "points": 142258,
    "sog": "splatdata/campus_sog/fine/chunk_6_5.sogdata"
   },
   {
@@ -851,11 +827,11 @@
    "i": 7,
    "j": 5,
    "center": [
-    53.2273,
-    17.4007,
-    -369.0863
+    79.373,
+    16.5515,
+    -317.6097
    ],
-   "points": 52075,
+   "points": 106058,
    "sog": "splatdata/campus_sog/fine/chunk_7_5.sogdata"
   },
   {
@@ -863,11 +839,11 @@
    "i": 8,
    "j": 5,
    "center": [
-    98.5465,
-    17.7401,
-    -369.0794
+    128.1783,
+    16.9169,
+    -317.6023
    ],
-   "points": 61803,
+   "points": 52724,
    "sog": "splatdata/campus_sog/fine/chunk_8_5.sogdata"
   },
   {
@@ -875,11 +851,11 @@
    "i": 9,
    "j": 5,
    "center": [
-    143.8657,
-    18.0794,
-    -369.0725
+    176.9836,
+    17.2824,
+    -317.5948
    ],
-   "points": 30328,
+   "points": 29913,
    "sog": "splatdata/campus_sog/fine/chunk_9_5.sogdata"
   },
   {
@@ -887,11 +863,11 @@
    "i": 10,
    "j": 5,
    "center": [
-    189.1849,
-    18.4188,
-    -369.0656
+    225.7889,
+    17.6478,
+    -317.5874
    ],
-   "points": 11705,
+   "points": 6675,
    "sog": "splatdata/campus_sog/fine/chunk_10_5.sogdata"
   },
   {
@@ -899,11 +875,11 @@
    "i": 11,
    "j": 5,
    "center": [
-    234.5042,
-    18.7582,
-    -369.0588
+    274.5942,
+    18.0133,
+    -317.58
    ],
-   "points": 2378,
+   "points": 2694,
    "sog": "splatdata/campus_sog/fine/chunk_11_5.sogdata"
   },
   {
@@ -911,35 +887,23 @@
    "i": 12,
    "j": 5,
    "center": [
-    279.8234,
-    19.0975,
-    -369.0519
+    323.3996,
+    18.3788,
+    -317.5726
    ],
-   "points": 527,
+   "points": 344,
    "sog": "splatdata/campus_sog/fine/chunk_12_5.sogdata"
-  },
-  {
-   "name": "Chunk_13_5",
-   "i": 13,
-   "j": 5,
-   "center": [
-    325.1426,
-    19.4369,
-    -369.045
-   ],
-   "points": 1103,
-   "sog": "splatdata/campus_sog/fine/chunk_13_5.sogdata"
   },
   {
    "name": "Chunk_0_6",
    "i": 0,
    "j": 6,
    "center": [
-    -264.0072,
-    14.3285,
-    -334.8194
+    -262.2642,
+    13.1065,
+    -273.9878
    ],
-   "points": 22602,
+   "points": 46470,
    "sog": "splatdata/campus_sog/fine/chunk_0_6.sogdata"
   },
   {
@@ -947,11 +911,11 @@
    "i": 1,
    "j": 6,
    "center": [
-    -218.688,
-    14.6679,
-    -334.8125
+    -213.4589,
+    13.4719,
+    -273.9804
    ],
-   "points": 53435,
+   "points": 108446,
    "sog": "splatdata/campus_sog/fine/chunk_1_6.sogdata"
   },
   {
@@ -959,11 +923,11 @@
    "i": 2,
    "j": 6,
    "center": [
-    -173.3688,
-    15.0072,
-    -334.8057
+    -164.6536,
+    13.8374,
+    -273.973
    ],
-   "points": 69059,
+   "points": 93950,
    "sog": "splatdata/campus_sog/fine/chunk_2_6.sogdata"
   },
   {
@@ -971,11 +935,11 @@
    "i": 3,
    "j": 6,
    "center": [
-    -128.0496,
-    15.3466,
-    -334.7988
+    -115.8483,
+    14.2029,
+    -273.9656
    ],
-   "points": 84488,
+   "points": 147486,
    "sog": "splatdata/campus_sog/fine/chunk_3_6.sogdata"
   },
   {
@@ -983,11 +947,11 @@
    "i": 4,
    "j": 6,
    "center": [
-    -82.7304,
-    15.6859,
-    -334.7919
+    -67.0429,
+    14.5683,
+    -273.9582
    ],
-   "points": 120766,
+   "points": 118859,
    "sog": "splatdata/campus_sog/fine/chunk_4_6.sogdata"
   },
   {
@@ -995,11 +959,11 @@
    "i": 5,
    "j": 6,
    "center": [
-    -37.4111,
-    16.0253,
-    -334.785
+    -18.2376,
+    14.9338,
+    -273.9508
    ],
-   "points": 96289,
+   "points": 155342,
    "sog": "splatdata/campus_sog/fine/chunk_5_6.sogdata"
   },
   {
@@ -1007,11 +971,11 @@
    "i": 6,
    "j": 6,
    "center": [
-    7.9081,
-    16.3647,
-    -334.7781
+    30.5677,
+    15.2993,
+    -273.9433
    ],
-   "points": 87484,
+   "points": 189321,
    "sog": "splatdata/campus_sog/fine/chunk_6_6.sogdata"
   },
   {
@@ -1019,11 +983,11 @@
    "i": 7,
    "j": 6,
    "center": [
-    53.2273,
-    16.704,
-    -334.7712
+    79.373,
+    15.6647,
+    -273.9359
    ],
-   "points": 71040,
+   "points": 154797,
    "sog": "splatdata/campus_sog/fine/chunk_7_6.sogdata"
   },
   {
@@ -1031,11 +995,11 @@
    "i": 8,
    "j": 6,
    "center": [
-    98.5465,
-    17.0434,
-    -334.7643
+    128.1783,
+    16.0302,
+    -273.9285
    ],
-   "points": 58151,
+   "points": 100222,
    "sog": "splatdata/campus_sog/fine/chunk_8_6.sogdata"
   },
   {
@@ -1043,11 +1007,11 @@
    "i": 9,
    "j": 6,
    "center": [
-    143.8657,
-    17.3827,
-    -334.7574
+    176.9836,
+    16.3957,
+    -273.9211
    ],
-   "points": 18513,
+   "points": 33565,
    "sog": "splatdata/campus_sog/fine/chunk_9_6.sogdata"
   },
   {
@@ -1055,11 +1019,11 @@
    "i": 10,
    "j": 6,
    "center": [
-    189.1849,
-    17.7221,
-    -334.7505
+    225.7889,
+    16.7611,
+    -273.9137
    ],
-   "points": 11124,
+   "points": 5922,
    "sog": "splatdata/campus_sog/fine/chunk_10_6.sogdata"
   },
   {
@@ -1067,11 +1031,11 @@
    "i": 11,
    "j": 6,
    "center": [
-    234.5042,
-    18.0615,
-    -334.7437
+    274.5942,
+    17.1266,
+    -273.9062
    ],
-   "points": 2984,
+   "points": 1842,
    "sog": "splatdata/campus_sog/fine/chunk_11_6.sogdata"
   },
   {
@@ -1079,35 +1043,23 @@
    "i": 12,
    "j": 6,
    "center": [
-    279.8234,
-    18.4008,
-    -334.7368
+    323.3996,
+    17.4921,
+    -273.8988
    ],
-   "points": 1752,
+   "points": 158,
    "sog": "splatdata/campus_sog/fine/chunk_12_6.sogdata"
-  },
-  {
-   "name": "Chunk_13_6",
-   "i": 13,
-   "j": 6,
-   "center": [
-    325.1426,
-    18.7402,
-    -334.7299
-   ],
-   "points": 549,
-   "sog": "splatdata/campus_sog/fine/chunk_13_6.sogdata"
   },
   {
    "name": "Chunk_0_7",
    "i": 0,
    "j": 7,
    "center": [
-    -264.0072,
-    13.6318,
-    -300.5043
+    -262.2642,
+    12.2198,
+    -230.3141
    ],
-   "points": 27683,
+   "points": 31490,
    "sog": "splatdata/campus_sog/fine/chunk_0_7.sogdata"
   },
   {
@@ -1115,11 +1067,11 @@
    "i": 1,
    "j": 7,
    "center": [
-    -218.688,
-    13.9712,
-    -300.4974
+    -213.4589,
+    12.5852,
+    -230.3067
    ],
-   "points": 96744,
+   "points": 61877,
    "sog": "splatdata/campus_sog/fine/chunk_1_7.sogdata"
   },
   {
@@ -1127,11 +1079,11 @@
    "i": 2,
    "j": 7,
    "center": [
-    -173.3688,
-    14.3105,
-    -300.4905
+    -164.6536,
+    12.9507,
+    -230.2992
    ],
-   "points": 109653,
+   "points": 95810,
    "sog": "splatdata/campus_sog/fine/chunk_2_7.sogdata"
   },
   {
@@ -1139,11 +1091,11 @@
    "i": 3,
    "j": 7,
    "center": [
-    -128.0496,
-    14.6499,
-    -300.4837
+    -115.8483,
+    13.3162,
+    -230.2918
    ],
-   "points": 88923,
+   "points": 134944,
    "sog": "splatdata/campus_sog/fine/chunk_3_7.sogdata"
   },
   {
@@ -1151,11 +1103,11 @@
    "i": 4,
    "j": 7,
    "center": [
-    -82.7304,
-    14.9892,
-    -300.4768
+    -67.0429,
+    13.6816,
+    -230.2844
    ],
-   "points": 83360,
+   "points": 136307,
    "sog": "splatdata/campus_sog/fine/chunk_4_7.sogdata"
   },
   {
@@ -1163,11 +1115,11 @@
    "i": 5,
    "j": 7,
    "center": [
-    -37.4111,
-    15.3286,
-    -300.4699
+    -18.2376,
+    14.0471,
+    -230.277
    ],
-   "points": 95878,
+   "points": 159923,
    "sog": "splatdata/campus_sog/fine/chunk_5_7.sogdata"
   },
   {
@@ -1175,11 +1127,11 @@
    "i": 6,
    "j": 7,
    "center": [
-    7.9081,
-    15.668,
-    -300.463
+    30.5677,
+    14.4126,
+    -230.2696
    ],
-   "points": 121244,
+   "points": 321662,
    "sog": "splatdata/campus_sog/fine/chunk_6_7.sogdata"
   },
   {
@@ -1187,11 +1139,11 @@
    "i": 7,
    "j": 7,
    "center": [
-    53.2273,
-    16.0073,
-    -300.4561
+    79.373,
+    14.778,
+    -230.2621
    ],
-   "points": 121417,
+   "points": 165816,
    "sog": "splatdata/campus_sog/fine/chunk_7_7.sogdata"
   },
   {
@@ -1199,11 +1151,11 @@
    "i": 8,
    "j": 7,
    "center": [
-    98.5465,
-    16.3467,
-    -300.4492
+    128.1783,
+    15.1435,
+    -230.2547
    ],
-   "points": 68786,
+   "points": 84716,
    "sog": "splatdata/campus_sog/fine/chunk_8_7.sogdata"
   },
   {
@@ -1211,11 +1163,11 @@
    "i": 9,
    "j": 7,
    "center": [
-    143.8657,
-    16.686,
-    -300.4423
+    176.9836,
+    15.5089,
+    -230.2473
    ],
-   "points": 45439,
+   "points": 19285,
    "sog": "splatdata/campus_sog/fine/chunk_9_7.sogdata"
   },
   {
@@ -1223,11 +1175,11 @@
    "i": 10,
    "j": 7,
    "center": [
-    189.1849,
-    17.0254,
-    -300.4354
+    225.7889,
+    15.8744,
+    -230.2399
    ],
-   "points": 19671,
+   "points": 2598,
    "sog": "splatdata/campus_sog/fine/chunk_10_7.sogdata"
   },
   {
@@ -1235,11 +1187,11 @@
    "i": 11,
    "j": 7,
    "center": [
-    234.5042,
-    17.3648,
-    -300.4286
+    274.5942,
+    16.2399,
+    -230.2325
    ],
-   "points": 3785,
+   "points": 1548,
    "sog": "splatdata/campus_sog/fine/chunk_11_7.sogdata"
   },
   {
@@ -1247,35 +1199,23 @@
    "i": 12,
    "j": 7,
    "center": [
-    279.8234,
-    17.7041,
-    -300.4217
+    323.3996,
+    16.6053,
+    -230.2251
    ],
-   "points": 1154,
+   "points": 304,
    "sog": "splatdata/campus_sog/fine/chunk_12_7.sogdata"
-  },
-  {
-   "name": "Chunk_13_7",
-   "i": 13,
-   "j": 7,
-   "center": [
-    325.1426,
-    18.0435,
-    -300.4148
-   ],
-   "points": 157,
-   "sog": "splatdata/campus_sog/fine/chunk_13_7.sogdata"
   },
   {
    "name": "Chunk_0_8",
    "i": 0,
    "j": 8,
    "center": [
-    -264.0072,
-    12.9351,
-    -266.1892
+    -262.2642,
+    11.3331,
+    -186.6403
    ],
-   "points": 32442,
+   "points": 7594,
    "sog": "splatdata/campus_sog/fine/chunk_0_8.sogdata"
   },
   {
@@ -1283,11 +1223,11 @@
    "i": 1,
    "j": 8,
    "center": [
-    -218.688,
-    13.2744,
-    -266.1823
+    -213.4589,
+    11.6985,
+    -186.6329
    ],
-   "points": 67623,
+   "points": 45353,
    "sog": "splatdata/campus_sog/fine/chunk_1_8.sogdata"
   },
   {
@@ -1295,11 +1235,11 @@
    "i": 2,
    "j": 8,
    "center": [
-    -173.3688,
-    13.6138,
-    -266.1754
+    -164.6536,
+    12.064,
+    -186.6255
    ],
-   "points": 42247,
+   "points": 60340,
    "sog": "splatdata/campus_sog/fine/chunk_2_8.sogdata"
   },
   {
@@ -1307,11 +1247,11 @@
    "i": 3,
    "j": 8,
    "center": [
-    -128.0496,
-    13.9532,
-    -266.1686
+    -115.8483,
+    12.4294,
+    -186.6181
    ],
-   "points": 115727,
+   "points": 85409,
    "sog": "splatdata/campus_sog/fine/chunk_3_8.sogdata"
   },
   {
@@ -1319,11 +1259,11 @@
    "i": 4,
    "j": 8,
    "center": [
-    -82.7304,
-    14.2925,
-    -266.1617
+    -67.0429,
+    12.7949,
+    -186.6106
    ],
-   "points": 100696,
+   "points": 108217,
    "sog": "splatdata/campus_sog/fine/chunk_4_8.sogdata"
   },
   {
@@ -1331,11 +1271,11 @@
    "i": 5,
    "j": 8,
    "center": [
-    -37.4111,
-    14.6319,
-    -266.1548
+    -18.2376,
+    13.1604,
+    -186.6032
    ],
-   "points": 90080,
+   "points": 144819,
    "sog": "splatdata/campus_sog/fine/chunk_5_8.sogdata"
   },
   {
@@ -1343,11 +1283,11 @@
    "i": 6,
    "j": 8,
    "center": [
-    7.9081,
-    14.9712,
-    -266.1479
+    30.5677,
+    13.5258,
+    -186.5958
    ],
-   "points": 124662,
+   "points": 167052,
    "sog": "splatdata/campus_sog/fine/chunk_6_8.sogdata"
   },
   {
@@ -1355,11 +1295,11 @@
    "i": 7,
    "j": 8,
    "center": [
-    53.2273,
-    15.3106,
-    -266.141
+    79.373,
+    13.8913,
+    -186.5884
    ],
-   "points": 134441,
+   "points": 149369,
    "sog": "splatdata/campus_sog/fine/chunk_7_8.sogdata"
   },
   {
@@ -1367,11 +1307,11 @@
    "i": 8,
    "j": 8,
    "center": [
-    98.5465,
-    15.65,
-    -266.1341
+    128.1783,
+    14.2568,
+    -186.581
    ],
-   "points": 114395,
+   "points": 47387,
    "sog": "splatdata/campus_sog/fine/chunk_8_8.sogdata"
   },
   {
@@ -1379,11 +1319,11 @@
    "i": 9,
    "j": 8,
    "center": [
-    143.8657,
-    15.9893,
-    -266.1272
+    176.9836,
+    14.6222,
+    -186.5735
    ],
-   "points": 54246,
+   "points": 13332,
    "sog": "splatdata/campus_sog/fine/chunk_9_8.sogdata"
   },
   {
@@ -1391,11 +1331,11 @@
    "i": 10,
    "j": 8,
    "center": [
-    189.1849,
-    16.3287,
-    -266.1203
+    225.7889,
+    14.9877,
+    -186.5661
    ],
-   "points": 20798,
+   "points": 1639,
    "sog": "splatdata/campus_sog/fine/chunk_10_8.sogdata"
   },
   {
@@ -1403,11 +1343,11 @@
    "i": 11,
    "j": 8,
    "center": [
-    234.5042,
-    16.668,
-    -266.1134
+    274.5942,
+    15.3532,
+    -186.5587
    ],
-   "points": 1942,
+   "points": 388,
    "sog": "splatdata/campus_sog/fine/chunk_11_8.sogdata"
   },
   {
@@ -1415,35 +1355,23 @@
    "i": 12,
    "j": 8,
    "center": [
-    279.8234,
-    17.0074,
-    -266.1066
+    323.3996,
+    15.7186,
+    -186.5513
    ],
-   "points": 1752,
+   "points": 502,
    "sog": "splatdata/campus_sog/fine/chunk_12_8.sogdata"
-  },
-  {
-   "name": "Chunk_13_8",
-   "i": 13,
-   "j": 8,
-   "center": [
-    325.1426,
-    17.3468,
-    -266.0997
-   ],
-   "points": 26,
-   "sog": "splatdata/campus_sog/fine/chunk_13_8.sogdata"
   },
   {
    "name": "Chunk_0_9",
    "i": 0,
    "j": 9,
    "center": [
-    -264.0072,
-    12.2384,
-    -231.8741
+    -262.2642,
+    10.4463,
+    -142.9665
    ],
-   "points": 22402,
+   "points": 924,
    "sog": "splatdata/campus_sog/fine/chunk_0_9.sogdata"
   },
   {
@@ -1451,11 +1379,11 @@
    "i": 1,
    "j": 9,
    "center": [
-    -218.688,
-    12.5777,
-    -231.8672
+    -213.4589,
+    10.8118,
+    -142.9591
    ],
-   "points": 43262,
+   "points": 6964,
    "sog": "splatdata/campus_sog/fine/chunk_1_9.sogdata"
   },
   {
@@ -1463,11 +1391,11 @@
    "i": 2,
    "j": 9,
    "center": [
-    -173.3688,
-    12.9171,
-    -231.8603
+    -164.6536,
+    11.1773,
+    -142.9517
    ],
-   "points": 56014,
+   "points": 32099,
    "sog": "splatdata/campus_sog/fine/chunk_2_9.sogdata"
   },
   {
@@ -1475,11 +1403,11 @@
    "i": 3,
    "j": 9,
    "center": [
-    -128.0496,
-    13.2565,
-    -231.8535
+    -115.8483,
+    11.5427,
+    -142.9443
    ],
-   "points": 108567,
+   "points": 16163,
    "sog": "splatdata/campus_sog/fine/chunk_3_9.sogdata"
   },
   {
@@ -1487,11 +1415,11 @@
    "i": 4,
    "j": 9,
    "center": [
-    -82.7304,
-    13.5958,
-    -231.8466
+    -67.0429,
+    11.9082,
+    -142.9369
    ],
-   "points": 90987,
+   "points": 37718,
    "sog": "splatdata/campus_sog/fine/chunk_4_9.sogdata"
   },
   {
@@ -1499,11 +1427,11 @@
    "i": 5,
    "j": 9,
    "center": [
-    -37.4111,
-    13.9352,
-    -231.8397
+    -18.2376,
+    12.2737,
+    -142.9294
    ],
-   "points": 96162,
+   "points": 67630,
    "sog": "splatdata/campus_sog/fine/chunk_5_9.sogdata"
   },
   {
@@ -1511,11 +1439,11 @@
    "i": 6,
    "j": 9,
    "center": [
-    7.9081,
-    14.2745,
-    -231.8328
+    30.5677,
+    12.6391,
+    -142.922
    ],
-   "points": 234216,
+   "points": 104509,
    "sog": "splatdata/campus_sog/fine/chunk_6_9.sogdata"
   },
   {
@@ -1523,11 +1451,11 @@
    "i": 7,
    "j": 9,
    "center": [
-    53.2273,
-    14.6139,
-    -231.8259
+    79.373,
+    13.0046,
+    -142.9146
    ],
-   "points": 155470,
+   "points": 58384,
    "sog": "splatdata/campus_sog/fine/chunk_7_9.sogdata"
   },
   {
@@ -1535,11 +1463,11 @@
    "i": 8,
    "j": 9,
    "center": [
-    98.5465,
-    14.9533,
-    -231.819
+    128.1783,
+    13.37,
+    -142.9072
    ],
-   "points": 90359,
+   "points": 20382,
    "sog": "splatdata/campus_sog/fine/chunk_8_9.sogdata"
   },
   {
@@ -1547,11 +1475,11 @@
    "i": 9,
    "j": 9,
    "center": [
-    143.8657,
-    15.2926,
-    -231.8121
+    176.9836,
+    13.7355,
+    -142.8998
    ],
-   "points": 48411,
+   "points": 5641,
    "sog": "splatdata/campus_sog/fine/chunk_9_9.sogdata"
   },
   {
@@ -1559,11 +1487,11 @@
    "i": 10,
    "j": 9,
    "center": [
-    189.1849,
-    15.632,
-    -231.8052
+    225.7889,
+    14.101,
+    -142.8924
    ],
-   "points": 11611,
+   "points": 472,
    "sog": "splatdata/campus_sog/fine/chunk_10_9.sogdata"
   },
   {
@@ -1571,11 +1499,11 @@
    "i": 11,
    "j": 9,
    "center": [
-    234.5042,
-    15.9713,
-    -231.7983
+    274.5942,
+    14.4664,
+    -142.8849
    ],
-   "points": 766,
+   "points": 764,
    "sog": "splatdata/campus_sog/fine/chunk_11_9.sogdata"
   },
   {
@@ -1583,47 +1511,23 @@
    "i": 12,
    "j": 9,
    "center": [
-    279.8234,
-    16.3107,
-    -231.7915
+    323.3996,
+    14.8319,
+    -142.8775
    ],
-   "points": 1351,
+   "points": 1014,
    "sog": "splatdata/campus_sog/fine/chunk_12_9.sogdata"
-  },
-  {
-   "name": "Chunk_13_9",
-   "i": 13,
-   "j": 9,
-   "center": [
-    325.1426,
-    16.6501,
-    -231.7846
-   ],
-   "points": 278,
-   "sog": "splatdata/campus_sog/fine/chunk_13_9.sogdata"
-  },
-  {
-   "name": "Chunk_0_10",
-   "i": 0,
-   "j": 10,
-   "center": [
-    -264.0072,
-    11.5417,
-    -197.559
-   ],
-   "points": 5974,
-   "sog": "splatdata/campus_sog/fine/chunk_0_10.sogdata"
   },
   {
    "name": "Chunk_1_10",
    "i": 1,
    "j": 10,
    "center": [
-    -218.688,
-    11.881,
-    -197.5521
+    -213.4589,
+    9.9251,
+    -99.2854
    ],
-   "points": 39803,
+   "points": 49,
    "sog": "splatdata/campus_sog/fine/chunk_1_10.sogdata"
   },
   {
@@ -1631,11 +1535,11 @@
    "i": 2,
    "j": 10,
    "center": [
-    -173.3688,
-    12.2204,
-    -197.5452
+    -164.6536,
+    10.2905,
+    -99.2779
    ],
-   "points": 51113,
+   "points": 481,
    "sog": "splatdata/campus_sog/fine/chunk_2_10.sogdata"
   },
   {
@@ -1643,11 +1547,11 @@
    "i": 3,
    "j": 10,
    "center": [
-    -128.0496,
-    12.5598,
-    -197.5383
+    -115.8483,
+    10.656,
+    -99.2705
    ],
-   "points": 75992,
+   "points": 554,
    "sog": "splatdata/campus_sog/fine/chunk_3_10.sogdata"
   },
   {
@@ -1655,11 +1559,11 @@
    "i": 4,
    "j": 10,
    "center": [
-    -82.7304,
-    12.8991,
-    -197.5315
+    -67.0429,
+    11.0215,
+    -99.2631
    ],
-   "points": 75777,
+   "points": 7836,
    "sog": "splatdata/campus_sog/fine/chunk_4_10.sogdata"
   },
   {
@@ -1667,11 +1571,11 @@
    "i": 5,
    "j": 10,
    "center": [
-    -37.4111,
-    13.2385,
-    -197.5246
+    -18.2376,
+    11.3869,
+    -99.2557
    ],
-   "points": 115767,
+   "points": 11959,
    "sog": "splatdata/campus_sog/fine/chunk_5_10.sogdata"
   },
   {
@@ -1679,11 +1583,11 @@
    "i": 6,
    "j": 10,
    "center": [
-    7.9081,
-    13.5778,
-    -197.5177
+    30.5677,
+    11.7524,
+    -99.2483
    ],
-   "points": 152501,
+   "points": 28044,
    "sog": "splatdata/campus_sog/fine/chunk_6_10.sogdata"
   },
   {
@@ -1691,11 +1595,11 @@
    "i": 7,
    "j": 10,
    "center": [
-    53.2273,
-    13.9172,
-    -197.5108
+    79.373,
+    12.1179,
+    -99.2408
    ],
-   "points": 137945,
+   "points": 28743,
    "sog": "splatdata/campus_sog/fine/chunk_7_10.sogdata"
   },
   {
@@ -1703,11 +1607,11 @@
    "i": 8,
    "j": 10,
    "center": [
-    98.5465,
-    14.2566,
-    -197.5039
+    128.1783,
+    12.4833,
+    -99.2334
    ],
-   "points": 85099,
+   "points": 10010,
    "sog": "splatdata/campus_sog/fine/chunk_8_10.sogdata"
   },
   {
@@ -1715,11 +1619,11 @@
    "i": 9,
    "j": 10,
    "center": [
-    143.8657,
-    14.5959,
-    -197.497
+    176.9836,
+    12.8488,
+    -99.226
    ],
-   "points": 20380,
+   "points": 1438,
    "sog": "splatdata/campus_sog/fine/chunk_9_10.sogdata"
   },
   {
@@ -1727,11 +1631,11 @@
    "i": 10,
    "j": 10,
    "center": [
-    189.1849,
-    14.9353,
-    -197.4901
+    225.7889,
+    13.2143,
+    -99.2186
    ],
-   "points": 7811,
+   "points": 416,
    "sog": "splatdata/campus_sog/fine/chunk_10_10.sogdata"
   },
   {
@@ -1739,11 +1643,11 @@
    "i": 11,
    "j": 10,
    "center": [
-    234.5042,
-    15.2746,
-    -197.4832
+    274.5942,
+    13.5797,
+    -99.2112
    ],
-   "points": 496,
+   "points": 718,
    "sog": "splatdata/campus_sog/fine/chunk_11_10.sogdata"
   },
   {
@@ -1751,504 +1655,12 @@
    "i": 12,
    "j": 10,
    "center": [
-    279.8234,
-    15.614,
-    -197.4764
+    323.3996,
+    13.9452,
+    -99.2038
    ],
-   "points": 254,
+   "points": 143,
    "sog": "splatdata/campus_sog/fine/chunk_12_10.sogdata"
-  },
-  {
-   "name": "Chunk_13_10",
-   "i": 13,
-   "j": 10,
-   "center": [
-    325.1426,
-    15.9534,
-    -197.4695
-   ],
-   "points": 415,
-   "sog": "splatdata/campus_sog/fine/chunk_13_10.sogdata"
-  },
-  {
-   "name": "Chunk_0_11",
-   "i": 0,
-   "j": 11,
-   "center": [
-    -264.0072,
-    10.845,
-    -163.2439
-   ],
-   "points": 2258,
-   "sog": "splatdata/campus_sog/fine/chunk_0_11.sogdata"
-  },
-  {
-   "name": "Chunk_1_11",
-   "i": 1,
-   "j": 11,
-   "center": [
-    -218.688,
-    11.1843,
-    -163.237
-   ],
-   "points": 14455,
-   "sog": "splatdata/campus_sog/fine/chunk_1_11.sogdata"
-  },
-  {
-   "name": "Chunk_2_11",
-   "i": 2,
-   "j": 11,
-   "center": [
-    -173.3688,
-    11.5237,
-    -163.2301
-   ],
-   "points": 36141,
-   "sog": "splatdata/campus_sog/fine/chunk_2_11.sogdata"
-  },
-  {
-   "name": "Chunk_3_11",
-   "i": 3,
-   "j": 11,
-   "center": [
-    -128.0496,
-    11.8631,
-    -163.2232
-   ],
-   "points": 21498,
-   "sog": "splatdata/campus_sog/fine/chunk_3_11.sogdata"
-  },
-  {
-   "name": "Chunk_4_11",
-   "i": 4,
-   "j": 11,
-   "center": [
-    -82.7304,
-    12.2024,
-    -163.2164
-   ],
-   "points": 34297,
-   "sog": "splatdata/campus_sog/fine/chunk_4_11.sogdata"
-  },
-  {
-   "name": "Chunk_5_11",
-   "i": 5,
-   "j": 11,
-   "center": [
-    -37.4111,
-    12.5418,
-    -163.2095
-   ],
-   "points": 74733,
-   "sog": "splatdata/campus_sog/fine/chunk_5_11.sogdata"
-  },
-  {
-   "name": "Chunk_6_11",
-   "i": 6,
-   "j": 11,
-   "center": [
-    7.9081,
-    12.8811,
-    -163.2026
-   ],
-   "points": 91538,
-   "sog": "splatdata/campus_sog/fine/chunk_6_11.sogdata"
-  },
-  {
-   "name": "Chunk_7_11",
-   "i": 7,
-   "j": 11,
-   "center": [
-    53.2273,
-    13.2205,
-    -163.1957
-   ],
-   "points": 100264,
-   "sog": "splatdata/campus_sog/fine/chunk_7_11.sogdata"
-  },
-  {
-   "name": "Chunk_8_11",
-   "i": 8,
-   "j": 11,
-   "center": [
-    98.5465,
-    13.5599,
-    -163.1888
-   ],
-   "points": 55264,
-   "sog": "splatdata/campus_sog/fine/chunk_8_11.sogdata"
-  },
-  {
-   "name": "Chunk_9_11",
-   "i": 9,
-   "j": 11,
-   "center": [
-    143.8657,
-    13.8992,
-    -163.1819
-   ],
-   "points": 14847,
-   "sog": "splatdata/campus_sog/fine/chunk_9_11.sogdata"
-  },
-  {
-   "name": "Chunk_10_11",
-   "i": 10,
-   "j": 11,
-   "center": [
-    189.1849,
-    14.2386,
-    -163.175
-   ],
-   "points": 4103,
-   "sog": "splatdata/campus_sog/fine/chunk_10_11.sogdata"
-  },
-  {
-   "name": "Chunk_11_11",
-   "i": 11,
-   "j": 11,
-   "center": [
-    234.5042,
-    14.5779,
-    -163.1681
-   ],
-   "points": 118,
-   "sog": "splatdata/campus_sog/fine/chunk_11_11.sogdata"
-  },
-  {
-   "name": "Chunk_12_11",
-   "i": 12,
-   "j": 11,
-   "center": [
-    279.8234,
-    14.9173,
-    -163.1612
-   ],
-   "points": 325,
-   "sog": "splatdata/campus_sog/fine/chunk_12_11.sogdata"
-  },
-  {
-   "name": "Chunk_13_11",
-   "i": 13,
-   "j": 11,
-   "center": [
-    325.1426,
-    15.2566,
-    -163.1544
-   ],
-   "points": 246,
-   "sog": "splatdata/campus_sog/fine/chunk_13_11.sogdata"
-  },
-  {
-   "name": "Chunk_0_12",
-   "i": 0,
-   "j": 12,
-   "center": [
-    -264.0072,
-    10.1483,
-    -128.9288
-   ],
-   "points": 10,
-   "sog": "splatdata/campus_sog/fine/chunk_0_12.sogdata"
-  },
-  {
-   "name": "Chunk_1_12",
-   "i": 1,
-   "j": 12,
-   "center": [
-    -218.688,
-    10.4876,
-    -128.9219
-   ],
-   "points": 843,
-   "sog": "splatdata/campus_sog/fine/chunk_1_12.sogdata"
-  },
-  {
-   "name": "Chunk_2_12",
-   "i": 2,
-   "j": 12,
-   "center": [
-    -173.3688,
-    10.827,
-    -128.915
-   ],
-   "points": 7790,
-   "sog": "splatdata/campus_sog/fine/chunk_2_12.sogdata"
-  },
-  {
-   "name": "Chunk_3_12",
-   "i": 3,
-   "j": 12,
-   "center": [
-    -128.0496,
-    11.1663,
-    -128.9081
-   ],
-   "points": 6601,
-   "sog": "splatdata/campus_sog/fine/chunk_3_12.sogdata"
-  },
-  {
-   "name": "Chunk_4_12",
-   "i": 4,
-   "j": 12,
-   "center": [
-    -82.7304,
-    11.5057,
-    -128.9013
-   ],
-   "points": 16461,
-   "sog": "splatdata/campus_sog/fine/chunk_4_12.sogdata"
-  },
-  {
-   "name": "Chunk_5_12",
-   "i": 5,
-   "j": 12,
-   "center": [
-    -37.4111,
-    11.8451,
-    -128.8944
-   ],
-   "points": 24332,
-   "sog": "splatdata/campus_sog/fine/chunk_5_12.sogdata"
-  },
-  {
-   "name": "Chunk_6_12",
-   "i": 6,
-   "j": 12,
-   "center": [
-    7.9081,
-    12.1844,
-    -128.8875
-   ],
-   "points": 38430,
-   "sog": "splatdata/campus_sog/fine/chunk_6_12.sogdata"
-  },
-  {
-   "name": "Chunk_7_12",
-   "i": 7,
-   "j": 12,
-   "center": [
-    53.2273,
-    12.5238,
-    -128.8806
-   ],
-   "points": 38276,
-   "sog": "splatdata/campus_sog/fine/chunk_7_12.sogdata"
-  },
-  {
-   "name": "Chunk_8_12",
-   "i": 8,
-   "j": 12,
-   "center": [
-    98.5465,
-    12.8631,
-    -128.8737
-   ],
-   "points": 19305,
-   "sog": "splatdata/campus_sog/fine/chunk_8_12.sogdata"
-  },
-  {
-   "name": "Chunk_9_12",
-   "i": 9,
-   "j": 12,
-   "center": [
-    143.8657,
-    13.2025,
-    -128.8668
-   ],
-   "points": 8732,
-   "sog": "splatdata/campus_sog/fine/chunk_9_12.sogdata"
-  },
-  {
-   "name": "Chunk_10_12",
-   "i": 10,
-   "j": 12,
-   "center": [
-    189.1849,
-    13.5419,
-    -128.8599
-   ],
-   "points": 2360,
-   "sog": "splatdata/campus_sog/fine/chunk_10_12.sogdata"
-  },
-  {
-   "name": "Chunk_11_12",
-   "i": 11,
-   "j": 12,
-   "center": [
-    234.5042,
-    13.8812,
-    -128.853
-   ],
-   "points": 648,
-   "sog": "splatdata/campus_sog/fine/chunk_11_12.sogdata"
-  },
-  {
-   "name": "Chunk_12_12",
-   "i": 12,
-   "j": 12,
-   "center": [
-    279.8234,
-    14.2206,
-    -128.8461
-   ],
-   "points": 1221,
-   "sog": "splatdata/campus_sog/fine/chunk_12_12.sogdata"
-  },
-  {
-   "name": "Chunk_13_12",
-   "i": 13,
-   "j": 12,
-   "center": [
-    325.1426,
-    14.5599,
-    -128.8393
-   ],
-   "points": 830,
-   "sog": "splatdata/campus_sog/fine/chunk_13_12.sogdata"
-  },
-  {
-   "name": "Chunk_2_13",
-   "i": 2,
-   "j": 13,
-   "center": [
-    -173.3688,
-    10.1303,
-    -94.5999
-   ],
-   "points": 30,
-   "sog": "splatdata/campus_sog/fine/chunk_2_13.sogdata"
-  },
-  {
-   "name": "Chunk_3_13",
-   "i": 3,
-   "j": 13,
-   "center": [
-    -128.0496,
-    10.4696,
-    -94.593
-   ],
-   "points": 141,
-   "sog": "splatdata/campus_sog/fine/chunk_3_13.sogdata"
-  },
-  {
-   "name": "Chunk_4_13",
-   "i": 4,
-   "j": 13,
-   "center": [
-    -82.7304,
-    10.809,
-    -94.5862
-   ],
-   "points": 93,
-   "sog": "splatdata/campus_sog/fine/chunk_4_13.sogdata"
-  },
-  {
-   "name": "Chunk_5_13",
-   "i": 5,
-   "j": 13,
-   "center": [
-    -37.4111,
-    11.1484,
-    -94.5793
-   ],
-   "points": 4706,
-   "sog": "splatdata/campus_sog/fine/chunk_5_13.sogdata"
-  },
-  {
-   "name": "Chunk_6_13",
-   "i": 6,
-   "j": 13,
-   "center": [
-    7.9081,
-    11.4877,
-    -94.5724
-   ],
-   "points": 14543,
-   "sog": "splatdata/campus_sog/fine/chunk_6_13.sogdata"
-  },
-  {
-   "name": "Chunk_7_13",
-   "i": 7,
-   "j": 13,
-   "center": [
-    53.2273,
-    11.8271,
-    -94.5655
-   ],
-   "points": 23099,
-   "sog": "splatdata/campus_sog/fine/chunk_7_13.sogdata"
-  },
-  {
-   "name": "Chunk_8_13",
-   "i": 8,
-   "j": 13,
-   "center": [
-    98.5465,
-    12.1664,
-    -94.5586
-   ],
-   "points": 15915,
-   "sog": "splatdata/campus_sog/fine/chunk_8_13.sogdata"
-  },
-  {
-   "name": "Chunk_9_13",
-   "i": 9,
-   "j": 13,
-   "center": [
-    143.8657,
-    12.5058,
-    -94.5517
-   ],
-   "points": 4213,
-   "sog": "splatdata/campus_sog/fine/chunk_9_13.sogdata"
-  },
-  {
-   "name": "Chunk_10_13",
-   "i": 10,
-   "j": 13,
-   "center": [
-    189.1849,
-    12.8452,
-    -94.5448
-   ],
-   "points": 170,
-   "sog": "splatdata/campus_sog/fine/chunk_10_13.sogdata"
-  },
-  {
-   "name": "Chunk_11_13",
-   "i": 11,
-   "j": 13,
-   "center": [
-    234.5042,
-    13.1845,
-    -94.5379
-   ],
-   "points": 72,
-   "sog": "splatdata/campus_sog/fine/chunk_11_13.sogdata"
-  },
-  {
-   "name": "Chunk_12_13",
-   "i": 12,
-   "j": 13,
-   "center": [
-    279.8234,
-    13.5239,
-    -94.531
-   ],
-   "points": 165,
-   "sog": "splatdata/campus_sog/fine/chunk_12_13.sogdata"
-  },
-  {
-   "name": "Chunk_13_13",
-   "i": 13,
-   "j": 13,
-   "center": [
-    325.1426,
-    13.8632,
-    -94.5242
-   ],
-   "points": 60,
-   "sog": "splatdata/campus_sog/fine/chunk_13_13.sogdata"
   }
  ],
  "coarse": {
