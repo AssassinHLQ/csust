@@ -113,6 +113,31 @@ func _ready() -> void:
 
 
 ## 找到 GLB 里的 AnimationPlayer，把 idle 设成循环并先播着。
+##
+## ⚠️ 同时**剥掉 idle 里两条腿骨的轨道**（方案 A，用户 2026-11-12 选的）。
+##
+## ── 为什么（`_probe_trex_idle_tracks` / `_probe_trex_leg_write_order` 实测）──
+## `idle` 一共 19 条轨道，其中只有 **两条**碰腿：
+##     轨道 16  `TrexRig/Skeleton3D:Bone.014`（**左**大腿）  TYPE_ROTATION_3D，1 个关键帧
+##     轨道 17  `TrexRig/Skeleton3D:Bone.015`（**左**小腿）  TYPE_ROTATION_3D，1 个关键帧
+## 右腿 `Bone.038/.039` **一条轨道都没有**。
+##
+## 于是两条腿的处境根本不一样：
+##   · 右腿 —— 没人和本喵抢，老实按 `_tick_legs()` 摆；
+##   · 左腿 —— `AnimationPlayer` 每帧都重放那条 `ROTATION_3D`，而它和
+##     `set_bone_pose_rotation()` **不是同一个写入入口**，两者对同一根骨混用时会
+##     互相盖。实测证据：把摆腿的起算基准一改（rest ← 原来是「上一帧姿态」），
+##     **「疯掉的那条腿」就从右换到了左** —— 只有争所有权才解释得了这种换边。
+##
+## 而那条轨道本身**根本不动**：`_probe_trex_idle_tracks` 第 2 节量到
+## 「只跑 idle：左大腿峰值 0.00°、相邻帧最大跳变 0.00°」，1 个关键帧的
+## `ROTATION_3D` 就是个常量姿态。删掉它**零视觉损失**，换来两侧完全对称。
+##
+## ⚠️ 只删**腿**的轨道，别的一概不碰（下巴/颈/尾/脊柱的 idle 微动都还在）。
+##    判据按骨名白名单走，不按轨道序号 —— 序号会随重新导出错位。
+const _LEG_BONES := ["Bone.014", "Bone.015", "Bone.038", "Bone.039"]
+
+
 func _setup_anim() -> void:
 	if model == null:
 		return
@@ -120,11 +145,41 @@ func _setup_anim() -> void:
 	if _anim == null:
 		push_warning("[Trex] 模型里没有 AnimationPlayer，攻击只会放预警圈")
 		return
+	# 所有动作里都可能带腿轨道 —— 攻击中途同样会和摆腿抢，所以逐个扫一遍。
+	# （`_tick_legs()` 只在 `current_animation == "idle"` 时才出手，但攻击播完
+	#   切回 idle 的那一帧仍会读到残留姿态，一起剥干净最省事。）
+	var stripped := 0
+	for an in _anim.get_animation_list():
+		var a := _anim.get_animation(an)
+		if a == null:
+			continue
+		stripped += _strip_leg_tracks(a)
 	var idle := _anim.get_animation("idle")
 	if idle != null:
 		idle.loop_mode = Animation.LOOP_LINEAR
 		_anim.play("idle")
-	print("[Trex %s] 动作就位：%s" % [display_name, str(_anim.get_animation_list())])
+	print("[Trex %s] 动作就位：%s｜剥掉腿骨轨道 %d 条（腿交给程序化摆腿）" % [
+		display_name, str(_anim.get_animation_list()), stripped])
+
+
+## 删掉一条动画里所有落在 `_LEG_BONES` 上的轨道，返回删了几条。
+##
+## ⚠️ 必须**从后往前**删：`remove_track()` 会把后面的轨道整体前移，
+##    正序删会跳轨（删掉第 16 条之后，原来的第 17 条变成第 16 条，循环变量却已 +1）。
+func _strip_leg_tracks(a: Animation) -> int:
+	var removed := 0
+	for t in range(a.get_track_count() - 1, -1, -1):
+		var path := String(a.track_get_path(t))
+		var hit := false
+		for nm in _LEG_BONES:
+			# 轨道路径形如 `TrexRig/Skeleton3D:Bone.014`，按骨名精确比对尾巴
+			if path.ends_with(":" + nm):
+				hit = true
+				break
+		if hit:
+			a.remove_track(t)
+			removed += 1
+	return removed
 
 
 ## 找出腿骨、算好「模型 X 轴在每根骨局部空间里的方向」。
@@ -151,11 +206,22 @@ func _setup_legs() -> void:
 			push_warning("[Trex] 找不到腿骨 %s，摆腿会缺一条" % nm)
 			continue
 		var rest := _leg_skel.get_bone_global_rest(bi)
+		# ⚠️ 摆腿轴 = **模型左右轴的逆变换**（`bone_rest_basis⁻¹ × RIGHT`）。
+		#
+		#    2026-11-12 实测翻车（用户：「跑步动画只动右腿」）：
+		#    原来这里算的是 `rest.basis.inverse() * Vector3.RIGHT`，看起来对，
+		#    但量出来的**末端轨迹**是 X 0.440 / Y 0.064 / Z 0.185 m ——
+		#    主位移在**左右**（拧/横摆），不是前后（迈步）。
+		#    轴本身垂直于骨轴（点乘 0.000）不等于「绕它转就前后迈步」，
+        #    因为它绕出来的是「骨轴 × 模型X」那个斜方向，和模型 X 差 60°。
+		#    现在先把模型 X 换到**骨局部**，再直接拿它当旋转轴 —— 不再走「取垂直」那一步。
 		var axis := (rest.basis.inverse() * Vector3.RIGHT).normalized()
 		var phase: float = float(e[1]) + (PI if nm in ["Bone.038", "Bone.039"] else 0.0)
 		var amp: float = float(e[2]) * (leg_swing_deg if e[2] > 0.0 else leg_knee_deg)
 		_leg_bones.append({
 			"bone": bi, "axis": axis, "phase": phase, "amp": amp,
+			# 静置姿态：每帧从**这里**起算，不在上一帧结果上叠（见 `_tick_legs()`）
+			"rest": rest.basis.get_rotation_quaternion(),
 		})
 	print("[Trex %s] 跑动就位：%d 根腿骨（%.0f m/s，拴绳 %.0f m）" % [
 		display_name, _leg_bones.size(), chase_speed, chase_leash])
@@ -249,10 +315,17 @@ func _tick_legs(delta: float) -> void:
 	for e in _leg_bones:
 		var bi: int = e["bone"]
 		var ang := deg_to_rad(float(e["amp"])) * sin(_walk_phase + float(e["phase"]))
-		# 在**当前**姿态上叠加，而不是拿 rest 覆盖 —— 这样 idle 里的呼吸/摆尾还在
-		var q := _leg_skel.get_bone_pose_rotation(bi)
+		# ⚠️ 必须从**静置姿态**起算，不能在 `get_bone_pose_rotation()` 上叠。
+		#
+		#    2026-11-12 实测翻车（用户：「跑步动画只动右腿」）：
+		#    原来写的是 `q = get_bone_pose_rotation(bi); set(…, q * Quaternion(axis, ang))`
+		#    —— 每帧都在**上一帧结果**上再乘一次，等于把摆角**积分**起来。
+		#    左腿 sin 一正一负、误差自己抵消（峰值 29.38°，看着正常）；
+		#    右腿相位差 π，每帧往同一侧推 —— 峰值量到 **160.53°**，小腿 118.03°，
+		#    表现就是「右腿在转圈、左腿像没动」（左右幅度比 5.46）。
+		#    现在每帧用 `rest` 重置，左右都老实按 `amp` 摆，比值回到 1.0 附近。
 		_leg_skel.set_bone_pose_rotation(bi,
-			q * Quaternion(e["axis"] as Vector3, ang))
+			(e["rest"] as Quaternion) * Quaternion(e["axis"] as Vector3, ang))
 	if model is Node3D:
 		# 身体随步频颠一下（两步一个周期）
 		(model as Node3D).position.y = _model_y0 + sin(_walk_phase * 2.0) * 0.12

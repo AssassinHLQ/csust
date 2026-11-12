@@ -62,15 +62,27 @@ func _run() -> void:
 	for i in 10:
 		await process_frame
 	var d0 := _flat_dist(boss, player)
+	var pp0 := player.global_position
 	var p0: Vector3 = boss.global_position
+	# ⚠️ 2026-11-12 修：这里原来只 `set` 一次玩家位置就不管了，实测翻车 ——
+	#    玩家是 `CharacterBody3D`，被放到半空之后会**掉下来 + 滑走**，
+	#    90 帧里自己跑出去几十米。于是「距离」变成
+	#    `26.1 m → 121.3 m（拉近 −95.2 m）` 这种荒谬读数（本体明明前进了 19.2 m），
+	#    看起来像「霸王龙不追」，其实是**量具跟着被测对象一起跑了**。
+	#    探针要量的是「霸王龙会不会靠近**那个点**」，所以每帧把玩家钉在原地。
 	for i in RUN_FRAMES:
+		player.global_position = pp0
+		player.velocity = Vector3.ZERO
 		await process_frame
 	var d1 := _flat_dist(boss, player)
 	var moved := _flat_len(p0, boss.global_position)
-	print("        距离 %.1f m → %.1f m（拉近 %.1f m）｜ 本体移动 %.1f m" % [
-		d0, d1, d0 - d1, moved])
+	var player_drift := _flat_len(pp0, player.global_position)
+	print("        距离 %.1f m → %.1f m（拉近 %.1f m）｜ 本体移动 %.1f m ｜ 玩家漂移 %.2f m" % [
+		d0, d1, d0 - d1, moved, player_drift])
 	_check(d1 < d0 - 8.0, "玩家不动时它会主动贴近（拉近 %.1f m > 8 m）" % (d0 - d1))
 	_check(moved > 8.0, "本体真的在移动（%.1f m > 8 m）" % moved)
+	# 顺带钉死「玩家确实没跑」—— 否则上面两条又会被同一个假象骗到
+	_check(player_drift < 1.0, "玩家被钉在原地（漂移 %.2f m < 1 m）" % player_drift)
 
 	print("")
 	print("========== 2. 会转身朝向玩家 ==========")
