@@ -111,6 +111,23 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "models/arona",
+		"title": "阿洛娜（小屋电脑里那个虚拟助手，终端敲 `arona` 出现）",
+		"author": "爱给网（aigei.com）用户上传的「碧蓝档案 阿罗娜 3d模型」，作者未署名；"
+			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
+		"license": "授权未核实（下载包没有许可文件）——仅限本地学习交流、不可商用、不可再分发；"
+			+ "本仓库不分发，克隆者需自行合法取得",
+		"distributed": false,
+		"source": "用户本地下载的 `[BlueArchive] - Arona.blend`（1.3 MB，205 骨骼绑定）+ 6 张贴图"
+			+ "（Body / Eye / Eyebrow / Face / Hair / Halo）",
+		"license_file": "",
+		"note": "2026-11-12 用户要求「打 arona 出现电脑里的阿洛娜」。磁盘上没有 Live2D"
+			+ "（moc3/model3.json 全无），所以用 Blender 后台模式把 .blend 转成 GLB："
+			+ "`_tools/export_arona_glb.py`（贴图已内嵌，1.31 MB）。`.gitignore` 排除了整个目录。"
+			+ "缺文件时 arona_stage 只打一行 warning，终端敲 arona 会停在终端画面，不会崩",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/pc_case",
 		"title": "壁挂 8×5090 机箱外壳（游戏开发部活动室）",
 		"author": "爱给网（aigei.com）用户上传的 CUSTOM GAMING PC，作者未署名；减面、开窗、改白漆由本项目完成",
@@ -403,6 +420,28 @@ const ENTRIES := [
 		"source": "UNDERTALE",
 		"license_file": "",
 		"note": "音频本体被 .gitignore 排除；*.ogg.import 进仓库（循环开关在里面），克隆者按 README 自备文件",
+	},
+	{
+		"group": "音效",
+		"path": "assets/music/pv_theme.mp3",
+		"title": "开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」",
+		"author": "NEXON Games / Yostar（Blue Archive OST）",
+		"license": "专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于发布产物",
+		"distributed": false,
+		"source": "B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定",
+		"license_file": "",
+		"note": "开场 PV 循环播放（有人在开始界面听歌），点「开始游戏」时淡出后交给房间 BGM；`.gitignore` 排除 mp3 与 .import，缺文件时 PV 静音、不报错",
+	},
+	{
+		"group": "界面与字体",
+		"path": "assets/cg",
+		"title": "开场 PV 图（8 张宽幅，逐张从左往右缓慢平移）",
+		"author": "Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图",
+		"license": "专有：仅本地学习演示，不可再分发、不可商用",
+		"distributed": false,
+		"source": "使用者 2026-11-12 提供的 8 张截图（混有 Blue Archive 游戏内画面与本作截图），存于 assets/cg/pv/",
+		"license_file": "",
+		"note": "`scripts/title_intro.gd` 按文件名排序循环播放；`.gitignore` 排除图片本体与 .import，缺图时自动退回「渐变底 + 标题」，启动、进度条、开始按钮都不受影响",
 	},
 	{
 		"group": "剧情与图标",

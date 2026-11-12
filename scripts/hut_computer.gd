@@ -51,6 +51,9 @@ var terminal: ArchTerminal
 var viewport: SubViewport
 ## 假 B 站窗口（终端敲 `bilibili` 打开）
 var bili: BiliBrowser
+## 阿洛娜的 3D 舞台与界面层（终端敲 `arona` 打开）
+var arona_stage: AronaStage
+var arona_page: AronaPage
 
 var _using := false
 var _in_range := false
@@ -120,6 +123,10 @@ func _build() -> void:
 	viewport.transparent_bg = false
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.handle_input_locally = false
+	# ⚠️ **必须给屏幕一个独立 World3D**：`SubViewport` 默认共用父场景的世界，
+	#    而阿洛娜那台 3D 相机就挂在这个 viewport 里 —— 不隔离的话，
+	#    屏幕上会把整个校园/小屋一起渲染出来（终端那些 Control 只是盖在上面）。
+	viewport.own_world_3d = true
 	add_child(viewport)
 
 	terminal = ArchTerminal.new()
@@ -140,6 +147,20 @@ func _build() -> void:
 	bili.visible = false
 	bili.close_requested.connect(_close_bili)
 	viewport.add_child(bili)
+
+	# 阿洛娜：先 3D 舞台（`own_world_3d` 已经是 true，见上面那段注释），
+	# 再一层**透明**的界面（名牌 + 对话气泡），后者压在前者上面、不挡 3D。
+	terminal.open_arona_requested.connect(_open_arona)
+	arona_stage = AronaStage.new()
+	arona_stage.name = "AronaStage"
+	viewport.add_child(arona_stage)
+
+	arona_page = AronaPage.new()
+	arona_page.name = "AronaPage"
+	arona_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	arona_page.visible = false
+	arona_page.close_requested.connect(_close_arona)
+	viewport.add_child(arona_page)
 
 	var screen_mat := StandardMaterial3D.new()
 	screen_mat.albedo_texture = viewport.get_texture()
@@ -323,6 +344,8 @@ func _input(event: InputEvent) -> void:
 		# 假 B 站开着的时候，按键归它 —— 否则方向键会被终端当成输入字符
 		if bili != null and bili.visible:
 			bili.feed(event)
+		elif arona_page != null and arona_page.visible:
+			arona_page.feed(event)
 		else:
 			terminal.feed(event)
 		get_viewport().set_input_as_handled()
@@ -346,6 +369,30 @@ func _close_bili() -> void:
 	if bili == null:
 		return
 	bili.close()
+	Sfx.play("ui_close", -8.0)
+
+
+## 终端敲 `arona` → 屏幕换成阿洛娜（3D 舞台 + 对话界面）。
+##
+## ⚠️ 要把终端**藏起来**：终端的 `_draw()` 每次都铺一整屏不透明底色，
+##    留着它的话阿洛娜的 3D 画面会被盖得一点不剩。
+func _open_arona() -> void:
+	if arona_stage == null or arona_page == null:
+		return
+	terminal.visible = false
+	arona_stage.set_active(true)
+	arona_page.open()
+	Sfx.play("ui_open", -8.0)
+	print("[电脑] 唤醒阿洛娜（3D 模型，离线）")
+
+
+## 从阿洛娜界面退出：恢复终端，把 3D 舞台收掉（省一点渲染）
+func _close_arona() -> void:
+	if arona_stage == null or arona_page == null:
+		return
+	arona_page.close()
+	arona_stage.set_active(false)
+	terminal.visible = true
 	Sfx.play("ui_close", -8.0)
 
 
@@ -405,9 +452,10 @@ func _close() -> void:
 	if not _using:
 		return
 	_using = false
-	# 合上电脑时把假 B 站一起收掉 —— 不然下次开机会直接看到上次的播放页
+	# 合上电脑时把假 B 站 / 阿洛娜一起收掉 —— 不然下次开机会直接看到上次的画面
 	if bili != null:
 		bili.close()
+	_close_arona()
 	_overlay.visible = false
 	_hint.visible = _in_range
 	_stand()

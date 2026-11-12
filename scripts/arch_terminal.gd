@@ -29,6 +29,8 @@ signal first_input
 ##    Godot 在 Windows 上拿不到输入法的候选文字，硬做中文输入不现实，
 ##    所以这里给几个**英文别名**；中文那个只写在 help 里当注释，敲不进来也无所谓。
 signal open_bili_requested
+## 玩家敲 `arona` 时发出：屏幕里换成阿洛娜（见 `arona_stage.gd` / `arona_page.gd`）
+signal open_arona_requested
 
 const COLS := 100
 const ROWS := 40
@@ -285,9 +287,15 @@ func _run(cmd: String) -> void:
 		"help":
 			_say("commands (all fake, for show only):")
 			for k in ["help", "neofetch", "ls", "cat readme.txt", "uname -a",
-					"whoami", "pacman -Syu", "df -h", "bilibili", "clear", "exit"]:
+					"whoami", "pacman -Syu", "df -h", "bilibili", "arona", "clear", "exit"]:
 				_push_line([["  ", DIM], [k, KEY_CYAN]])
 			_push_line([["  ", DIM], ["anything else: zsh: command not found", DIM]])
+		"arona":
+			# 屏幕上换成阿洛娜（3D 模型 + 自己的相机/灯光，见 `arona_stage.gd`）。
+			# 用户 2026-11-12：「打 arona 可以出现电脑里面的阿洛娜」。
+			_push_line([["ARONA 唤醒中 ...", KEY_CYAN]])
+			_push_line([["(offline demo -- she lives on this machine)", DIM]])
+			open_arona_requested.emit()
 		"bilibili", "bili", "b23", "blbl":
 			# 开「假 B 站」（`scripts/bili_browser.gd`，纯本地，不联网）。
 			# 用户 2026-11-12：「终端敲 bilibili → 打开游戏内的 B 站风格窗口」。

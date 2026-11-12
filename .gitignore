@@ -1,4 +1,4 @@
-# ---- Godot 引擎缓存与产物（官方模板）----
+﻿# ---- Godot 引擎缓存与产物（官方模板）----
 .godot/
 /android/
 *.translation
@@ -52,6 +52,26 @@
 /assets/music/*.wav
 !/assets/music/*.ogg.import
 !/assets/music/README.md
+
+# 开场 PV 素材（2026-11-12）—— 和上面 BGM / 模型同一条规矩：
+#   · 图片里混有 Blue Archive 游戏内画面（© NEXON Games / Yostar）与本地截图；
+#   · PV 音乐是 BA OST「Constant Moderato（PV1）」。
+#   **都不随仓库分发**。缺素材时 `scripts/title_intro.gd` 会自动退回
+#   「渐变深蓝底 + 标题」，启动、进度条、开始按钮照常，只是没有 PV 画面/音乐。
+# 想自己换图：把 png 丢进 assets/cg/pv/（按文件名排序），见那个目录的 README.md。
+# ⚠️ `.import` 也一起排除：源图不在时留着 .import 会让 Godot 一直报
+#    「找不到源文件」，而且克隆者放新图时会沿用旧的导入参数。
+/assets/cg/pv/*.png
+/assets/cg/pv/*.png.import
+/assets/cg/pv/*.jpg
+/assets/cg/pv/*.jpg.import
+/assets/cg/pv/*.jpeg
+/assets/cg/pv/*.jpeg.import
+/assets/cg/pv/*.webp
+/assets/cg/pv/*.webp.import
+!/assets/cg/pv/README.md
+/assets/music/pv_theme.mp3
+/assets/music/pv_theme.mp3.import
 
 # 爱丽丝轨道炮音效（Blue Archive 游戏内音频，© NEXON Games / Yostar）
 # —— 专有版权，**不随仓库分发**，与上面 BGM、`models/Arisu*.glb` 同一套处理方式。
@@ -120,6 +140,19 @@ __pycache__/
 # 自动换成**程序化占位火箭**，跑酷的去程/回程照常能飞完 —— 和 gamedev_room /
 # pc_wall_case 一个套路。要恢复真模型：见 CREDITS.md 里那条的还原步骤。
 /models/rocket_falcon9/
+
+# 阿洛娜（电脑里那个虚拟助手，终端敲 `arona` 出现）—— 2026-11-12。
+#
+# 来源：爱给网下载的「碧蓝档案 阿罗娜 3d模型」里的 `[BlueArchive] - Arona.blend`
+#      （带 6 张贴图：Body / Eye / Eyebrow / Face / Hair / Halo）。
+#      **授权未核实**，只允许本地学习演示，不随仓库分发 —— 与 Arisu*.glb、BGM 同一套口径。
+#
+# 这个 GLB 是**派生物**，由 Blender 后台模式从 .blend 转出（贴图已打进 GLB）：
+#     D:\SOFTWARE\Blender52\blender.exe --background --factory-startup \
+#         --python _tools/export_arona_glb.py
+# 缺档不影响启动：`scripts/arona_stage.gd` 找不到 GLB 只会 push_warning + 打印一行，
+# 终端敲 `arona` 之后屏幕就停在终端画面（不会崩）。
+/models/arona/
 
 # 电竞房 LOD 的**高模 / 中模**（2026-11-08）—— 334 MB 的派生档，不进仓库。
 #

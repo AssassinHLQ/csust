@@ -48,6 +48,7 @@
 | 飞猪优香（第二位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_pig/`，来源 `飞猪优香 (2)_by_一个睿智.zip` | `猪猪优香.fbx`；`uv/` 里两张是作者的成品渲染图，已挪到 `ref/` 当贴图基准 |
 | 霸王龙优香（第一位 Boss） | Blue Archive 玩家二创（原作者未标注） | 专有 | ❌ | `models/boss/` | `优香霸王龙.fbx`，73 骨、无动画 |
 | 七名同伴（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/companions/`，来源 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包，整理者 lihaohong6 / Peterli） | 均取初始形态；凯伊用 `Kei_ext.glb` |
+| **阿洛娜**（小屋电脑里的虚拟助手，终端敲 `arona` 出现） | 爱给网（aigei.com）用户上传的「碧蓝档案 阿罗娜 3d模型」，作者未署名；角色 © NEXON Games / Yostar | 授权未核实（下载包无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `models/arona/`（`.gitignore` 排除） | `models/arona/arona.glb`，源：用户本地的 `碧蓝档案 阿罗娜 3d模型_爱给网_aigei_com\source\[BlueArchive] - Arona.blend` + 6 张贴图（Body / Eye / Eyebrow / Face / Hair / Halo） | **2026-11-12** 用户要求「打 arona 出现电脑里的阿洛娜」。磁盘上**没有 Live2D**（`moc3` / `model3.json` 全无），所以 Blender 5.2 后台转 GLB（`_tools/export_arona_glb.py`）：原档贴图路径是坏的（`//Arona Body.png` 空格 + 少了 `textures/`），且材质是 MMD 的（每材质 3 个 Material Output，glTF 只认 Principled 那个，否则**静默丢贴图**）—— 脚本里整块重建材质，产物 1.31 MB / 205 骨 / 6 材质贴图内嵌。缺文件时 `arona_stage.gd` 只 warning，敲 `arona` 停在终端画面不崩 |
 | RTX 5090 显卡模型（最后平台房顶的资产） | 爱给网（aigei.com）用户上传，作者未署名 | 专有（仅限学习交流，不可商用） | ❌ | `models/rtx5090/`，来源：爱给网下载的 `RTX5090.obj`（4.5 MB，29,480 面） | 2026-10-20 用户提供并当天换成高模（同目录还留着 945 KB 的 `RTX5090simplified.obj`）；`.gitignore` 排除了整个目录，缺它时屋顶用程序化占位卡 |
 | BANK 招牌模型（最后平台小屋屋顶） | **使用者自制**（Rhino 导出 OBJ） | 归使用者所有 | ✅ `models/bank/BANK.obj` | `models/bank/`，2026-10-20 桌面提供 | 1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 缺失，仓库补了一份最小 `BANK.mtl` |
 | AMD Ryzen 9 9950X3D 处理器模型（609 屋顶的 149 颗，Rhino 源） | 基于用户 Rhino 导出的 9950X3D GLB 减面与分材质；参考模型来自爱给网用户上传 | 处理后的低模随仓库分发；原始 SLDPRT 仅学习交流、不可商用；AMD / RYZEN 是 AMD 商标 | ✅ `models/cpu_9950x3d/ryzen_9950x3d.glb` | `models/cpu_9950x3d/`；参考用户提供的爱给网 `.SLDPRT`（Godot/Blender 读不了）与 `P1.PNG` | Rhino 源减到 12,192 面；蓝基板 + 银 IHS + 32 颗金手指 + IHS 丝印；149 颗摆 609 画室屋顶（模型 ×3 → 36 cm），¥4,599/颗直接进银行卡（京东 2026-10 行情），合计 ¥685,251 |
@@ -77,6 +78,7 @@
 | Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留招牌/铭牌用字（游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线等，7.5 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
 | Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
 | [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
+| 开场 PV 图（8 张宽幅，逐张从左往右缓慢平移） | Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图 | 专有：仅本地学习演示，不可再分发、不可商用 | ❌ | `assets/cg/pv/`，使用者 2026-11-12 提供的 8 张截图 | `scripts/title_intro.gd` 按文件名排序循环播放，盖住高斯泼溅加载；`.gitignore` 排除图片本体与 `.import`，缺图时自动退回「渐变底 + 标题」 |
 
 ## 四、音效
 
@@ -87,6 +89,7 @@
 | 爱丽丝轨道炮音效（换弹 / EX 必杀；连发枪声裁决记录） | NEXON Games / Yostar（Blue Archive 游戏内 SFX）；裁剪：本项目作者（Python） | **专有版权** —— 仅本地学习 / 非商业演示，不得再分发、不得用于发布产物 | ❌ | `assets/sfx/aris/` | 由 `_godot_editor_data/make_aris_sfx.py` 从 `SFX_Common_RG_aris_Reload`（换弹两段）/ `SFX_Skill_Aris_Ex`（EX 爆发段）裁出；`SFX_Public_Aris` / `SFX_Aris_Hit` 也裁了两条连发候选，但 2026-11-11 用户听完 A/B 决定 `fire` 仍用合成枪声，故暂未接线。逐条裁决与被淘汰的候选见 `assets/sfx/aris/README.md`；音频本体被 `.gitignore` 排除，只留 `*.wav.import` |
 | 商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS） | 音色模型：**SLNeil**（B站）；台词由本项目撰写（[B站空间](https://space.bilibili.com/523537077)） | 模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发 | ❌ | `story/voice/shop/` | GPT-SoVITS 生成 12 句（serika_01…09 / momoi_01…02 / aris_01）；爱丽丝前半句「邦邦咔邦」替换为用户提供的 DSH 余额挂件皮肤视频原声（BA 角色声音，NEXON/Yostar，仅本地），与 TTS「就这套了」拼接成 aris_01，候选 `aris_01_authentic_v1..3`；整个目录被 `.gitignore` 排除 |
 | 商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版） | Toby Fox / Materia Collective | 专有版权 —— 仅本地学习，不得再分发、不得用于任何发布产物 | ❌ | `assets/music/`，来源 UNDERTALE | 音频本体被 `.gitignore` 排除；`*.ogg.import` 进仓库（循环开关在里面），克隆者需自备文件 |
+| 开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」 | NEXON Games / Yostar（Blue Archive OST） | 专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于发布产物 | ❌ | `assets/music/pv_theme.mp3`，来源 B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2 | 开场 PV 循环播放（有人在开始界面听歌），点「开始游戏」时淡出后交给房间 BGM；`.gitignore` 排除 mp3 与 `.import`，缺文件时 PV 静音、不报错 |
 
 ## 五、剧情与图标
 
