@@ -17,8 +17,10 @@ func _run() -> void:
 	var gd_st := load("res://assets/music/gamedev_theme.ogg") as AudioStreamOggVorbis
 	var es_st := load("res://assets/music/esports_theme.ogg") as AudioStreamOggVorbis
 	var r609_st := load("res://assets/music/art609_theme.ogg") as AudioStreamOggVorbis
+	var hut_st := load("res://assets/music/hut_theme.ogg") as AudioStreamOggVorbis
 	for pair in [["shop_theme.ogg", shop_st], ["gamedev_theme.ogg", gd_st],
-			["esports_theme.ogg", es_st], ["art609_theme.ogg", r609_st]]:
+			["esports_theme.ogg", es_st], ["art609_theme.ogg", r609_st],
+			["hut_theme.ogg", hut_st]]:
 		var name: String = pair[0]
 		var st: AudioStreamOggVorbis = pair[1]
 		if st == null:
@@ -298,7 +300,42 @@ func _run() -> void:
 			% [str(player.global_position), Music.current()])
 		r609_roof = Music.current() == ""
 
-	print("\n=== 8. 判定 ===")
+	# ───────────────────── 临时服务器据点（小屋）─────────────────────
+	#
+	# 用户 2026-11-12：「这个临时服务器据点用这个音乐，去掉结尾没声音时候就可以循环了」。
+	# 小屋 = `MeshHut`（`scenes/mesh_hut.tscn`，game.tscn 里摆在 (14, 0, -15.5)），
+	# 音乐区由 `scripts/hut_music.gd` 运行时按 `Hut/Walls` 量出来。
+	print("\n=== 8. 临时服务器据点（小屋）===")
+	var hut := game.get_node_or_null("MeshHut") as Node3D
+	var hut_zone: Area3D = null if hut == null else hut.get_node_or_null("MusicZone") as Area3D
+	print("  MusicZone：%s" % ("有" if hut_zone != null else "**没有**"))
+	var hut_in := false
+	var hut_out := false
+	if hut_zone != null:
+		var hcs := hut_zone.get_child(0) as CollisionShape3D
+		var hb := hcs.shape as BoxShape3D
+		var hc := hut_zone.global_transform * hcs.position
+		print("  触发区 %.2f × %.2f × %.2f m，世界中心 (%.2f, %.2f, %.2f)"
+			% [hb.size.x, hb.size.y, hb.size.z, hc.x, hc.y, hc.z])
+		# 屋里
+		player.global_position = Vector3(hc.x, hut.global_position.y + 0.15, hc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[小屋里 %s] current=「%s」（应为 hut）"
+			% [str(player.global_position), Music.current()])
+		hut_in = Music.current() == "hut" and Music.is_playing()
+		# 屋外：往 +Z 走 8 m（挑一个**站得住、且不在别的房间音乐区里**的点 ——
+		# +X 方向 9 m 会撞进商店的音乐区，−Z 12 m 是空地会掉下去被重生逻辑送走）
+		player.global_position = Vector3(hc.x, hut.global_position.y + 0.15, hc.z + 8.0)
+		player.velocity = Vector3.ZERO
+		for _f in 50:
+			await process_frame
+		print("[小屋外 %s] current=「%s」 is_playing=%s（应为空/false）"
+			% [str(player.global_position), Music.current(), str(Music.is_playing())])
+		hut_out = Music.current() == "" and not Music.is_playing()
+
+	print("\n=== 9. 判定 ===")
 	# ⚠️ 用户 2026-11-11：「不要淡入淡出了，所有的」—— 默认淡化必须为 0
 	var no_fade := float(Music.FADE_DEFAULT) <= 0.0
 	print("  默认不淡化（FADE_DEFAULT=%.1f）%s" % [
@@ -330,6 +367,11 @@ func _run() -> void:
 	print("  画室609：屋里放         %s" % ("✔" if r609_in else "✘"))
 	print("  画室609：出门停         %s" % ("✔" if r609_out else "✘"))
 	print("  画室609：屋顶不算屋里   %s" % ("✔" if r609_roof else "✘"))
+	print("  循环开关（临时据点）    %s（长度 %.4f s，应 115.8507）"
+		% [("✔" if hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 else "✘"),
+			hut_st.get_length()])
+	print("  临时据点：屋里放         %s" % ("✔" if hut_in else "✘"))
+	print("  临时据点：出屋停         %s" % ("✔" if hut_out else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and absf(gd_st.get_length() - 130.1927) < 0.01 \
@@ -339,7 +381,9 @@ func _run() -> void:
 		and shop_zone_ok and shop_back and shop_started and shop_stopped \
 		and was_stopped and zone_ok and gd_started and gd_stopped \
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
-		and r609_track == "room609" and r609_in and r609_out and r609_roof
+		and r609_track == "room609" and r609_in and r609_out and r609_roof \
+		and hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 \
+		and hut_in and hut_out
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 

@@ -1,6 +1,7 @@
 [gd_scene load_steps=20 format=3 uid="uid://cl08irr7qd06t"]
 
 [ext_resource type="FontFile" path="res://assets/ui/gamedev_sign_12px.ttf" id="1_sign_font"]
+[ext_resource type="Script" path="res://scripts/hut_music.gd" id="2_music"]
 
 [sub_resource type="BoxMesh" id="Mesh_hut_sign"]
 size = Vector3(0.06, 0.6, 2.6)
@@ -79,6 +80,7 @@ radial_segments = 8
 rings = 1
 
 [node name="MeshHut" type="Node3D" unique_id=128419031]
+script = ExtResource("2_music")
 
 [node name="Hut" type="CSGCombiner3D" parent="." unique_id=519130765]
 use_collision = true

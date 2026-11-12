@@ -12,6 +12,7 @@
 | `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间开、走出去停） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
 | `esports_theme.ogg` | 电竞房的 BGM（走进房间开、走出去停；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
 | `art609_theme.ogg` | 画室 609 的 BGM（范围按「出门」定，与泼溅释放同一套边界） | 「碧蓝档案OST Vol.1」P37「Lemonade Diary（咖啡厅）」，© NEXON Games / Yostar |
+| `hut_theme.ogg` | 「临时服务器据点」小屋的 BGM（走进去开、走出去停） | 「碧蓝档案OST Vol.1」P44「Daily Routine 247（阿罗娜／彩奈）」，© NEXON Games / Yostar |
 
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
@@ -194,6 +195,39 @@ loop_offset=75.9992
 
 **演变记录**：起点 `76.3976`（对应 1:16.05 那轮）→ **`75.9992`（本轮 1:15.99）**。
 
+## 临时服务器据点那首（`hut_theme.ogg`）
+
+源文件 117.3537 s（320 kbps MP3，`「碧蓝档案OST🎵」音乐合集~Vol.1（320K）_P44_Daily Routine 247（阿罗娜_彩奈）_音频.mp3`）。
+
+用户 2026-11-12：「这个临时服务器据点用这个音乐，**去掉结尾没声音时候就可以循环了**」。
+
+**实测：这首头尾都有数字静音**（mp3 编码器留的，不是曲子本身）：
+
+```
+头部静音 0.1338 s（0 ~ 0.1338 s 幅度全 < 0.0008）
+尾部静音 1.3691 s（115.9845 s 之后幅度全 0）
+```
+
+⚠️ **只切尾部不够**：那样每次循环会在接缝处多出 120 ms 空白，听着像
+「喘一口气」。所以**头尾都切**：
+
+```python
+# 找首个/末个幅度 > 0.0008（≈ -62 dBFS）的采样
+head = 首个超阈采样；tail = 末个超阈采样
+y = x[head:tail+1]                       # [0.1338, 115.9845] → 115.8507 s
+y[-8ms:] *= 线性淡出到 0                  # 把末尾那点残余（0.0009）收到干净零
+# 再按 -1 dBFS 归一化，交给 ffmpeg 编码
+```
+
+实测：
+
+```
+去掉头 0.1338 s + 尾 1.3691 s → 新长度 115.8507 s（5109017 帧）
+循环接缝：末采样 0 → 首采样 -0.0011，跳变 0.0011
+          （曲子内部相邻样点平均跳变 0.023933，即 ×0.045）
+峰值归一化到 −1 dBFS
+```
+
 ## 循环开关在哪
 
 `gamedev_theme.ogg.import` / `shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
@@ -219,6 +253,9 @@ loop_offset=75.9992
 - `scripts/splat_scene.gd::_update_room_bgm()` —— 画室 609 **不用 Area3D**：
   复用 `_is_inside_room()`（和「出房间释放泼溅」同一套边界），
   在 `game.tscn` 的 `Room609` 节点上填 `room_bgm_track = "room609"` 即可
-- `scripts/_verify_music.gd` —— 自检：四个房间的循环开关、进/出播放与停止
+- `scripts/hut_music.gd` —— 「临时服务器据点」小屋（挂在 `scenes/mesh_hut.tscn`
+  根节点上，小屋本来没脚本）。盒子按 `Hut/Walls` 与 `Hut/Cavity` 的尺寸差**量出墙厚**，
+  再水平每边外扩 `MUSIC_GROW = 1.2 m`
+- `scripts/_verify_music.gd` —— 自检：**五个房间**的循环开关、进/出播放与停止
   （电竞房那段还验「房子藏着时不出声、现身才出声」；画室 609 那段验
-  「屋里放 / 出门停 / 屋顶不算屋里」）
+  「屋里放 / 出门停 / 屋顶不算屋里」；小屋那段验「屋里放 / 出屋停」）
