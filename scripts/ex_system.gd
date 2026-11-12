@@ -304,17 +304,38 @@ func _fire_laser_orb() -> void:
 	holder.add_child(light)
 
 	# ③ 球外面挂几根抖动的蓝色电弧（参考图 1/2 那圈青色电光）
+	# 2026-11-12 用户：「前面的球没有特效」→ 电弧加粗加长（0.045 → 0.075、0.30~0.75 → 0.5~1.3），
+	# 根数 6 → 8，并把 alpha 上限抬高，球本身才有「电」的感觉。
 	var arc_meshes: Array = []
-	for i in 6:
+	for i in 8:
 		var ami := MeshInstance3D.new()
 		var abm := BoxMesh.new()
-		abm.size = Vector3(0.045, 0.045, 1.0)
+		abm.size = Vector3(0.075, 0.075, 1.0)
 		ami.mesh = abm
 		ami.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		ami.material_override = _add_mat(ORB_ARC, 9.0)
 		holder.add_child(ami)
 		arc_meshes.append(ami)
 	holder.set_meta("arcs", arc_meshes)
+
+	# 球身自带的**旋转能量环**（用户：「前面的球没有特效」）：
+	# 两个细环套在球上、各自绕不同轴旋转，球就活了 —— 不再是一颗死白球。
+	var orb_rings: Array = []
+	for i in 2:
+		var rmi := MeshInstance3D.new()
+		var rtm := TorusMesh.new()
+		rtm.inner_radius = 0.72
+		rtm.outer_radius = 1.0
+		rtm.rings = 32
+		rtm.ring_segments = 4
+		rmi.mesh = rtm
+		rmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		rmi.material_override = _add_mat(
+			Color(0.78, 0.95, 1.00, 0.8) if i == 0 else Color(1.00, 0.72, 1.00, 0.8), 9.0)
+		rmi.scale = Vector3.ONE * ORB_RADIUS * 1.75
+		holder.add_child(rmi)
+		orb_rings.append(rmi)
+	holder.set_meta("orb_rings", orb_rings)
 	# 光晕（假泛光）
 	var orb_halo := _halo(ORB_RADIUS * 7.0, Color(0.95, 0.70, 1.00, 0.55), 7.0)
 	holder.add_child(orb_halo)
@@ -344,9 +365,9 @@ func _attach_trail(holder: Node3D, dir: Vector3) -> void:
 	# 局部 +Z = −dir ⇒ 局部 z 为正就是把东西摆在球**后面**
 	trail.global_basis = Basis(right0, realup0, -dir)
 	var streaks: Array = []
-	# 12 → 22 根（用户 2026-11-12：「尾巴不够密集」），并让它们分两层：
-	# 一半细而长（外层速度线）、一半稍粗且短（紧贴球身），层次更厚
-	for i in 22:
+	# 用户 2026-11-12：「条纹太少,太短了条纹」→ 22 根加到 **40 根**，长度大幅拉长。
+	# 仍分两层：偶数号细而**很长**（外层速度线，4~16 m），奇数号稍粗稍短（1.5~5 m）。
+	for i in 40:
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		var thick := 0.035 if i % 2 == 0 else 0.062
@@ -358,7 +379,7 @@ func _attach_trail(holder: Node3D, dir: Vector3) -> void:
 		trail.add_child(mi)
 		var ang := randf() * TAU
 		var rad := sqrt(randf()) * 0.62
-		var ln := randf_range(2.0, 8.5) if i % 2 == 0 else randf_range(1.2, 4.5)
+		var ln := randf_range(4.0, 16.0) if i % 2 == 0 else randf_range(1.5, 5.0)
 		mi.position = Vector3(cos(ang) * rad, sin(ang) * rad, 0.35 + ln * 0.5)
 		mi.scale = Vector3(1.0, 1.0, ln)
 		streaks.append({"mi": mi, "mat": mat, "len": ln})
@@ -397,9 +418,10 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 				mi3.position.z = 0.35 + ln2 * 0.5
 				(s["mat"] as StandardMaterial3D).albedo_color.a = randf_range(0.20, 0.58)
 		# 环状波纹：每 1.5 m 一圈（用户：「尾巴不够密集」），左右对称绕在球身周围
+		# 2026-11-12 用户：「后面波纹太大了,变小点」→ 半径 1.1~2.4 收到 0.5~1.0
 		if travelled - last_crescent >= 1.5:
 			last_crescent = travelled
-			_ripple(pos, dir, randf_range(1.1, 2.4), ORB_ARC)
+			_ripple(pos, dir, randf_range(0.5, 1.0), ORB_ARC)
 		# 电弧每帧抖一下：绕球随机朝向 + 随机长度（参考图里那圈乱窜的青色电光）
 		if holder.has_meta("arcs"):
 			for a in (holder.get_meta("arcs") as Array):
@@ -408,8 +430,16 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 				var tt := randf_range(-1.2, 1.2)
 				ami.global_position = pos
 				ami.global_basis = Basis(Vector3.FORWARD, rr) * Basis(Vector3.RIGHT, tt)
-				ami.scale = Vector3(1.0, 1.0, randf_range(0.30, 0.75))
-				(ami.material_override as StandardMaterial3D).albedo_color.a = randf_range(0.45, 1.0)
+				ami.scale = Vector3(1.0, 1.0, randf_range(0.5, 1.3))
+				(ami.material_override as StandardMaterial3D).albedo_color.a = randf_range(0.55, 1.0)
+		# 球身两个能量环各自旋转（球不是死白球）
+		if holder.has_meta("orb_rings"):
+			var rings2: Array = holder.get_meta("orb_rings")
+			for ri in rings2.size():
+				var rmi2 := rings2[ri] as MeshInstance3D
+				var sp := 7.0 if ri == 0 else -5.0
+				rmi2.rotate_object_local(Vector3.RIGHT if ri == 0 else Vector3.FORWARD,
+					sp * get_process_delta_time())
 	holder.queue_free()
 
 
