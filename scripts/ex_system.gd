@@ -344,18 +344,21 @@ func _attach_trail(holder: Node3D, dir: Vector3) -> void:
 	# 局部 +Z = −dir ⇒ 局部 z 为正就是把东西摆在球**后面**
 	trail.global_basis = Basis(right0, realup0, -dir)
 	var streaks: Array = []
-	for i in 12:
+	# 12 → 22 根（用户 2026-11-12：「尾巴不够密集」），并让它们分两层：
+	# 一半细而长（外层速度线）、一半稍粗且短（紧贴球身），层次更厚
+	for i in 22:
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		bm.size = Vector3(0.035, 0.035, 1.0)
+		var thick := 0.035 if i % 2 == 0 else 0.062
+		bm.size = Vector3(thick, thick, 1.0)
 		mi.mesh = bm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var mat := _add_mat(Color(0.86, 0.72, 1.00, 0.5), 7.0)
 		mi.material_override = mat
 		trail.add_child(mi)
 		var ang := randf() * TAU
-		var rad := sqrt(randf()) * 0.55
-		var ln := randf_range(2.0, 7.0)
+		var rad := sqrt(randf()) * 0.62
+		var ln := randf_range(2.0, 8.5) if i % 2 == 0 else randf_range(1.2, 4.5)
 		mi.position = Vector3(cos(ang) * rad, sin(ang) * rad, 0.35 + ln * 0.5)
 		mi.scale = Vector3(1.0, 1.0, ln)
 		streaks.append({"mi": mi, "mat": mat, "len": ln})
@@ -393,10 +396,10 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 				mi3.scale = Vector3(1.0, 1.0, ln2)
 				mi3.position.z = 0.35 + ln2 * 0.5
 				(s["mat"] as StandardMaterial3D).albedo_color.a = randf_range(0.20, 0.58)
-		# 弯月扫掠：每 3.8 m 在球的位置甩一片扩张的青色弧（参考图 1/2）
-		if travelled - last_crescent >= 3.8:
+		# 环状波纹：每 1.5 m 一圈（用户：「尾巴不够密集」），左右对称绕在球身周围
+		if travelled - last_crescent >= 1.5:
 			last_crescent = travelled
-			_crescent(pos, dir, randf_range(2.2, 3.4), ORB_ARC)
+			_ripple(pos, dir, randf_range(1.1, 2.4), ORB_ARC)
 		# 电弧每帧抖一下：绕球随机朝向 + 随机长度（参考图里那圈乱窜的青色电光）
 		if holder.has_meta("arcs"):
 			for a in (holder.get_meta("arcs") as Array):
@@ -732,10 +735,41 @@ func _add_streaks(mat: StandardMaterial3D, around := 6.0, stretch := 0.12) -> vo
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 
 
-## 弯月扫掠（参考图 1/2 那几道青蓝弧光）：
-## 在 `at` 处生成两片**倾斜的月牙**，向外扩、同时淡出，然后自删。
-## 月牙是自定义 ArrayMesh（见 `_crescent_mesh`），不是环 —— 环是等宽的一圈，
-## 月牙是**中间厚两端尖**的一段弧，才是参考图那个「扫过去」的形状。
+## 球身周围的**环状波纹**（用户 2026-11-12：「你这个尾巴旁边的波纹怎么只有一边?」）。
+##
+## ⚠️ 本喵上一版用的是 `_crescent()` —— 那是一段 **150° 的弧**，弧心朝着局部 +X，
+##    所以从任何角度看都只出现在球的**一侧**（截图里就是右边几道弯月）。
+##    参考图那种是**绕着球一圈圈对称**的，所以这里改用**整圈**：
+##    一个 TorusMesh，环面垂直于飞行方向（局部 Y 轴对到 `dir`），
+##    从小到大扩开并淡出 —— 无论从哪个角度看，左右两侧都有。
+func _ripple(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.88
+	tm.outer_radius = 1.0
+	tm.rings = 36
+	tm.ring_segments = 4
+	mi.mesh = tm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := _add_mat(col, 6.5)
+	mi.material_override = mat
+	_fx_root.add_child(mi)
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var right := up.cross(dir).normalized()
+	var realup := dir.cross(right).normalized()
+	mi.global_basis = Basis(right, dir, realup)
+	mi.global_position = at
+	mi.scale = Vector3.ONE * 0.28
+
+	var tw := mi.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mi, "scale", Vector3.ONE * radius, 0.34) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.34)
+	tw.chain().tween_callback(mi.queue_free)
+
+
+## 弯月扫掠（**只用在命中爆炸**，飞行途中不再用它 —— 见 `_ripple` 上面那段）。
 func _crescent(at: Vector3, dir: Vector3, radius: float, col: Color) -> void:
 	var holder := Node3D.new()
 	holder.name = "Crescent"
