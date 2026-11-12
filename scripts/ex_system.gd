@@ -318,25 +318,48 @@ func _fire_laser_orb() -> void:
 	# 光晕（假泛光）
 	var orb_halo := _halo(ORB_RADIUS * 7.0, Color(0.95, 0.70, 1.00, 0.55), 7.0)
 	holder.add_child(orb_halo)
+	# 身后的速度条纹（用户手绘示意的那种长条）
+	_attach_trail(holder, dir)
 
 	_orb_fly(holder, origin, dir)
 
 
-## 光球拖尾的一节：一片小光晕，0.22 s 内缩+淡出后自删。
+## 光球后面的**速度条纹**（用户 2026-11-12 画了示意图：一颗圆球 + 后面好几道长长的直线）。
 ##
-## 为什么不用 GPUParticles：那要额外配 ParticleProcessMaterial / Mesh，
-## 而且这股 EX 是「偶尔放一次」，每帧一个 tween 的开销可以忽略（约 2 帧寿命内几十个）。
-## 颜色跟着球走（粉紫），所以整条尾是同一个色系。
-func _spawn_trail(at: Vector3, dir: Vector3) -> void:
-	var h := _halo(ORB_RADIUS * 5.0, Color(0.92, 0.62, 1.00, 0.42), 6.0)
-	_fx_root.add_child(h)
-	# 稍微往回拖一点，尾巴才在球后面而不是和球重合
-	h.global_position = at - dir * 0.15
-	var tw := h.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(h, "scale", Vector3.ONE * 0.45, 0.22)
-	tw.tween_property(h.material_override, "albedo_color:a", 0.0, 0.22)
-	tw.chain().tween_callback(h.queue_free)
+## ⚠️ 本喵第一版做的是「每帧在身后留一片小光晕、0.22 s 淡出」——
+##    那是**一串会消散的点**，不是条纹，实机几乎看不出来（用户：「你怎么只有圆球
+##    没有后面的特效了?」）。正确做法是**细长的条**，而且必须挂在球上跟着走，
+##    这样它才是一条笔直拖在后面的线，而不是散开的一团。
+##
+## 做法：挂一个 `OrbTrail` 子节点，把它的局部 **+Z 指向身后（−dir）**，
+## 然后沿 +Z 摆若干根细长盒子（0.035 m 见方、长 2~7 m、横截面随机散开成一小簇）。
+## 每帧轻微抖动长度与透明度 → 像高速掠过的光条，而不是死板的棍子。
+func _attach_trail(holder: Node3D, dir: Vector3) -> void:
+	var trail := Node3D.new()
+	trail.name = "OrbTrail"
+	holder.add_child(trail)
+	var up0 := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	var right0 := up0.cross(dir).normalized()
+	var realup0 := dir.cross(right0).normalized()
+	# 局部 +Z = −dir ⇒ 局部 z 为正就是把东西摆在球**后面**
+	trail.global_basis = Basis(right0, realup0, -dir)
+	var streaks: Array = []
+	for i in 12:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.035, 0.035, 1.0)
+		mi.mesh = bm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := _add_mat(Color(0.86, 0.72, 1.00, 0.5), 7.0)
+		mi.material_override = mat
+		trail.add_child(mi)
+		var ang := randf() * TAU
+		var rad := sqrt(randf()) * 0.55
+		var ln := randf_range(2.0, 7.0)
+		mi.position = Vector3(cos(ang) * rad, sin(ang) * rad, 0.35 + ln * 0.5)
+		mi.scale = Vector3(1.0, 1.0, ln)
+		streaks.append({"mi": mi, "mat": mat, "len": ln})
+	holder.set_meta("streaks", streaks)
 
 
 func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
@@ -362,9 +385,14 @@ func _orb_fly(holder: Node3D, origin: Vector3, dir: Vector3) -> void:
 		pos = next
 		travelled += step
 		holder.global_position = pos
-		# 拖尾（用户 2026-11-11：「为什么这个普通状态的 ex 没有光球拖尾?」）：
-		# 每帧在球的位置留一片小光晕，短促淡出 —— 便宜、且和球同色，读起来就是一条尾。
-		_spawn_trail(pos, dir)
+		# 速度条纹：每帧轻微抖动长度/透明度（条纹本身挂在球上，位置不用管）
+		if holder.has_meta("streaks"):
+			for s in (holder.get_meta("streaks") as Array):
+				var mi3 := s["mi"] as MeshInstance3D
+				var ln2: float = float(s["len"]) * randf_range(0.75, 1.25)
+				mi3.scale = Vector3(1.0, 1.0, ln2)
+				mi3.position.z = 0.35 + ln2 * 0.5
+				(s["mat"] as StandardMaterial3D).albedo_color.a = randf_range(0.20, 0.58)
 		# 弯月扫掠：每 3.8 m 在球的位置甩一片扩张的青色弧（参考图 1/2）
 		if travelled - last_crescent >= 3.8:
 			last_crescent = travelled
