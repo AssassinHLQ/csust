@@ -58,6 +58,7 @@ func _ready() -> void:
 	build_collision()
 	_build_music_zone()
 	_build_base_steps()
+	_open_cabinet()
 
 
 ## 对外入口（探针也调）。**幂等**：只报一次。
@@ -346,6 +347,13 @@ func _build_base_steps() -> void:
 
 ## 按**世界**尺寸/位置加一个台阶盒（内部换算回本节点空间）。
 ## ⚠️ 房间 basis 是纯旋转（Y、Z 各 −1，行列式 +1），所以尺寸不用缩放，只需换中心点。
+##
+## ⚠️⚠️ 2026-11-12：房间被整体放大到 **1.5 倍**（`game.tscn` 里 `EsportsRoom`
+##      的 basis 三轴 ×1.5）之后，这条「尺寸不用缩放」就**不再成立**了 ——
+##      往 1.5 倍的父节点里塞 `size = 世界尺寸` 的盒子，物理世界里会变成 1.5 倍大。
+##      目前这个函数只被 `_build_base_steps()` 用，而那条路径在
+##      `scenes/esports_room.tscn` 已经有 `BaseSteps` 时会**直接 return**（见那儿第一句），
+##      所以现在跑不到。真要再用它，先把尺寸除以 `global_basis` 的缩放。
 func _add_step_box_world(body: StaticBody3D, inv: Transform3D,
 		size_world: Vector3, centre_world: Vector3) -> void:
 	var cs := CollisionShape3D.new()
@@ -354,3 +362,111 @@ func _add_step_box_world(body: StaticBody3D, inv: Transform3D,
 	cs.shape = box
 	cs.position = inv * centre_world
 	body.add_child(cs)
+
+
+# ══════════════════ 衣柜：把烘出来的实心块挖成能进人的壳 ══════════════════
+#
+# 用户 2026-11-12：「这个电竞房柜子要可以进去」。
+#
+# ── 原来为什么进不去 ──
+# 柜子（GLB 里的网格 `M_Scene_-_Root`，世界 x 46.91~48.92 / y 0.46~3.41 / z 18.30~19.48）
+# 在 `esports_collision_baked.tscn` 里被烘成了 **8 个实心盒** `P0057_0..7`：
+#     2 列（x 对半分）× 4 层（y 0.46~1.20 / 1.20~1.94 / 1.94~2.67 / 2.67~3.41），
+#     而且每一块都是 **1.19 m 全进深** —— 整个柜体内部是实心的一坨。
+# 烘焙工具是按「一件物体一个盒子」出的，它当然不知道柜子应该是个洞。
+#
+# ── 现在怎么做 ──
+#   ① 找出柜子网格的世界包围盒（按名字找，GLB 里它就叫 `M_Scene_-_Root`）；
+#   ② 把**完全落在柜子内部、且顶面低于柜顶一个层高**的那些盒子 `disabled`
+#      —— 也就是挖掉下面 3 层，**保留最顶一层当柜顶**（不然人会从柜子上方飞出去）；
+#   ③ 在左右两侧补两片 0.1 m 厚的薄墙，免得人在柜子里横着穿出侧板。
+#      **前后都不封**：这样不管门朝哪一侧都能走进去（本喵没法从网格可靠判断哪边是正面，
+#      封错一边就直接把人挡在外面了）。
+#
+# ── 代价（要如实知道）──
+# 柜子里的**层板是纯视觉的**（GLB 网格），碰撞挖空之后玩家会和层板穿插。
+# 玩家胶囊高 1.5 m、柜内净高 2.16 m（0.51 地板 ~ 2.67 柜顶），钻进去是够的。
+#
+# ── 复烘会怎样 ──
+# 这段逻辑是**按位置**挖的，不认盒子名字，所以重新烘焙（盒子重编号）也不会失效。
+# 但柜子本身挪了位置的话，`M_Scene_-_Root` 的包围盒会跟着变，挖的范围自然也跟着变。
+const CABINET_MESH := "M_Scene_-_Root"
+## 柜顶保留的厚度：等于烘出来的最上一层的层高（0.74 m）
+const CABINET_KEEP_TOP := 0.75
+## 侧板厚度
+const CABINET_WALL := 0.10
+
+
+func _open_cabinet() -> void:
+	var auto_col := get_node_or_null(BAKED_AUTOCOL) as Node3D
+	if auto_col == null:
+		return
+
+	# ── ① 柜子的世界包围盒 ──
+	# ⚠️ 只认 `Room` 实例下面的那个（`Lod/HighModel`、`Lod/MidModel` 里还有同名副本，
+	#    一起 merge 也无所谓 —— 它们位置相同，但显式限定来源更好读）。
+	var cab := AABB()
+	var found := false
+	var glb := get_node_or_null("Room")
+	if glb == null:
+		return
+	for mi in glb.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m == null or m.mesh == null or String(m.name) != CABINET_MESH:
+			continue
+		var b: AABB = m.global_transform * m.mesh.get_aabb()
+		cab = b if not found else cab.merge(b)
+		found = true
+	if not found:
+		push_warning("[EsportsCol] 找不到柜子网格 %s，柜子挖空跳过" % CABINET_MESH)
+		return
+
+	var ceiling := cab.end.y - CABINET_KEEP_TOP
+	var inv := global_transform.affine_inverse()
+	var scl: Vector3 = global_basis.get_scale().abs()
+	if scl.x < 0.001 or scl.y < 0.001 or scl.z < 0.001:
+		return
+
+	# ── ② 挖空：中心落在柜内、且顶面低于柜顶的盒子 ──
+	#
+	# ⚠️ 判据用「**中心**落在柜内」，不是「整个盒子完全包含在柜内」——
+	#    第一版用后者只挖掉 4 个，最底下那层（y 0.46~1.20）两块没挖掉，
+	#    正好挡在玩家腿上，人还是进不去（实测 `_verify_esports_cabinet_walk` 3/6）。
+	#    烘出来的盒子跟网格包围盒之间差个一两厘米很常见，用中心判就不会被这点误差挡住。
+	var killed := 0
+	for c in auto_col.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or not (cs.shape is BoxShape3D):
+			continue
+		var half: Vector3 = cs.global_basis.get_scale().abs() \
+			* (cs.shape as BoxShape3D).size * 0.5
+		var cb := AABB(cs.global_position - half, half * 2.0)
+		var centre := cb.get_center()
+		if not cab.has_point(centre):
+			continue
+		# 「柜顶」= **底面**在柜顶线及以上的那层。
+		#
+		# ⚠️ 这里不能用 `cb.end.y > ceiling`（顶面）判 —— 第一/二版就是这么写的，
+		#    而 y 1.94~2.67 那两块的顶面正好等于 ceiling（2.660）加上浮点误差，
+		#    被误判成「柜顶层」留了下来，结果它们卡在玩家胸口，人还是进不去
+		#    （实测只挖掉 4 个，`_verify_esports_cabinet_walk` 3/6）。
+		#    改判**底面**：顶层的底面 2.67 ≥ 2.640 ✓ 留下；1.94 < 2.640 ⇒ 挖掉。
+		if cb.position.y >= ceiling - 0.02:
+			continue
+		cs.disabled = true
+		killed += 1
+
+	# ── ③ 左右两片薄墙（世界尺寸 → 本节点空间要除以缩放）──
+	var wall_h := ceiling - cab.position.y
+	var y_c := cab.position.y + wall_h * 0.5
+	var depth := cab.end.z - cab.position.z
+	for x in [cab.position.x + CABINET_WALL * 0.5, cab.end.x - CABINET_WALL * 0.5]:
+		var cs2 := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(CABINET_WALL, wall_h, depth) / scl
+		cs2.shape = box
+		cs2.position = inv * Vector3(float(x), y_c, cab.get_center().z)
+		auto_col.add_child(cs2)
+
+	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，保留柜顶（y<%.2f），补两侧 0.1 m 薄墙；柜内净高 %.2f m"
+		% [killed, ceiling, wall_h])
