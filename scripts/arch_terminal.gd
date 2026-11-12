@@ -166,7 +166,10 @@ func reset() -> void:
 func _banner() -> void:
 	_push_line([["ArisuOS", USER_CYAN], ["  ·  Arch Linux (fake, for show)", DIM]])
 	# 开机横幅要主动告诉玩家「敲 help 看全部命令」—— 用户 2026-11-12 提的第一诉求。
-	_push_line([["[F] quit   ", DIM], ["type help", KEY_CYAN],
+	# ⚠️ 退出键写 `Esc` 而不是 `F`：**F 已经不能用来退出了**（用户 2026-11-12：
+	#    「不能用 F 取消因为输入不了命令」—— F 会抢在终端前面关掉电脑，
+	#    导致字母 f 打不进来）。详见 `hut_computer.gd::_input()` 的注释。
+	_push_line([["[Esc] quit   ", DIM], ["type help", KEY_CYAN],
 		["  to list every command", DIM]])
 	_push_line([])
 	_neofetch()

@@ -96,7 +96,9 @@ func _input(event: InputEvent) -> void:
 	# 病根是**派发顺序**：`Node._input` 由 SceneTree 按节点树**倒序**发下去，
 	# 而 `game.tscn` 里 MeshHut（电脑挂在它下面）排在 SettingsMenu **前面**，
 	# 倒序之后菜单反而先拿到 Esc —— 于是菜单先 toggle 并把事件吃掉，
-	# 终端那边**永远收不到**（它的页脚明明写着「按 F（或 Esc、或输入 exit）退出电脑」）。
+	# 终端那边**永远收不到**（它的页脚写着「Esc 或 Ctrl+Q 退出电脑」；
+	# 2026-11-12 之前写的是「按 F（或 Esc、或输入 exit）」，F 那条已废 —— 见
+	# `hut_computer.gd::_input()` 里为什么不能用单个字母当退出键）。
 	# 更难看的是层号：电脑那层 CanvasLayer 是 **40**、这个菜单是 **10**，终端会盖在菜单上面。
 	#
 	# 这里**故意不 `set_input_as_handled()`**：让 Esc 继续往下走到电脑，

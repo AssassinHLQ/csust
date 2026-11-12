@@ -6,6 +6,11 @@ extends Node3D
 ## 椅子可以坐上去，然后可以使用电脑，就是弹出这个 ARCH LINUX 主题，按 F 使用，
 ## 再按 F 退出」。
 ##
+## ⚠️ 「再按 F 退出」这条**2026-11-12 已废**：用户当天反馈「不能用 F 取消，因为输入
+##    不了命令」—— F 在把按键转给终端之前就把电脑关了，等于**字母 f 打不进终端**，
+##    `neofetch`/`df`/`sudo` 全废。所以现在**打开**还是 F（人没在用时），
+##    **退出**改成 `Esc` / `Ctrl+Q` / `exit` 命令，见 `_input()` 里那段注释。
+##
 ## ── 挂在哪 ──
 ## `game.gd::_build_computer()` 把它加成 `MeshHut` 的子节点，所以这里的坐标
 ## **就是小屋的局部坐标**（`scenes/mesh_hut.tscn` 里量的）：
@@ -301,7 +306,7 @@ func _build_ui() -> void:
 	frame.add_child(_screen)
 
 	var foot := Label.new()
-	foot.text = "按 F（或 Esc、或输入 exit）退出电脑"
+	foot.text = "Esc 或 Ctrl+Q 退出电脑（也可以直接输入 exit）· 键盘可以正常打字"
 	foot.add_theme_font_size_override("font_size", 16)
 	foot.add_theme_color_override("font_color", Color(0.62, 0.72, 0.85))
 	foot.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -347,8 +352,19 @@ func _input(event: InputEvent) -> void:
 	if k == null or not k.pressed or k.echo:
 		return
 	if _using:
-		# 鼠标之类的先吃掉，键盘全部转给终端；F / Esc 由终端和这里一起处理
-		if k.keycode == KEY_F:
+		# 鼠标之类的先吃掉，键盘全部转给终端
+		#
+		# ⚠️⚠️ 2026-11-12 用户：「电脑取消，不能用 F 取消因为输入不了命令」——
+		#    原来这里有一句 `if k.keycode == KEY_F: _close()`，而且**在转给终端之前**就
+		#    把电脑关了。后果不是「退出不方便」，而是**字母 f 根本打不进终端**：
+		#    `neofetch` / `df` / `sudo` / `clear` 里凡是带 f 的，敲到 f 就整台电脑被关掉。
+		#    所以这里**不再用单个字母当退出键**（任何可打印字符都会有同样的毛病）。
+		#
+		# 现在退出电脑的三条路（都不占可打印字符）：
+		#   · `Esc`      —— 终端自己 `exit_requested`；页面里先退一层
+		#   · `Ctrl+Q`   —— 任何页面下直接关（这里处理）
+		#   · `exit` / `logout` 命令
+		if k.ctrl_pressed and k.keycode == KEY_Q:
 			_close()
 			get_viewport().set_input_as_handled()
 			return
