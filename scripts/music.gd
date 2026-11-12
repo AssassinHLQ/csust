@@ -92,6 +92,15 @@ const TRACKS := {
 	#    取 [0.1338, 115.9845] → 新长度 **115.8507 s**，末尾再补 8 ms 淡出收到干净零。
 	#    循环接缝跳变 0.0011 = 曲子内部相邻样点平均跳变（0.023933）的 **×0.045**。
 	"hut": {"file": "hut_theme.ogg", "db": -13.0},
+	# 蒙德里安大楼的 BGM（用户 2026-11-12：「Midsummer Cat 这个蒙德里安大楼的音乐，
+	#    去掉尾部没声音就可以循环」）。
+	# 素材：「碧蓝档案OST Vol.1（320K）」P5「Midsummer Cat」。
+	# ⚠️ 原曲 139.6216 s，**头尾都有数字静音**（mp3 编码器留的）：
+	#    头部静音 0.1383 s、尾部静音 0.3110 s。
+	#    头尾都切 → 新长度 **139.1724 s**，末尾再补 8 ms 淡出收到干净零。
+	#    循环接缝跳变 0.000870 = 曲子内部相邻样点平均跳变（0.017391）的 **×0.050**。
+	#    （和 `hut` 同一个道理：只切尾部会留 138 ms 空白，听着像「喘一口气」。）
+	"mondrian": {"file": "mondrian_theme.ogg", "db": -13.0},
 }
 
 ## 默认淡化时长（秒）。**0 = 不淡化**（用户 2026-11-11：「不要淡入淡出了，所有的」）。
@@ -104,6 +113,29 @@ static var _tween: Tween
 static var _current := ""
 static var _cache := {}
 static var _missing := {}
+## 开场 PV 期间**压住所有 BGM**（见 `hold()`）。
+static var _held := false
+
+
+## 压住 / 放开所有 BGM。
+##
+## 为什么需要：画室 609 的 `splat_scene.gd::_update_room_bgm()` 每帧都在调
+## `Music.play("room609")`，开场 PV 一放就会和 PV 音乐叠在一起。压住期间
+## `play()` 直接返回 true 但不真的出声；`hold(false)` 之后，下一帧房间逻辑
+## 自己会再调 `play()`，BGM 自然接上，不需要这里记住“刚才想放哪首”。
+static func hold(on: bool) -> void:
+	_held = on
+	if not on:
+		return
+	# 硬切：开场音乐要独占。`FADE_DEFAULT = 0` 本来就是硬切，这里也一样。
+	if is_instance_valid(_player) and _player.playing:
+		_player.stop()
+	_current = ""
+
+
+## 自检用：现在是不是被开场 PV 压着。
+static func is_held() -> bool:
+	return _held
 
 
 ## 播一首。同一首已经在放就什么都不做（不会重头开始）。
@@ -113,6 +145,9 @@ static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
 	if not TRACKS.has(track):
 		push_warning("[Music] 没有这首：%s" % track)
 		return false
+	# 开场 PV 压住期间：假装收下了，但一声不响（见 `hold()`）。
+	if _held:
+		return true
 	if track == _current and is_instance_valid(_player) and _player.playing:
 		return true
 	if not _ensure_host():

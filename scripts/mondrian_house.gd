@@ -124,6 +124,9 @@ var decor_count := 0
 func _ready() -> void:
 	if auto_build:
 		build()
+	# 音乐触发区：烘焙版（`mondrian_house_baked.tscn`）和程序化版都要建，
+	# 所以放在 `auto_build` 判断之外（见 `_build_music_zone`）。
+	_build_music_zone()
 
 
 func build() -> void:
@@ -857,3 +860,83 @@ func _report() -> void:
 	print("[Mondrian] 楼梯：一整块斜坡（31° 附近，水平 %.2f m、爬升 %.2f m），楔块 + 旋转盒碰撞"
 		% [STAIR_RUN, STAIR_RISE])
 	print("[Mondrian] 碰撞盒 %d 个、装饰 %d 个" % [solid_count, decor_count])
+
+
+# ══════════════════════ BGM 触发区 ══════════════════════
+#
+# 用户 2026-11-12：「Midsummer Cat 这个蒙德里安大楼的音乐，
+#                    去掉尾部没声音就可以循环」。
+# 曲目表见 `scripts/music.gd`（逻辑名 `mondrian`）。
+#
+# ── 为什么放在 `mondrian_house.gd` 而不是另开脚本 ──
+# 烘焙版 `mondrian_house_baked.tscn` 的根节点本来就挂着本脚本
+# （`auto_build = false`，不会重建房子），一个节点只能挂一个脚本，
+# 所以音乐区直接写在这里，和商店／部室／电竞房／小屋一个套路。
+#
+# ── 尺寸怎么来的 ──
+# 按本脚本自己的常量算，不写死数字：外墙 x ±`HALF_W`、z ±`HALF_D`，
+# 内壁再各收一个墙厚 `WALL_T`，最后再内缩 `MUSIC_INSET`。
+# ⚠️ 用户 2026-11-12 在小屋那边要求过「要进门才行，别站边上就响」，
+#    所以这里同样**往内缩**，不外扩。
+# 高度覆盖两层（0 ~ `MUSIC_TOP`），楼梯上楼、二楼照样有音乐。
+const MUSIC_TRACK := "mondrian"
+## 触发区比内壁再**内缩**多少米（每边）
+const MUSIC_INSET := 0.8
+## 触发区顶面高度（米）。房子总高 8.00（一层 4.20 + 二层 3.80），
+## 取 7.60 留 0.40 余量 —— 二楼地板在 4.20，站二楼当然在区内。
+const MUSIC_TOP := 7.60
+## 触发区节点名（自检按名字找）
+const MUSIC_ZONE := "MusicZone"
+
+var _music_zone: Area3D
+var _music_inside := 0
+
+
+## 建 BGM 触发区。**幂等**：已经有了就不再建。
+func _build_music_zone() -> void:
+	if get_node_or_null(MUSIC_ZONE) != null:
+		return
+	# 内壁尺寸：外框减两侧墙厚，再减两侧内缩
+	var half_x := HALF_W - WALL_T - MUSIC_INSET
+	var half_z := HALF_D - WALL_T - MUSIC_INSET
+	if half_x <= 0.5 or half_z <= 0.5:
+		push_warning("[Mondrian] 内壁算出来太小（%.2f × %.2f），BGM 触发区不建" % [half_x, half_z])
+		return
+	var area := Area3D.new()
+	area.name = MUSIC_ZONE
+	area.collision_layer = 0          # 自己不被撞
+	area.collision_mask = 1           # 只感应世界层（玩家在第 1 层）
+	area.monitoring = true
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(half_x * 2.0, MUSIC_TOP, half_z * 2.0)
+	cs.shape = box
+	cs.position = Vector3(0.0, MUSIC_TOP * 0.5, 0.0)   # 本节点空间，房子中心在原点
+	area.add_child(cs)
+	add_child(area)
+	# ⚠️ 用「计数」而不是布尔：玩家被瞬移时可能先 entered B 再 exited A，
+	#    布尔量会在同一帧里被后到的 exited 抹掉（理由详见 `shop.gd`）。
+	area.body_entered.connect(_on_music_body.bind(1))
+	area.body_exited.connect(_on_music_body.bind(-1))
+	_music_zone = area
+	print("[Mondrian] BGM 触发区：%.2f × %.2f × %.2f m（内壁 %.2f × %.2f，每边内缩 %.1f）曲目 `%s`"
+		% [box.size.x, box.size.y, box.size.z,
+			(HALF_W - WALL_T) * 2.0, (HALF_D - WALL_T) * 2.0, MUSIC_INSET, MUSIC_TRACK])
+
+
+func _on_music_body(body: Node3D, delta: int) -> void:
+	if not body.is_in_group("player"):
+		return
+	_music_inside = maxi(_music_inside + delta, 0)
+	if _music_inside > 0:
+		Music.play(MUSIC_TRACK)
+	elif Music.current() == MUSIC_TRACK:
+		# 只在「放的正好是自己这首」时才停 —— 免得别的房间共用同一台播放器时
+		# 走到门口把人家的 BGM 掐掉
+		Music.stop()
+
+
+## 房子被释放 / 换场景时别把 BGM 留在空气里飘。
+func _exit_tree() -> void:
+	if _music_inside > 0 and Music.current() == MUSIC_TRACK:
+		Music.stop()

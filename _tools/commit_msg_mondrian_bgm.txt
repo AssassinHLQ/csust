@@ -1,0 +1,47 @@
+音乐: 蒙德里安大楼加 BGM「Midsummer Cat」（_verify_music 32/32、冒烟 12/12）
+
+用户 2026-11-12：「Midsummer Cat 这个蒙德里安大楼的音乐，
+去掉尾部没声音就可以循环」。
+
+素材：「碧蓝档案OST Vol.1（320K）」P5「Midsummer Cat」。
+大楼 = `MondrianHouse`（`scenes/mondrian_house_baked.tscn`，game.tscn 里摆在
+(27.3, 0, 13.5)，外墙 x ±8、z ±6、高 8，门在 −Z 侧朝商店）。
+
+── 音频：头尾静音都切 ──
+
+原曲 139.6216 s，实测头尾都有数字静音（mp3 编码器留的）：
+
+    头部静音 0.1383 s
+    尾部静音 0.3110 s
+
+头尾都切 → **139.1724 s**，末尾再补 8 ms 线性淡出收到干净零。
+
+    循环接缝：末采样 0 → 首采样 0.00087，跳变 0.000870
+              （曲子内部相邻样点平均跳变 0.017391，即 **×0.050**）
+    峰值归一化到 −1 dBFS，整段 RMS 0.2247
+
+⚠️ 只切尾部会在接缝处留 138 ms 空白 —— 所以头尾一起切（和「临时服务器据点」同一套）。
+
+── 代码 ──
+
+- `scripts/mondrian_house.gd`：新增 `_build_music_zone()`，在 `_ready()` 里调用
+  （放在 `auto_build` 判断**之外**，烘焙版也要建）。
+  烘焙版 `mondrian_house_baked.tscn` 的根节点本来就挂着本脚本、`auto_build = false`
+  不会重建房子，一个节点只能挂一个脚本，所以直接写在里面（和其他房间一个套路）。
+  尺寸按脚本自己的 `HALF_W/HALF_D/WALL_T` 常量算，不写死数字：
+  **内壁再内缩 0.8 m**、高度 0~7.6（一层 4.20 + 二层 3.80，两层都覆盖）
+- `scripts/music.gd`：曲目表加 `mondrian`
+- `assets/music/mondrian_theme.ogg.import`：loop=true（音频本体按 .gitignore 不入库）
+- `assets/music/README.md`：曲目表 + 这首的静音裁剪实测 + 代码位置
+- `scripts/_verify_music.gd`：加第 9 段「蒙德里安大楼」——
+  查 loop/长度、屋里放、门槛上不响、屋外不响；判定 27 → **32** 项
+
+── 实测 ──
+
+    触发区 13.90 × 7.60 × 9.90 m（内壁 15.50 × 11.50，每边内缩 0.8）
+    世界范围 x 20.35~34.25 / y 0~7.60 / z 8.55~18.45
+    大楼里 (27.3, 0.0, 13.5)       → current=「mondrian」 ✔
+    大楼门槛 (27.3, 0.0, 8.15)     → current=「」        ✔（不响）
+    大楼外  (37.25, 0.0, 13.5)     → current=「」        ✔
+
+_verify_music **32/32 全过**；_smoke_build **12/12「可以打包」**。

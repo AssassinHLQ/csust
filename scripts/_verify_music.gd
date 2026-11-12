@@ -18,9 +18,10 @@ func _run() -> void:
 	var es_st := load("res://assets/music/esports_theme.ogg") as AudioStreamOggVorbis
 	var r609_st := load("res://assets/music/art609_theme.ogg") as AudioStreamOggVorbis
 	var hut_st := load("res://assets/music/hut_theme.ogg") as AudioStreamOggVorbis
+	var mh_st := load("res://assets/music/mondrian_theme.ogg") as AudioStreamOggVorbis
 	for pair in [["shop_theme.ogg", shop_st], ["gamedev_theme.ogg", gd_st],
 			["esports_theme.ogg", es_st], ["art609_theme.ogg", r609_st],
-			["hut_theme.ogg", hut_st]]:
+			["hut_theme.ogg", hut_st], ["mondrian_theme.ogg", mh_st]]:
 		var name: String = pair[0]
 		var st: AudioStreamOggVorbis = pair[1]
 		if st == null:
@@ -359,7 +360,53 @@ func _run() -> void:
 			% [str(player.global_position), Music.current()])
 		hut_inside_plays = Music.current() == "hut" and Music.is_playing()
 
-	print("\n=== 9. 判定 ===")
+	# ───────────────────── 蒙德里安大楼 ─────────────────────
+	#
+	# 用户 2026-11-12：「Midsummer Cat 这个蒙德里安大楼的音乐，
+	#                   去掉尾部没声音就可以循环」。
+	# 大楼 = `MondrianHouse`（`scenes/mondrian_house_baked.tscn`，game.tscn 里摆在
+	# (27.3, 0, 13.5)，外墙 x ±8、z ±6，门在 −Z 侧朝商店）。
+	print("\n=== 9. 蒙德里安大楼 ===")
+	var mh := game.get_node_or_null("MondrianHouse") as Node3D
+	var mh_zone: Area3D = null if mh == null else mh.get_node_or_null("MusicZone") as Area3D
+	print("  MusicZone：%s" % ("有" if mh_zone != null else "**没有**"))
+	var mh_in := false
+	var mh_porch := false
+	var mh_out := false
+	if mh_zone != null:
+		var mcs := mh_zone.get_child(0) as CollisionShape3D
+		var mb := mcs.shape as BoxShape3D
+		var mc := mh_zone.global_transform * mcs.position
+		print("  触发区 %.2f × %.2f × %.2f m，世界中心 (%.2f, %.2f, %.2f)"
+			% [mb.size.x, mb.size.y, mb.size.z, mc.x, mc.y, mc.z])
+		# 屋内中心
+		player.global_position = Vector3(mc.x, mh.global_position.y + 0.15, mc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[大楼里 %s] current=「%s」（应为 mondrian）"
+			% [str(player.global_position), Music.current()])
+		mh_in = Music.current() == "mondrian" and Music.is_playing()
+		# 门框附近（触发区靠门侧边界外 0.4 m，约等于站在门槛上）→ 不该响
+		player.global_position = Vector3(mc.x,
+			mh.global_position.y + 0.15, mc.z - mb.size.z * 0.5 - 0.4)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[大楼门槛 %s] current=「%s」（应为空）"
+			% [str(player.global_position), Music.current()])
+		mh_porch = Music.current() == ""
+		# 屋外东侧 3 m → 不该响
+		player.global_position = Vector3(mc.x + mb.size.x * 0.5 + 3.0,
+			mh.global_position.y + 0.15, mc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[大楼外 %s] current=「%s」（应为空）"
+			% [str(player.global_position), Music.current()])
+		mh_out = Music.current() == ""
+
+	print("\n=== 10. 判定 ===")
 	# ⚠️ 用户 2026-11-11：「不要淡入淡出了，所有的」—— 默认淡化必须为 0
 	var no_fade := float(Music.FADE_DEFAULT) <= 0.0
 	print("  默认不淡化（FADE_DEFAULT=%.1f）%s" % [
@@ -401,6 +448,12 @@ func _run() -> void:
 	print("  临时据点：出屋停         %s" % ("✔" if hut_out else "✘"))
 	print("  临时据点：门槛上不响     %s（要进门才放）" % ("✔" if hut_door_silent else "✘"))
 	print("  临时据点：进门就响       %s" % ("✔" if hut_inside_plays else "✘"))
+	print("  循环开关（蒙德里安）    %s（长度 %.4f s，应 139.1724）"
+		% [("✔" if mh_st.loop and absf(mh_st.get_length() - 139.1724) < 0.01 else "✘"),
+			mh_st.get_length()])
+	print("  蒙德里安：屋里放         %s" % ("✔" if mh_in else "✘"))
+	print("  蒙德里安：门槛上不响     %s" % ("✔" if mh_porch else "✘"))
+	print("  蒙德里安：屋外不响       %s" % ("✔" if mh_out else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and absf(es_st.loop_offset - 22.7796) < 0.01 \
@@ -414,7 +467,9 @@ func _run() -> void:
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
 		and r609_track == "room609" and r609_in and r609_out and r609_roof \
 		and hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 \
-		and hut_in and hut_out and hut_door_silent and hut_inside_plays
+		and hut_in and hut_out and hut_door_silent and hut_inside_plays \
+		and mh_st.loop and absf(mh_st.get_length() - 139.1724) < 0.01 \
+		and mh_in and mh_porch and mh_out
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 

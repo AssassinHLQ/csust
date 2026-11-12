@@ -13,6 +13,7 @@
 | `esports_theme.ogg` | 电竞房的 BGM（走进房间开、走出去停；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
 | `art609_theme.ogg` | 画室 609 的 BGM（范围按「出门」定，与泼溅释放同一套边界） | 「碧蓝档案OST Vol.1」P37「Lemonade Diary（咖啡厅）」，© NEXON Games / Yostar |
 | `hut_theme.ogg` | 「临时服务器据点」小屋的 BGM（走进去开、走出去停） | 「碧蓝档案OST Vol.1」P44「Daily Routine 247（阿罗娜／彩奈）」，© NEXON Games / Yostar |
+| `mondrian_theme.ogg` | 蒙德里安大楼的 BGM（进屋开、出门停） | 「碧蓝档案OST Vol.1」P5「Midsummer Cat」，© NEXON Games / Yostar |
 
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
@@ -243,6 +244,25 @@ y[-8ms:] *= 线性淡出到 0                  # 把末尾那点残余（0.0009�
 峰值归一化到 −1 dBFS
 ```
 
+## 蒙德里安大楼那首（`mondrian_theme.ogg`）
+
+源文件 139.6216 s（320 kbps MP3，`「碧蓝档案OST🎵」音乐合集~Vol.1（320K）_P5_Midsummer Cat_音频.mp3`）。
+
+用户 2026-11-12：「Midsummer Cat 这个蒙德里安大楼的音乐，去掉尾部没声音就可以循环」。
+
+和「临时服务器据点」同一套处理（那首的推导见上一节）：
+
+```
+头部静音 0.1383 s（幅度 < 0.0008）
+尾部静音 0.3110 s
+去掉头尾 → 新长度 139.1724 s，末尾补 8 ms 线性淡出
+循环接缝：末采样 0 → 首采样 0.00087，跳变 0.000870
+          （曲子内部相邻样点平均跳变 0.017391，即 ×0.050）
+峰值归一化到 −1 dBFS，整段 RMS 0.2247
+```
+
+⚠️ 只切尾部的话会在接缝处留 138 ms 空白 —— 所以头尾一起切。
+
 ## 循环开关在哪
 
 `gamedev_theme.ogg.import` / `shop_theme.ogg.import` 里的 `loop=true`（以及 `loop_offset=0`）。
@@ -274,7 +294,11 @@ y[-8ms:] *= 线性淡出到 0                  # 把末尾那点残余（0.0009�
   ⚠️ 2026-11-12 用户报「占到边上也播放，要进门才行」——原来是**外扩 1.2 m**，
   触发区比房子还大；改成内缩后实测：音乐在 x≈11.40 才响（走进屋里约 0.5 m），
   站门槛/墙外都不响，y≈2.55 以上（站屋顶）也不响
-- `scripts/_verify_music.gd` —— 自检：**五个房间**的循环开关、进/出播放与停止
-  （小屋那段还验「门槛上不响 / 进门就响」，防止触发区又被改大到墙外）
+- `scripts/mondrian_house.gd::_build_music_zone()` —— 蒙德里安大楼。烘焙版
+  `mondrian_house_baked.tscn` 的根节点本来就挂着这个脚本（`auto_build = false`），
+  所以直接写在这里；尺寸按脚本自己的 `HALF_W/HALF_D/WALL_T` 常量算，
+  内壁再内缩 0.8 m，高度 0~7.6（两层都覆盖）
+- `scripts/_verify_music.gd` —— 自检：**六个房间**的循环开关、进/出播放与停止
+  （小屋那段还验「门槛上不响 / 进门就响」；大楼那段验「屋里放 / 门槛不响 / 屋外不响」）
   （电竞房那段还验「房子藏着时不出声、现身才出声」；画室 609 那段验
   「屋里放 / 出门停 / 屋顶不算屋里」；小屋那段验「屋里放 / 出屋停」）
