@@ -165,8 +165,9 @@ func reset() -> void:
 
 func _banner() -> void:
 	_push_line([["ArisuOS", USER_CYAN], ["  ·  Arch Linux (fake, for show)", DIM]])
-	_push_line([["[F] quit   type ", DIM], ["help", KEY_CYAN],
-		["  : commands are fake, nothing is executed", DIM]])
+	# 开机横幅要主动告诉玩家「敲 help 看全部命令」—— 用户 2026-11-12 提的第一诉求。
+	_push_line([["[F] quit   ", DIM], ["type help", KEY_CYAN],
+		["  to list every command", DIM]])
 	_push_line([])
 	_neofetch()
 
@@ -209,6 +210,14 @@ func _push_line(segments: Array) -> void:
 			c.append(DIM)
 	_text.append(s)
 	_cols.append(c)
+	# ── 滚屏 ──
+	# 用户 2026-11-12：「输入 help 可以弹出所有可以用的命令」—— 命令一多，
+	# 输出就会超出 ROWS（40 行），而这里**没有滚动条**：超出部分直接画到屏幕外，
+	# 等于「help 只说了一半」。所以超过 ROWS 就从**顶上**丢掉最旧的，
+	# 表现和真终端一致（新内容把旧内容顶上去）。
+	while _text.size() > ROWS:
+		_text.remove_at(0)
+		_cols.remove_at(0)
 	_cursor_row = _text.size() - 1
 	_cursor_col = s.strip_edges(false, true).length()
 
@@ -281,18 +290,98 @@ func _submit() -> void:
 	_prompt_line()
 
 
+## ── 命令表（**help 的唯一数据源**）────────────────────────────────────────
+## 用户 2026-11-12：「写 help 命令，输入可以弹出所有可以用的命令」。
+##
+## ⚠️ 为什么要有这张表：原来 `help` 是**手写的一份字符串列表**，每加一个命令
+##    （`bilibili` / `arona` / `plana` …）都得记得同步改，漏一次就名单漂移。
+##    现在 `help` 直接遍历这张表生成，**加命令只改这一处**，
+##    别名解析（`bili`/`b23` → `bilibili`）也走同一张表。
+##
+## ⚠️ `desc` / `arg` 一律**英文**：终端是按 8 px「字符格」逐字画的，
+##    汉字字形 13 px 宽，会压掉右边两个字符糊成一团（见本文件开头那段说明）。
+##    中文提示只能放在覆盖层的普通 Label 里。
+##
+## 字段：`name` 正式命令名 / `alias` 别名 / `arg` 用法里的参数示意 / `desc` 一句话说明
+const COMMANDS := [
+	{"name": "help", "alias": [], "arg": "", "desc": "show this list (or: help <cmd>)"},
+	{"name": "neofetch", "alias": [], "arg": "", "desc": "print the machine spec sheet"},
+	{"name": "ls", "alias": [], "arg": "", "desc": "list the home directory"},
+	{"name": "cat", "alias": [], "arg": "readme.txt", "desc": "print a text file"},
+	{"name": "uname", "alias": [], "arg": "-a", "desc": "kernel / arch version"},
+	{"name": "whoami", "alias": [], "arg": "", "desc": "print the current user"},
+	{"name": "df", "alias": [], "arg": "-h", "desc": "disk usage table"},
+	{"name": "pacman", "alias": [], "arg": "-Syu", "desc": "pretend to upgrade packages"},
+	{"name": "sudo", "alias": [], "arg": "rm ...", "desc": "try your luck"},
+	{"name": "bilibili", "alias": ["bili", "b23", "blbl"], "arg": "",
+		"desc": "open the fake bilibili window (offline)"},
+	{"name": "arona", "alias": [], "arg": "", "desc": "wake up ARONA (3D assistant)"},
+	{"name": "plana", "alias": [], "arg": "", "desc": "switch to PLANA (frame anim)"},
+	{"name": "clear", "alias": [], "arg": "", "desc": "clear the screen"},
+	{"name": "exit", "alias": ["logout"], "arg": "", "desc": "close the computer"},
+]
+
+## 每行左侧「命令 + 参数」占多少列，右边接说明
+const HELP_COL := 20
+
+
+## 把用户敲的名字（含别名）解析成正式命令名；解析不到返回 ""
+func _canonical(name: String) -> String:
+	for c in COMMANDS:
+		if String(c["name"]) == name:
+			return name
+		for a in c["alias"]:
+			if String(a) == name:
+				return String(c["name"])
+	return ""
+
+
+## 一行命令怎么显示：`  name arg` 左侧补齐到 HELP_COL
+func _cmd_label(c: Dictionary) -> String:
+	var left := "  " + String(c["name"])
+	if not String(c["arg"]).is_empty():
+		left += " " + String(c["arg"])
+	return left.rpad(HELP_COL)
+
+
 func _run(cmd: String) -> void:
 	var parts := cmd.split(" ", false)
-	var name := String(parts[0]).to_lower()
-	var arg := cmd.substr(name.length()).strip_edges()
+	var raw := String(parts[0]).to_lower()
+	var arg := cmd.substr(raw.length()).strip_edges()
+	# 先按表解析（含别名）；解析不到就是未知命令 —— 顺便提示去看 help
+	var name := _canonical(raw)
+	if name.is_empty():
+		_push_line([["zsh: command not found: ", RED], [raw, FG]])
+		_push_line([["  ", DIM], ["run `help` to see what this machine can do", DIM]])
+		return
 	match name:
 		"help":
-			_say("commands (all fake, for show only):")
-			for k in ["help", "neofetch", "ls", "cat readme.txt", "uname -a",
-					"whoami", "pacman -Syu", "df -h", "bilibili", "arona", "plana",
-					"clear", "exit"]:
-				_push_line([["  ", DIM], [k, KEY_CYAN]])
-			_push_line([["  ", DIM], ["anything else: zsh: command not found", DIM]])
+			if arg.is_empty():
+				_say("available commands (all fake, nothing is executed):")
+				for c in COMMANDS:
+					_push_line([[_cmd_label(c), KEY_CYAN], [String(c["desc"]), FG]])
+					var al: Array = c["alias"]
+					if not al.is_empty():
+						_push_line([["".rpad(HELP_COL), DIM],
+							["  aka: " + ", ".join(PackedStringArray(al)), DIM]])
+				_push_line([["  ", DIM],
+					["anything else: zsh: command not found", DIM]])
+			else:
+				# `help <cmd>`：只讲那一条（也认别名）
+				var want := _canonical(arg.to_lower())
+				if want.is_empty():
+					_say("help: no entry for `%s`" % arg)
+					_push_line([["  ", DIM], ["run `help` for the full list", DIM]])
+				else:
+					for c in COMMANDS:
+						if String(c["name"]) != want:
+							continue
+						_push_line([[_cmd_label(c), KEY_CYAN], [String(c["desc"]), FG]])
+						var al2: Array = c["alias"]
+						if not al2.is_empty():
+							_push_line([["  ", DIM], ["aliases: "
+								+ ", ".join(PackedStringArray(al2)), DIM]])
+						break
 		"plana":
 			# 屏幕里换成普拉娜（绿幕抠像的逐帧动画，见 `plana_page.gd`）。
 			# 用户 2026-11-12：「扣绿幕，输入 plana 就出现这」。
@@ -356,7 +445,10 @@ func _run(cmd: String) -> void:
 			_push_line([["logout", DIM]])
 			exit_requested.emit()
 		_:
-			_push_line([["zsh: command not found: ", RED], [name, FG]])
+			# 走到这里说明「COMMANDS 表里登记了、但 match 里忘了写处理分支」——
+			# 这是给维护者看的信号，不是给玩家看的正常路径（未知命令在上面就 return 了）。
+			_push_line([["internal: `%s` is listed but has no handler" % name, RED]])
+			push_warning("[ArchTerminal] 命令 `%s` 在 COMMANDS 里有条目，但 _run() 没有分支" % name)
 
 
 func _say(line: String) -> void:
