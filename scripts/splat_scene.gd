@@ -281,6 +281,16 @@ var loading := false
 ## 这次加载失败了（`_finish` 里设）。场景门预载时用它判断「等完了没有」。
 ## 名字不能叫 `failed` —— 和上面的 `failed` 信号重名。
 var load_failed := false
+## ── 开场 PV 用的总进度（0..1，单调不减）──
+## `sog_runtime` 的 progress 信号是「阶段 + 该阶段点数」，开场的进度条要的是
+## **一条总进度**，所以这里把各阶段按实测耗时折算成累计比例。
+## 只在主线程更新（`progress` 信号本体是 `call_deferred` 发出来的）。
+var load_ratio := 0.0
+## 当前阶段名（"decode" 等，只给日志 / 以后想显示阶段文案时用）
+var load_phase := ""
+## 命令行把这个节点排除了（`--splat=off` / `--venue=` 不匹配）。
+## 排除的节点不许被 `force_start()` 拉起来。
+var _cli_skipped := false
 ## 上一次展开（含裁剪）的结果，按「源文件 + 修改时间 + 裁剪参数」缓存。
 ## 场景来回切时同一个 .sogdata 会反复展开；缓存住这份 665 MB 的 CPU 数据，
 ## 回程就只剩 GDGS 的 GPU 上传（~2 s），不用再花 3 s 展开 + 裁剪。
@@ -329,6 +339,11 @@ func _ready() -> void:
 	#    目前没有任何地方在暂停时启动它们（只有 `_probe_collapse.gd` 用，而它不暂停），
 	#    真要用了再单独拆一个「只跑 join」的开关。
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 开场 PV 的进度条读 `load_ratio`，它由这个信号折算（见 `_on_load_progress`）。
+	# 连的是自己的信号：`_on_progress_from_thread()` 在 worker 线程里
+	# `progress.emit.call_deferred(...)`，所以本 handler 一定在主线程跑。
+	if not progress.is_connected(_on_load_progress):
+		progress.connect(_on_load_progress)
 	# 「出房间就释放泼溅显存」的设置：读一次 + 登记监听（面板改完立刻生效）
 	unload_outside_room = bool(GameSettings.value("splat_unload_outside"))
 	GameSettings.listen(_on_settings_changed)
@@ -344,10 +359,12 @@ func _ready() -> void:
 			var want := a.substr(8)
 			if want != "" and want != "all" and venue != "" and venue != want:
 				print("[SplatScene] %s 不在 --venue=%s 里，跳过" % [display_name, want])
+				_cli_skipped = true
 				_disable_placed_collision()
 				return
 		elif a == "--splat=off" or a == "--no-splat":
 			print("[SplatScene] 命令行要求跳过泼溅加载")
+			_cli_skipped = true
 			_disable_placed_collision()
 			return
 	if auto_start:
@@ -986,6 +1003,13 @@ func _update_inside_hide() -> void:
 
 ## 后台开始解码；完成时发 loaded / failed
 func start() -> void:
+	# 命令行把这个节点排除了就永远不加载。
+	# ⚠️ 不能只在 `_ready()` 里 return 就完事：房间 BGM / 「出门释放」这两条
+	#    每帧逻辑会自己调 `start()`（`_update_room_exit_unload()` 见玩家在屋里、
+	#    泼溅又不在，就当成「刚被卸掉」重载）。少了这道闸，`--splat=off`
+	#    会在几帧之后被偷偷拉起来 —— 自检会白等一整套解码。
+	if _cli_skipped:
+		return
 	if loading or splat_node != null:
 		return
 	var source := _resolve_source()
@@ -994,6 +1018,9 @@ func start() -> void:
 		return
 	loading = true
 	_start_ms = Time.get_ticks_msec()
+	# 开场 PV 的进度条从 0 开始（重新进入房间重载时也复位）
+	load_ratio = 0.0
+	load_phase = ""
 	_thread = Thread.new()
 	if low_priority:
 		_thread.start(_worker.bind(source), Thread.PRIORITY_LOW)
@@ -1001,9 +1028,13 @@ func start() -> void:
 		_thread.start(_worker.bind(source))
 
 
-## 立刻开始，不管 start_delay / start_distance（场景门在黑屏期间预载用）。
+## 立刻开始，不管 start_delay / start_distance（场景门在黑屏期间预载用、
+## 开场 PV 要盖住加载时也用）。
+##
+## ⚠️ 被命令行排除的节点（`--splat=off` / `--venue=` 不匹配）**不许**被它拉起来，
+##    否则 `--venue` 的隔离就漏了。
 func force_start() -> void:
-	if loading or splat_node != null:
+	if _cli_skipped or loading or splat_node != null:
 		return
 	start()
 
@@ -1293,8 +1324,51 @@ func _on_progress_from_thread(phase: String, done: int, total: int) -> void:
 	progress.emit.call_deferred(phase, done, total)
 
 
+## 把「阶段 + 本阶段进度」折算成**一条总进度**（开场 PV 的进度条用）。
+##
+## 各阶段的权重大致按实测耗时给（RTX 4060 Laptop，冷缓存）：
+##   纹理 3 s → 中心 1 s → 展开点云 ≈ 45 s → 打包 ≈ 2 s。
+## 暖缓存则整段都是「读缓存」，所以 `cache` 在读的时候给到 90%。
+## 最后收尾（建 GDGS 节点 / 裁剪）在主线程，没有进度信号，留到 `_finish()` 补 1.0。
+func _on_load_progress(phase: String, done: int, total: int) -> void:
+	var t := 1.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
+	var lo := 0.0
+	var hi := 0.0
+	match phase:
+		"cache":
+			if load_ratio < 0.5:
+				# 暖启动：读那份 2.1 GB 展开缓存就是等待的大头
+				lo = 0.02
+				hi = 0.90
+			else:
+				# 冷启动：解完再写缓存，只占尾巴一点
+				lo = 0.96
+				hi = 0.97
+		"textures":
+			lo = 0.00
+			hi = 0.06
+		"center":
+			lo = 0.06
+			hi = 0.12
+		"decode":
+			lo = 0.12
+			hi = 0.92
+		"pack":
+			lo = 0.92
+			hi = 0.96
+		_:
+			return
+	load_phase = phase
+	# 单调不减：解码线程可能因为缓存写回又报一次靠前的阶段
+	load_ratio = maxf(load_ratio, lerpf(lo, hi, t))
+
+
 func _finish(result: Dictionary) -> void:
 	loading = false
+	# 到这里工作线程已经交卷（主线程建节点只要几 ms），进度条可以满格了。
+	# ⚠️ 不要写成「decode 到 100% 就满」—— 打包/裁剪/建节点还在后面。
+	load_ratio = 1.0
+	load_phase = "done"
 	elapsed_seconds = float(Time.get_ticks_msec() - _start_ms) / 1000.0
 	if not bool(result.get("ok", false)):
 		load_failed = true

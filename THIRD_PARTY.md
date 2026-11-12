@@ -30,6 +30,8 @@
 | 高斯泼溅数据（校园 / 画室 609） | **知天下 AI 生成**；权利状态未核实 | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，再分发权未由本项目核实 |
 | 校园碰撞网格 | 派生自上一项 | ❌ 不包含 | `models/school.collision.glb` |
 | UNDERTALE「Tem Shop」 | **专有版权**（© Toby Fox / Materia Collective） | ❌ 不包含 | `assets/music/shop_theme.ogg`（商店「柴关电脑城」的 BGM，40.2094 s 无缝循环版）。**仅用于本地学习，不得再分发、不得用于任何发布产物**。`.gitignore` 排除音频本体，但保留 `shop_theme.ogg.import`（循环开关在里面）。裁剪与循环点的推导见 `assets/music/README.md` 与 `tools/audio/make_loop.py` |
+| Blue Archive OST「Constant Moderato（PV1）」 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `assets/music/pv_theme.mp3`（开场 PV 循环播放，点「开始游戏」时淡出）。来源 B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2。**仅用于本地学习 / 非商业演示，不得再分发、不得用于任何发布产物**。`.gitignore` 排除 mp3 与 `.import`，缺文件时 PV 静音、不报错 |
+| 开场 PV 图（8 张宽幅） | **混有专有版权素材**：部分为 Blue Archive 游戏内画面（© NEXON Games / Yostar），部分为本作截图 | ❌ 不包含 | `assets/cg/pv/*.jpg`（`scripts/title_intro.gd` 按文件名排序循环平移；`.gitignore` 排除图片本体与 `.import`）。原图偏软，另有 `assets/cg/pv_hd/`（Real-ESRGAN ncnn 4× 超分 → 高 1440，由 `_tools/upscale_pv_images.ps1` 生成）优先使用，同样不入库。缺图时自动退回「渐变底 + 标题」，启动、进度条、开始按钮都不受影响 |
 | 项目图标 `icon.png` | 待确认 | ✅ 包含 | 来源需仓库作者确认；若不是原创请替换为自有图标 |
 
 ## 克隆后怎么补齐

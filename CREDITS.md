@@ -79,7 +79,7 @@
 | Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留招牌/铭牌用字（游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线等，7.5 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
 | Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
 | [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
-| 开场 PV 图（8 张宽幅，逐张从左往右缓慢平移） | Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图 | 专有：仅本地学习演示，不可再分发、不可商用 | ❌ | `assets/cg/pv/`，使用者 2026-11-12 提供的 8 张截图 | `scripts/title_intro.gd` 按文件名排序循环播放，盖住高斯泼溅加载；`.gitignore` 排除图片本体与 `.import`，缺图时自动退回「渐变底 + 标题」 |
+| 开场 PV 图（8 张宽幅，逐张从左往右缓慢平移） | Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图 | 专有：仅本地学习演示，不可再分发、不可商用 | ❌ | `assets/cg/pv/`，使用者 2026-11-12 提供的 8 张截图 | `scripts/title_intro.gd` 按文件名排序循环播放，盖住高斯泼溅加载；`.gitignore` 排除图片本体与 `.import`，缺图时自动退回「渐变底 + 标题」。AI 超分版 `assets/cg/pv_hd/`（Real-ESRGAN 4× → 高 1440）由 `_tools/upscale_pv_images.ps1` 生成，同样不入库 |
 
 ## 四、音效
 

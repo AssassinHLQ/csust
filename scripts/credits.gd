@@ -458,7 +458,7 @@ const ENTRIES := [
 		"distributed": false,
 		"source": "使用者 2026-11-12 提供的 8 张截图（混有 Blue Archive 游戏内画面与本作截图），存于 assets/cg/pv/",
 		"license_file": "",
-		"note": "`scripts/title_intro.gd` 按文件名排序循环播放；`.gitignore` 排除图片本体与 .import，缺图时自动退回「渐变底 + 标题」，启动、进度条、开始按钮都不受影响",
+		"note": "`scripts/title_intro.gd` 按文件名排序循环播放；`.gitignore` 排除图片本体与 .import，缺图时自动退回「渐变底 + 标题」，启动、进度条、开始按钮都不受影响。AI 超分版 `assets/cg/pv_hd/`（Real-ESRGAN 4× → 高 1440）由 `_tools/upscale_pv_images.ps1` 从原图生成，同样不入库",
 	},
 	{
 		"group": "剧情与图标",

@@ -97,8 +97,8 @@ const STORY_DIR := "res://story/"
 ##    「初始没有暂停」当场就红。想「进关卡直接开打」用 `-- --story=off`。
 const PLAY_OPENING := true
 
-## ── 开场标题卡（2026-11-11）──
-## 见 `scripts/title_intro.gd` 文件头。这里只管「什么时候播」：
+## ── 开场 PV（2026-11-12 改版；原来是标题卡）──
+## 见 `scripts/title_intro.gd` 文件头。这里只管「什么时候播、给什么进度」：
 ##   · 只在**第一次**进这个场景时播（`_entered_via_gate` 为假）；
 ##   · `--script`（自检 / 探针）**一律不播**，理由和 `PLAY_OPENING` 一样；
 ##   · `-- --intro=off` 可以手动关掉。
@@ -801,10 +801,13 @@ func _apply_scene_entry() -> bool:
 	return true
 
 
-## 播开场标题卡。返回时画面已经干净（可以接着演剧情）。
+## 播开场 PV（带载入进度条 + 开始按钮）。返回时玩家已经点过「开始游戏」，
+## 画面干净，可以接着演剧情了。
 ##
-## 用户 2026-11-11：「现在 做开始动画,开始动画怎么做合适呢」→
-## 选了「先只做标题卡」+「任意键可跳过」。做法见 `scripts/title_intro.gd` 文件头。
+## 用户 2026-11-12：「做 PV，蔚蓝档案做法…替代开始动画，在高斯泼溅没加载完之前
+## 先用这个掩盖，并且加进度条显示加载进度，加载完下方显示开始游戏，此时点击可以
+## 进入游戏…后续硬盘有了缓存就快很多，但是还是显示进度条与加载完的开始游戏，
+## 点击开始游戏才进入 609。因为有人会听歌」→ 做法见 `scripts/title_intro.gd` 文件头。
 ##
 ## 三个"不播"：
 ##   ① `--script`（自检 / 探针）—— 和 `PLAY_OPENING` 同一条理由；
@@ -817,7 +820,7 @@ func _play_title_intro() -> void:
 		return
 	for a in OS.get_cmdline_user_args():
 		if a == "--intro=off":
-			print("[Game] --intro=off：跳过开场标题卡")
+			print("[Game] --intro=off：跳过开场 PV")
 			return
 	var intro := TitleIntroScript.new() as Node
 	intro.name = "TitleIntro"
@@ -830,14 +833,21 @@ func _play_title_intro() -> void:
 	if _player != null and _player.has_method("set_ride_lock"):
 		_player.call("set_ride_lock", true)
 		locked = true
-	print("[Game] 开场标题卡：开始（玩家已锁 %s）" % str(locked))
-	# 传 `_splats_ready`：标题卡会一直盖着黑幕，直到世界真的能看为止
-	# （冷缓存解 615 万点要 50 s，那段时间正好用来当载入画面）
-	await intro.call("play", Callable(self, "_splats_ready"))
+	# 开场 PV 就是给泼溅解码当遮罩的：别等 `start_delay` / `start_distance`，
+	# 直接把解码开起来，进度条才有东西可显示。
+	# （`force_start()` 会跳过被 `--splat=off` / `--venue=` 排除的节点。）
+	for s in _splats:
+		if s != null:
+			s.force_start()
+	print("[Game] 开场 PV：开始（玩家已锁 %s）" % str(locked))
+	# 传 `_intro_state`：PV 每帧问「加载到哪了 / 世界就绪了没」。
+	# 用户要的是「加载完才出开始按钮、点了才进游戏」，所以这里会一直等到点击。
+	await intro.call("play", Callable(self, "_intro_state"))
+	intro.queue_free()
 	if locked and _player != null and is_instance_valid(_player) \
 			and _player.has_method("set_ride_lock"):
 		_player.call("set_ride_lock", false)
-	print("[Game] 开场标题卡：结束")
+	print("[Game] 开场 PV：结束")
 
 
 func _play_opening() -> void:
@@ -918,6 +928,28 @@ func _splats_ready() -> bool:
 		if s != null and s.loading:
 			return false
 	return true
+
+
+## 开场 PV 每帧问一次：加载到哪了？
+## 返回 `{"ratio": 0..1, "ready": bool, "names": ["画室609"]}`（见 `title_intro.gd` 文件头）。
+##
+## ★ 为什么 ratio 取**最小值**而不是平均值：多份场地是同时解码的，进度条应该按
+##   「最慢那份」算 —— 平均值会在最大那份还没好时就显示 90%+，然后卡住不动。
+## ★ 为什么失败也算 ready：`_splats_ready()` 只看 `loading`，解码失败时
+##   `_finish()` 会把 `loading` 置 false。不这样兜底的话，一次解码失败就会把玩家
+##   永久钉在开场 PV 上，比「少一份泼溅」严重得多。
+func _intro_state() -> Dictionary:
+	var ratio := 1.0
+	var names: Array = []
+	for s in _splats:
+		if s == null:
+			continue
+		if s.loading:
+			ratio = minf(ratio, clampf(s.load_ratio, 0.0, 1.0))
+			var nm := String(s.display_name)
+			if not nm.is_empty():
+				names.append(nm)
+	return {"ratio": ratio, "ready": _splats_ready(), "names": names}
 
 
 func _process(delta: float) -> void:
