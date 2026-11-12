@@ -311,6 +311,8 @@ func _run() -> void:
 	print("  MusicZone：%s" % ("有" if hut_zone != null else "**没有**"))
 	var hut_in := false
 	var hut_out := false
+	var hut_door_silent := false
+	var hut_inside_plays := false
 	if hut_zone != null:
 		var hcs := hut_zone.get_child(0) as CollisionShape3D
 		var hb := hcs.shape as BoxShape3D
@@ -334,6 +336,28 @@ func _run() -> void:
 		print("[小屋外 %s] current=「%s」 is_playing=%s（应为空/false）"
 			% [str(player.global_position), Music.current(), str(Music.is_playing())])
 		hut_out = Music.current() == "" and not Music.is_playing()
+
+		# ⚠️ 用户 2026-11-12：「为什么占到边上也播放？缩小圈子，要进门才行」。
+		#    所以这里额外验一件事：**站在门槛上/墙外不许响**，必须走进屋里才响。
+		#    小屋世界范围 x 10.7~17.3（门在 −X 侧）、内壁 x≈10.9。
+		#    胶囊半径 0.30，所以「中心 x」和「区边界」差 0.3 —— 判据按实测边界来写。
+		var door_x := hc.x - hb.size.x * 0.5      # 触发区靠门那一侧的边界
+		# 门框附近（触发区边界外 0.4 m，约等于站在门槛/墙里侧）→ 不该响
+		player.global_position = Vector3(door_x - 0.4, hut.global_position.y + 0.15, hc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[小屋门槛 %s] current=「%s」（应为空）"
+			% [str(player.global_position), Music.current()])
+		hut_door_silent = Music.current() == ""
+		# 往里 1 m（明确进屋）→ 该响
+		player.global_position = Vector3(door_x + 1.0, hut.global_position.y + 0.15, hc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[小屋进门 %s] current=「%s」（应为 hut）"
+			% [str(player.global_position), Music.current()])
+		hut_inside_plays = Music.current() == "hut" and Music.is_playing()
 
 	print("\n=== 9. 判定 ===")
 	# ⚠️ 用户 2026-11-11：「不要淡入淡出了，所有的」—— 默认淡化必须为 0
@@ -375,6 +399,8 @@ func _run() -> void:
 			hut_st.get_length()])
 	print("  临时据点：屋里放         %s" % ("✔" if hut_in else "✘"))
 	print("  临时据点：出屋停         %s" % ("✔" if hut_out else "✘"))
+	print("  临时据点：门槛上不响     %s（要进门才放）" % ("✔" if hut_door_silent else "✘"))
+	print("  临时据点：进门就响       %s" % ("✔" if hut_inside_plays else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and absf(es_st.loop_offset - 22.7796) < 0.01 \
@@ -388,7 +414,7 @@ func _run() -> void:
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
 		and r609_track == "room609" and r609_in and r609_out and r609_roof \
 		and hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 \
-		and hut_in and hut_out
+		and hut_in and hut_out and hut_door_silent and hut_inside_plays
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 
