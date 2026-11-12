@@ -85,30 +85,44 @@ func _run() -> void:
 				first_step = false
 	print("地面基准（台阶底）y = %.3f\n" % floor_y)
 
-	# ① 天花板不该躺在门口高度（这是 2026-11-11 的真凶）
-	#    `物件_8` 是天花板，局部 y 3.3~3.6；房间 Y=-1 翻转后必须落在头顶之上。
-	var ceil_ok := false
-	var ceil_seen := 0
+	# ① 门口「头肩区域」不该被大碰撞板封住（这是 2026-11-11「门进不去」的真凶）
+	#
+	# ⚠️ 判据换过两次，记下来免得再绕回去：
+	#    · 第一版：按名字找 `P0007_0` + 尺寸 ≥ 网格 AABB 的 90% ⇒ 认定它是天花板。
+	#      房间放大 1.5 倍后比例变了，**一个都匹配不上**，于是静默判红。
+	#    · 第二版：比例放松到 60%。结果 `P0007_0` 匹配上了，但实测它局部 y=3.4210896
+	#      —— 和门口 `BaseSteps` 三级台阶环的外圈**完全相同**，是台阶坐着的**底板**，
+	#      不是天花板（世界 y 0.06~0.51，而门洞在 0.60~2.20，根本不挡）。
+	#      ⇒「按名字认板子」这条路本身脆，删掉。
+	#    · 现在这版直接测**要防的那件事**：任何大块碰撞板都不许横跨玩家的头肩区域
+	#      （地面 +0.6 ~ +2.10）。底板在 0.51 以下、天花板在头顶之上，都算通过。
+	#      这是「挡不挡人」的物理判据，跟板子叫什么、缩放到多少倍无关。
+	var head_lo := floor_y + 0.6
+	var head_hi := floor_y + 2.10
+	var ceil_ok := true
+	var plates := 0
 	for c in room.find_children("*", "CollisionShape3D", true, false):
 		var cs := c as CollisionShape3D
-		if cs.name != "P0007_0" or not (cs.shape is BoxShape3D):
+		if not (cs.shape is BoxShape3D):
 			continue
-		ceil_seen += 1
 		var s := (cs.shape as BoxShape3D).size
-		var aabb := cs.global_transform * AABB(-s * 0.5, s)
-		# 「和整间房一样大的薄板」——放大后网格 AABB 会变（LOD 换模也会），
-		# 所以比例判据放松到 0.6，并且**无论如何都打印**，免得又是「匹配不上就静默失败」。
-		var big := s.x >= bb.size.x * 0.6 and s.z >= bb.size.z * 0.6
-		print("① P0007_0 板 %.2f×%.2f（房间网格 %.2f×%.2f）→ %s；世界 y %.2f~%.2f，底面需 > %.2f"
-			% [s.x, s.z, bb.size.x, bb.size.z, "算天花板" if big else "尺寸偏小不算",
-				aabb.position.y, aabb.end.y, floor_y + 2.10])
-		if not big:
+		# 只看「横跨整间房」的大板子；桌子椅子显示器这类小盒子不参与
+		if s.x < bb.size.x * 0.6 or s.z < bb.size.z * 0.6 or s.y > 2.0:
 			continue
-		ceil_ok = aabb.position.y > floor_y + 2.10
-		print("   ⇒ 判定：%s" % ("通过" if ceil_ok else "**失败**"))
-	if ceil_seen == 0:
-		print("① 没找到名为 P0007_0 的碰撞形状（天花板板子可能改名了）")
-	_check(ceil_ok, "天花板碰撞不在门口高度（否则会把门封死）")
+		plates += 1
+		var aabb := cs.global_transform * AABB(-s * 0.5, s)
+		var lo := aabb.position.y
+		var hi := aabb.end.y
+		var clash := hi > head_lo and lo < head_hi
+		print("① 大板 %-10s %.2f×%.2f×%.2f  世界 y %.2f~%.2f  %s"
+			% [String(cs.name), s.x, s.y, s.z, lo, hi,
+				"**侵入头肩区 ⇒ 挡门**" if clash else "不挡门"])
+		if clash:
+			ceil_ok = false
+	if plates == 0:
+		print("① 房间下没有横跨式大板（地板/天花板都不按盒子建模）⇒ 不构成挡门")
+	print("   头肩区 = y %.2f~%.2f（地面基准 %.3f）" % [head_lo, head_hi, floor_y])
+	_check(ceil_ok, "没有大块碰撞板横跨门口头肩区（否则会把门封死）")
 
 	# ② 真推三个方向。
 	#
