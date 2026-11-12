@@ -365,12 +365,22 @@ func _attach_trail(holder: Node3D, dir: Vector3) -> void:
 	# 局部 +Z = −dir ⇒ 局部 z 为正就是把东西摆在球**后面**
 	trail.global_basis = Basis(right0, realup0, -dir)
 	var streaks: Array = []
-	# 用户 2026-11-12：「条纹太少,太短了条纹」→ 22 根加到 **40 根**，长度大幅拉长。
-	# 仍分两层：偶数号细而**很长**（外层速度线，4~16 m），奇数号稍粗稍短（1.5~5 m）。
-	for i in 40:
+	# 用户 2026-11-12 最终要求：「还要更密,但是要更细,圆的中间多、长、粗,两侧细一点」
+	# ⇒ 不再用「两层交替」，改成**按离轴距离 t 做连续渐变**：
+	#    t = 0 贴着轴心（球正后方）：**更多、更长、更粗**
+	#    t = 1 最外侧：**更细、更短**
+	#    半径用 `t * max_rad` 均匀分布 ⇒ 靠轴心那几圈周长小，视觉上自然更密；
+	#    再让每 5 根里抽 1 根强制贴轴心（t × 0.25），中间那块再密一档。
+	var max_rad := 0.62
+	for i in 60:
+		var t := randf()
+		if i % 5 == 0:
+			t *= 0.25
+		var rad := t * max_rad
+		var thick := lerpf(0.085, 0.020, t)      # 中间粗、两侧细
+		var ln := lerpf(14.0, 3.5, t) * randf_range(0.85, 1.15)
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		var thick := 0.035 if i % 2 == 0 else 0.062
 		bm.size = Vector3(thick, thick, 1.0)
 		mi.mesh = bm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -378,8 +388,6 @@ func _attach_trail(holder: Node3D, dir: Vector3) -> void:
 		mi.material_override = mat
 		trail.add_child(mi)
 		var ang := randf() * TAU
-		var rad := sqrt(randf()) * 0.62
-		var ln := randf_range(4.0, 16.0) if i % 2 == 0 else randf_range(1.5, 5.0)
 		mi.position = Vector3(cos(ang) * rad, sin(ang) * rad, 0.35 + ln * 0.5)
 		mi.scale = Vector3(1.0, 1.0, ln)
 		streaks.append({"mi": mi, "mat": mat, "len": ln})
