@@ -33,6 +33,55 @@ func _run() -> void:
 		print("  loop_offset = %.3f" % st.loop_offset)
 		print("  长度        = %.4f s" % st.get_length())
 
+	# ───────────────── next 关卡：蒙德里安门厅 ─────────────────
+	#
+	# ⚠️ 必须在加载 `game.tscn` **之前**测：`next_level.tscn` 是整关，
+	#    它的坐标和 game.tscn 的世界**重叠**，两个场景同时在树里时
+	#    game 的玩家会落进门厅的音乐区，测出来一团乱
+	#    （本喵第一版放在后面，结果门厅两条一直 ✘ —— 日志里 current 是 room609）。
+	# 音乐区由 `scripts/hall_music.gd` 挂在 `scenes/mondrian_hall.tscn` 根节点上，
+	# 复用同一首 `mondrian_theme.ogg`（曲目名也是 `mondrian`）。
+	print("\n=== 0. next 关卡：蒙德里安门厅（先测，避免和 game.tscn 坐标重叠）===")
+	var hall_in := false
+	var hall_2f := false
+	var hall_scene := (load("res://scenes/next_level.tscn") as PackedScene).instantiate() as Node3D
+	root.add_child(hall_scene)
+	for _f in 90:
+		await physics_frame
+	var hall := hall_scene.get_node_or_null("Hall") as Node3D
+	var hall_zone: Area3D = null if hall == null else hall.get_node_or_null("MusicZone") as Area3D
+	print("  MusicZone：%s" % ("有" if hall_zone != null else "**没有**"))
+	if hall_zone != null:
+		var kcs := hall_zone.get_child(0) as CollisionShape3D
+		var kb := kcs.shape as BoxShape3D
+		var kc := hall_zone.global_transform * kcs.position
+		print("  触发区 %.2f × %.2f × %.2f m，世界中心 (%.2f, %.2f, %.2f)"
+			% [kb.size.x, kb.size.y, kb.size.z, kc.x, kc.y, kc.z])
+		var hp := hall_scene.get("_player") as CharacterBody3D
+		if hp == null:
+			hp = get_first_node_in_group("player") as CharacterBody3D
+		if hp == null:
+			print("  **找不到 next_level 的玩家**")
+		else:
+			hp.global_position = Vector3(kc.x, 0.6, kc.z)      # 一楼
+			hp.velocity = Vector3.ZERO
+			for _f in 30:
+				await physics_frame
+			print("[门厅一楼 %s] current=「%s」（应为 mondrian）"
+				% [str(hp.global_position), Music.current()])
+			hall_in = Music.current() == "mondrian" and Music.is_playing()
+			hp.global_position = Vector3(kc.x, 4.95, kc.z)     # 二楼楼板
+			hp.velocity = Vector3.ZERO
+			for _f in 30:
+				await physics_frame
+			print("[门厅二楼 %s] current=「%s」（应为 mondrian）"
+				% [str(hp.global_position), Music.current()])
+			hall_2f = Music.current() == "mondrian" and Music.is_playing()
+	hall_scene.queue_free()
+	for _f in 20:
+		await physics_frame
+	Music.stop()
+
 	var game := (load("res://scenes/game.tscn") as PackedScene).instantiate() as Node3D
 	root.add_child(game)
 	for _i in 130:
@@ -454,6 +503,8 @@ func _run() -> void:
 	print("  蒙德里安：屋里放         %s" % ("✔" if mh_in else "✘"))
 	print("  蒙德里安：门槛上不响     %s" % ("✔" if mh_porch else "✘"))
 	print("  蒙德里安：屋外不响       %s" % ("✔" if mh_out else "✘"))
+	print("  门厅：一楼也响           %s" % ("✔" if hall_in else "✘"))
+	print("  门厅：二楼也响           %s" % ("✔" if hall_2f else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
 		and absf(es_st.loop_offset - 22.7796) < 0.01 \
@@ -469,7 +520,8 @@ func _run() -> void:
 		and hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 \
 		and hut_in and hut_out and hut_door_silent and hut_inside_plays \
 		and mh_st.loop and absf(mh_st.get_length() - 139.1724) < 0.01 \
-		and mh_in and mh_porch and mh_out
+		and mh_in and mh_porch and mh_out \
+		and hall_in and hall_2f
 	print("\n  总判定：%s" % ("全部通过 ✔" if all_ok else "**有失败 ✘**"))
 	quit(0 if all_ok else 1)
 

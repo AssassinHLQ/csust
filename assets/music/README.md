@@ -15,6 +15,10 @@
 | `hut_theme.ogg` | 「临时服务器据点」小屋的 BGM（走进去开、走出去停） | 「碧蓝档案OST Vol.1」P44「Daily Routine 247（阿罗娜／彩奈）」，© NEXON Games / Yostar |
 | `mondrian_theme.ogg` | 蒙德里安大楼的 BGM（进屋开、出门停） | 「碧蓝档案OST Vol.1」P5「Midsummer Cat」，© NEXON Games / Yostar |
 
+⚠️ `mondrian_theme.ogg` **两处共用**：`game.tscn` 里的蒙德里安大楼（`MondrianHouse`）
+和 `next_level.tscn` 里的门厅（`Hall`）放的是同一首、同一个曲目名 `mondrian`，
+只是各自的触发区不同（前者一场、后者三层通高）。
+
 **只有本地放好这些文件，对应的房间才有音乐**。没有它时不会报错：
 `scripts/music.gd` 会 `push_warning` 一次然后静默跳过，游戏照常跑
 （和 `assets/ui_sprout/`、`assets/ui_font/` 一样的处理）。
@@ -298,7 +302,14 @@ y[-8ms:] *= 线性淡出到 0                  # 把末尾那点残余（0.0009�
   `mondrian_house_baked.tscn` 的根节点本来就挂着这个脚本（`auto_build = false`），
   所以直接写在这里；尺寸按脚本自己的 `HALF_W/HALF_D/WALL_T` 常量算，
   内壁再内缩 0.8 m，高度 0~7.6（两层都覆盖）
-- `scripts/_verify_music.gd` —— 自检：**六个房间**的循环开关、进/出播放与停止
-  （小屋那段还验「门槛上不响 / 进门就响」；大楼那段验「屋里放 / 门槛不响 / 屋外不响」）
+- `scripts/hall_music.gd` —— **next 关卡**的门厅（挂在 `scenes/mondrian_hall.tscn` 根节点上，
+  那个场景根节点本来没有脚本）。三层楼板的水平范围各不相同（F1 x −11.75~5.75、
+  F2 −11.90~7.90、F3 −7.90~9.90），所以运行时扫 `Interior` 里
+  `F1_Floor`/`F2_`/`F3_` 的楼板盒取并集，再每边内缩 0.8 m、顶部抬 1.6 m 覆盖三楼
+- `scripts/_verify_music.gd` —— 自检：**六个场景**的循环开关、进/出播放与停止
+  （小屋那段还验「门槛上不响 / 进门就响」；大楼那段验「屋里放 / 门槛不响 / 屋外不响」；
+  门厅那段验「一楼响 / 二楼响」）。
+  ⚠️ 门厅那段必须放在加载 `game.tscn` **之前** —— `next_level.tscn` 是整关，
+  坐标和 game.tscn 重叠，同时在场时 game 的玩家会落进门厅的音乐区
   （电竞房那段还验「房子藏着时不出声、现身才出声」；画室 609 那段验
   「屋里放 / 出门停 / 屋顶不算屋里」；小屋那段验「屋里放 / 出屋停」）
