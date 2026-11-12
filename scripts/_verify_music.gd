@@ -345,7 +345,10 @@ func _run() -> void:
 		% [("✔" if gd_st.loop and absf(gd_st.loop_offset) < 0.01
 				and absf(gd_st.get_length() - 130.1927) < 0.01 else "✘"),
 			gd_st.loop_offset, gd_st.get_length()])
-	print("  循环开关（电竞房）      %s" % ("✔" if es_st.loop else "✘"))
+	print("  循环开关（电竞房）      %s（loop_offset=%.4f，应 22.7796；全长 %.2f s，应 92.07）"
+		% [("✔" if es_st.loop and absf(es_st.loop_offset - 22.7796) < 0.01
+				and absf(es_st.get_length() - 92.07) < 0.02 else "✘"),
+			es_st.loop_offset, es_st.get_length()])
 	print("  循环开关（画室609）     %s" % ("✔" if r609_st.loop else "✘"))
 	print("  画室609：接回 1:16      %s（loop_offset = %.4f s，应约 76.00；全长 %.2f s，应 151.90）"
 		% [("✔" if absf(r609_st.loop_offset - 75.9992) < 0.01
@@ -374,6 +377,8 @@ func _run() -> void:
 	print("  临时据点：出屋停         %s" % ("✔" if hut_out else "✘"))
 	var all_ok := no_fade \
 		and shop_st.loop and gd_st.loop and es_st.loop and r609_st.loop \
+		and absf(es_st.loop_offset - 22.7796) < 0.01 \
+		and absf(es_st.get_length() - 92.07) < 0.02 \
 		and absf(gd_st.get_length() - 130.1927) < 0.01 \
 		and r609_st.loop_offset > 75.5 and r609_st.loop_offset < 77.5 \
 		and absf(r609_st.loop_offset - 75.9992) < 0.01 \
