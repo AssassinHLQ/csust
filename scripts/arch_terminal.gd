@@ -31,6 +31,8 @@ signal first_input
 signal open_bili_requested
 ## 玩家敲 `arona` 时发出：屏幕里换成阿洛娜（见 `arona_stage.gd` / `arona_page.gd`）
 signal open_arona_requested
+## 玩家敲 `plana` 时发出：屏幕里换成普拉娜（绿幕素材抠像 → 逐帧播放，见 `plana_page.gd`）
+signal open_plana_requested
 
 const COLS := 100
 const ROWS := 40
@@ -287,9 +289,16 @@ func _run(cmd: String) -> void:
 		"help":
 			_say("commands (all fake, for show only):")
 			for k in ["help", "neofetch", "ls", "cat readme.txt", "uname -a",
-					"whoami", "pacman -Syu", "df -h", "bilibili", "arona", "clear", "exit"]:
+					"whoami", "pacman -Syu", "df -h", "bilibili", "arona", "plana",
+					"clear", "exit"]:
 				_push_line([["  ", DIM], [k, KEY_CYAN]])
 			_push_line([["  ", DIM], ["anything else: zsh: command not found", DIM]])
+		"plana":
+			# 屏幕里换成普拉娜（绿幕抠像的逐帧动画，见 `plana_page.gd`）。
+			# 用户 2026-11-12：「扣绿幕，输入 plana 就出现这」。
+			_push_line([["PLANA 连接中 ...", KEY_CYAN]])
+			_push_line([["(offline demo -- silhouette from a green-screen clip)", DIM]])
+			open_plana_requested.emit()
 		"arona":
 			# 屏幕上换成阿洛娜（3D 模型 + 自己的相机/灯光，见 `arona_stage.gd`）。
 			# 用户 2026-11-12：「打 arona 可以出现电脑里面的阿洛娜」。

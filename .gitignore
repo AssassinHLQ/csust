@@ -1,4 +1,4 @@
-﻿# ---- Godot 引擎缓存与产物（官方模板）----
+# ---- Godot 引擎缓存与产物（官方模板）----
 .godot/
 /android/
 *.translation
@@ -70,6 +70,16 @@
 /assets/cg/pv/*.webp
 /assets/cg/pv/*.webp.import
 !/assets/cg/pv/README.md
+# AI 超分（Real-ESRGAN 4× → 高 1440）后的同名图：同样只是本地产物，
+# 由 `_tools/upscale_pv_images.ps1` 从上面的原图重新生成，不入库。
+/assets/cg/pv_hd/*.png
+/assets/cg/pv_hd/*.png.import
+/assets/cg/pv_hd/*.jpg
+/assets/cg/pv_hd/*.jpg.import
+/assets/cg/pv_hd/*.jpeg
+/assets/cg/pv_hd/*.jpeg.import
+/assets/cg/pv_hd/*.webp
+/assets/cg/pv_hd/*.webp.import
 /assets/music/pv_theme.mp3
 /assets/music/pv_theme.mp3.import
 
@@ -134,6 +144,18 @@ __pycache__/
 # 游戏开发部部室（Sketchfab 作者：起航扬帆了）—— 下载包无许可文件、原页面 404，
 # 授权未核实，只允许本地学习演示，不随仓库分发。见 credits.gd 与 CREDITS.md
 /models/gamedev_room/
+
+# ── 普拉娜（电脑里第二个虚拟助手，终端敲 `plana` 出现）—— 2026-11-12 ──
+#
+# 来源：用户给的绿幕视频 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`
+#      （720×786 / 30 fps / 29.53 s）。用 ffmpeg 抠掉绿幕（底色实测 #46E200）
+#      + despill 去绿边，重采样成 443 帧 360×393 的带 alpha PNG。
+#      **授权未核实**，只允许本地学习演示，不随仓库分发 —— 与 `/models/arona/` 同口径。
+#
+# 重新生成：`_tools/fetch_plana_frames.ps1`（脚本里有参数理由 + 两个坑的说明）
+# 缺帧不影响启动：`plana_page.gd` 只 push_warning，敲 `plana` 会停在终端画面。
+# ⚠️ 连 `.import` 一起忽略 —— 443 个存根文件进仓库没有意义。
+/assets/plana_frames/
 
 # SpaceX Falcon 9（Sketchfab 作者：Forest Katsch，CC BY-NC 4.0）—— 带 NC（禁商用）条款，
 # 按「第三方素材一律不进仓库」的既有口径排除。缺这个文件时 `rocket_ride.gd` 会

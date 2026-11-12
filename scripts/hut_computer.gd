@@ -54,6 +54,8 @@ var bili: BiliBrowser
 ## 阿洛娜的 3D 舞台与界面层（终端敲 `arona` 打开）
 var arona_stage: AronaStage
 var arona_page: AronaPage
+## 普拉娜的逐帧动画界面层（终端敲 `plana` 打开）
+var plana_page: PlanaPage
 
 var _using := false
 var _in_range := false
@@ -161,6 +163,15 @@ func _build() -> void:
 	arona_page.visible = false
 	arona_page.close_requested.connect(_close_arona)
 	viewport.add_child(arona_page)
+
+	# 普拉娜：纯 2D 逐帧（绿幕抠像的 PNG 序列），跟阿洛娜同一层位置
+	terminal.open_plana_requested.connect(_open_plana)
+	plana_page = PlanaPage.new()
+	plana_page.name = "PlanaPage"
+	plana_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	plana_page.visible = false
+	plana_page.close_requested.connect(_close_plana)
+	viewport.add_child(plana_page)
 
 	var screen_mat := StandardMaterial3D.new()
 	screen_mat.albedo_texture = viewport.get_texture()
@@ -346,6 +357,8 @@ func _input(event: InputEvent) -> void:
 			bili.feed(event)
 		elif arona_page != null and arona_page.visible:
 			arona_page.feed(event)
+		elif plana_page != null and plana_page.visible:
+			plana_page.feed(event)
 		else:
 			terminal.feed(event)
 		get_viewport().set_input_as_handled()
@@ -392,6 +405,25 @@ func _close_arona() -> void:
 		return
 	arona_page.close()
 	arona_stage.set_active(false)
+	terminal.visible = true
+	Sfx.play("ui_close", -8.0)
+
+
+## 终端敲 `plana` → 屏幕换成普拉娜（逐帧动画）。
+## 和 `_open_arona()` 一样要把终端藏起来：终端每帧铺一整屏不透明底色。
+func _open_plana() -> void:
+	if plana_page == null:
+		return
+	terminal.visible = false
+	plana_page.open()
+	Sfx.play("ui_open", -8.0)
+	print("[电脑] 切换普拉娜（逐帧 %d 帧，离线）" % plana_page.frame_count())
+
+
+func _close_plana() -> void:
+	if plana_page == null:
+		return
+	plana_page.close()
 	terminal.visible = true
 	Sfx.play("ui_close", -8.0)
 
@@ -452,10 +484,11 @@ func _close() -> void:
 	if not _using:
 		return
 	_using = false
-	# 合上电脑时把假 B 站 / 阿洛娜一起收掉 —— 不然下次开机会直接看到上次的画面
+	# 合上电脑时把假 B 站 / 阿洛娜 / 普拉娜一起收掉 —— 不然下次开机会直接看到上次的画面
 	if bili != null:
 		bili.close()
 	_close_arona()
+	_close_plana()
 	_overlay.visible = false
 	_hint.visible = _in_range
 	_stand()

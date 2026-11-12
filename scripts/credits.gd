@@ -111,6 +111,23 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "assets/plana_frames",
+		"title": "普拉娜（电脑里第二个虚拟助手，终端敲 `plana` 出现）",
+		"author": "绿幕素材由用户提供（来源为公开投稿的「普拉娜绿幕素材」，上传者未署名）；"
+			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
+		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
+			+ "本仓库不分发，克隆者需自行合法取得",
+		"distributed": false,
+		"source": "用户本地的 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`"
+			+ "（720×786 / 30 fps / 29.53 s，绿幕底色 #46E200）",
+		"license_file": "",
+		"note": "2026-11-12 用户要求「扣绿幕，输入 plana 就出现这」。ffmpeg 抠像"
+			+ "（chromakey + despill 去绿边）→ 15 fps / 360×393 带 alpha PNG 共 443 帧"
+			+ "（脚本 `_tools/fetch_plana_frames.ps1`，43.2 MB）。`.gitignore` 排除了整个目录。"
+			+ "Godot 播 .ogv 拿不到 alpha（实测最小 alpha=255），所以只能序列帧 + 环形缓冲加载",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/arona",
 		"title": "阿洛娜（小屋电脑里那个虚拟助手，终端敲 `arona` 出现）",
 		"author": "爱给网（aigei.com）用户上传的「碧蓝档案 阿罗娜 3d模型」，作者未署名；"
