@@ -21,6 +21,14 @@ extends Control
 signal exit_requested
 ## 玩家第一次敲键（用来把光标切到「有焦点」状态）
 signal first_input
+## 玩家敲 `bilibili` 时发出开「假 B 站」窗口（见 `bili_browser.gd`）
+##
+## ⚠️ 为什么命令名只能用英文：`feed()` 只收 **ASCII 32~126**（见下面那段注释），
+##    中文根本打不进来 —— 用户 2026-11-12 在终端里敲「哔哩哔哩」只漏进去
+##    `awraa zzcxzsa` 这种拼音字母，就是被这个过滤挡掉的。
+##    Godot 在 Windows 上拿不到输入法的候选文字，硬做中文输入不现实，
+##    所以这里给几个**英文别名**；中文那个只写在 help 里当注释，敲不进来也无所谓。
+signal open_bili_requested
 
 const COLS := 100
 const ROWS := 40
@@ -277,9 +285,15 @@ func _run(cmd: String) -> void:
 		"help":
 			_say("commands (all fake, for show only):")
 			for k in ["help", "neofetch", "ls", "cat readme.txt", "uname -a",
-					"whoami", "pacman -Syu", "df -h", "clear", "exit"]:
+					"whoami", "pacman -Syu", "df -h", "bilibili", "clear", "exit"]:
 				_push_line([["  ", DIM], [k, KEY_CYAN]])
 			_push_line([["  ", DIM], ["anything else: zsh: command not found", DIM]])
+		"bilibili", "bili", "b23", "blbl":
+			# 开「假 B 站」（`scripts/bili_browser.gd`，纯本地，不联网）。
+			# 用户 2026-11-12：「终端敲 bilibili → 打开游戏内的 B 站风格窗口」。
+			_push_line([["正在打开 bilibili ...", KEY_CYAN]])
+			_push_line([["(offline demo -- no network, nothing is really loaded)", DIM]])
+			open_bili_requested.emit()
 		"neofetch":
 			_neofetch()
 		"ls":

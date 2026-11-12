@@ -49,6 +49,8 @@ const VP_SIZE := Vector2i(832, 664)
 
 var terminal: ArchTerminal
 var viewport: SubViewport
+## 假 B 站窗口（终端敲 `bilibili` 打开）
+var bili: BiliBrowser
 
 var _using := false
 var _in_range := false
@@ -126,7 +128,18 @@ func _build() -> void:
 	# 不要再手动设 size —— 锚点布局会覆盖掉，设了反而让人误以为是它在起作用。
 	terminal.set_anchors_preset(Control.PRESET_FULL_RECT)
 	terminal.exit_requested.connect(_close)
+	terminal.open_bili_requested.connect(_open_bili)
 	viewport.add_child(terminal)
+
+	# 假 B 站（`bilibili` 命令打开）。**必须放同一个 SubViewport** ——
+	# 终端画面是「一份内容、两处显示」（桌上显示器的材质 + 全屏覆盖层），
+	# 放外面就只有覆盖层看得到、桌上那台显示器还是终端。
+	bili = BiliBrowser.new()
+	bili.name = "BiliBrowser"
+	bili.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bili.visible = false
+	bili.close_requested.connect(_close_bili)
+	viewport.add_child(bili)
 
 	var screen_mat := StandardMaterial3D.new()
 	screen_mat.albedo_texture = viewport.get_texture()
@@ -307,12 +320,33 @@ func _input(event: InputEvent) -> void:
 			_close()
 			get_viewport().set_input_as_handled()
 			return
-		terminal.feed(event)
+		# 假 B 站开着的时候，按键归它 —— 否则方向键会被终端当成输入字符
+		if bili != null and bili.visible:
+			bili.feed(event)
+		else:
+			terminal.feed(event)
 		get_viewport().set_input_as_handled()
 		return
 	if k.keycode == KEY_F and _in_range:
 		_open()
 		get_viewport().set_input_as_handled()
+
+
+## 终端敲 `bilibili` → 盖上一层假 B 站（终端画面留着，回来还在）
+func _open_bili() -> void:
+	if bili == null:
+		return
+	bili.open()
+	Sfx.play("ui_open", -8.0)
+	print("[电脑] 打开假 B 站（离线 demo，不联网）")
+
+
+## B 站里按 Esc 退回终端
+func _close_bili() -> void:
+	if bili == null:
+		return
+	bili.close()
+	Sfx.play("ui_close", -8.0)
 
 
 func _open() -> void:
@@ -371,6 +405,9 @@ func _close() -> void:
 	if not _using:
 		return
 	_using = false
+	# 合上电脑时把假 B 站一起收掉 —— 不然下次开机会直接看到上次的播放页
+	if bili != null:
+		bili.close()
 	_overlay.visible = false
 	_hint.visible = _in_range
 	_stand()
