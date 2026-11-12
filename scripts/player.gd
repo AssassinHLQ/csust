@@ -403,10 +403,35 @@ func _notification(what: int) -> void:
 
 ## 能不能收鼠标：带 `--no-capture` 的探针/自检永远不收；
 ## 正常启动还要求窗口已经拿到焦点（后台窗口不抢鼠标）。
+##
+## ⚠️ 2026-11-12 追加第三条：**开场 PV 期间不收**。
+##    用户实测「按 F5 之后开场 PV 里看不见鼠标、点不到开始游戏」——
+##    本喵原先只在 `game.gd::_play_title_intro()` 里把鼠标设成 VISIBLE，
+##    结果玩家这边**只要窗口再获一次焦点**（从编辑器 F5 起来时必然发生）
+##    就又把光标收走了。而那个阶段（PV 里）**鼠标必须能点**，不该被任何一方抢。
+##
+##    判据直接看 `get_tree().current_scene` 下有没有还在播的开场层，
+##    不再多存一份状态（PV 层自己会 `queue_free()`，看不到就是没在播）。
 func _may_capture() -> bool:
 	if OS.get_cmdline_user_args().has("--no-capture"):
 		return false
+	if _title_intro_playing():
+		return false
 	return DisplayServer.window_is_focused()
+
+
+## 开场 PV 正在播吗？（它是一层 CanvasLayer，挂在当前场景下，名字 `TitleIntro`）
+func _title_intro_playing() -> bool:
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var scene := tree.current_scene
+	if scene == null:
+		return false
+	var n := scene.get_node_or_null("TitleIntro")
+	if n == null or not is_instance_valid(n):
+		return false
+	return n.has_method("is_playing") and bool(n.call("is_playing"))
 
 
 ## 这个鼠标按钮是不是滚轮（上 / 下 / 左 / 右）。

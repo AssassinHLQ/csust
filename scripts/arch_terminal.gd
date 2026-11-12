@@ -130,6 +130,26 @@ var _blink_t := 0.0
 var _font: Font
 
 
+## 等宽字体候选。**真正等宽的排第一**（用户 2026-11-12：
+## 「这个 arch 的字体是不是有一点点乱了」）。
+##
+## ── 为什么会乱 ──
+## 本控件已经在按「字符格」画（每个字的 x = `col * CELL.x`），可**字形本身**
+## 还得塞进 8 px 的格子：`assets/ui/font.ttf` 是 Fusion Pixel 的**中文像素字体**，
+## 它的西文字宽**不是等宽的**，`i` / `M` / `.` 各自宽度不同，压进同一个格子
+## 就会东倒西歪、笔画挤在一起。中文没问题（本来就是方框字）。
+## 所以：往 `assets/ui/` 丢一个等宽字体（改名 `mono.ttf`）就能立刻变整齐；
+## 没有等宽字体时退回 CJK 字体 —— 中文照常显示，只是西文会略歪。
+const MONO_CANDIDATES := [
+	"res://assets/ui/mono.ttf",
+	"res://assets/ui/LiberationMono-Regular.ttf",
+	"res://assets/ui/JetBrainsMono-Regular.ttf",
+	"res://assets/ui/DejaVuSansMono.ttf",
+]
+## 退路：中文像素字体（原来一直在用的那份）
+const CJK_CANDIDATES := ["res://assets/ui/font.ttf", "res://assets/ui_sprout/font.ttf"]
+
+
 func _ready() -> void:
 	_font = _pick_font()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -137,13 +157,33 @@ func _ready() -> void:
 	reset()
 
 
+## 自检 / `hut_computer.gd` 的底部提示行共用这一份选择逻辑。
+func terminal_font() -> Font:
+	if _font == null:
+		_font = _pick_font()
+	return _font
+
+
 func _pick_font() -> Font:
-	for p in ["res://assets/ui/font.ttf", "res://assets/ui_sprout/font.ttf"]:
+	for p in MONO_CANDIDATES:
+		if ResourceLoader.exists(p):
+			var f := load(p) as Font
+			if f != null:
+				return f
+	for p in CJK_CANDIDATES:
 		if ResourceLoader.exists(p):
 			var f := load(p) as Font
 			if f != null:
 				return f
 	return ThemeDB.fallback_font
+
+
+## 现在用的是不是等宽字体（自检用；false = 退回了中文像素字体，西文会略歪）
+func uses_mono_font() -> bool:
+	for p in MONO_CANDIDATES:
+		if ResourceLoader.exists(p):
+			return true
+	return false
 
 
 func _process(delta: float) -> void:

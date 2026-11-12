@@ -51,6 +51,12 @@ static var _active_root_id := 0
 static var _last_window_mode := ""
 static var _applying_window := false
 
+## 4K 截图期间：强制 3D 渲染缩放 = 1.0，并且**不碰窗口模式**
+## （窗口尺寸/模式由 `scripts/free_camera.gd::capture_4k()` 自己控制）。
+## 不加这个的话，截图把窗口改成 4K 会触发 `size_changed` → `apply_window_mode()`
+## 又按设置把窗口拉回最大化 —— 拍出来还是原分辨率。
+static var capture_override := false
+
 
 ## 视口尺寸 → 自动分辨率上限。**纯函数**：不改任何状态，`_auto_scale` 由调用方存。
 ##
@@ -84,6 +90,9 @@ static func apply(node: Node, auto_scale: float) -> Dictionary:
 	# ① 3D 渲染缩放：只**乘**自动上限（窗口极大时它小于 1），不放大过 1.0
 	var res := float(GameSettings.value("resolution_scale"))
 	var target := clampf(auto_scale * res, 0.25, 1.0)
+	if capture_override:
+		# 4K 截图：不管自动上限和用户缩放，3D 一律按原生分辨率渲染
+		target = 1.0
 	if not is_equal_approx(vp.scaling_3d_scale, target):
 		vp.scaling_3d_scale = target
 
@@ -231,6 +240,9 @@ static func apply_shadows(node: Node) -> void:
 ##      修法：屏幕数 ≤ 0 或可用区太小时**什么都不做**（宁可保持原样，也不摆到屏幕外）。
 static func apply_window_mode() -> void:
 	if DisplayServer.get_name() == "headless" or _applying_window:
+		return
+	if capture_override:
+		# 4K 截图自己管窗口，别在这里按设置抢回去
 		return
 	var mode := String(GameSettings.value("window_mode"))
 	var want := DisplayServer.WINDOW_MODE_MAXIMIZED

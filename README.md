@@ -7268,3 +7268,65 @@ Black（全黑底，盖住 3D 世界）
 ⚠️ 模型基于通用照片/动画，对**细线（光环、招牌描边）**偶尔会「脑补」出一点锯齿感；
 比原图的「糊成一团」还是明显好。想要更保守就调低 `sharpen`，或只保留超分不叠锐化。
 
+
+## 14.6 拍摄工具：自由摄像头 F7 + 离屏 4K 截图 F8（2026-11-12）
+
+用户：「f3 模式新增 f7，切换自由摄像头 wasd qe 方便拍摄」「我的项目怎么开四 k」。
+
+### 键位
+
+| 键 | 作用 |
+|---|---|
+| `F3` | 开发者模式（先按这个） |
+| `F7` / `Esc` | 进 / 出自由摄像头 |
+| `WASD` | 沿视线平移（复用项目 InputMap） |
+| `Q` / `E` | 世界坐标下降 / 上升 |
+| 鼠标 | 转视角（进入时自动捕获） |
+| `Shift` / `Ctrl` | 加速 ×4 / 减速 ×0.25 |
+| 滚轮 | 调基础速度（1~60 m/s） |
+| `F8` | **离屏 4K 截图**（窗口全程不动） |
+
+### 为什么 4K 是「离屏 SubViewport」而不是把窗口拉大
+
+第一版把窗口临时拉到 4K，用户实测**三次闪退**：日志最后一行都是
+`_fit_render_scale 渲染尺寸 (3840, 2000)`。而探针从窗口化 1600×900 起步
+一直复现不出来 —— 真正崩的是「**最大化 → 切窗口化 → 瞬间拉 3840×2000**」
+（Vulkan swapchain 重建在这台机器上不稳）。
+
+现在：新建 `3840 × 当前宽高比` 的 `SubViewport`，共享同一个 `World3D`，
+复制当前相机渲一帧再 `get_image()`。窗口尺寸/模式**全程不变**。
+⚠️ 必须把相机的 `compositor` 一并复制给离屏相机，否则 GDGS Compute 后端
+一格泼溅都不画（很安静地不画）。
+
+### 相机只能有一台
+
+`splat_compositor.gd` 会给「当前相机」挂 Compositor。自由摄像头**不新建**相机，
+而是把玩家那台 `Camera3D` 从弹簧臂上借下来、挂到自由摄像头节点下飞，
+退出时挂回去并还原本地变换 / fov / near。两台相机会同时持有两份 Compositor，
+4K 渲染时直接崩 Vulkan —— 这是第一次闪退的真凶。
+
+### F8 崩溃顺带暴露的两个坑
+
+1. `game.gd::_report_input()` 每秒一次的「鼠标没捕获就自动收回」，
+   把**开场 PV 故意的 VISIBLE** 当成丢了鼠标 → 用户「一开始有鼠标，加载完不见了」。
+   现在三处都认 `_title_intro_playing()`：`player._may_capture()`、
+   `game._report_input()`、`title_intro._release_mouse()`。
+2. `game.gd::_player_state()` 被误删一行换行，已修。
+
+### 电脑界面的排版（顺手）
+
+- 全屏覆盖层左右各留 90 px → 改成贴满整屏（16 px 边框），
+  `TextureRect` 从 `KEEP_ASPECT_CENTERED` 改成 `STRETCH_SCALE`，不再两边黑。
+- 底部「Esc 或 Ctrl+Q 退出」改用终端字体。
+- 新增 `assets/ui/mono.ttf`（**JetBrains Mono**，OFL 1.1，许可原文
+  `assets/ui/LICENSE_JetBrainsMono_OFL.txt`）。`arch_terminal.gd` 和
+  `bili_browser.gd` 都优先用它 —— 原来用 Fusion Pixel 中文像素字体，
+  西文不等宽，按字符格画就会「有一点点乱 / 没对齐」。中文走系统字体回退。
+
+### 验证
+
+- `_verify_free_camera.gd`：**28/28**（开关、接管/还原、WASD/QE 位移、帮助条）。
+- `_probe_f8_offscreen.gd`（真窗口、带泼溅）：连拍 2 次 4K，
+  **窗口尺寸/模式全程未变**，`3840×2160`，画面有内容。
+- `_probe_intro_mouse_race.gd`：7+ 项全过（含模拟 FOCUS_IN 与每秒自愈周期）。
+- `boot_check.sh 900` 无 SCRIPT ERROR。

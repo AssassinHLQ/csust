@@ -105,6 +105,10 @@ const PLAY_OPENING := true
 const TitleIntroScript := preload("res://scripts/title_intro.gd")
 const PLAY_TITLE_INTRO := true
 
+## ── 自由摄像头（开发者模式 F7，2026-11-12 用户要的拍摄工具）──
+## 见 `scripts/free_camera.gd` 文件头：WASD 平移 / QE 升降 / F8 拍 4K。
+const FreeCamScript := preload("res://scripts/free_camera.gd")
+
 var _floor_carved := false
 ## 加载成功的房间场地（挖地板洞要用它的世界包围盒）
 var _room_scene: SplatScene = null
@@ -146,6 +150,8 @@ const PERF_REFRESH := 0.2
 var _perf_layer: CanvasLayer
 var _perf_label: Label
 var _perf_clock := 0.0
+## 自由摄像头（开发者模式 F7 懒建；见 `_toggle_free_cam()`）
+var _free_cam: Camera3D
 ## 最近 120 帧的真实帧间隔（ms）。p99 比平均帧率有用得多：
 ## 「平均 60 fps 但 p99 130 ms」玩起来就是一顿一顿，平均帧率完全看不出来。
 ## 注：`Performance.TIME_PROCESS` 在这个工程里和真实帧间隔对不上（浮层开着报
@@ -198,18 +204,52 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and (event as InputEventKey).pressed:
 		var key := event as InputEventKey
 		_keys_seen += 1
-		if not key.echo and (key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY):
-			_toggle_perf_overlay()
-			# ⚠️ F3 **不要** `set_input_as_handled()`：`player.gd::_input` 排在
-			#    本函数**之后**（树里 Player 在前），一吃掉 player 那半边的
-			#    「开发者模式开关」就永远轮不到了。
-			#    （反过来的坑也踩过：player 先吃、game 收不到 → 浮层打不开。
-			#     现在两边都不吃 F3，各管各的一半。）
-			#
-			# ⚠️ 暂停时也要开开发者模式：Player 是 PAUSABLE，开菜单时它收不到
-			#    `_input`，只剩本函数（ALWAYS）。不在这里补一刀的话，
-			#    就是「暂停时按 F3，面板出来了但 F4/F5/F6 不生效」。
-			DevMode.toggle()
+		if not key.echo:
+			if key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY:
+				_toggle_perf_overlay()
+				# ⚠️ F3 **不要** `set_input_as_handled()`：`player.gd::_input` 排在
+				#    本函数**之后**（树里 Player 在前），一吃掉 player 那半边的
+				#    「开发者模式开关」就永远轮不到了。
+				#    （反过来的坑也踩过：player 先吃、game 收不到 → 浮层打不开。
+				#     现在两边都不吃 F3，各管各的一半。）
+				#
+				# ⚠️ 暂停时也要开开发者模式：Player 是 PAUSABLE，开菜单时它收不到
+				#    `_input`，只剩本函数（ALWAYS）。不在这里补一刀的话，
+				#    就是「暂停时按 F3，面板出来了但 F4/F5/F6 不生效」。
+				DevMode.toggle()
+			elif key.keycode == KEY_F7 or key.physical_keycode == KEY_F7:
+				# F7：开发者模式下的自由摄像头（拍摄用）。
+				# 自由摄像头**激活时**它是场景最后一个子节点，会先一步吃掉 F7/Esc，
+				# 所以这里只负责「关着的时候打开」。
+				if DevMode.is_on():
+					_toggle_free_cam()
+					get_viewport().set_input_as_handled()
+				else:
+					print("[Dev] F7：先按 F3 开开发者模式")
+			elif key.keycode == KEY_F8 or key.physical_keycode == KEY_F8:
+				if DevMode.is_on() and (_free_cam == null or not bool(_free_cam.call("is_active"))):
+					print("[Dev] F8 4K 截图：先按 F7 进自由摄像头")
+				get_viewport().set_input_as_handled()
+
+
+## 自由摄像头开关（F7）。
+##
+## 懒建 + **挂成场景最后一个子节点**：Godot 的 `Node._input` 是**倒序**派发的，
+## 最后一个子节点最先收到 —— 这样自由摄像头激活时能先吃掉 F7/Esc/F8，
+## 不会让 `SettingsMenu` 同时弹出设置菜单。
+func _toggle_free_cam() -> void:
+	if _free_cam == null or not is_instance_valid(_free_cam):
+		var fc := FreeCamScript.new() as Camera3D
+		fc.name = "FreeCam"
+		add_child(fc)
+		fc.call("setup", self)
+		_free_cam = fc
+	_free_cam.call("toggle")
+
+
+## 自检 / 探针用：当前自由摄像头（没建过就是 null）
+func free_camera() -> Camera3D:
+	return _free_cam
 
 
 func _report_input() -> void:
@@ -221,6 +261,17 @@ func _report_input() -> void:
 			note = "   ← ⚠️ **窗口没有前台焦点：键鼠都收不到，点一下游戏窗口即可**"
 		elif get_tree().paused:
 			note = "   ← 游戏被暂停（Esc 设置菜单开着，或正在播剧情对话）"
+		elif _title_intro_playing():
+			# ⚠️⚠️ 2026-11-12 用户实测第三次才逮到这个：
+			#    「一开始有鼠标但是加载完不见了」。
+			#
+			#    凶手就是**下面这一支自愈**：它每秒判一次「有焦点 + 没暂停 +
+			#    鼠标不是 CAPTURED ⇒ 当成丢了、收回来」。
+			#    可开场 PV 期间鼠标**本来就该是 VISIBLE**（要点「开始游戏」），
+			#    于是加载一结束（进到能跑满一秒的节点）就被它一把收走。
+			#
+			#    所以这里必须先认「开场在播」：那是有意的 VISIBLE，不是丢鼠标。
+			note = "   ← 开场 PV 正在播，鼠标保持可见（不收）"
 		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			# 自愈：有焦点、没暂停、鼠标却没被捕获 ⇒ 自己收回来。
 			# （焦点丢失时 Godot 会把鼠标放出来且**不会自动收回**；player.gd 的
@@ -237,6 +288,19 @@ func _report_input() -> void:
 ## 如果 `player.gd` 的 `_ready()` 根本没跑，那么「没捕获鼠标」和「WASD 不动」
 ## 就是**同一个原因**（脚本没执行）；而如果它活得好好的，两个症状就得分开查。
 ## 只看鼠标模式是分不出来的 —— 默认值本来就是 0（VISIBLE）。
+## 开场 PV 正在播吗？（和 `player.gd::_title_intro_playing()` 同一套判据）
+##
+## ⚠️ 三处要一起认这一条，少一处就会把光标抢走：
+##   ① `player.gd::_may_capture()`（窗口获焦时别再抢）
+##   ② 本文件 `_report_input()` 的自愈分支（每秒那把「自动收回」）
+##   ③ `title_intro._release_mouse()`（自己放开放）
+func _title_intro_playing() -> bool:
+	var n := get_node_or_null("TitleIntro")
+	if n == null or not is_instance_valid(n):
+		return false
+	return n.has_method("is_playing") and bool(n.call("is_playing"))
+
+
 func _player_state() -> String:
 	var pl := get_node_or_null("Player")
 	if pl == null:
@@ -825,6 +889,18 @@ func _play_title_intro() -> void:
 	var intro := TitleIntroScript.new() as Node
 	intro.name = "TitleIntro"
 	add_child(intro)
+	# ⚠️ 鼠标：`player.gd::_ready()` 已经把它设成 CAPTURED 了（第三人称要那样），
+	#    而开场 UI 是要**用鼠标点「开始游戏」**的 —— 不收回来，光标就是隐形的
+	#    （用户 2026-11-12 实测：「开始 pv 没看见鼠标」）。这里先放开一次，
+	#    因为 `title_intro._release_mouse()` 在 `play()` 里才跑，
+	#    而这中间 `_ready()` 还要同步做一长串建场景的活。
+	if not OS.get_cmdline_user_args().has("--no-capture"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# ⚠️⚠️ 光放一次不够（2026-11-12 第二次实测仍然看不见）：
+	#    `player.gd::_notification(FOCUS_IN)` 会在窗口获焦时**再把光标抢回去**，
+	#    而从编辑器 F5 起来的窗口必然会经历一次 FOCUS_IN。
+	#    所以 `player.gd::_may_capture()` 里也加了「开场 PV 在播就不收」那条闸
+	#    —— 两处一起改才真的稳，单改这一处会被玩家那条路径抵消。
 	# 黑幕盖着的时候人还在场上：不锁住的话，玩家在看不见的情况下按 WASD /
 	# 空格能把自己走到悬崖边或者掉下去，淡出那一刻画面就是"人已经在别处"。
 	# `set_ride_lock(true)` 正好是现成的语义 —— 不落重力、不吃移动输入、

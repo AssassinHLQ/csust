@@ -132,6 +132,18 @@ var _slideshow_gen := 0
 var _music: AudioStreamPlayer
 var _music_held := false
 
+## ── 鼠标：开场期间必须**放开**（2026-11-12 实测翻车）──
+##
+## 病根：`player.gd::_ready()` 会 `Input.mouse_mode = CAPTURED`（正常第三人称要那样），
+## 而本层在 `game.gd::_ready()` 里才建 —— 那一刻鼠标**已经被抓走**。
+## 表现就是用户看到的：「开始 PV 没看见鼠标」，怎么也点不到「开始游戏」。
+## （Windows 的“焦点跟随鼠标”下，点哪儿焦点都能到游戏，但**光标是隐形的**。）
+##
+## 所以：开场期间存下原来的模式、强制 `VISIBLE`；点开始后恢复，
+## 下一帧 `player.gd` 自己会把第三人称要的捕获收回去。
+var _prev_mouse_mode := -1
+var _mouse_owned := false
+
 
 ## 播一遍。`poll` 见文件头；`await` 它，返回时画面已经干净、玩家可以操作了。
 func play(poll: Callable) -> void:
@@ -161,6 +173,8 @@ func play(poll: Callable) -> void:
 	await _run_loading(poll)
 	await _wait_for_start()
 	await _fade_out_all()
+	# 点完开始才把鼠标还给第三人称（开场期间必须看得见光标，见 `_release_mouse()`）
+	_restore_mouse()
 
 	if _layer != null and is_instance_valid(_layer):
 		_layer.queue_free()
@@ -208,6 +222,7 @@ func _black_only() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_layer.add_child(_root)
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_release_mouse()
 	# 黑底：**创建时就是全黑**。第一帧世界可能还没画出来，不能先露一帧再盖。
 	_black = ColorRect.new()
 	_black.name = "Black"
@@ -216,6 +231,36 @@ func _black_only() -> void:
 	_root.add_child(_black)
 	_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	get_viewport().size_changed.connect(_on_viewport_resized)
+
+
+# ── 鼠标：开场期间放开，点开始后还回去 ──────────────────────────────────
+
+## 强制显示光标，并记住原来的模式。
+##
+## ⚠️ 自检 / 探针带 `--no-capture` 时**记成 -1 = 不动鼠标**：
+##    那些用例专门验「跑测试不抢用户鼠标」，这里去放一下就等于把它们的前提推翻。
+func _release_mouse() -> void:
+	_prev_mouse_mode = -1
+	_mouse_owned = false
+	if OS.get_cmdline_user_args().has("--no-capture"):
+		return
+	if DisplayServer.get_name() == "headless":
+		return
+	_prev_mouse_mode = Input.mouse_mode
+	_mouse_owned = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## 把鼠标模式还原成开场前的（第三人称要的是 CAPTURED）。
+##
+## ⚠️ 只在**点过开始**之后读一次：`player.gd` 在再拿到焦点时会自己收回，
+##    这里别每帧去抢；但用户如果一次都没让窗口失焦，那就得靠这一下。
+func _restore_mouse() -> void:
+	if not _mouse_owned:
+		return
+	if _prev_mouse_mode >= 0:
+		Input.mouse_mode = _prev_mouse_mode as Input.MouseMode
+	_mouse_owned = false
 
 
 # ── 正片：PV 图 / CG / 帧序列 / 兜底 ─────────────────────────────────────
@@ -890,6 +935,8 @@ func is_start_ready() -> bool:
 
 
 func _exit_tree() -> void:
+	# 开场被打断（换场景 / 直接退出）时也要把鼠标还回去，别让用户丢了光标
+	_restore_mouse()
 	if _music != null and is_instance_valid(_music):
 		_music.stop()
 	if _music_held:

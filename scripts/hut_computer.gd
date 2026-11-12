@@ -277,18 +277,25 @@ func _build_ui() -> void:
 	_overlay.add_child(dim)
 
 	# 显示器外框：一圈深灰边 + 里面是终端画面
+	#
+	# ⚠️ 2026-11-12 用户：「屏幕能不能更大点，就是两边占满那种」。
+	#    原来左右各留 90 px、上下各 60 px，外面还有一层 `KEEP_ASPECT_CENTERED`
+	#    再按 832×664 的固定画布等比缩放 —— 两边就黑出两大块。
+	#    现在：外框贴满整屏（只留 16 px 给边框本身），画面 `STRETCH_SCALE` 铺满，
+	#    终端画布那边也改成跟着尺寸自适应（见 `arch_terminal.gd` 的 `COLS/ROWS`）。
+	var inset := 16
 	var frame := Panel.new()
 	frame.name = "Frame"
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.offset_left = 90
-	frame.offset_top = 60
-	frame.offset_right = -90
-	frame.offset_bottom = -60
+	frame.offset_left = inset
+	frame.offset_top = inset
+	frame.offset_right = -inset
+	frame.offset_bottom = -inset
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.02, 0.025, 0.035)
 	sb.border_color = Color(0.22, 0.24, 0.28)
-	sb.set_border_width_all(10)
-	sb.set_corner_radius_all(8)
+	sb.set_border_width_all(8)
+	sb.set_corner_radius_all(6)
 	frame.add_theme_stylebox_override("panel", sb)
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(frame)
@@ -296,26 +303,62 @@ func _build_ui() -> void:
 	_screen = TextureRect.new()
 	_screen.name = "ScreenTexture"
 	_screen.texture = viewport.get_texture()
-	_screen.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# `STRETCH_SCALE`：直接铺满外框。终端是字符画，稍微拉伸不会糊，
+	# 关键是**别留黑边**（原来 KEEP_ASPECT_CENTERED 会按画布比例缩）。
+	_screen.stretch_mode = TextureRect.STRETCH_SCALE
 	_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_screen.offset_left = 10
-	_screen.offset_top = 10
-	_screen.offset_right = -10
-	_screen.offset_bottom = -10
+	_screen.offset_left = 8
+	_screen.offset_top = 8
+	_screen.offset_right = -8
+	_screen.offset_bottom = -8
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(_screen)
 
+	# 底部提示行：**用终端那套等宽字体**（用户 2026-11-12：
+	# 「退出提示也在下面用 arch 风格字体」）。原来走的是默认 UI 字体，和终端不一套。
 	var foot := Label.new()
+	foot.name = "Footer"
 	foot.text = "Esc 或 Ctrl+Q 退出电脑（也可以直接输入 exit）· 键盘可以正常打字"
-	foot.add_theme_font_size_override("font_size", 16)
+	foot.add_theme_font_size_override("font_size", 15)
 	foot.add_theme_color_override("font_color", Color(0.62, 0.72, 0.85))
+	# 终端字体（等宽，ASCII 干净）；找得到就换成它，中文靠系统字体回退
+	var term_font := _terminal_font()
+	if term_font != null:
+		foot.add_theme_font_override("font", term_font)
 	foot.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	foot.offset_top = -44
-	foot.offset_left = -240
-	foot.offset_right = 240
+	foot.offset_top = -40
+	foot.offset_left = -320
+	foot.offset_right = 320
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(foot)
+
+
+## 终端用的等宽字体。和 `arch_terminal.gd::_pick_font()` 同一套优先级：
+## 优先找真正的等宽字体（Arch 风格界面就该等宽），找不到再退回 CJK 字体。
+##
+## ⚠️ 这就是用户说的「arch 的字体是不是有一点点乱了」的根源：
+##    原来两边都拿 `assets/ui/font.ttf`（Fusion Pixel 中文像素字体）——
+##    它的**西文字宽不是等宽的**，和终端里 8 px 的字符格对不上，
+##    画一行 ASCII 就会东倒西歪；中文倒是没问题。
+##    所以先找 `assets/ui/mono.ttf`（往这儿丢任何等宽字体即可），
+##    没有才退回原来的 CJK 字体（中文照常显示，只是西文会略歪）。
+const MONO_CANDIDATES := [
+	"res://assets/ui/mono.ttf",
+	"res://assets/ui/LiberationMono-Regular.ttf",
+	"res://assets/ui/JetBrainsMono-Regular.ttf",
+]
+
+
+func _terminal_font() -> Font:
+	for p in MONO_CANDIDATES:
+		if ResourceLoader.exists(p):
+			return load(p) as Font
+	# 退回终端现在实际在用的那一份（保持两边一致）
+	var t := terminal
+	if t != null and t.has_method("terminal_font"):
+		return t.call("terminal_font")
+	return null
 
 
 # ── 交互 ──────────────────────────────────────────────────────────────────────

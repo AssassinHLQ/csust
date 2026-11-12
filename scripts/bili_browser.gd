@@ -95,6 +95,14 @@ const DANMAKU_POOL := [
 	"这波操作满分", "三连了", "终于等到更新", "看完心情很好",
 ]
 
+## 字体：**优先等宽**（`assets/ui/mono.ttf`，用户 2026-11-12：
+## 「哔哩哔哩界面文字没对齐」——这个页面的标题/播放数/提示行都是按列硬排的，
+## 用比例字体会让数字和拉丁字母各走各的宽度，列与列就对不齐了）。
+## 中文没有等宽字形，交给 Godot 的系统字体回退；CJK 本身是方块字，排起来不跳。
+const MONO_CANDIDATES := [
+	"res://assets/ui/mono.ttf",
+	"res://assets/ui/LiberationMono-Regular.ttf",
+]
 const FONT_PATH := "res://assets/ui/font.ttf"
 const FS := 14                       # 正文字号
 const FS_SMALL := 12
@@ -129,6 +137,12 @@ func _ready() -> void:
 
 
 func _pick_font() -> Font:
+	# 先找等宽字体（列对齐靠它），没有才退回原来的 CJK 字体
+	for p in MONO_CANDIDATES:
+		if ResourceLoader.exists(p):
+			var mf := load(p) as Font
+			if mf != null:
+				return mf
 	if ResourceLoader.exists(FONT_PATH):
 		var f := load(FONT_PATH) as Font
 		if f != null:
