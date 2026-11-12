@@ -231,14 +231,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.3, 0, -11.367813)
 [node name="ShopDeck" parent="." unique_id=454651004 instance=ExtResource("22_shopdeck")]
 
 [node name="LotEast" parent="." unique_id=1114352731 instance=ExtResource("19_lot_east")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 52.6, 0, 2)
 
 [node name="GameDevRoom" parent="." unique_id=2057702952 instance=ExtResource("20_gamedev_room")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 51.443455, 0.01, -6.920073)
 
 [node name="EsportsRoom" parent="." unique_id=562515769 instance=ExtResource("21_esports_room")]
 visible = false
-transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 53.26548, 3.61, 13.256798)
+transform = Transform3D(1.5, 0, 0, 0, -1.5, 0, 0, 0, -1.5, 53.26548, 5.415, 13.256798)
 
 [node name="MondrianHouse" parent="." unique_id=2115650812 instance=ExtResource("16_mondrian_baked")]
 

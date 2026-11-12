@@ -63,26 +63,51 @@ func _run() -> void:
 
 	var cx := (bb.position.x + bb.end.x) * 0.5
 	var cz := (bb.position.z + bb.end.z) * 0.5
+	# ── 「地面高度」怎么取（2026-11-12 改）──────────────────────────────
+	# 原来用 `bb.position.y`（**网格 AABB 最小 y**）。房间放大 1.5 倍之后，
+	# 那个最小 y 是**地基**（−2.65 m），不是室内地面 ⇒ 基准整体偏了 1.8 m，
+	# 下面那条「天花板高于头顶」的断言就失去意义了（它连板子都没匹配上）。
+	# 现在改用 **`BaseSteps`（门口那三级台阶）的最低底面**：台阶本来就坐在房间地面上，
+	# 而且台阶跟着房间一起缩放，所以这个基准对任何 scale 都成立。
 	var floor_y := bb.position.y
+	var steps := room.get_node_or_null("BaseSteps")
+	if steps != null:
+		var first_step := true
+		for c in steps.get_children():
+			var cs2 := c as CollisionShape3D
+			if cs2 == null or not (cs2.shape is BoxShape3D):
+				continue
+			var s2: Vector3 = (cs2.shape as BoxShape3D).size
+			var half: Vector3 = cs2.global_transform.basis.get_scale().abs() * s2 * 0.5
+			var bottom := cs2.global_position.y - half.y
+			if first_step or bottom < floor_y:
+				floor_y = bottom
+				first_step = false
+	print("地面基准（台阶底）y = %.3f\n" % floor_y)
 
 	# ① 天花板不该躺在门口高度（这是 2026-11-11 的真凶）
 	#    `物件_8` 是天花板，局部 y 3.3~3.6；房间 Y=-1 翻转后必须落在头顶之上。
 	var ceil_ok := false
-	var ceil_pos := Vector3.ZERO
+	var ceil_seen := 0
 	for c in room.find_children("*", "CollisionShape3D", true, false):
 		var cs := c as CollisionShape3D
 		if cs.name != "P0007_0" or not (cs.shape is BoxShape3D):
 			continue
+		ceil_seen += 1
 		var s := (cs.shape as BoxShape3D).size
-		# 只有「和整间房一样大的薄板」才是那块天花板
-		if s.x < bb.size.x * 0.9 or s.z < bb.size.z * 0.9:
-			continue
 		var aabb := cs.global_transform * AABB(-s * 0.5, s)
-		ceil_pos = aabb.position
-		# 翻转后它的世界底边必须高于玩家头顶（2.10 m）之上
+		# 「和整间房一样大的薄板」——放大后网格 AABB 会变（LOD 换模也会），
+		# 所以比例判据放松到 0.6，并且**无论如何都打印**，免得又是「匹配不上就静默失败」。
+		var big := s.x >= bb.size.x * 0.6 and s.z >= bb.size.z * 0.6
+		print("① P0007_0 板 %.2f×%.2f（房间网格 %.2f×%.2f）→ %s；世界 y %.2f~%.2f，底面需 > %.2f"
+			% [s.x, s.z, bb.size.x, bb.size.z, "算天花板" if big else "尺寸偏小不算",
+				aabb.position.y, aabb.end.y, floor_y + 2.10])
+		if not big:
+			continue
 		ceil_ok = aabb.position.y > floor_y + 2.10
-		print("① 天花板碰撞 P0007_0 世界 y %.2f ~ %.2f（底面需 > %.2f）"
-			% [aabb.position.y, aabb.end.y, floor_y + 2.10])
+		print("   ⇒ 判定：%s" % ("通过" if ceil_ok else "**失败**"))
+	if ceil_seen == 0:
+		print("① 没找到名为 P0007_0 的碰撞形状（天花板板子可能改名了）")
 	_check(ceil_ok, "天花板碰撞不在门口高度（否则会把门封死）")
 
 	# ② 真推三个方向。
