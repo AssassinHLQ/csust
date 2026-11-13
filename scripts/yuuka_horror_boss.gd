@@ -179,6 +179,14 @@ const BEAM_TOP := 44.0
 const BEAM_DAMAGE := 46.0
 const SUMMON_COUNT := 4
 
+## 冲锋枪扫射：射速极快、单发伤害低（用户 2026-11-13「冲锋枪普通攻击但速度特别快」）
+const RAPID_SHOTS := 20
+const RAPID_INTERVAL := 0.05
+const RAPID_DAMAGE := 5.0
+const RAPID_SPEED := 36.0
+const RAPID_SPREAD := 0.7
+const RAPID_SIZE := 0.42
+
 ## 出招节奏（秒）。二阶段 ÷ P2_SPEED。
 const INTERVAL_1 := 5.5
 const INTRO_GRACE := 2.5
@@ -197,7 +205,7 @@ const REVIVE_TO := 0.5         # 回到一半血
 ## （`Exs_Cutin` / `Kneel_Attack_*` / `Move_Jump` / `Normal_Reload` / `Normal_Callsign`）
 const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
 	"spikes", "nova", "phantom", "homing", "gravity",
-	"shield", "kneel", "leapslam", "beam", "summon"]
+	"shield", "kneel", "leapslam", "beam", "summon", "rapid"]
 
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
@@ -565,6 +573,8 @@ func _cast_skill() -> void:
 			await _skill_beam(pc)
 		"summon":
 			await _skill_summon(pc)
+		"rapid":
+			await _skill_rapid(pc)
 		_:
 			await _skill_shockwave()
 	_busy = false
@@ -1410,17 +1420,46 @@ func _skill_summon(pc: Vector3) -> void:
 		await get_tree().create_timer(0.1).timeout
 
 
+# ── 16 冲锋枪扫射 ──
+##
+## 用户 2026-11-13：「要一个快速冲锋枪扫射技能，就是冲锋枪普通攻击但是速度特别快」。
+## 射速 20 发/秒（间隔 0.05 s）、单发只有 5 点，但带 0.7 m 的随机散布 ——
+## 站桩会被糊一脸，边跑边打就只剩零星几发。
+## 弹速 36 m/s、弹体 42%（视觉上像曳光弹），判定仍然是三点一线的扫掠球。
+
+func _skill_rapid(pc: Vector3) -> void:
+	_play_once("Stand_Attack_Ing", 0.08)
+	Sfx.play("fire", -12.0)
+	var n := RAPID_SHOTS + (10 if _phase >= 2 else 0)
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var p := _find_player()
+		var target := pc
+		if p != null:
+			var vel := (p as CharacterBody3D).velocity if p is CharacterBody3D else Vector3.ZERO
+			target = p.global_position + Vector3.UP * 0.9 + vel * 0.12
+		target += Vector3(randf_range(-1.0, 1.0), randf_range(-0.6, 0.9),
+			randf_range(-1.0, 1.0)) * RAPID_SPREAD
+		_spawn_orb(target, "rapid", Vector3.ZERO, RAPID_DAMAGE, RAPID_SPEED, RAPID_SIZE)
+		# 每 4 发补一声枪响（Sfx 自己还有 gap 节流，不会糊成噪音）
+		if i % 4 == 0:
+			Sfx.play("fire", -14.0)
+		await get_tree().create_timer(RAPID_INTERVAL).timeout
+	await get_tree().create_timer(0.25).timeout
+
+
 # ────────────────────────── 光球 ──────────────────────────
 
 ## `kind` 只用于统计（barrage / homing / kneel）；`side` 给追踪弹一点出生偏移；
 ## `dmg_now` / `speed_now` 让不同技能用同一套光球但手感不同。
 func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO,
-		dmg_now := ORB_DAMAGE, speed_now := ORB_SPEED) -> void:
+		dmg_now := ORB_DAMAGE, speed_now := ORB_SPEED, size_scale := 1.0) -> void:
 	var orb := MeshInstance3D.new()
 	orb.name = "HorrorOrb"
 	var sm := SphereMesh.new()
-	sm.radius = 1.1
-	sm.height = 2.2
+	sm.radius = 1.1 * size_scale
+	sm.height = 2.2 * size_scale
 	sm.radial_segments = 16
 	sm.rings = 8
 	orb.mesh = sm
@@ -1876,6 +1915,8 @@ func _debug_cast_inner(kind: String, p: Node3D) -> void:
 			await _skill_beam(pc)
 		"summon":
 			await _skill_summon(pc)
+		"rapid":
+			await _skill_rapid(pc)
 		_:
 			await _skill_shockwave()
 

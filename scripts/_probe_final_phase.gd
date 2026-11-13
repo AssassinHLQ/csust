@@ -219,6 +219,7 @@ func _run() -> void:
 	await _test_leapslam()
 	await _test_beam()
 	await _test_summon()
+	await _test_rapid()
 	_test_all_skills()
 	await _test_revive()
 	await _test_phase2_buffs()
@@ -577,16 +578,30 @@ func _test_summon() -> void:
 		"命中 %d 次" % _hits("summon"))
 
 
+## 冲锋枪扫射：射速 20 发/秒、单发低伤
+func _test_rapid() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "rapid")
+	await _until_idle(45.0)
+	var hp1 := _hp()
+	_check("冲锋枪扫射：连发糊脸", _hits("rapid") >= 3 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("rapid"), hp0, hp1])
+
+
 func _test_all_skills() -> void:
 	var st: Dictionary = _boss.call("status")
 	var counts: Dictionary = st["counts"]
 	var missing: Array[String] = []
 	for n in ["shock", "slam", "barrage", "sweep", "meteor", "spikes",
 			"nova", "phantom", "homing", "gravity",
-			"shield", "kneel", "leapslam", "beam", "summon"]:
+			"shield", "kneel", "leapslam", "beam", "summon", "rapid"]:
 		if int(counts.get(n, 0)) <= 0:
 			missing.append(n)
-	_check("十五个技能都放出来过", missing.is_empty(),
+	_check("十六个技能都放出来过", missing.is_empty(),
 		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
 
 
