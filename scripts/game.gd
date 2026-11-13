@@ -880,7 +880,14 @@ func _apply_scene_entry() -> bool:
 func _play_title_intro() -> void:
 	if not PLAY_TITLE_INTRO:
 		return
-	if OS.get_cmdline_args().has("--script"):
+	# `-- --intro=on`：**强制播**，连 `--script` 也播。
+	# 2026-11-13 加：带 `--script` 的真窗口探针原来永远看不到开场 PV，
+	# 于是「开场第一张图卡几下」这类问题根本没法用探针复现（只能靠猜）。
+	var force := false
+	for a in OS.get_cmdline_user_args():
+		if a == "--intro=on":
+			force = true
+	if OS.get_cmdline_args().has("--script") and not force:
 		return
 	for a in OS.get_cmdline_user_args():
 		if a == "--intro=off":

@@ -56,6 +56,8 @@ const SUB_TEXT := "Blue Archive 二次创作 · 个人非商业作品"
 const SLIDE_SEC := 9.0
 ## 两张图之间交叉淡化多久（秒）。下一张在 `SLIDE_SEC - SLIDE_FADE` 时进场。
 const SLIDE_FADE := 1.0
+## 开场前预载 PV 纹理最多等多久（秒）。超时就按老路慢慢解，别把开场卡死。
+const PREFETCH_MAX_SEC := 8.0
 ## 点开始之后整层淡出多久（秒）。
 const FADE_OUT := 0.9
 ## 开场音乐音量 / 淡入 / 点开始后的淡出（秒）。
@@ -119,6 +121,20 @@ var _start_button: Button
 var _start_hint: Label
 
 var _slides: Array[String] = []
+## 预载好的纹理（下标与 `_slides` 一一对应；预载失败的留 null，运行时再退化去 load）。
+##
+## ⚠️ 2026-11-13 用户：「为什么开始时加载第一张图片一定会卡顿几下才正常」。
+##    实测（`_probe_pv_load_cost.gd`，headless 量的纯 CPU 侧）：
+##      `load()` 一张 pv_hd 要 **44~119 ms**，8 张合计 **531 ms**；
+##      而这些图真实分辨率是 3978×1440 ~ 5850×1440（远超需要）。
+##    60 fps 一帧是 16.7 ms ⇒ **一张图 = 一次肉眼可见的卡**。
+##    而 `_loop_slides()` 原来是把 `_load_texture()` 写在循环里**主线程同步**调的，
+##    于是「第一张图出现」那一帧要独自扛下解码 + 着色器首编译（canvas_item
+##    材质第一次绘制，驱动侧 pipeline 创建通常还要 100~500 ms）。
+##    修法：开场前用后台线程把 8 张全解码好，再在黑底还盖着的时候先画一帧
+##    把着色器编译掉 —— 用户看到的就是「一下就顺了」。
+var _tex_cache: Array[Texture2D] = []
+var _prefetch_done := false
 var _kind := ""
 var _slide_mat: ShaderMaterial
 var _playing := false
@@ -166,6 +182,12 @@ func play(poll: Callable) -> void:
 	# `Music.play("room609")`，不压住就会和 PV 音乐叠在一起。
 	Music.hold(true)
 	_music_held = true
+	# ★ 先把纹理在**后台线程**解码好、并在黑底还盖着时把着色器编译掉，
+	#   这样第一张图出现时就不会卡（原因见 `_tex_cache` 上面那段实测记录）。
+	#   `-- --pv-warmup=off` 可关掉（A/B 对比 / 排查用）。
+	if not _warmup_disabled():
+		await _prefetch_slides()
+		await _warm_up_shader()
 	_start_slideshow()
 	print("[TitleIntro] 正片 = %s（%d 张图，音乐 %s）" % [
 		_kind, _slides.size(), "有" if _music != null else "无"])
@@ -411,10 +433,117 @@ func _restart_slideshow() -> void:
 	_loop_slides(_slideshow_gen)
 
 
+## `-- --pv-warmup=off`：关掉预载 + 预热（A/B 对比、排查用）。
+func _warmup_disabled() -> bool:
+	for a in OS.get_cmdline_user_args():
+		if a == "--pv-warmup=off":
+			return true
+	return false
+
+
+## 把 `_slides` 的纹理在**后台线程**里全部解码好，主线程只做「取回来」。
+##
+## `ResourceLoader.load_threaded_request()` 一发出就返回，解码在 worker 线程排队；
+## `load_threaded_get_status()` 轮询到 READY 之后再 `load_threaded_get()` 拿资源，
+## 那一步只剩「把已经解好的东西挂上去」，几乎不花时间。
+##
+## 没有导入缓存（clone 下来没跑过编辑器）的图走不了线程化加载，就留给
+## `_load_texture()` 的现场解码路径 —— 但那种情况本来就只有开发期会遇到。
+##
+## 超时保护：**最多等 `PREFETCH_MAX_SEC` 秒**。泼溅解码正在抢 CPU，慢慢排也行，
+## 但绝不能因为某张图卡住就把开场卡死（做不到就按老路慢慢解，至少能看）。
+func _prefetch_slides() -> void:
+	_tex_cache.clear()
+	_tex_cache.resize(_slides.size())
+	for i in _slides.size():
+		_tex_cache[i] = null
+	if _slides.is_empty():
+		_prefetch_done = true
+		return
+	var t0 := Time.get_ticks_msec()
+	var want: Array[int] = []
+	for i in _slides.size():
+		if ResourceLoader.exists(_slides[i]):
+			var err := ResourceLoader.load_threaded_request(_slides[i])
+			if err == OK:
+				want.append(i)
+	var pending := want.size()
+	print("[TitleIntro] 预载 %d 张图（后台线程，%d 张没有导入缓存）" % [
+		want.size(), _slides.size() - want.size()])
+	while pending > 0 and float(Time.get_ticks_msec() - t0) / 1000.0 < PREFETCH_MAX_SEC:
+		await get_tree().process_frame
+		pending = 0
+		for i in want:
+			if _tex_cache[i] != null:
+				continue
+			var st := ResourceLoader.load_threaded_get_status(_slides[i])
+			if st == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+				pending += 1
+				continue
+			if st != ResourceLoader.THREAD_LOAD_LOADED:
+				continue
+			var res: Variant = ResourceLoader.load_threaded_get(_slides[i])
+			if res is Texture2D:
+				_tex_cache[i] = res as Texture2D
+	var cost := float(Time.get_ticks_msec() - t0) / 1000.0
+	var got := 0
+	for t in _tex_cache:
+		if t != null:
+			got += 1
+	_prefetch_done = true
+	print("[TitleIntro] 预载完成：%d/%d 张，耗时 %.2f s" % [got, _slides.size(), cost])
+
+
+## 黑底还盖着的时候，先把第一张图**画一两帧**：
+##   ① 触发 `PV_SLIDE_SHADER` 首次编译（canvas_item 材质第一次绘制要走驱动侧
+##      建 pipeline，隔离实测约 90 ms —— 就是「第一张图卡一下」的那一下）；
+##   ② 让第一张纹理完成 GPU 上传。
+##
+## 做法：挂一张 `modulate.a = 0` 的 Slide（全透明 = 看不见，但**仍然会画**，
+## 照样走编译和上传），等两帧再把它收掉。黑底垫在这张透明图下面，
+## 所以用户完全看不出来。
+func _warm_up_shader() -> void:
+	if _kind != "pv" and _kind != "frames":
+		return
+	if _backdrop == null or not is_instance_valid(_backdrop):
+		return
+	var tex := _slide_texture(0)
+	if tex == null:
+		return
+	var probe := TextureRect.new()
+	probe.name = "WarmUp"
+	probe.texture = tex
+	probe.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	probe.stretch_mode = TextureRect.STRETCH_SCALE
+	probe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	probe.size = Vector2(64.0, 64.0)
+	probe.position = Vector2.ZERO
+	probe.modulate.a = 0.0        # 全透明：看不见，但会画
+	probe.material = _slide_material()
+	_backdrop.add_child(probe)
+	# 两帧足够：第 1 帧建 pipeline，第 2 帧确认走的是缓存
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if is_instance_valid(probe):
+		probe.queue_free()
+
+
+## 第 `idx` 张图的纹理：优先用预载好的缓存，没有才退回 `_load_texture()`。
+## `idx` 是循环里一路递增的，所以取缓存下标时要取模（和 `_slides` 同一套规则）。
+func _slide_texture(idx: int) -> Texture2D:
+	if _slides.is_empty():
+		return null
+	var k := idx % _slides.size()
+	if k < _tex_cache.size() and _tex_cache[k] != null:
+		return _tex_cache[k]
+	return _load_texture(_slides[k])
+
+
 func _loop_slides(gen: int) -> void:
 	var i := 0
 	while _playing and gen == _slideshow_gen and not _start_pressed and not _slides.is_empty():
-		var tex := _load_texture(_slides[i % _slides.size()])
+		# ★ 走缓存：预载过就是「取回来」，不再是主线程现场解码（见 `_tex_cache`）
+		var tex := _slide_texture(i)
 		i += 1
 		if tex == null:
 			continue
