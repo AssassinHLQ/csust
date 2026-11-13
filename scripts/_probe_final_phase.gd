@@ -214,7 +214,12 @@ func _run() -> void:
 	await _test_phantom()
 	await _test_homing()
 	await _test_gravity()
-	_test_ten_skills()
+	await _test_shield()
+	await _test_kneel()
+	await _test_leapslam()
+	await _test_beam()
+	await _test_summon()
+	_test_all_skills()
 	await _test_revive()
 	await _test_phase2_buffs()
 	_player.set_physics_process(true)
@@ -491,51 +496,141 @@ func _test_gravity() -> void:
 	_teleport(safe_spot())
 
 
-func _test_ten_skills() -> void:
+## EX 护盾：上盾 + 闪避率；护盾先吃伤害，血量不掉
+func _test_shield() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_boss.call("debug_cast", "shield")
+	await _until(func() -> bool: return float(_boss.call("status")["shield_hp"]) > 0.0, 15.0)
+	var st: Dictionary = _boss.call("status")
+	await _shot("16_shield", _boss.global_position + Vector3(22, 22, 30),
+		_boss.global_position + Vector3(0, 8, 0))
+	_check("EX 护盾：套上了护盾", float(st["shield_hp"]) > 0.0,
+		"%.0f 点" % float(st["shield_hp"]))
+	_check("EX 护盾：闪避率提高", float(st["evasion"]) > 0.0,
+		"%.0f%%" % (float(st["evasion"]) * 100.0))
+	# 闪避是随机数，测"吸收"时先把它固定成 0（必中）
+	_boss.call("debug_set_evasion", 0.0)
+	var hp0 := _hp_boss()
+	var sh0 := float(_boss.call("status")["shield_hp"])
+	_boss.call("take_damage", 500.0)
+	await _wait(0.25)
+	var st2: Dictionary = _boss.call("status")
+	var hp1 := _hp_boss()
+	var sh1 := float(st2["shield_hp"])
+	_check("护盾先吸收伤害（血不掉、盾在掉）",
+		is_equal_approx(hp1, hp0) and sh1 < sh0,
+		"血 %.0f→%.0f，盾 %.0f→%.0f" % [hp0, hp1, sh0, sh1])
+	_boss.call("debug_set_evasion", -1.0)
+	_boss.call("_break_shield", false)
+
+
+func _test_kneel() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "kneel")
+	await _until_idle()
+	var hp1 := _hp()
+	_check("跪射：扇形弹幕打中", _hits("kneel") >= 1 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("kneel"), hp0, hp1])
+
+
+func _test_leapslam() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "leapslam")
+	await _until_idle()
+	var hp1 := _hp()
+	_check("跳砸：圈内命中", _hits("leapslam") >= 1 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("leapslam"), hp0, hp1])
+
+
+func _test_beam() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "beam")
+	await _until_idle(45.0)
+	var hp1 := _hp()
+	_check("蓄力炮：直线光柱命中", _hits("beam") >= 1 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("beam"), hp0, hp1])
+
+
+func _test_summon() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "summon")
+	await _until(func() -> bool: return int(_boss.call("status")["phantoms"]) > 0, 15.0)
+	await _until_idle(60.0)
+	_check("召唤：幻影群扑到人", _hits("summon") >= 1,
+		"命中 %d 次" % _hits("summon"))
+
+
+func _test_all_skills() -> void:
 	var st: Dictionary = _boss.call("status")
 	var counts: Dictionary = st["counts"]
 	var missing: Array[String] = []
 	for n in ["shock", "slam", "barrage", "sweep", "meteor", "spikes",
-			"nova", "phantom", "homing", "gravity"]:
+			"nova", "phantom", "homing", "gravity",
+			"shield", "kneel", "leapslam", "beam", "summon"]:
 		if int(counts.get(n, 0)) <= 0:
 			missing.append(n)
-	_check("十个技能都放出来过", missing.is_empty(),
+	_check("十五个技能都放出来过", missing.is_empty(),
 		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
 
 
 func _test_revive() -> void:
 	_boss.call("debug_reset")
+	# 玩家血量拉高：无敌期间她会真的开打，别让探针玩家被打死送回大厅
+	_set_hp(9999.0)
 	_boss.call("take_damage", 1.0e9)
 	await _until(func() -> bool: return bool(_boss.call("status")["reviving"]), 15.0)
 	var st: Dictionary = _boss.call("status")
-	_check("血量打空 → 复活演出（不是直接死）",
+	_check("打空第一条血 → 复活演出（不是直接死）",
 		bool(st["reviving"]) and not bool(st["dead"]) and int(st["phase"]) == 1,
 		"reviving=%s dead=%s phase=%d" % [str(st["reviving"]), str(st["dead"]),
 			int(st["phase"])])
 	_check("复活无敌 20 s", bool(st["invuln"]) and float(st["revive_t"]) > 18.0,
 		"剩 %.1f s" % float(st["revive_t"]))
-	var hp0 := _hp_boss()
-	_boss.call("take_damage", 1000.0)
-	await _wait(0.2)
-	# ⚠️ 复活期间血量本来就在涨，判据是"没有掉 1000"，不是"完全没变"
-	_check("无敌期间打不动", _hp_boss() >= hp0 and _hp_boss() < hp0 + 1000.0,
-		"%.0f → %.0f（只涨不跌）" % [hp0, _hp_boss()])
-	await _until(func() -> bool: return float(_boss.call("status")["health"]) > 0.0, 40.0)
+	# 3 秒回血完成 → 立刻进二阶段（**仍然无敌**）
+	await _until(func() -> bool: return int(_boss.call("status")["phase"]) == 2, 25.0)
 	var st2: Dictionary = _boss.call("status")
-	_check("血量逐渐回复（不是瞬间满）", float(st2["health"]) > 0.0,
-		"当前 %.0f / %.0f" % [float(st2["health"]), float(st2["max_health"])])
+	_check("3 秒回血到一半就进二阶段",
+		int(st2["phase"]) == 2
+			and is_equal_approx(float(st2["health"]), float(st2["max_health"]) * 0.5),
+		"phase=%d 血量 %.0f" % [int(st2["phase"]), float(st2["health"])])
+	_check("回血完成后**仍然无敌**", bool(st2["invuln"]),
+		"invuln=%s 剩 %.1f s" % [str(st2["invuln"]), float(st2["revive_t"])])
+	# 无敌期间她必须已经在出招
+	var c0 := _total_casts()
+	await _wait(2.5)
+	var st3: Dictionary = _boss.call("status")
+	var c1 := _total_casts()
+	_check("无敌时间里照样进攻", bool(st3["invuln"]) and c1 > c0,
+		"出招 %d → %d（仍无敌：%s）" % [c0, c1, str(st3["invuln"])])
+	# 20 s 到点解无敌
 	_boss.call("debug_finish_revive")
 	await _wait(0.3)
-	var st3: Dictionary = _boss.call("status")
-	_check("复活结束 → 二阶段、血量回到一半、无敌解除",
-		int(st3["phase"]) == 2
-			and is_equal_approx(float(st3["health"]), float(st3["max_health"]) * 0.5)
-			and not bool(st3["invuln"]),
-		"phase=%d 血量 %.0f 无敌=%s" % [int(st3["phase"]), float(st3["health"]),
-			str(st3["invuln"])])
+	var st4: Dictionary = _boss.call("status")
+	_check("20 秒到点解除无敌", not bool(st4["invuln"]) and not bool(st4["reviving"]),
+		"invuln=%s reviving=%s" % [str(st4["invuln"]), str(st4["reviving"])])
 
 
 func _test_phase2_buffs() -> void:
+	# 二阶段开场她自带 EX 护盾（会先吃伤害），测"防御减半"之前先拆掉盾
+	_boss.call("debug_set_evasion", 0.0)
+	_boss.call("_break_shield", false)
+	await _wait(0.2)
 	var st: Dictionary = _boss.call("status")
 	_check("二阶段攻击 +200%（×3）", is_equal_approx(float(st["damage_scale"]), 3.0),
 		"×%.2f" % float(st["damage_scale"]))
@@ -550,6 +645,7 @@ func _test_phase2_buffs() -> void:
 	await _wait(0.2)
 	_check("二阶段实际挨 1000 只掉 500", is_equal_approx(hp0 - _hp_boss(), 500.0),
 		"%.0f → %.0f" % [hp0, _hp_boss()])
+	_boss.call("debug_set_evasion", -1.0)
 
 
 # ────────────────────────── 报告 ──────────────────────────
@@ -656,6 +752,16 @@ func _sky_back() -> bool:
 	if pm == null or pm.panorama == null:
 		return true
 	return not pm.panorama.resource_path.ends_with("sky_doom.jpg")
+
+
+## 到目前为止总共出了多少招（复活无敌期间要验证"她在打"）
+func _total_casts() -> int:
+	var st: Dictionary = _boss.call("status")
+	var counts: Dictionary = st["counts"]
+	var n := 0
+	for k in counts.keys():
+		n += int(counts[k])
+	return n
 
 
 func _hits(kind: String) -> int:

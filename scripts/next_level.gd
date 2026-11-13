@@ -625,7 +625,7 @@ func _on_final_boss_spawned(boss: Node3D) -> void:
 
 ## 血量打空后的复活演出（20 s 无敌）
 func _on_final_boss_revive() -> void:
-	_show_message("优香-恐怖 正在复苏 —— 20 秒内打不动她", 4.0)
+	_show_message("优香-恐怖 正在复苏 —— 20 秒内打不动她，但她照样会开火", 4.0)
 	print("[ConstructivistLevel] 终局：BOSS 进入复活演出（20 s 无敌）")
 
 

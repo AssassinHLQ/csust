@@ -52,7 +52,7 @@ const RISE_STAGGER := 0.18
 ## 平时埋多深（墙顶沉到地面以下多少米）。留 1 m 保证任何地形起伏下都看不见。
 const BURY := 1.0
 ## 上下两圈扫描线各自的高度（米）和离墙顶/墙底的距离
-const BAND_H := 5.0
+const BAND_H := 7.0
 const BAND_INSET := 0.8
 ## BOSS 出现在玩家前方多远（米）
 const SPAWN_DIST := 48.0
@@ -90,8 +90,9 @@ var _sun: DirectionalLight3D
 func _ready() -> void:
 	name = "ArenaLock"
 	_fill_mat = _make_fill_mat()
-	_band_mat_up = _make_band_mat(72.0, 0.22, 0.55)
-	_band_mat_down = _make_band_mat(72.0, 0.22, -0.55)
+	# 上下两圈"密集线"：72 条 → 130 条（用户要更密）
+	_band_mat_up = _make_band_mat(130.0, 0.15, 0.55)
+	_band_mat_down = _make_band_mat(130.0, 0.15, -0.55)
 
 
 ## 跑整个终局序列。`bounds` 只用到 x/z（y 由射线现打）。
@@ -201,8 +202,9 @@ func _make_fill_mat() -> ShaderMaterial:
 	# 0.34 在黑色背景上也看得出是一层红雾。
 	m.set_shader_parameter("fill_color", Color(0.90, 0.06, 0.07, 0.34))
 	m.set_shader_parameter("line_color", Color(1.0, 0.20, 0.13, 0.40))
-	m.set_shader_parameter("line_count", 11.0)
-	m.set_shader_parameter("line_width", 0.16)
+	# 用户 2026-11-13「校园红线不够密集」：11 条 → 34 条，线也收细
+	m.set_shader_parameter("line_count", 34.0)
+	m.set_shader_parameter("line_width", 0.11)
 	m.set_shader_parameter("scroll_speed", 0.10)
 	m.set_shader_parameter("pulse_speed", 1.5)
 	m.set_shader_parameter("pulse_depth", 0.18)

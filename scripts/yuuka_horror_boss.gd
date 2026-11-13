@@ -62,6 +62,13 @@ signal phase_changed(phase: int)
 signal revive_started
 
 const SKIN_SHADER := preload("res://shaders/horror_skin.gdshader")
+## 恐怖版静态眼睛/嘴：**只换这一个 boss**。普通优香（同伴、剧情里那位）继续用原图，
+## 所以原 `Yuuka_Yuuka_Original_EyeMouth.png` 一个字节都不动。
+## 用资源路径认表面：模型里 7 张口型贴图叫 `Yuuka_Character_Mouth_*`，不会被误换。
+## ⚠️ 用 `load()` 而不是 `preload`：模型/贴图目录不进仓库（只有 `.import` 入库），
+##    硬 `preload` 在缺这张图的机器上会让整份脚本解析失败。
+const HORROR_EYE_MOUTH_PATH := "res://models/companions/Yuuka_Horror_EyeMouth.png"
+const EYE_MOUTH_TEX_PATH := "res://models/companions/Yuuka_Yuuka_Original_EyeMouth.png"
 ## 砸击/陨石/引力井的地面圈（半透明 + 亮边；见该 shader 文件头）
 const DISC_SHADER := preload("res://shaders/telegraph_disc.gdshader")
 const DISC_ALPHA := 0.26
@@ -147,6 +154,27 @@ const WELL_TIME := 3.0
 const WELL_PULL := 2.6         # 每秒往中心拽的位移（m/s），远小于跑速 6.8
 const WELL_DAMAGE := 32.0
 
+## ── EX 护盾（优香原作是**护盾角色**，用户 2026-11-13 点名要）──
+## 给自己套一层护盾 + 提高闪避率；护盾吸收完就碎。
+const SHIELD_HP := 2200.0
+const SHIELD_TIME := 18.0
+const SHIELD_EVASION := 0.35      # 护盾在时 35% 概率直接闪掉这次伤害
+const SHIELD_COOLDOWN := 26.0
+
+## ── 跪射 / 跳砸 / 蓄力炮 / 召唤 ──
+const KNEEL_COUNT := 4
+const KNEEL_DAMAGE := 10.0
+const LEAP_RADIUS := 9.0
+const LEAP_WARN := 1.1
+const LEAP_DAMAGE := 44.0
+const LEAP_KNOCK := 20.0
+const BEAM_WARN := 1.3
+const BEAM_LEN := 90.0
+const BEAM_HALF_WIDTH := 2.2
+const BEAM_TOP := 44.0
+const BEAM_DAMAGE := 46.0
+const SUMMON_COUNT := 4
+
 ## 出招节奏（秒）。二阶段 ÷ P2_SPEED。
 const INTERVAL_1 := 5.5
 const INTRO_GRACE := 2.5
@@ -158,13 +186,19 @@ const P2_DEFENSE := 0.5        # 受到的伤害 ×0.5（"防御力 +50%"）
 const P2_DAMAGE := 3.0         # 攻击"增加 200%" → ×3
 const P2_SPEED := 1.5          # 攻速"增加 50%" → 间隔 ÷1.5
 const REVIVE_TIME := 20.0      # 无敌 20 s
-const REVIVE_TO := 0.5         # 逐渐回到一半血
+const REVIVE_HEAL_TIME := 3.0  # 前 3 s 回血到一半，回完立刻开打
+const REVIVE_TO := 0.5         # 回到一半血
 
+## 15 招：前 10 招是"攻击"，后 5 招用 GLB 里另外几段动作
+## （`Exs_Cutin` / `Kneel_Attack_*` / `Move_Jump` / `Normal_Reload` / `Normal_Callsign`）
 const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
-	"spikes", "nova", "phantom", "homing", "gravity"]
+	"spikes", "nova", "phantom", "homing", "gravity",
+	"shield", "kneel", "leapslam", "beam", "summon"]
 
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
+var _horror_eye_tried := false
+var _horror_eye_tex_cache: Texture2D = null
 var _aura_light: OmniLight3D
 var _rings: Array[Dictionary] = []
 var _aura_built := false
@@ -186,12 +220,23 @@ var _wells: Array[Dictionary] = []      # 引力井
 var _phantoms: Array[Dictionary] = []   # 幻影
 var _slam_marks: Array[Node3D] = []
 
-## 复活演出：血量打空 → 20 s 无敌 + 回到一半
+## 复活演出：血量打空 → 20 s 无敌；前 REVIVE_HEAL_TIME 秒回血到一半，
+## 回完**立刻开打**（剩下 17 s 仍然无敌）
 var _reviving := false
 var _invuln := false
 var _revive_t := 0.0
+var _heal_t := 0.0
+var _phase2_live := false
 var _shield_t := 0.0
 var _pulse := 0.0
+
+## EX 护盾：剩余护盾量 / 剩余时间 / 冷却 / 视觉节点
+var _shield_hp := 0.0
+var _shield_left := 0.0
+var _shield_cd := 0.0
+var _shield_fx: Array[Node3D] = []
+## 探针用：>=0 时强制这个闪避率（默认 -1 = 用护盾自带的值）
+var _evasion_fixed := -1.0
 
 
 func _init() -> void:
@@ -245,8 +290,13 @@ func _apply_skin() -> void:
 			var sm := ShaderMaterial.new()
 			sm.shader = SKIN_SHADER
 			if src != null:
-				sm.set_shader_parameter("albedo_tex", src.albedo_texture)
-				sm.set_shader_parameter("use_texture", src.albedo_texture != null)
+				var tex: Texture2D = src.albedo_texture
+				if tex != null and tex.resource_path == EYE_MOUTH_TEX_PATH:
+					var horror_tex := _horror_eye_tex()
+					if horror_tex != null:
+						tex = horror_tex
+				sm.set_shader_parameter("albedo_tex", tex)
+				sm.set_shader_parameter("use_texture", tex != null)
 				# 眼睛/嘴是 alpha scissor 材质，丢了这个会变成方块
 				sm.set_shader_parameter("use_alpha",
 					src.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED)
@@ -254,6 +304,17 @@ func _apply_skin() -> void:
 				sm.set_shader_parameter("use_texture", false)
 			m.set_surface_override_material(s, sm)
 			_skin_mats.append(sm)
+
+
+## 恐怖版眼贴图；缺文件只警告一次并退回原图（模型目录不入库）。
+func _horror_eye_tex() -> Texture2D:
+	if not _horror_eye_tried:
+		_horror_eye_tried = true
+		if ResourceLoader.exists(HORROR_EYE_MOUTH_PATH):
+			_horror_eye_tex_cache = load(HORROR_EYE_MOUTH_PATH) as Texture2D
+		if _horror_eye_tex_cache == null:
+			push_warning("[YuukaHorror] 缺 %s，眼睛退回原图" % HORROR_EYE_MOUTH_PATH)
+	return _horror_eye_tex_cache
 
 
 func _setup_anim() -> void:
@@ -363,16 +424,23 @@ func _physics_process(delta: float) -> void:
 	_tick_sweeps(delta)
 	_tick_wells(delta)
 	_tick_phantoms(delta)
+	_tick_shield(delta)
 	if _dead:
 		return
 	if _reviving:
-		# 复活演出：血量从 0 逐渐涨到一半，血条跟着走
+		# 用户 2026-11-13：「一阶段结束无敌 20 秒，先 3 秒复活回复到一半血量，
+		# 复活完 boss 直接开始攻击」——前 3 s 回血，回完立刻开打，
+		# 但**仍然无敌**，剩下的 17 s 就是"她边打你边打不动她"。
 		_revive_t = maxf(_revive_t - delta, 0.0)
-		var k := 1.0 - _revive_t / REVIVE_TIME
-		health = max_health * REVIVE_TO * clampf(k, 0.0, 1.0)
-		health_changed.emit(health, max_health)
+		if _heal_t > 0.0:
+			_heal_t = maxf(_heal_t - delta, 0.0)
+			var k := 1.0 - _heal_t / REVIVE_HEAL_TIME
+			health = max_health * REVIVE_TO * clampf(k, 0.0, 1.0)
+			health_changed.emit(health, max_health)
+			if _heal_t <= 0.0:
+				_start_phase2()
 		if _revive_t <= 0.0:
-			_end_revive()
+			_end_invuln()
 	if not _boss_attack_enabled():
 		return
 	_t_skill -= delta
@@ -479,6 +547,16 @@ func _cast_skill() -> void:
 			await _skill_homing(pc)
 		"gravity":
 			await _skill_gravity(pc)
+		"shield":
+			await _skill_shield()
+		"kneel":
+			await _skill_kneel(pc)
+		"leapslam":
+			await _skill_leapslam(pc)
+		"beam":
+			await _skill_beam(pc)
+		"summon":
+			await _skill_summon(pc)
 		_:
 			await _skill_shockwave()
 	_busy = false
@@ -921,7 +999,7 @@ func _skill_phantom(pc: Vector3) -> void:
 
 
 ## 幻影：一团红色的"优香轮廓"（胶囊 + 头部球），直线扑向目标点，到了就炸。
-func _spawn_ghost(from: Vector3, target: Vector3) -> void:
+func _spawn_ghost(from: Vector3, target: Vector3, kind := "phantom") -> void:
 	var g := Node3D.new()
 	g.name = "Phantom"
 	g.top_level = true
@@ -948,7 +1026,7 @@ func _spawn_ghost(from: Vector3, target: Vector3) -> void:
 	# 三维方向：玩家飞在天上时幻影会爬升追上去（对空）
 	var dir := target - from
 	dir = dir.normalized() if dir.length() > 0.5 else facing()
-	_phantoms.append({"node": g, "dir": dir, "t": GHOST_LIFE})
+	_phantoms.append({"node": g, "dir": dir, "t": GHOST_LIFE, "kind": kind})
 
 
 func _tick_phantoms(delta: float) -> void:
@@ -977,7 +1055,8 @@ func _tick_phantoms(delta: float) -> void:
 				done = true
 				n.global_position = closest
 		if done:
-			_hit_area(n.global_position, GHOST_BLAST_R, _dmg(GHOST_DAMAGE), 14.0, "phantom")
+			_hit_area(n.global_position, GHOST_BLAST_R, _dmg(GHOST_DAMAGE), 14.0,
+				String(e.get("kind", "phantom")))
 			_blast_fx(n.global_position)
 			n.queue_free()
 			continue
@@ -1066,10 +1145,267 @@ func _tick_wells(delta: float) -> void:
 	_wells = keep
 
 
+# ── 11 EX 护盾（优香原作是护盾角色）──
+
+func _skill_shield() -> void:
+	_play_once("Exs_Cutin", 0.2)
+	Sfx.play("ex_fire", -8.0)
+	await get_tree().create_timer(0.7).timeout
+	if _dead or not is_instance_valid(self):
+		return
+	_raise_shield()
+
+
+## 上盾：护盾值 + 闪避率，持续 SHIELD_TIME
+func _raise_shield() -> void:
+	_shield_hp = SHIELD_HP * (1.6 if _phase >= 2 else 1.0)
+	_shield_left = SHIELD_TIME
+	_shield_cd = SHIELD_COOLDOWN
+	_build_shield_fx()
+	Sfx.play("ui_open", -3.0)
+	print("[YuukaHorror] EX 护盾：%.0f 点，闪避 %.0f%%，%.0f s" % [
+		_shield_hp, _evasion() * 100.0, SHIELD_TIME])
+
+
+## 当前闪避率（只在护盾存在时生效；探针可以用 `debug_set_evasion` 固定）
+func _evasion() -> float:
+	if _evasion_fixed >= 0.0:
+		return _evasion_fixed
+	return SHIELD_EVASION if _shield_hp > 0.0 else 0.0
+
+
+func _build_shield_fx() -> void:
+	_clear_shield_fx()
+	# 一层半透明球壳 + 两圈环，挂在 BOSS 身上（跟着她动）
+	var ball := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 11.0
+	sm.height = 22.0
+	sm.radial_segments = 32
+	sm.rings = 16
+	ball.mesh = sm
+	ball.material_override = _additive(Color(1.0, 0.10, 0.12, 0.12))
+	ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ball.position = Vector3(0.0, height * 0.42, 0.0)
+	add_child(ball)
+	_shield_fx.append(ball)
+	for spec in [[0.0, 0.0], [PI * 0.5, 0.0]]:
+		var ring := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.985
+		tm.outer_radius = 1.0
+		tm.rings = 96
+		tm.ring_segments = 4
+		ring.mesh = tm
+		ring.material_override = _additive(Color(1.0, 0.22, 0.14, 0.45))
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ring.position = Vector3(0.0, height * 0.42, 0.0)
+		ring.rotation.x = float(spec[0])
+		ring.scale = Vector3(11.0, 2.0, 11.0)
+		add_child(ring)
+		_shield_fx.append(ring)
+
+
+func _clear_shield_fx() -> void:
+	for n in _shield_fx:
+		if is_instance_valid(n):
+			n.queue_free()
+	_shield_fx.clear()
+
+
+func _tick_shield(delta: float) -> void:
+	_shield_cd = maxf(_shield_cd - delta, 0.0)
+	if _shield_hp <= 0.0:
+		return
+	_shield_left -= delta
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var a := 0.10 + 0.05 * (0.5 + 0.5 * sin(t * 3.2))
+	for n in _shield_fx:
+		var mi := n as MeshInstance3D
+		if mi == null or not is_instance_valid(mi):
+			continue
+		var m := mi.material_override as StandardMaterial3D
+		if m != null:
+			m.albedo_color.a = a
+	if _shield_left <= 0.0:
+		_break_shield(false)
+
+
+func _break_shield(explode := true) -> void:
+	_shield_hp = 0.0
+	_shield_left = 0.0
+	_clear_shield_fx()
+	if explode:
+		_blast_fx(global_position + Vector3.UP * height * 0.42)
+		Sfx.play("ui_close", -3.0)
+	print("[YuukaHorror] 护盾碎了（闪避率回到 0）")
+
+
+## 被打到护盾：闪一下盾壳
+func _shield_hit_fx() -> void:
+	for n in _shield_fx:
+		var mi := n as MeshInstance3D
+		if mi == null or not is_instance_valid(mi):
+			continue
+		var m := mi.material_override as StandardMaterial3D
+		if m == null:
+			continue
+		m.albedo_color.a = 0.55
+		var tw := create_tween()
+		tw.tween_property(m, "albedo_color:a", 0.12, 0.25)
+
+
+## 闪避：一声轻响 + 身上闪一下
+func _dodge_fx() -> void:
+	Sfx.play("ui_toggle", -8.0)
+	_flash_shield()
+
+
+# ── 12 跪射 ──
+
+func _skill_kneel(pc: Vector3) -> void:
+	_play_once("Kneel_Attack_Start", 0.12)
+	Sfx.play("fire_beam", -10.0)
+	await get_tree().create_timer(0.35).timeout
+	if _dead or not is_instance_valid(self):
+		return
+	_play_once("Kneel_Attack_Ing", 0.08)
+	var n := KNEEL_COUNT + (2 if _phase >= 2 else 0)
+	var p := _find_player()
+	var vel := (p as CharacterBody3D).velocity if p is CharacterBody3D else Vector3.ZERO
+	var aim := pc + Vector3(vel.x, 0.0, vel.z) * 0.35
+	var flat := aim - global_position
+	flat.y = 0.0
+	flat = flat.normalized() if flat.length() > 0.5 else facing()
+	var side := Vector3(flat.z, 0.0, -flat.x)
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var off := (float(i) - float(n - 1) * 0.5) * 2.0
+		_spawn_orb(aim + side * off, "kneel", Vector3.ZERO, KNEEL_DAMAGE,
+			ORB_SPEED * 1.15)
+		await get_tree().create_timer(0.09).timeout
+
+
+# ── 13 跳砸 ──
+
+func _skill_leapslam(pc: Vector3) -> void:
+	_play_once("Move_Jump", 0.12)
+	Sfx.play("fire_beam", -6.0)
+	var center := Vector3(pc.x, pc.y, pc.z)
+	var disc := _make_disc(center, LEAP_RADIUS, Color(1.0, 0.16, 0.10, 0.45))
+	_slam_marks.append(disc)
+	var tw := create_tween()
+	tw.tween_property(disc, "scale", Vector3(LEAP_RADIUS, 1.0, LEAP_RADIUS), LEAP_WARN) \
+		.from(Vector3(LEAP_RADIUS * 0.25, 1.0, LEAP_RADIUS * 0.25))
+	# 视觉：整个人往上一跃再砸下来（只动 model，不动碰撞盒）
+	if model != null:
+		var base_y := model.position.y
+		var hop := create_tween()
+		hop.tween_property(model, "position:y", base_y + 8.0, 0.45) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		hop.tween_property(model, "position:y", base_y, maxf(LEAP_WARN - 0.45, 0.2)) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await tw.finished
+	if _dead or not is_instance_valid(self):
+		_free_marks()
+		return
+	_hit_area(center, LEAP_RADIUS, _dmg(LEAP_DAMAGE), LEAP_KNOCK, "leapslam")
+	Sfx.play("ui_close", -1.0)
+	_flash_mark(disc, 1.3, 0.3)
+	_slam_marks.erase(disc)
+	await get_tree().create_timer(0.3).timeout
+
+
+# ── 14 蓄力炮（装填 → 一炮）──
+
+func _skill_beam(pc: Vector3) -> void:
+	_play_once("Normal_Reload", 0.15)
+	Sfx.play("ui_open", -6.0)
+	var dir := pc - global_position
+	dir.y = 0.0
+	dir = dir.normalized() if dir.length() > 1.0 else facing()
+	var pivot := Node3D.new()
+	pivot.name = "BeamPivot"
+	pivot.top_level = true
+	pivot.rotation.y = atan2(dir.x, dir.z)
+	pivot.global_position = global_position
+	add_child(pivot)
+	var blade := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.6, BEAM_TOP, BEAM_LEN)
+	blade.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = Color(1.0, 0.18, 0.10, 0.0)
+	blade.material_override = mat
+	blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	blade.position = Vector3(0.0, BEAM_TOP * 0.5, BEAM_LEN * 0.5)
+	pivot.add_child(blade)
+	# 蓄力：细红线越来越亮
+	var tw := create_tween()
+	tw.tween_property(mat, "albedo_color:a", 0.28, BEAM_WARN)
+	await tw.finished
+	if _dead or not is_instance_valid(self):
+		if is_instance_valid(pivot):
+			pivot.queue_free()
+		return
+	# 开火：炮身加粗，判定一次
+	bm.size = Vector3(BEAM_HALF_WIDTH * 2.0, BEAM_TOP, BEAM_LEN)
+	var tw2 := create_tween()
+	tw2.tween_property(mat, "albedo_color:a", 0.60, 0.07)
+	await get_tree().create_timer(0.3).timeout
+	_beam_hit(dir)
+	Sfx.play("ex_fire", -3.0)
+	await get_tree().create_timer(0.25).timeout
+	if is_instance_valid(pivot):
+		var tw3 := create_tween()
+		tw3.tween_property(mat, "albedo_color:a", 0.0, 0.35)
+		tw3.tween_callback(pivot.queue_free)
+
+
+func _beam_hit(dir: Vector3) -> void:
+	var p := _find_player()
+	if p == null or not p.has_method("take_damage"):
+		return
+	var chest := p.global_position + Vector3.UP * 0.9
+	var from := global_position + Vector3.UP * 2.0
+	var closest := Geometry3D.get_closest_point_to_segment(
+		chest, from, from + dir * BEAM_LEN)
+	var dy := chest.y - global_position.y
+	if closest.distance_to(chest) <= BEAM_HALF_WIDTH and dy >= -2.0 and dy <= BEAM_TOP:
+		_hits["beam"] += 1
+		p.call("take_damage", _dmg(BEAM_DAMAGE), from, 18.0)
+		print("[YuukaHorror] beam 命中（偏离 %.1f m）" % closest.distance_to(chest))
+
+
+# ── 15 召唤（呼号 → 一群幻影）──
+
+func _skill_summon(pc: Vector3) -> void:
+	_play_once("Normal_Callsign", 0.15)
+	Sfx.play("ui_open", -5.0)
+	await get_tree().create_timer(0.6).timeout
+	if _dead or not is_instance_valid(self):
+		return
+	var n := SUMMON_COUNT + (1 if _phase >= 2 else 0)
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var ang := TAU * float(i) / float(n)
+		var off := Vector3(cos(ang), 0.0, sin(ang)) * 5.0
+		var tgt := pc + Vector3(cos(ang * 2.0), 0.0, sin(ang * 2.0)) * 3.0
+		_spawn_ghost(global_position + off, tgt, "summon")
+		await get_tree().create_timer(0.1).timeout
+
+
 # ────────────────────────── 光球 ──────────────────────────
 
-## `kind` 只用于统计（barrage / homing）；`side` 给追踪弹一点出生偏移。
-func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO) -> void:
+## `kind` 只用于统计（barrage / homing / kneel）；`side` 给追踪弹一点出生偏移；
+## `dmg_now` / `speed_now` 让不同技能用同一套光球但手感不同。
+func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO,
+		dmg_now := ORB_DAMAGE, speed_now := ORB_SPEED) -> void:
 	var orb := MeshInstance3D.new()
 	orb.name = "HorrorOrb"
 	var sm := SphereMesh.new()
@@ -1098,6 +1434,8 @@ func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO) -> void:
 		"node": orb, "dir": dir, "t": 0.0, "kind": kind,
 		"homing": kind == "homing",
 		"life": HOMING_LIFE if kind == "homing" else ORB_LIFE,
+		"dmg": HOMING_DAMAGE if kind == "homing" else dmg_now,
+		"speed": HOMING_SPEED if kind == "homing" else speed_now,
 	})
 
 
@@ -1118,7 +1456,7 @@ func _tick_orbs(delta: float) -> void:
 			node.queue_free()
 			continue
 		var dir: Vector3 = o["dir"]
-		var speed := ORB_SPEED
+		var speed := float(o.get("speed", ORB_SPEED))
 		if bool(o["homing"]):
 			speed = HOMING_SPEED
 			if p != null:
@@ -1142,8 +1480,7 @@ func _tick_orbs(delta: float) -> void:
 			if closest.distance_to(chest) <= ORB_HIT_R:
 				var kind := String(o["kind"])
 				_hits[kind] = int(_hits.get(kind, 0)) + 1
-				p.call("take_damage",
-					_dmg(HOMING_DAMAGE if kind == "homing" else ORB_DAMAGE), closest, 6.0)
+				p.call("take_damage", _dmg(float(o.get("dmg", ORB_DAMAGE))), closest, 6.0)
 				print("[YuukaHorror] %s 命中" % kind)
 				node.queue_free()
 				continue
@@ -1273,6 +1610,20 @@ func take_damage(amount: float, hit_pos := Vector3.ZERO, hit_dir := Vector3.ZERO
 		# 复活演出的 20 s：枪打得再准也不掉血
 		_flash_shield()
 		return
+	# ── EX 护盾：先按闪避率骰一次，再吃护盾，最后才扣血 ──
+	if _shield_hp > 0.0:
+		if randf() < _evasion():
+			_dodge_fx()
+			return
+		var absorbed := minf(_shield_hp, amount)
+		_shield_hp -= absorbed
+		amount -= absorbed
+		_shield_hit_fx()
+		if _shield_hp <= 0.0:
+			_break_shield()
+		if amount <= 0.0:
+			_flash_shield()
+			return
 	# 二阶段"防御力 +50%" = 受到的伤害减半
 	var dmg := amount * (1.0 - P2_DEFENSE) if _phase >= 2 else amount
 	super.take_damage(dmg, hit_pos, hit_dir)
@@ -1292,6 +1643,8 @@ func _begin_revive() -> void:
 	_reviving = true
 	_invuln = true
 	_revive_t = REVIVE_TIME
+	_heal_t = REVIVE_HEAL_TIME
+	_phase2_live = false
 	health = 0.0
 	health_changed.emit(health, max_health)
 	_t_skill = REVIVE_TIME + 0.5
@@ -1311,20 +1664,33 @@ func _begin_revive() -> void:
 	_play_once("Victory_Start")
 
 
-## 无敌结束：正式进入第二阶段（血量就是回满的那一半）
-func _end_revive() -> void:
-	_reviving = false
-	_invuln = false
+## 3 s 回血结束 → **立刻开打**（用户：无敌时间里她就开始攻击）。
+## 注意：这里**不解无敌**，`_invuln` 还要再挂 17 s。
+func _start_phase2() -> void:
+	if _phase2_live:
+		return
+	_phase2_live = true
 	_phase = 2
 	health = max_health * REVIVE_TO
 	health_changed.emit(health, max_health)
-	_t_skill = 1.2
+	_t_skill = 0.8          # 回血一结束就出招，不留空档
 	_skill_i = 0
 	phase_changed.emit(2)
 	Sfx.play("ui_open", -2.0)
 	_play_once("Victory_End")
-	print("[YuukaHorror] 进入二阶段：血量 %.0f / %.0f，攻击 ×%.1f，间隔 %.2f s，受伤 ×%.2f" % [
-		health, max_health, P2_DAMAGE, _interval(), 1.0 - P2_DEFENSE])
+	# 护盾角色：进二阶段先给自己上盾（玩家在这 17 s 里打不动她，但能看清盾在掉）
+	_raise_shield()
+	print("[YuukaHorror] 回血完成 → 二阶段开打（仍无敌）：血量 %.0f，攻击 ×%.1f，间隔 %.2f s，受伤 ×%.2f" % [
+		health, P2_DAMAGE, _interval(), 1.0 - P2_DEFENSE])
+
+
+## 20 s 到点：无敌解除
+func _end_invuln() -> void:
+	if not _reviving and not _invuln:
+		return
+	_reviving = false
+	_invuln = false
+	print("[YuukaHorror] 复活无敌结束（可以打了）")
 
 
 ## 二阶段的真死：走 GLB 的 Vital_Dying_Ing → Vital_Death（不用基类的整体扑倒）
@@ -1396,7 +1762,12 @@ func status() -> Dictionary:
 		"dead": _dead,
 		"reviving": _reviving,
 		"revive_t": _revive_t,
+		"heal_t": _heal_t,
+		"phase2_live": _phase2_live,
 		"invuln": _invuln,
+		"shield_hp": _shield_hp,
+		"shield_left": _shield_left,
+		"evasion": _evasion(),
 		"damage_scale": P2_DAMAGE if _phase >= 2 else 1.0,
 		"take_scale": 1.0 - P2_DEFENSE if _phase >= 2 else 1.0,
 		"interval": _interval(),
@@ -1417,6 +1788,11 @@ func status() -> Dictionary:
 
 
 ## 探针用：清掉场上所有特效残骸、把计数归零（招式之间互不干扰）
+## 探针用：把闪避率固定成 v（0 = 必中，方便测护盾吸收）
+func debug_set_evasion(v: float) -> void:
+	_evasion_fixed = v
+
+
 func debug_reset() -> void:
 	for w in _waves:
 		var n: Node3D = w["node"]
@@ -1480,12 +1856,25 @@ func _debug_cast_inner(kind: String, p: Node3D) -> void:
 			await _skill_homing(pc)
 		"gravity":
 			await _skill_gravity(pc)
+		"shield":
+			await _skill_shield()
+		"kneel":
+			await _skill_kneel(pc)
+		"leapslam":
+			await _skill_leapslam(pc)
+		"beam":
+			await _skill_beam(pc)
+		"summon":
+			await _skill_summon(pc)
 		_:
 			await _skill_shockwave()
 
 
 ## 探针用：跳过 20 s 的最短等待，直接结算复活演出
 func debug_finish_revive() -> void:
+	# 直接跳到"回血完成 + 无敌结束"
+	_heal_t = 0.0
+	_revive_t = 0.0
 	if _reviving:
-		_revive_t = 0.0
-		_end_revive()
+		_start_phase2()
+	_end_invuln()
