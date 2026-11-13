@@ -128,6 +128,11 @@ const LOGO_WIDTH := 42
 const USER := "alice"
 const HOST := "arisu"
 
+## `date` / `cal` 用的名字表（`Time` 的 weekday 是 0=周日，这里按周一起排）
+const _WDAY := ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+const _MON := ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 ## 每行：纯文本 + 逐字符颜色
 var _text: Array[String] = []
 var _cols: Array[PackedColorArray] = []
@@ -135,6 +140,8 @@ var _cursor_row := 0
 var _cursor_col := 0
 ## 当前屏幕第一行对应 `_text` 的下标（回滚位置）。贴底时 = `_text.size() - ROWS`
 var _view_top := 0
+## 敲过的命令（`history` 命令用）。只留最近 100 条，够用又不占内存
+var _history: Array[String] = []
 ## 当前输入行（提示符之后的部分）
 var _typing := ""
 var _blink := true
@@ -440,6 +447,11 @@ func _submit() -> void:
 	_rewrite_input()
 	_push_line([])
 	if not cmd.is_empty():
+		# 记一笔给 `history` 用（空格开头的按 zsh 习惯不入历史）
+		if not cmd.begins_with(" "):
+			_history.append(cmd)
+			while _history.size() > 100:
+				_history.remove_at(0)
 		_run(cmd)
 	elif companion_active():
 		# 空回车 = 「继续说」。**不能拿空格当前进键** —— 终端要能敲
@@ -463,14 +475,38 @@ func _submit() -> void:
 ## 字段：`name` 正式命令名 / `alias` 别名 / `arg` 用法里的参数示意 / `desc` 一句话说明
 const COMMANDS := [
 	{"name": "help", "alias": [], "arg": "", "desc": "show this list (or: help <cmd>)"},
-	{"name": "neofetch", "alias": [], "arg": "", "desc": "print the machine spec sheet"},
+	{"name": "neofetch", "alias": ["fastfetch"], "arg": "", "desc": "print the machine spec sheet"},
 	{"name": "ls", "alias": [], "arg": "", "desc": "list the home directory"},
+	{"name": "tree", "alias": [], "arg": "", "desc": "the home directory, as a tree"},
 	{"name": "cat", "alias": [], "arg": "readme.txt", "desc": "print a text file"},
+	{"name": "rm", "alias": [], "arg": "-rf /", "desc": "please don't"},
 	{"name": "uname", "alias": [], "arg": "-a", "desc": "kernel / arch version"},
 	{"name": "whoami", "alias": [], "arg": "", "desc": "print the current user"},
 	{"name": "df", "alias": [], "arg": "-h", "desc": "disk usage table"},
+	{"name": "free", "alias": [], "arg": "-h", "desc": "memory usage"},
+	{"name": "lsblk", "alias": [], "arg": "", "desc": "block devices (this machine is a tablet)"},
+	{"name": "ps", "alias": [], "arg": "", "desc": "running processes"},
+	{"name": "htop", "alias": ["top", "btop"], "arg": "", "desc": "process viewer (they are in here too)"},
+	{"name": "dmesg", "alias": [], "arg": "", "desc": "kernel log"},
+	{"name": "systemctl", "alias": [], "arg": "status", "desc": "the fake init system"},
+	{"name": "uptime", "alias": [], "arg": "", "desc": "how long this thing has been on"},
+	{"name": "date", "alias": [], "arg": "", "desc": "current date and time"},
+	{"name": "cal", "alias": [], "arg": "", "desc": "this month's calendar"},
 	{"name": "pacman", "alias": [], "arg": "-Syu", "desc": "pretend to upgrade packages"},
+	{"name": "yay", "alias": ["paru"], "arg": "-S ...", "desc": "AUR helper (also offline)"},
+	{"name": "reflector", "alias": [], "arg": "", "desc": "rank the mirror list"},
+	{"name": "ping", "alias": [], "arg": "baidu.com", "desc": "try the network (spoiler: none)"},
+	{"name": "curl", "alias": ["wget"], "arg": "url", "desc": "same, but for HTTP"},
+	{"name": "fastboot", "alias": [], "arg": "oem unlock", "desc": "the bootloader this tablet had"},
 	{"name": "sudo", "alias": [], "arg": "rm ...", "desc": "try your luck"},
+	{"name": "echo", "alias": [], "arg": "text", "desc": "print the argument back"},
+	{"name": "history", "alias": [], "arg": "", "desc": "what you typed so far"},
+	{"name": "alias", "alias": [], "arg": "", "desc": "list the shortcuts"},
+	{"name": "which", "alias": ["whereis"], "arg": "cmd", "desc": "find a command"},
+	{"name": "man", "alias": [], "arg": "cmd", "desc": "the manual (there is no manual)"},
+	{"name": "vim", "alias": ["vi"], "arg": "", "desc": "you will not get out"},
+	{"name": "cowsay", "alias": [], "arg": "text", "desc": "a cow says something"},
+	{"name": "sl", "alias": [], "arg": "", "desc": "you typed sl instead of ls again"},
 	{"name": "bilibili", "alias": ["bili", "b23", "blbl"], "arg": "",
 		"desc": "open the fake bilibili window (offline)"},
 	{"name": "arona", "alias": [], "arg": "1|2", "desc": "ARONA shows up in the right pane"},
@@ -481,7 +517,10 @@ const COMMANDS := [
 ]
 
 ## 每行左侧「命令 + 参数」占多少列，右边接说明
-const HELP_COL := 20
+## 「命令 + 参数」占多少列，右边接说明。
+## 26 是照最长的一条（`  fastboot oem unlock` = 21 列）留的：它后面还要有 5 个空格，
+## 否则说明会贴着命令写（`fastboot oem unlockthe bootloader...`，实拍图里很难看）。
+const HELP_COL := 26
 
 
 ## 把用户敲的名字（含别名）解析成正式命令名；解析不到返回 ""
@@ -500,7 +539,13 @@ func _cmd_label(c: Dictionary) -> String:
 	var left := "  " + String(c["name"])
 	if not String(c["arg"]).is_empty():
 		left += " " + String(c["arg"])
-	return left.rpad(HELP_COL)
+	# ⚠️ `rpad()` 遇到「本来就比列宽长」的串**不会加任何空格**，
+	#    于是 `systemctl status arona` 会和说明粘成
+	#    `systemctl status aronaThe fake init system`（实拍图里就是这样）。
+	#    所以太长的就在后面**至少补两个空格**，宁可这一行对不齐也别粘字。
+	if left.length() < HELP_COL:
+		return left.rpad(HELP_COL)
+	return left + "  "
 
 
 func _run(cmd: String) -> void:
@@ -525,6 +570,9 @@ func _run(cmd: String) -> void:
 							["  aka: " + ", ".join(PackedStringArray(al)), DIM]])
 				_push_line([["  ", DIM],
 					["anything else: zsh: command not found", DIM]])
+				# 39 条命令一屏放不下，主动告诉玩家怎么往上翻（滚轮回滚是 2026-11-13 加的）
+				_push_line([["  ", DIM],
+					["(list is long -- scroll the wheel / PgUp to see the top)", DIM]])
 			else:
 				# `help <cmd>`：只讲那一条（也认别名）
 				var want := _canonical(arg.to_lower())
@@ -584,6 +632,98 @@ func _run(cmd: String) -> void:
 			_push_line([["Filesystem      Size  Used Avail Use% Mounted on", DIM]])
 			_push_line([["/dev/nvme0n1p2  1.8T  641G  1.1T  37% /", FG]])
 			_push_line([["/dev/nvme1n1p1  1.8T  1.2T  510G  71% /mnt/models", FG]])
+		# ── 系统 / 硬件 ──（用户 2026-11-13：「命令太少了，ARCHLINUX 还有什么经典命令」）
+		"free":
+			_push_line([["               total        used        free      shared  buff/cache   available", DIM]])
+			_push_line([["Mem:            6.3G        3.1G        1.9G         88M        1.3G        3.0G", FG]])
+			_push_line([["Swap:             0B          0B          0B", FG]])
+			_push_line([["  (no swap. Alice wiped the disk, remember?)", DIM]])
+		"lsblk":
+			_push_line([["NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS", DIM]])
+			_push_line([["mmcblk0     179:0    0 238.4G  0 disk", FG]])
+			_push_line([["|-mmcblk0p1 179:1    0   512M  0 part /boot", FG]])
+			_push_line([["`-mmcblk0p2 179:2    0 237.9G  0 part /", FG]])
+			_push_line([["nvme0n1     259:0    0   1.8T  0 disk", FG]])
+			_push_line([["`-nvme0n1p1 259:1    0   1.8T  0 part /mnt/models", FG]])
+			_push_line([["  (no sda anywhere. the desk has no case, remember?)", DIM]])
+		"ps":
+			_push_line([["    PID TTY          TIME CMD", DIM]])
+			for row in [["1042", "00:00:01", "zsh"], ["1187", "00:00:00", "arona"],
+					["1250", "00:00:00", "plana"], ["2317", "00:00:00", "ps"]]:
+				_push_line([["%7s pts/0     %s %s"
+					% [String(row[0]), String(row[1]), String(row[2])], FG]])
+		"htop":
+			# 台词里提过「我在 htop 里看到自己在跑」—— 这里必须真的能看到她
+			_push_line([["  0[||||||||       34.2%]  Tasks: 142; 391 thr; 2 running", KEY_CYAN]])
+			_push_line([["  1[|||             8.1%]  Load average: 0.42 0.51 0.48", KEY_CYAN]])
+			_push_line([["  Mem[||||||||     3.1G/6.3G]  Uptime: 9 hours, 11 mins", KEY_CYAN]])
+			_push_line([["  Swp[                    0K/0K]", KEY_CYAN]])
+			_push_line([])
+			_push_line([["    PID USER      VIRT   RES  CPU%  MEM%  Command", DIM]])
+			_push_line([["   1042 alice    4821M  612M   1.7   9.5  konsole", FG]])
+			_push_line([["   1187 alice    2104M  188M   0.3   2.9  arona", GOLD]])
+			_push_line([["   1250 alice    1902M  154M   0.1   2.4  plana", Color(0.82, 0.76, 1.0)]])
+			_push_line([["      1 root       28M   12M   0.0   0.2  systemd", DIM]])
+			_push_line([["F1 Help  F2 Setup  F3 Search  F4 Filter  F5 Tree  F9 Kill  F10 Quit", DIM]])
+		"dmesg":
+			_push_line([["[    0.000000] Linux version 6.11.5-arch1-1 (fake log, nothing is real)", DIM]])
+			_push_line([["[    0.312220] mmcblk0: 238.4 GiB -- the tablet IS the computer", FG]])
+			_push_line([["[    2.884102] arona: mounting /dev/tty0 ... ok", FG]])
+			_push_line([["[    3.001121] systemd[1]: Reached target Multi-User System.", FG]])
+			_push_line([["[    3.001472] systemd[1]: booted in 3.00s (was 40s. thanks, Alice.)", GREEN]])
+		"systemctl":
+			_push_line([["* arona.service - Arona (virtual assistant on /dev/tty0)", FG]])
+			_push_line([["     Loaded: loaded (/usr/lib/systemd/system/arona.service; enabled)", DIM]])
+			_push_line([["     Active: active (running) since Thu 2026-11-13 07:12:41 CST", GREEN]])
+			_push_line([["   Main PID: 1187 (arona)", DIM]])
+			_push_line([["     Memory: 188.4M   Tasks: 1 (limit: 7709)", DIM]])
+			if arg.contains("plana"):
+				_push_line([["* plana.service - Plana (idle, watching the filesystem)", FG]])
+				_push_line([["     Active: active (waiting) since Thu 2026-11-13 07:12:44 CST", DIM]])
+		"uptime":
+			var td := Time.get_datetime_dict_from_system()
+			_push_line([["%02d:%02d:%02d up 9 hours, 11 mins, 1 user, load average: 0.42, 0.51, 0.48"
+				% [int(td["hour"]), int(td["minute"]), int(td["second"])], FG]])
+		"date":
+			var td2 := Time.get_datetime_dict_from_system()
+			_push_line([["%s %s %d %02d:%02d:%02d CST %d" % [
+				_WDAY[(int(td2["weekday"]) + 6) % 7], _MON[int(td2["month"]) - 1],
+				int(td2["day"]), int(td2["hour"]), int(td2["minute"]),
+				int(td2["second"]), int(td2["year"])], FG]])
+		"cal":
+			# 台词里阿洛娜吐槽「白白净净、有日历有天气的那个界面被你刷没了」——
+			# 那就在终端里还她一个日历
+			var now := Time.get_datetime_dict_from_system()
+			var yyyy := int(now["year"])
+			var mm := int(now["month"])
+			_push_line([["      %s %d" % [_MON[mm - 1], yyyy], KEY_CYAN]])
+			_push_line([["Mo Tu We Th Fr Sa Su", DIM]])
+			var wd_today := (int(now["weekday"]) + 6) % 7      # Time: 0=周日 → 换成周一起
+			var lead := posmod(wd_today - (int(now["day"]) - 1), 7)
+			var cells: Array[String] = []
+			for _i in lead:
+				cells.append("  ")
+			var n_days := _days_in_month(yyyy, mm)
+			for d in n_days:
+				cells.append("%2d" % (d + 1))
+			var at := 0
+			while at < cells.size():
+				var line := " "
+				for k in 7:
+					if at + k < cells.size():
+						line += cells[at + k] + " "
+				_push_line([[line.rstrip(" "), FG]])
+				at += 7
+			_push_line([["  (you deleted the weather widget too, by the way.)", DIM]])
+		"tree":
+			_push_line([["/home/%s" % USER, KEY_CYAN]])
+			_push_line([["|- Desktop/", FG]])
+			_push_line([["|- Documents/", FG]])
+			_push_line([["|- Downloads/", FG]])
+			_push_line([["|  `- 依旧送送送，普拉娜绿幕素材_视频.mp4   29.5 s", DIM]])
+			_push_line([["|- Pictures/", FG]])
+			_push_line([["|- readme.txt", FG]])
+			_push_line([["`- .zshrc", FG]])
 		"pacman":
 			if arg.contains("-Syu") or arg.contains("-S"):
 				_push_line([[":: synchronising package databases...", KEY_CYAN]])
@@ -600,6 +740,120 @@ func _run(cmd: String) -> void:
 			else:
 				_push_line([["%s is not in the sudoers file. This incident will be reported."
 					% USER, RED]])
+		# ── 包管理 / 网络 / 刷机 ──
+		"yay":
+			if arg.is_empty() or arg == "-h":
+				_say("yay: error: no targets specified (use yay -S <pkg>)")
+			else:
+				_push_line([[":: Searching AUR for %s..." % arg.replace("-S", "").strip_edges(),
+					KEY_CYAN]])
+				_push_line([["error: cannot reach aur.archlinux.org (offline demo)", RED]])
+				_push_line([["  (the network has been down since the day you rooted this thing)", DIM]])
+		"reflector":
+			_push_line([[":: Retrieving and ranking the mirror list...", KEY_CYAN]])
+			for m in [["https://mirror.rackspace.com/archlinux/", "0.42"],
+					["https://mirrors.kernel.org/archlinux/", "0.51"],
+					["https://mirror.0x.sg/archlinux/", "0.88"]]:
+				_push_line([["  ", DIM], [String(m[0]).rpad(44), FG], [String(m[1]) + " s", GREEN]])
+			_push_line([[":: 3 mirrors, 0 of them reachable. (offline demo)", DIM]])
+		"ping":
+			var host := arg if not arg.is_empty() else "baidu.com"
+			_push_line([["ping: %s: Network is unreachable" % host, RED]])
+			_push_line([["  (0 packets transmitted, 0 received -- it is not a real network)", DIM]])
+		"curl":
+			var url := arg if not arg.is_empty() else "https://www.bilibili.com"
+			_push_line([["curl: (6) Could not resolve host: %s" % url.get_slice("//", 1),
+				RED]])
+			_push_line([["  (nothing on this machine has ever been online)", DIM]])
+		"fastboot":
+			if arg.contains("unlock"):
+				_push_line([["< waiting for any device >", DIM]])
+				_push_line([["OKAY [  0.512s]  (already unlocked -- Alice did that months ago)", GREEN]])
+				_push_line([["Finished. Total time: 0.512s", GREEN]])
+			elif arg.is_empty():
+				_push_line([["usage: fastboot [oem unlock | devices | reboot]", DIM]])
+				_push_line([["  this tablet has no fastboot anymore. it has a shell.", DIM]])
+			else:
+				_push_line([["fastboot: %s: no such device (offline demo)" % arg, RED]])
+		# ── 日常小工具 ──
+		"echo":
+			var text := arg
+			if text.begins_with("$"):
+				match text:
+					"$SHELL":
+						text = "/bin/zsh"
+					"$USER":
+						text = USER
+					"$HOSTNAME":
+						text = HOST
+					"$PATH":
+						text = "/usr/local/bin:/usr/bin:/bin"
+					_:
+						text = ""
+			_push_line([[text, FG]])
+		"history":
+			if _history.is_empty():
+				_say("history: nothing yet. you just got here.")
+			else:
+				var from := maxi(0, _history.size() - 30)
+				for i in range(from, _history.size()):
+					_push_line([["%5d  " % (i + 1), DIM], [_history[i], FG]])
+		"alias":
+			_push_line([["alias bili='bilibili'   alias top='htop'   alias vi='vim'", FG]])
+			_push_line([["  (every one of them is also listed by `help`)", DIM]])
+		"which":
+			var want_cmd := _canonical(arg.to_lower()) if not arg.is_empty() else ""
+			if arg.is_empty():
+				_say("which: missing argument (try `which pacman`)")
+			elif want_cmd.is_empty():
+				_push_line([["which: no %s in (/usr/local/bin:/usr/bin:/bin)" % arg, RED]])
+			else:
+				var where := "/usr/bin/"
+				if want_cmd in ["arona", "plana", "bilibili"]:
+					where = "/usr/local/bin/"     # 三个「本机特供」
+				_push_line([[where + want_cmd, GREEN]])
+				if want_cmd != arg.to_lower():
+					_push_line([["  (%s is an alias of %s)" % [arg, want_cmd], DIM]])
+		"man":
+			if arg.is_empty():
+				_say("What manual page do you want? (try `man pacman`)")
+			else:
+				_push_line([["No manual entry for %s" % arg, RED]])
+				_push_line([["  /usr/share/man is empty -- this machine has never had docs.", DIM]])
+		"vim":
+			_push_line([["Vim - Vi IMproved 9.1 (this is not really running)", KEY_CYAN]])
+			_push_line([["Type  :q<Enter>  to quit.", FG]])
+			_push_line([["-- INSERT -- (you are trapped. try typing :q)", DIM]])
+			_push_line([["  loading a real editor would require a real machine.", DIM]])
+		"cowsay":
+			var what := arg if not arg.is_empty() else "moo"
+			_push_line([[" ______________________________", DIM]])
+			_push_line([["< %s >" % what, DIM]])
+			_push_line([[" ------------------------------", DIM]])
+			_push_line([["        \\   ^__^", DIM]])
+			_push_line([["         \\  (oo)\\_______", DIM]])
+			_push_line([["            (__)\\       )\\/\\", DIM]])
+			_push_line([["                ||----w |", DIM]])
+			_push_line([["                ||     ||", DIM]])
+		"sl":
+			# 经典 easter egg：把 ls 打成 sl 就来一列火车
+			_push_line([["      ====        ________                ___________", GOLD]])
+			_push_line([["  _D _|  |_______/        \\__I_I_____===__|_________|", GOLD]])
+			_push_line([["   |(_)---  |   H\\________/ |   |        =|___ ___|", GOLD]])
+			_push_line([["   /     |  |   H  |  |     |   |         ||_| |_||", GOLD]])
+			_push_line([["  |      |  |   H  |__--------------------| [___] |", GOLD]])
+			_push_line([["  | ________|___H__/__|_____/[][]~\\_______|       |", GOLD]])
+			_push_line([["  |/ |   |-----------I_____I [][] []  D   |=======|__", GOLD]])
+			_push_line([["      choo choo. (you typed sl instead of ls again)", DIM]])
+		"rm":
+			if arg.is_empty():
+				_say("rm: missing operand")
+			elif arg.contains("/") and (arg.contains("-r") or arg.contains("/")):
+				_push_line([["rm: refusing to remove '%s' -- this is a fake terminal." % arg, RED]])
+				_push_line([["  nothing is executed. not even this.", DIM]])
+			else:
+				_push_line([["rm: cannot remove '%s': Permission denied (this machine is a prop)"
+					% arg, RED]])
 		"clear":
 			reset()
 		"exit", "logout":
@@ -622,6 +876,18 @@ func _clip_arg(arg: String) -> int:
 
 func _say(line: String) -> void:
 	_push_line([[line, FG]])
+
+
+## 某年某月有几天（`cal` 用；闰年按公历规则）
+func _days_in_month(year: int, month: int) -> int:
+	match month:
+		2:
+			var leap := (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+			return 29 if leap else 28
+		4, 6, 9, 11:
+			return 30
+		_:
+			return 31
 
 
 # ══════════════════ 屏幕里的同伴（阿洛娜 / 普拉娜）══════════════════

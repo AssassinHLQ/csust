@@ -96,7 +96,47 @@ func _run() -> void:
 
 	await _shot("help_after")
 
-	# ── ⑩ 回滚：历史要留得住、滚轮要能翻、打字要能跳回最新 ──
+	# ── ⑩ 2026-11-13 补的那批经典命令 ──
+	#    用户：「可惜命令太少了，ARCHLINUX 还有什么经典命令」。
+	#    这里抽查几条，重点验「输出里有它该有的东西」而不是只验不报错。
+	_check(Terminal.COMMANDS.size() >= 30,
+		"命令表扩到 %d 条" % Terminal.COMMANDS.size())
+
+	var cases := [
+		["htop", ["arona", "PID"], "htop 里能看到 arona 在跑（台词彩蛋）"],
+		["cal", ["Mo Tu We Th Fr Sa Su"], "cal 画出了日历（阿洛娜吐槽的那个）"],
+		["date", ["CST"], "date 有日期时区"],
+		["lsblk", ["mmcblk0"], "lsblk 里这台机器是块 mmc"],
+		["dmesg", ["booted in 3.00s"], "dmesg 有开机 3 秒的梗"],
+		["systemctl", ["arona.service"], "systemctl 认得 arona.service"],
+		["which bili", ["/usr/local/bin/bilibili"], "which 把别名解析到真命令"],
+		["which frog", ["no frog in"], "which 找不到就明说"],
+		["tree", ["Downloads"], "tree 列出家目录"],
+		["sl", ["choo choo"], "sl 会开火车（经典 easter egg）"],
+		["vim", ["Vim - Vi IMproved"], "vim 出得来（虽然出不去）"],
+		["cowsay 你好", ["(oo)"], "cowsay 画了头牛"],
+		["ping baidu.com", ["Network is unreachable"], "ping 明说没网"],
+		["curl https://example.com", ["Could not resolve host"], "curl 也明说没网"],
+		["yay -S firefox", ["offline"], "yay 连不上 AUR（离线 demo）"],
+		["fastboot oem unlock", ["already unlocked"], "fastboot 记得爱丽丝解过锁"],
+		["rm -rf /", ["refusing"], "rm -rf / 被拒（假的也别真干）"],
+		["history", ["help"], "history 记得前面敲过的东西"],
+		["alias", ["bili"], "alias 列出别名"],
+		["man pacman", ["No manual entry"], "man 大方承认没有文档"],
+		["echo $SHELL", ["/bin/zsh"], "echo 认得 $SHELL"],
+	]
+	for c in cases:
+		var cmd := String(c[0])
+		await _type(cmd)
+		var txt := String(_term.call("screen_text"))
+		var miss: Array[String] = []
+		for want in c[1]:
+			if not txt.contains(String(want)):
+				miss.append(String(want))
+		_check(miss.is_empty(), "%s —— %s%s" % [cmd, String(c[2]),
+			"" if miss.is_empty() else "（没找到 %s）" % ", ".join(miss)])
+
+	# ── ⑪ 回滚：历史要留得住、滚轮要能翻、打字要能跳回最新 ──
 	#    用户 2026-11-13：「怎么不能滚轮滑动」—— 之前超出 ROWS 就从顶上删，
 	#    等于没有历史。现在 `_text` 留 HISTORY_MAX 行，滚轮 / PgUp / PgDn 翻。
 	var hist := int(_term.call("history_count"))
@@ -120,7 +160,8 @@ func _run() -> void:
 	_check(int(_term.call("view_top")) == 0, "一直往上翻停在 0（不越界）")
 
 	# 往下翻到底 = 贴回最新，且不会超出
-	_wheel(MOUSE_BUTTON_WHEEL_DOWN, 60)
+	# （历史现在能到 400 行，一格 3 行，所以别只滚 60 下 —— 会停在半路假红）
+	_wheel(MOUSE_BUTTON_WHEEL_DOWN, 200)
 	_check(int(_term.call("view_top")) == int(_term.call("_max_view_top")),
 		"一直往下翻回到底（不越界）")
 
