@@ -479,13 +479,38 @@ func _ready() -> void:
 ## 同伴全变成站桩，用户看到的就是「光站着」。
 ##
 ## 这里只把**播放器**（基础层 + 两个叠加层）改成 `ALWAYS`，`AnimDriver` 自己
-## 仍是继承：状态机不推进（暂停期间没人调 `set_locomotion`，也就不可能切动作），
-## 但已经播上的循环动作继续播 —— 呼吸、眨眼（已停用）、待机的身体摆动都在。
-## 代价：Esc 菜单开着时背后的角色也会动。这才是正常的观感，不是 bug。
+## 仍是继承：暂停期间没人调 `set_locomotion`，状态机不会自己切动作。
+## 所以**移动中的角色必须在暂停那一刻被收归待机**（见 `_notification` /
+## `_pause_to_idle`）——否则开播前正在播的 `Move_Ing` / `Cafe_Walk` 会原地循环
+## 整段对话（用户报「对话时还在跑步」）。收归之后继续播的就是待机呼吸。
+## 代价：Esc 菜单开着时背后的角色也会呼吸摆动。这才是正常的观感，不是 bug。
 func _keep_alive_when_paused() -> void:
 	for p in [player, upper, upper_move, arms]:
 		if p != null:
 			(p as AnimationPlayer).process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+## 世界暂停（剧情对话 / Esc 菜单）时站定。
+##
+## 播放器是 ALWAYS（见 `_keep_alive_when_paused`），暂停期间相位照样推进；
+## 而状态机靠 `set_locomotion()` 喂速度，暂停时宿主的 `_physics_process` 停了、
+## 没人喂 —— 于是开播前正在播的移动动画会**原地循环整段对话**。
+## 这里在收到暂停通知时把速度归零、收掉开火/换弹的一次性动作，切回待机。
+## 玩家和同伴共用本驱动，一处生效全部生效。
+##
+## 恢复（`NOTIFICATION_UNPAUSED`）不用管：宿主第一帧物理就会用真实速度重新
+## 调 `set_locomotion()`，该跑跑该走走。
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PAUSED:
+		_pause_to_idle()
+
+
+func _pause_to_idle() -> void:
+	if player == null:
+		return
+	reset_state()
+	_speed = 0.0
+	_update_locomotion()
 
 
 ## 每帧：开火时把枪管掰到准星方向（见 `GUN_BONE` 上面那张表）。
