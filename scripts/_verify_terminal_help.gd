@@ -95,8 +95,63 @@ func _run() -> void:
 	_check(lines2 <= Terminal.ROWS, "连续输出后行数仍 ≤ ROWS（%d）" % lines2)
 
 	await _shot("help_after")
+
+	# ── ⑩ 回滚：历史要留得住、滚轮要能翻、打字要能跳回最新 ──
+	#    用户 2026-11-13：「怎么不能滚轮滑动」—— 之前超出 ROWS 就从顶上删，
+	#    等于没有历史。现在 `_text` 留 HISTORY_MAX 行，滚轮 / PgUp / PgDn 翻。
+	var hist := int(_term.call("history_count"))
+	_check(hist > Terminal.ROWS,
+		"历史比一屏长（%d 行 > ROWS %d）—— 有东西可滚" % [hist, Terminal.ROWS])
+	var bottom := int(_term.call("_max_view_top"))
+	_check(int(_term.call("view_top")) == bottom, "默认贴着最新内容（view_top = %d）" % bottom)
+
+	# 滚轮往上 = 看更旧的
+	_wheel(MOUSE_BUTTON_WHEEL_UP, 3)
+	var up1 := int(_term.call("view_top"))
+	_check(up1 < bottom, "滚轮上翻生效（%d → %d）" % [bottom, up1])
+
+	# 滚轮往下 = 回新
+	_wheel(MOUSE_BUTTON_WHEEL_DOWN, 1)
+	var down1 := int(_term.call("view_top"))
+	_check(down1 > up1, "滚轮下翻生效（%d → %d）" % [up1, down1])
+
+	# 往上翻到底 = 0，且不会变成负数
+	_wheel(MOUSE_BUTTON_WHEEL_UP, 120)
+	_check(int(_term.call("view_top")) == 0, "一直往上翻停在 0（不越界）")
+
+	# 往下翻到底 = 贴回最新，且不会超出
+	_wheel(MOUSE_BUTTON_WHEEL_DOWN, 60)
+	_check(int(_term.call("view_top")) == int(_term.call("_max_view_top")),
+		"一直往下翻回到底（不越界）")
+
+	# 翻上去之后打字 = 自动跳回最新（不然字会写进屏幕外那行）
+	_wheel(MOUSE_BUTTON_WHEEL_UP, 5)
+	var bottom2 := int(_term.call("_max_view_top"))
+	var scrolled := int(_term.call("view_top"))
+	_check(scrolled < bottom2, "已上翻（%d < %d）" % [scrolled, bottom2])
+	await _type("ls")
+	# ⚠️ 提交一行后历史会 +1，所以重新算「贴底」应该是多少，别拿旧值比
+	_check(int(_term.call("view_top")) == int(_term.call("_max_view_top")),
+		"打字后自动跳回最新")
+	# 刚敲的这条要真的落在提示符那行上（不是被吞掉）
+	var landed := false
+	for line in String(_term.call("screen_text")).split("\n"):
+		if line.begins_with("alice@arisu:") and line.contains("ls"):
+			landed = true
+	_check(landed, "输入确实落在了提示符那行（`alice@arisu:~$ls`）")
+
+	await _shot("help_scrolled")
 	_summary()
 	quit(0)
+
+
+## 发一个鼠标滚轮事件（`feed()` 认 `InputEventMouseButton`）
+func _wheel(button: MouseButton, times: int) -> void:
+	for _i in times:
+		var e := InputEventMouseButton.new()
+		e.button_index = button
+		e.pressed = true
+		_term.feed(e)
 
 
 func _type(line: String) -> void:

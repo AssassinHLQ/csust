@@ -22,8 +22,11 @@
 #       **必须加**：不加的话剪影边缘有一圈亮绿边（白头发在绿幕上抗锯齿，
 #       边缘像素被染绿）。加了之后还会多出约 2600 个半透明像素，边缘更自然。
 #   · fps=15：源 30 → 15，帧数减半（886 → 443），动画感够用。
-#   · scale=360:-1:flags=lanczos：屏幕里的 SubViewport 是 832×664，
-#       她在里面约占 500 px 高，360 宽的源够清晰，再大只是白占显存。
+#   · scale=720:-1:flags=lanczos：**按原视频宽度出**，不再缩到 360。
+#     ⚠️ 2026-11-13 用户实测立绘「画质变差」：360 宽是给旧的 832×664 画布定的，
+#        新画布 1280×720 里立绘高 682 px、窗口再放大 ~2×，360 宽的图被拉三倍多。
+#        现在出 720×786 原尺寸，画布里只是缩小，屏幕上接近 1:1。
+#        代价：显存/磁盘变大，所以 `frame_anim.gd` 的 CACHE_MAX 从 48 降到 16。
 #
 # ── 为什么不直接用带 alpha 的 .ogv ──
 # Godot 只支持 Theora(.ogv)。ffmpeg 能编 `-c:v libtheora -pix_fmt yuva420p`，
@@ -35,17 +38,22 @@
 $ErrorActionPreference = "Stop"
 
 $ffmpeg = "D:\SOFTWARE\ffmpeg\bin\ffmpeg.exe"
-$src = "C:\Users\WY157\Downloads\依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4"
+# 用户重下过一次素材：文件名多了个 `(1)`。按候选列表找，别写死。
+$candidates = @(
+    "C:\Users\WY157\Downloads\依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4",
+    "C:\Users\WY157\Downloads\依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频(1).mp4"
+)
+$src = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 $dst = Join-Path $PSScriptRoot "..\assets\plana_frames"
 
 if (-not (Test-Path $ffmpeg)) { throw "找不到 ffmpeg: $ffmpeg" }
-if (-not (Test-Path $src)) { throw "找不到源视频: $src" }
+if (-not $src) { throw "找不到源视频，试过：$($candidates -join ' / ')" }
 
 New-Item -ItemType Directory -Force -Path $dst | Out-Null
 Get-ChildItem $dst -Filter *.png -ErrorAction SilentlyContinue | Remove-Item -Force
 
 $filter = "chromakey=0x46E200:0.16:0.06,despill=type=green:mix=1:expand=0.3," +
-          "fps=15,scale=360:-1:flags=lanczos,format=rgba"
+          "fps=15,scale=720:-1:flags=lanczos,format=rgba"
 
 & $ffmpeg -v error -i $src -vf $filter -vsync 0 -compression_level 6 `
     -y (Join-Path $dst "f_%04d.png")

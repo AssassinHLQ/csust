@@ -362,6 +362,19 @@ func _physics_process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# ── 鼠标滚轮：转给终端翻历史 ──
+	# 用户 2026-11-13：「怎么不能滚轮滑动」。原来这段第一句就是
+	# `event as InputEventKey`，鼠标事件当场被判成 null 丢掉，滚轮永远到不了终端。
+	# 现在先单独接滚轮（终端里是 `_scroll_by()`）。
+	if _using:
+		var mb := event as InputEventMouseButton
+		if mb != null and mb.pressed \
+				and (mb.button_index == MOUSE_BUTTON_WHEEL_UP
+					or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) \
+				and not (bili != null and bili.visible):
+			terminal.feed(event)
+			get_viewport().set_input_as_handled()
+			return
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return

@@ -36,6 +36,16 @@ signal open_bili_requested
 
 const COLS := 100
 const ROWS := 40
+## 回滚历史最多留多少行。
+##
+## ⚠️ 2026-11-13 用户：「怎么不能滚轮滑动」—— 之前 `_text` 超过 `ROWS` 就把最旧的
+##    从顶上丢掉（**根本没有历史**），当然没东西可滚。现在：
+##      · `_text` 留 `HISTORY_MAX` 行（400 行 ≈ 十屏）；
+##      · `ROWS` 只管「一屏显示几行」；
+##      · 滚轮 / PageUp / PageDown 翻，`_view_top` 记当前屏顶是历史里的第几行。
+const HISTORY_MAX := 400
+## 滚轮一格翻几行
+const WHEEL_LINES := 3
 const CELL := Vector2(8.0, 16.0)
 const FONT_SIZE := 13
 const MARGIN := Vector2(14.0, 10.0)
@@ -123,6 +133,8 @@ var _text: Array[String] = []
 var _cols: Array[PackedColorArray] = []
 var _cursor_row := 0
 var _cursor_col := 0
+## 当前屏幕第一行对应 `_text` 的下标（回滚位置）。贴底时 = `_text.size() - ROWS`
+var _view_top := 0
 ## 当前输入行（提示符之后的部分）
 var _typing := ""
 var _blink := true
@@ -156,6 +168,10 @@ func _ready() -> void:
 	_font = _pick_font()
 	_cjk_font = _pick_cjk_font()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 立绘是把 720 宽的帧图**缩小**画进来的（`draw_texture_rect`），必须显式开
+	# 线性过滤，否则会出锯齿 / 块状边（用户 2026-11-13：「画质怎么变差了」）。
+	# 文字不受影响：字形是 1:1 画的，不做缩放采样。
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_voice = AudioStreamPlayer.new()
 	_voice.name = "Voice"
 	_voice.bus = &"Master"
@@ -225,6 +241,7 @@ func reset() -> void:
 	_text.clear()
 	_cols.clear()
 	_typing = ""
+	_view_top = 0
 	_stop_voice()
 	_banner()
 	_prompt_line()
@@ -282,18 +299,54 @@ func _push_line(segments: Array) -> void:
 		s += " ".repeat(pad)
 		for _i in pad:
 			c.append(DIM)
+	# 加新行之前先记住「是不是贴着底」：贴着底就继续跟着滚（真终端行为），
+	# 已经翻上去看历史就**别动视口** —— 否则同伴每 7 秒说一句，玩家根本读不了旧内容。
+	var follow := _at_bottom()
 	_text.append(s)
 	_cols.append(c)
-	# ── 滚屏 ──
-	# 用户 2026-11-12：「输入 help 可以弹出所有可以用的命令」—— 命令一多，
-	# 输出就会超出 ROWS（40 行），而这里**没有滚动条**：超出部分直接画到屏幕外，
-	# 等于「help 只说了一半」。所以超过 ROWS 就从**顶上**丢掉最旧的，
-	# 表现和真终端一致（新内容把旧内容顶上去）。
-	while _text.size() > ROWS:
+	# ── 历史截断 ──
+	# 2026-11-13 之前这里是 `while size > ROWS: 从顶上删` —— 那个**没有历史**，
+	# 滚轮自然没东西可滚（用户：「怎么不能滚轮滑动」）。现在只截到 HISTORY_MAX。
+	while _text.size() > HISTORY_MAX:
 		_text.remove_at(0)
 		_cols.remove_at(0)
+		if not follow:
+			_view_top = maxi(_view_top - 1, 0)
 	_cursor_row = _text.size() - 1
 	_cursor_col = s.strip_edges(false, true).length()
+	if follow:
+		_view_top = _max_view_top()
+
+
+## 视口最多能滚到哪（再往下就没内容了）
+func _max_view_top() -> int:
+	return maxi(_text.size() - ROWS, 0)
+
+
+## 视口是不是贴着最新那一行
+func _at_bottom() -> bool:
+	return _view_top >= _max_view_top()
+
+
+## 翻历史。`lines` 正数往下（往新）、负数往上（往旧）。
+func _scroll_by(lines: int) -> void:
+	if _text.size() <= ROWS:
+		return
+	_view_top = clampi(_view_top + lines, 0, _max_view_top())
+	queue_redraw()
+
+
+## 直接跳回最新（敲字 / 按回车时用：输入框永远在最底下）
+func _follow_bottom() -> void:
+	var v := _max_view_top()
+	if _view_top != v:
+		_view_top = v
+		queue_redraw()
+
+
+## 探针用：当前视口顶是历史第几行
+func view_top() -> int:
+	return _view_top
 
 
 func _prompt_line() -> void:
@@ -307,6 +360,9 @@ func _prompt_line() -> void:
 
 ## 重画当前输入行（敲字/退格都走这里，不新开行）
 func _rewrite_input() -> void:
+	# 一敲字就跳回最新 —— 输入框永远在最底下（和真终端一致）。
+	# 不这样的话：翻上去看历史、顺手打个命令，字会被写进**屏幕外**那行。
+	_follow_bottom()
 	var head := _text.size() - 1
 	var base: String = _text[head].substr(0, _cursor_col)
 	var row := base + _typing
@@ -328,6 +384,18 @@ func _rewrite_input() -> void:
 # ── 键盘 ──────────────────────────────────────────────────────────────────────
 
 func feed(event: InputEvent) -> bool:
+	# ── 鼠标滚轮回滚 ──
+	# 用户 2026-11-13：「怎么不能滚轮滑动」。滚轮事件由
+	# `hut_computer._input()` 转进来（那边原来只转键盘 event，鼠标直接丢了）。
+	var mb := event as InputEventMouseButton
+	if mb != null:
+		if mb.pressed:
+			match mb.button_index:
+				MOUSE_BUTTON_WHEEL_UP:
+					_scroll_by(-WHEEL_LINES)
+				MOUSE_BUTTON_WHEEL_DOWN:
+					_scroll_by(WHEEL_LINES)
+		return true
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return false
@@ -347,6 +415,11 @@ func feed(event: InputEvent) -> bool:
 		KEY_TAB:
 			if companion_active():
 				_comp_next()
+		# 翻历史：除了滚轮，键盘也要能翻（和真终端一样）
+		KEY_PAGEUP:
+			_scroll_by(-(ROWS - 2))
+		KEY_PAGEDOWN:
+			_scroll_by(ROWS - 2)
 		KEY_BACKSPACE:
 			if not _typing.is_empty():
 				_typing = _typing.substr(0, _typing.length() - 1)
@@ -923,10 +996,14 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), BG)
 	var f := _font
 	var fs := FONT_SIZE
-	for r in _text.size():
+	# 只画**视口里那一段**（`_view_top` 起 ROWS 行）。历史可以比一屏长得多
+	# （最多 HISTORY_MAX），全画就画到屏幕外面去了。
+	var shown := mini(ROWS, maxi(_text.size() - _view_top, 0))
+	for i in shown:
+		var r := _view_top + i
 		var row := _text[r]
 		var cols := _cols[r]
-		var y := MARGIN.y + float(r + 1) * CELL.y - 4.0
+		var y := MARGIN.y + float(i + 1) * CELL.y - 4.0
 		var cell_x := 0.0
 		for c in row.length():
 			var ch := row[c]
@@ -946,18 +1023,35 @@ func _draw() -> void:
 	# 同伴立绘 + 压板：**必须在正文之后画**，她的存在感就是「盖住系统」；
 	# 但放在光标之前 —— 光标永远要看得见。
 	_draw_companion()
-	# 光标：按**显示格数**算 x（中文占 2 格）
-	if _blink:
+	# 光标：按**显示格数**算 x（中文占 2 格）。只有光标那行**在视口里**才画
+	# （翻历史时光标在屏幕外，硬画会飘到别人的行上）。
+	var vis := _cursor_row - _view_top
+	if _blink and vis >= 0 and vis < ROWS:
 		var head := _text[_cursor_row] if _cursor_row < _text.size() else ""
 		var prefix := head.substr(0, mini(_cursor_col, head.length())) + _typing
 		var cx := MARGIN.x + float(_cells(prefix)) * CELL.x
-		var cy := MARGIN.y + float(_cursor_row) * CELL.y
+		var cy := MARGIN.y + float(vis) * CELL.y
 		draw_rect(Rect2(Vector2(cx, cy + 2.0), Vector2(CELL.x - 1.0, CELL.y - 3.0)),
 			CURSOR)
+	# ── 回滚提示 ──
+	# 翻上去了就在正文下方的空带里写一行「现在在第几行」，否则玩家不知道自己
+	# 看的是历史还是在最底下（720 高的画布，40 行只占到 650，底下正好空一条）。
+	if not _at_bottom():
+		var hint := "↑ scrolled %d/%d   (wheel · PgUp/PgDn · type to jump back)" % [
+			_view_top, _max_view_top()]
+		var hy := MARGIN.y + float(ROWS) * CELL.y + 4.0
+		if hy < size.y - 4.0:
+			draw_string(f, Vector2(MARGIN.x, hy), hint, HORIZONTAL_ALIGNMENT_LEFT,
+				size.x * _comp_panel_x() - MARGIN.x, FONT_SIZE, GOLD)
 
 
-## 探针/自检用：现在屏幕上有几行、最后一行是什么
+## 探针/自检用：**这一屏**有几行（历史可能更长，见 `history_count()`）
 func line_count() -> int:
+	return mini(ROWS, _text.size())
+
+
+## 探针/自检用：历史里一共留了多少行
+func history_count() -> int:
 	return _text.size()
 
 

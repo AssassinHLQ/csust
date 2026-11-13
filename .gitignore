@@ -149,7 +149,7 @@ __pycache__/
 #
 # 来源：用户给的绿幕视频 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`
 #      （720×786 / 30 fps / 29.53 s）。用 ffmpeg 抠掉绿幕（底色实测 #46E200）
-#      + despill 去绿边，重采样成 443 帧 360×393 的带 alpha PNG。
+#      + despill 去绿边，重采样成 443 帧 720×786 的带 alpha PNG（126.6 MB）。
 #      **授权未核实**，只允许本地学习演示，不随仓库分发 —— 与 `/models/arona/` 同口径。
 #
 # 重新生成：`_tools/fetch_plana_frames.ps1`（脚本里有参数理由 + 两个坑的说明）
@@ -167,7 +167,7 @@ __pycache__/
 #
 # 重新生成：`_tools/fetch_arona_frames.ps1`
 #      （先 crop=720:1172:0:60 裁掉水印，再 chromakey=0x2EDC01 + despill 去绿边）
-#      389 帧 / 300×488 / 44.8 MB
+#      389 帧 / 720×1172 / 172 MB（2026-11-13 从 300×488 放大，用户反馈画质差）
 # 缺帧不影响启动：`arch_terminal.gd::summon()` 只打进一行 `frames missing`，不会崩。
 # ⚠️ 连 `.import` 一起忽略 —— 389 个存根文件进仓库没有意义。
 /assets/arona_frames/

@@ -119,11 +119,11 @@ const ENTRIES := [
 			+ "本仓库不分发，克隆者需自行合法取得",
 		"distributed": false,
 		"source": "用户本地的 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`"
-			+ "（720×786 / 30 fps / 29.53 s，绿幕底色 #46E200）",
+			+ "（1080×1180 / 30 fps / 29.53 s，绿幕底色 #46E200）",
 		"license_file": "",
 		"note": "2026-11-12 用户要求「扣绿幕，输入 plana 就出现这」。ffmpeg 抠像"
-			+ "（chromakey + despill 去绿边）→ 15 fps / 360×393 带 alpha PNG 共 443 帧"
-			+ "（脚本 `_tools/fetch_plana_frames.ps1`，43.2 MB）。`.gitignore` 排除了整个目录。"
+			+ "（chromakey + despill 去绿边）→ 15 fps / 720×786 带 alpha PNG 共 443 帧"
+			+ "（脚本 `_tools/fetch_plana_frames.ps1`，126.6 MB）。`.gitignore` 排除了整个目录。"
 			+ "Godot 播 .ogv 拿不到 alpha（实测最小 alpha=255），所以只能序列帧 + 环形缓冲加载。"
 			+ "2026-11-13 起改为画在终端右半屏（arch_terminal.gd::summon），不再开独立页面",
 	},
@@ -137,14 +137,16 @@ const ENTRIES := [
 		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
 			+ "本仓库不分发，克隆者需自行合法取得",
 		"distributed": false,
-		"source": "用户 2026-11-12 下载的绿幕视频（bilibili 空间 3546885205789214）；"
-			+ "ffmpeg 先 crop=720:1172:0:60 裁掉左上角水印，再 chromakey=0x2EDC01 + despill",
+		"source": "用户 2026-11-12 下载的绿幕视频（bilibili 空间 3546885205789214，"
+			+ "源 1080×1848）；ffmpeg 先按比例裁掉顶部 4.87% 的水印带、把右上角刷成纯绿"
+			+ "让 chromakey 一起抠掉，再 chromakey=0x2EDC01 + despill",
 		"license_file": "",
 		"note": "2026-11-13 用户要求「arona 换这个扣绿幕」，并且「不是新开一个界面，"
 			+ "而是直接在 arch 右半部分显现，遮住系统，她的对话也通过终端发送」。"
-			+ "12 fps / 300×488 带 alpha PNG 共 389 帧 / 44.8 MB"
+			+ "12 fps / 720×1172 带 alpha PNG 共 389 帧 / 172 MB"
 			+ "（脚本 `_tools/fetch_arona_frames.ps1`）。与普拉娜共用 frame_anim.gd 的"
-			+ "环形缓冲（48 帧上限），不会一次性吃掉几百 MB 显存。`.gitignore` 排除了整个目录",
+			+ "环形缓冲（16 帧上限 ≈ 54 MB），不会一次性吃掉几百 MB 显存。"
+			+ "`.gitignore` 排除了整个目录",
 	},
 	{
 		"group": "角色与 Boss 模型",
