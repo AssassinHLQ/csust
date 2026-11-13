@@ -59,7 +59,7 @@ static func name_error(name: String) -> String:
 	return ""
 
 
-## 这个名字对应的**真实文件路径**；找不到返回空串。
+## 名字对应的**真实文件路径**；找不到返回空串。
 static func find(name: String) -> String:
 	var n := name.strip_edges()
 	if n.is_empty() or not name_error(n).is_empty():
@@ -68,14 +68,20 @@ static func find(name: String) -> String:
 	var ext := n.get_extension().to_lower()
 	if EXTS.has(ext):
 		var direct := DIR + n
-		if FileAccess.file_exists(direct):
+		if _exists(direct):
 			return direct
 	# 没写后缀（或写了个不认识的后缀）→ 按 EXTS 顺序试
 	for e in EXTS:
 		var p := DIR + n + "." + e
-		if FileAccess.file_exists(p):
+		if _exists(p):
 			return p
 	return ""
+
+
+## 导出包里裸音频不进 PCK（只有 .import 侧车），FileAccess 看不到；
+## ResourceLoader.exists 走重映射，两边都能认。
+static func _exists(p: String) -> bool:
+	return ResourceLoader.exists(p) or FileAccess.file_exists(p)
 
 
 ## 名字 → 音频流。找不到 / 读不出来都返回 null（**不报错**，调用方决定怎么说）。
