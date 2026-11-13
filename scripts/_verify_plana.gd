@@ -4,13 +4,13 @@ extends SceneTree
 ## ⚠️ 为什么要「独立」：`game.gd:105` 里 `preload("res://scripts/title_intro.gd")`，
 ##    而那个文件当时正被**另一个会话**改到一半（缩进语法错）⇒ 任何加载 `game.tscn`
 ##    的探针都会连带失败。所以这里**不碰 game.tscn**，直接实例化 PlanaPage
-##    （尺寸照抄屏幕 SubViewport 的 832×664），把「帧序列 + 播放 + 界面」验掉。
+##    （尺寸照抄屏幕 SubViewport 的 1280×720），把「帧序列 + 播放 + 界面」验掉。
 ##    终端→页面的接线等 title_intro 修好后另跑一次端到端。
 ##
 ##   godot --path . --script res://scripts/_verify_plana.gd -- --no-capture
 
 const OFF := preload("res://scripts/offscreen_window.gd")
-const VP := Vector2i(832, 664)
+const VP := Vector2i(1280, 720)
 
 var _pass := 0
 var _fail := 0
@@ -30,7 +30,7 @@ func _run() -> void:
 	page.name = "PlanaPage"
 	page.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(page)
-	# 模拟 SubViewport 的尺寸（真实场景里是 PRESET_FULL_RECT 撑满 832×664）
+	# 模拟 SubViewport 的尺寸（真实场景里是 PRESET_FULL_RECT 撑满 1280×720）
 	page.set_deferred("size", Vector2(VP))
 	await _wait(4)
 	page.size = Vector2(VP)

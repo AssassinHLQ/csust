@@ -617,8 +617,16 @@ const COMPANIONS := {
 ## 同伴自动说话的间隔（秒）。**回车（输入为空时）/ Tab** 可以立刻叫下一句。
 ## ⚠️ 不用空格：空格必须能打进命令里（`pacman -Syu`），这是「F 不能当退出键」同一个坑。
 const COMP_LINE_GAP := 7.0
-## 立绘压板从屏幕宽度的这个比例开始，一直到右边缘
-const COMP_PANEL_X := 0.42
+## 压板左边缘占画布宽度的比例 —— **不再写死**，由「正文右边界」算出来。
+##
+## ⚠️ 别改回固定值：0.42 是照着旧的 832 宽画布调的；画布改成 1280×720 之后，
+##    100 列正文 = 14 + 800 = 814 px（占 63.6%），再按 42% 切压板，
+##    正文就会被自己的立绘压板盖掉一大截（用户 2026-11-13 要的正是
+##    「往左压缩，右边多出来的黑屏是给角色用的」——这块位置得跟着正文走）。
+func _comp_panel_x() -> float:
+	if size.x <= 0.0:
+		return 0.64
+	return clampf((MARGIN.x + float(COLS) * CELL.x + 10.0) / size.x, 0.30, 0.92)
 ## 配音目录。**不入库**（`.gitignore` 排除），用 GPT-SoVITS 生成，见
 ## `_tools/gen_companion_voice.py`；文件命名 `<who>/<open|loop>_NN.wav`。
 ## 目录不存在 / 少了某一句都**只静音**，不报错 —— 克隆者没跑过生成脚本也能正常玩。
@@ -758,8 +766,8 @@ func _stop_voice() -> void:
 
 ## 压板左边还能画多少**显示格**（折行宽度就是这么来的）
 func _comp_text_cells() -> int:
-	var px := size.x * COMP_PANEL_X - MARGIN.x
-	return maxi(int(px / CELL.x), 12)
+	var px := size.x * _comp_panel_x() - MARGIN.x
+	return clampi(int(px / CELL.x), 12, COLS)
 
 
 ## 按显示格数硬折行（中文 2 格、ASCII 1 格）。
@@ -829,8 +837,8 @@ func _comp_push(segments: Array) -> void:
 
 ## 同伴的立绘区域（右半屏，留出最后一行提示符不被盖）
 func _comp_rect() -> Rect2:
-	return Rect2(size.x * COMP_PANEL_X, 0.0, size.x * (1.0 - COMP_PANEL_X),
-		size.y - 38.0)
+	var x := size.x * _comp_panel_x()
+	return Rect2(x, 0.0, size.x - x, size.y - 38.0)
 
 
 func _draw_companion() -> void:

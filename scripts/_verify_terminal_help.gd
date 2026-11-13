@@ -5,13 +5,13 @@ extends SceneTree
 ##
 ## ⚠️ 独立跑，不加载 game.tscn —— `game.gd:105` preload 的 `title_intro.gd`
 ##    当时被另一个会话改到一半（缩进语法错），任何加载 game.tscn 的探针都会连带失败。
-##    这里直接实例化 `ArchTerminal`（尺寸照抄屏幕 SubViewport 的 832×664）。
+##    这里直接实例化 `ArchTerminal`（尺寸照抄屏幕 SubViewport 的 1280×720）。
 ##
 ##   godot --path . --script res://scripts/_verify_terminal_help.gd -- --no-capture
 
 const OFF := preload("res://scripts/offscreen_window.gd")
 const Terminal := preload("res://scripts/arch_terminal.gd")
-const VP := Vector2i(832, 664)
+const VP := Vector2i(1280, 720)
 
 var _pass := 0
 var _fail := 0

@@ -48,6 +48,10 @@ func _run() -> void:
 	_check(comp.call("is_using"), "电脑已打开")
 	_check(not term.companion_active(), "刚开机时屏幕上没有同伴")
 
+	# 开机画面（banner + neofetch）留一张：用户 2026-11-13 的诉求是
+	# 「屏幕占满窗口、字别再被拉胖」，这张图最直观（画布 1280×720 = 窗口 1:1）。
+	await _shot("00_boot")
+
 	# ── 1. 敲 arona（**必须按回车**，命令才会执行）──
 	await _cmd("arona")
 	await _wait(6)
@@ -297,8 +301,10 @@ func _shot_pixels(name: String) -> float:
 	print("  [img] %s" % out.path_join("%s.png" % name))
 	var w := img.get_width()
 	var h := img.get_height()
-	var left := _mean_luma(img, Rect2i(0, 0, int(w * 0.3), h))
-	var right := _mean_luma(img, Rect2i(int(w * 0.62), 0, int(w * 0.38), h))
+	var left := _mean_luma(img, Rect2i(0, 0, int(w * 0.30), h))
+	# 立绘压板现在接在正文右边界之后（约 64%，见 `_comp_panel_x()`），
+	# 所以右边取样从 68% 开始，避开正文最后几列。
+	var right := _mean_luma(img, Rect2i(int(w * 0.68), 0, int(w * 0.32), h))
 	print("  平均亮度  左 %.3f   右 %.3f" % [left, right])
 	return absf(right - left)
 

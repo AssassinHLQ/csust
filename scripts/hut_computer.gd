@@ -49,8 +49,16 @@ const USE_DY_MAX := 1.6
 const SEAT_LOCAL := Vector3(-0.6, 0.0, -1.30)
 const SEAT_EYE_Y := 1.05
 
-## 终端画布尺寸：COLS×CELL + 两侧留白
-const VP_SIZE := Vector2i(832, 664)
+## 终端画布尺寸。
+##
+## ⚠️ **必须是 16:9**（2026-11-13 用户实测：「现在的 ARCH LINUX 太胖了」）。
+##    原来是 832×664（1.25:1），而窗口/全屏是 1.75~1.78:1，`STRETCH_SCALE`
+##    把它横向拉宽约 40% —— 字被拉扁成「胖字」。现在画布跟窗口同比例，
+##    而且**屏幕直接铺满整个窗口**（外框已去掉），拉伸几乎为 1。
+##
+## 100 列 × 8 px = 800 px 的正文只占 1280 里的 63%，
+## 右边 37% 是**留给阿洛娜 / 普拉娜的立绘区**（见 `arch_terminal.gd` 的同伴一节）。
+const VP_SIZE := Vector2i(1280, 720)
 
 var terminal: ArchTerminal
 var viewport: SubViewport
@@ -262,43 +270,20 @@ func _build_ui() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(dim)
 
-	# 显示器外框：一圈深灰边 + 里面是终端画面
+	# 屏幕：**直接铺满整个窗口，不要外框**
 	#
-	# ⚠️ 2026-11-12 用户：「屏幕能不能更大点，就是两边占满那种」。
-	#    原来左右各留 90 px、上下各 60 px，外面还有一层 `KEEP_ASPECT_CENTERED`
-	#    再按 832×664 的固定画布等比缩放 —— 两边就黑出两大块。
-	#    现在：外框贴满整屏（只留 16 px 给边框本身），画面 `STRETCH_SCALE` 铺满，
-	#    终端画布那边也改成跟着尺寸自适应（见 `arch_terminal.gd` 的 `COLS/ROWS`）。
-	var inset := 16
-	var frame := Panel.new()
-	frame.name = "Frame"
-	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.offset_left = inset
-	frame.offset_top = inset
-	frame.offset_right = -inset
-	frame.offset_bottom = -inset
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.02, 0.025, 0.035)
-	sb.border_color = Color(0.22, 0.24, 0.28)
-	sb.set_border_width_all(8)
-	sb.set_corner_radius_all(6)
-	frame.add_theme_stylebox_override("panel", sb)
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_overlay.add_child(frame)
-
+	# ⚠️ 2026-11-13 用户（附实拍图）：「还要扩大，占满整个窗口，不要屏幕旁边那个框了，
+	#    直接就是屏幕满占窗口」。所以原来那圈 8 px 深灰边 + 16 px 内缩 + 圆角
+	#    **整块删掉**，`ScreenTexture` 直接贴在 Overlay 上、offset 全 0。
+	#    画布本身也换成 16:9（见 `VP_SIZE`），否则会被横向拉宽成「胖字」。
 	_screen = TextureRect.new()
 	_screen.name = "ScreenTexture"
 	_screen.texture = viewport.get_texture()
-	# `STRETCH_SCALE`：直接铺满外框。终端是字符画，稍微拉伸不会糊，
-	# 关键是**别留黑边**（原来 KEEP_ASPECT_CENTERED 会按画布比例缩）。
+	# `STRETCH_SCALE` 铺满；画布已是 16:9，和窗口比例基本一致，几乎没有拉伸
 	_screen.stretch_mode = TextureRect.STRETCH_SCALE
 	_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_screen.offset_left = 8
-	_screen.offset_top = 8
-	_screen.offset_right = -8
-	_screen.offset_bottom = -8
 	_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.add_child(_screen)
+	_overlay.add_child(_screen)
 
 	# 底部提示行：**用终端那套等宽字体**（用户 2026-11-12：
 	# 「退出提示也在下面用 arch 风格字体」）。原来走的是默认 UI 字体，和终端不一套。

@@ -43,7 +43,7 @@ const C_DIM := Color(0.55, 0.58, 0.64)
 const C_PINK := Color(0.98, 0.44, 0.62)
 const C_BLUE := Color(0.27, 0.72, 0.94)
 
-# ── 布局（SubViewport 是 832×664）───────────────────────────────────────────
+# ── 布局（SubViewport 是 1280×720 = 16:9，2026-11-13 从 832×664 改过来）───────
 const PAD := 24.0
 const BAR_H := 46.0
 const HEAD_H := 104.0
