@@ -14,7 +14,7 @@ func _initialize() -> void:
 		fails.append("有曲目文件缺失")
 
 	print("\n=== 循环参数 ===")
-	for n in ["shop", "gamedev", "esports", "room609"]:
+	for n in ["shop", "gamedev", "esports", "room609", "finalboss"]:
 		var info: Dictionary = Music.TRACKS[n]
 		var path: String = Music.DIR + String(info.get("file", ""))
 		var st := load(path) as AudioStreamOggVorbis

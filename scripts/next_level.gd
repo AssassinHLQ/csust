@@ -24,6 +24,10 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 ## 状态本身没问题：`DevMode` 把值存在 `GameSettings`（`dev_mode` 那一项），
 ## 跨场景保留。缺的只是"谁来按"。
 const DevMode := preload("res://scripts/dev_mode.gd")
+## 终局「校园封锁 + 最终 BOSS」（用户 2026-11-13）。见 `scripts/arena_lock.gd`。
+const ArenaLockScript := preload("res://scripts/arena_lock.gd")
+## 自由摄像头（开发者模式 F7，2026-11-12 用户要的拍摄工具）。见 `free_camera.gd`。
+const FreeCamScript := preload("res://scripts/free_camera.gd")
 ## 和 `game.gd::PERF_KEY` 保持一致
 const PERF_KEY := KEY_F3
 ## 浮层刷新间隔（秒），和 `game.gd::PERF_REFRESH` 一致
@@ -32,6 +36,8 @@ const PERF_REFRESH := 0.2
 const PERF_WINDOW := 120
 
 var _perf_layer: CanvasLayer
+## 自由摄像头（F7 懒建；和 `game.gd::_toggle_free_cam()` 同一套）
+var _free_cam: Camera3D
 var _perf_label: Label
 var _perf_clock := 0.0
 var _perf_dts: Array[float] = []
@@ -104,6 +110,19 @@ var _campus_shown := false
 var _msg_tween: Tween
 var _pad_off: Material
 var _pad_on: Material
+
+## ── 终局：三只霸王龙全部倒下 → 校园封锁 + 最终 BOSS（2026-11-13 用户）──
+##
+## 用户原话：「在打败三只霸王龙之后，围墙会上升锁住我们，此时围墙变成半透明红色
+## 并且有上下红色密集线条封锁，天空盒变成末日风格的，然后最终 boss 优香-恐怖登场」
+##
+## 三只霸王龙在 `next_level.tscn` 里都写了 `respawn_on_death = false`，
+## 所以每只的 `died` 只会来一次 —— 直接数次数，不用防重复。
+## 真正的演出在 `scripts/arena_lock.gd`，这里只负责「数到 0 就开演」。
+var _trex_total := 0
+var _trex_left := 0
+var _final_started := false
+var _arena_lock: Node3D
 
 
 func _enter_tree() -> void:
@@ -233,6 +252,14 @@ func _input(event: InputEvent) -> void:
 				DevMode.toggle()
 				print("[Dev] F3 → 开发者模式 = %s" % str(DevMode.is_on()))
 				return
+			# ── F7：自由摄像头（拍摄用；激活时它自己先吃掉 F7/Esc）──
+			if key.keycode == KEY_F7 or key.physical_keycode == KEY_F7:
+				if DevMode.is_on():
+					_toggle_free_cam()
+					get_viewport().set_input_as_handled()
+				else:
+					print("[Dev] F7：先按 F3 开开发者模式")
+				return
 			# ── F4/F5/F6：**回显**（2026-11-11 用户选 C 方案）──
 			#
 			# 用户报「第二场景仍然不能用 f456」，可探针实测三键逻辑都正常
@@ -254,6 +281,18 @@ func _input(event: InputEvent) -> void:
 				var on := DevMode.is_on()
 				_show_key_echo("%s 收到 · 开发者模式 %s" % [nm, "开" if on else "关（先按 F3）"])
 				print("[Dev] %s 按键到达 next_level.gd（开发者模式=%s）" % [nm, str(on)])
+
+
+## 自由摄像头开关（F7）：懒建，挂成最后一个子节点 —— `Node._input` 倒序派发，
+## 放最后才能让它先吃掉 F7/Esc/F8（见 `scripts/free_camera.gd`）。
+func _toggle_free_cam() -> void:
+	if _free_cam == null or not is_instance_valid(_free_cam):
+		var fc := FreeCamScript.new() as Camera3D
+		fc.name = "FreeCam"
+		add_child(fc)
+		fc.call("setup", self)
+		_free_cam = fc
+	_free_cam.call("toggle")
 
 
 ## 屏幕右下角闪一行「按到了什么」（F4/F5/F6 回显，2026-11-11 用户选 C 方案）。
@@ -478,6 +517,14 @@ func _ready() -> void:
 		print("[ConstructivistLevel] Boss 血条：绑了 %d 位（%s）"
 			% [bosses.size(), ", ".join(bosses.map(func(b): return String(b.name)))])
 
+	# ── 终局钩子：全部霸王龙倒下 → 封锁 + 优香-恐怖（2026-11-13）──
+	_trex_total = bosses.size()
+	_trex_left = _trex_total
+	for b in bosses:
+		if b != null and not b.died.is_connected(_on_boss_died):
+			b.died.connect(_on_boss_died)
+	print("[ConstructivistLevel] 终局监视：霸王龙 %d 只" % _trex_total)
+
 	_set_goal_open(false)
 	_update_scoreboard()
 	_show_message("击破 %d 个机关 —— 北门会下沉，可以出去看校园" % _total, 5.0)
@@ -511,8 +558,129 @@ func _on_target_died(_by: float) -> void:
 		print("[ConstructivistLevel] 机关清空，终点解锁 + 北门开启")
 
 
-func _set_goal_open(on: bool) -> void:
-	# 这个函数可能在 `died` 信号的物理刷新里被调，直接改 monitoring 会被引擎拒绝
+## ── 终局（2026-11-13 用户）────────────────────────────────────────────────
+## 「在打败三只霸王龙之后，围墙会上升锁住我们…然后最终 boss 优香-恐怖登场！」
+
+## 某只霸王龙倒下。数到 0 就开演。
+func _on_boss_died(_by: float) -> void:
+	if _final_started:
+		return
+	_trex_left = maxi(_trex_left - 1, 0)
+	var down := _trex_total - _trex_left
+	print("[ConstructivistLevel] 霸王龙倒下 %d / %d（还剩 %d）" % [down, _trex_total, _trex_left])
+	if _trex_left > 0:
+		_show_message("霸王龙倒下 %d / %d" % [down, _trex_total], 2.5)
+		return
+	_final_started = true
+	_begin_final_phase.call_deferred()
+
+
+## 封锁 + 换天 + 最终 BOSS。中间留 1.4 s 让玩家反应一下，
+## 别让"最后一只倒下"和"墙升起来"糊在同一帧。
+func _begin_final_phase() -> void:
+	_show_message("三只霸王龙全部倒下 —— 校园封锁启动", 4.0)
+	Sfx.play("ui_open", -6.0)
+	print("[ConstructivistLevel] 终局开始：封锁 + 换天 + 最终 BOSS")
+	await get_tree().create_timer(1.4).timeout
+	if not is_inside_tree():
+		return
+	var lock := ArenaLockScript.new() as Node3D
+	if lock == null:
+		push_error("[ConstructivistLevel] 封锁控制器建不出来")
+		return
+	add_child(lock)
+	_arena_lock = lock
+	lock.connect("boss_spawned", _on_final_boss_spawned)
+	lock.connect("finished", _on_final_cleared)
+	var env := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	var sun := get_node_or_null("Sun") as DirectionalLight3D
+	lock.call("start", env, sun, _player, _arena_bounds())
+	# 终局期间死在封锁区里，不该被送回大厅（要重新走进校园打第二遍）。
+	# 存一个**刻意的**封锁区存档点：墙升起来那一刻玩家站的位置
+	# （刚打完最后一只霸王龙，脚下是实地；跑着摔下去这种例外就不挪存档点）。
+	var vel := Vector3.ZERO
+	if _player != null:
+		vel = _player.get("velocity")
+	if _player != null and _player.has_method("set_respawn_point") and vel.length() < 6.0:
+		_player.call("set_respawn_point", _player.global_position)
+		print("[ConstructivistLevel] 终局存档点 → %s" % str(_player.global_position.snappedf(0.1)))
+
+
+## 最终 BOSS 出来了：血条重绑到它身上（三只霸王龙已经死了，旧条不该还留着）。
+func _on_final_boss_spawned(boss: Node3D) -> void:
+	var b := boss as Boss
+	if b == null:
+		return
+	if _hud != null and _hud.has_method("bind_bosses"):
+		_hud.bind_bosses([b])
+		print("[ConstructivistLevel] Boss 血条 → 优香-恐怖")
+	_show_message("优香-恐怖 登场", 5.0)
+
+
+## 优香-恐怖 倒下、封锁解除。
+func _on_final_cleared() -> void:
+	_show_message("优香-恐怖 已被击破 —— 校园解除封锁", 6.0)
+	print("[ConstructivistLevel] 终局完成：优香-恐怖 已被击破")
+
+
+## 校园围墙的 footprint（= 用户建的那圈墙），给封锁罩用。
+##
+## 实测（`_probe_campuswall.gd`）：`CampusCollision` 是一个 `Node3D` 包着一个
+## `StaticBody3D`，body 里只有一个 18 万面的 `ConcavePolygonShape3D`，
+## 世界包围盒 **573.17 × 53.68 × 483.39**（x ±287、z −558 ~ −75）。
+## 所以从**形状顶点**量；量不出来再退到 `CampusFloor` 那块大板的 x/z。
+func _arena_bounds() -> AABB:
+	var cc := get_node_or_null("CampusCollision")
+	if cc != null:
+		var b := _collision_aabb(cc)
+		if b.size.x > 10.0 and b.size.z > 10.0:
+			print("[ConstructivistLevel] 校园范围（碰撞网格）%s" % str(b.size.snappedf(0.01)))
+			return b
+	var fl := get_node_or_null("CampusFloor/Collision") as CollisionShape3D
+	if fl != null and fl.shape is BoxShape3D:
+		var s := (fl.shape as BoxShape3D).size
+		var c := fl.global_position
+		print("[ConstructivistLevel] 校园范围（地面板兜底）%s" % str(s.snappedf(0.01)))
+		return AABB(Vector3(c.x - s.x * 0.5, -1.0, c.z - s.z * 0.5),
+			Vector3(s.x, 60.0, s.z))
+	push_warning("[ConstructivistLevel] 量不出校园范围，用写死的兜底值")
+	return AABB(Vector3(-287.8, -1.0, -558.4), Vector3(575.6, 60.0, 483.4))
+
+
+## 把一个节点（含子孙）里所有碰撞形状的顶点并成世界 AABB。
+## ⚠️ 18 万个面逐个变换太慢；抽样（每 13 个面取 1 个）量包围盒完全够，
+##    误差是"极值面可能被跳过"，几百米尺度上最多差几米。
+func _collision_aabb(from: Node) -> AABB:
+	var out := AABB()
+	var seen := false
+	var stack: Array[Node] = [from]
+	while not stack.is_empty():
+		var c: Node = stack.pop_back()
+		if c is CollisionShape3D:
+			var cs := c as CollisionShape3D
+			var sh := cs.shape
+			if sh is ConcavePolygonShape3D:
+				var faces := (sh as ConcavePolygonShape3D).get_faces()
+				if not faces.is_empty():
+					var xf := cs.global_transform
+					var b := AABB(xf * faces[0], Vector3.ZERO)
+					var i := 0
+					while i < faces.size():
+						b = b.expand(xf * faces[i])
+						i += 13
+					out = b if not seen else out.merge(b)
+					seen = true
+			elif sh is BoxShape3D:
+				var bs := (sh as BoxShape3D).size
+				var b2: AABB = cs.global_transform * AABB(-bs * 0.5, bs)
+				out = b2 if not seen else out.merge(b2)
+				seen = true
+		for ch in c.get_children():
+			stack.append(ch)
+	return out
+
+
+func _set_goal_open(on: bool) -> void:	# 这个函数可能在 `died` 信号的物理刷新里被调，直接改 monitoring 会被引擎拒绝
 	_goal.set_deferred("monitoring", on)
 	_goal_light.light_energy = 2.6 if on else 0.6
 	_pad.set_surface_override_material(0, _pad_on if on else _pad_off)
@@ -544,6 +712,10 @@ func _on_fall(body: Node3D) -> void:
 ## 被 boss 打倒：血量归零 → 玩家自己会在 0.6 s 后回到本场景的存档点，
 ## 这里只负责提示和把进度相关的表现收一下。
 func _on_player_died() -> void:
+	if _final_started:
+		_show_message("被击倒 —— 送回封锁区入口", 3.0)
+		print("[ConstructivistLevel] 玩家倒下，等待重生到封锁区存档点")
+		return
 	_show_message("被击倒 —— 送回大厅入口", 3.0)
 	print("[ConstructivistLevel] 玩家倒下，等待重生到入口")
 
