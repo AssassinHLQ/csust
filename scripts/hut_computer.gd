@@ -64,6 +64,8 @@ var terminal: ArchTerminal
 var viewport: SubViewport
 ## 假 B 站窗口（终端敲 `bilibili` 打开）
 var bili: BiliBrowser
+## 假浏览器（终端敲 `archlinux` 打开，画的是 archlinux.org 首页）
+var web: ArchWeb
 ## ⚠️ 阿洛娜 / 普拉娜 **不再挂在这里**。
 ##
 ## 用户 2026-11-12 中途改了设计：「arona 这个，**不是新开一个界面**，
@@ -85,6 +87,10 @@ var _layer: CanvasLayer
 var _overlay: Control
 var _screen: TextureRect
 var _hint: Label
+## 底部那行「Esc 或 Ctrl+Q 退出电脑…」。页面（B 站 / 浏览器）开着的时候要藏起来：
+## 那时候 Esc 是「退出这个页面」而不是「退出电脑」，两句话放一起会互相矛盾，
+## 而且它会压在页面内容上（实拍图里正好盖住包名那几行）。
+var _foot: Label
 var _beam: OmniLight3D
 
 
@@ -167,6 +173,16 @@ func _build() -> void:
 	bili.visible = false
 	bili.close_requested.connect(_close_bili)
 	viewport.add_child(bili)
+
+	# 假浏览器（`archlinux` 命令打开）。也放同一个 SubViewport、盖在 bili 之上：
+	# 两个页面同一时刻只会开一个，谁在上都不要紧，但层级要稳定。
+	terminal.open_web_requested.connect(_open_web)
+	web = ArchWeb.new()
+	web.name = "ArchWeb"
+	web.set_anchors_preset(Control.PRESET_FULL_RECT)
+	web.visible = false
+	web.close_requested.connect(_close_web)
+	viewport.add_child(web)
 
 	# 阿洛娜 / 普拉娜：**不在这里建**。她们由终端自己画在右半屏
 	# （见本文件 `bili` 变量上面那段说明，以及 `arch_terminal.gd` 的
@@ -288,6 +304,7 @@ func _build_ui() -> void:
 	# 底部提示行：**用终端那套等宽字体**（用户 2026-11-12：
 	# 「退出提示也在下面用 arch 风格字体」）。原来走的是默认 UI 字体，和终端不一套。
 	var foot := Label.new()
+	_foot = foot
 	foot.name = "Footer"
 	foot.text = "Esc 或 Ctrl+Q 退出电脑（也可以直接输入 exit）· 键盘可以正常打字"
 	foot.add_theme_font_size_override("font_size", 15)
@@ -370,9 +387,11 @@ func _input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb != null and mb.pressed \
 				and (mb.button_index == MOUSE_BUTTON_WHEEL_UP
-					or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) \
-				and not (bili != null and bili.visible):
-			terminal.feed(event)
+					or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			if web != null and web.visible:
+				web.feed(event)
+			elif not (bili != null and bili.visible):
+				terminal.feed(event)      # B 站页面不吃滚轮，终端才要
 			get_viewport().set_input_as_handled()
 			return
 	var k := event as InputEventKey
@@ -395,8 +414,11 @@ func _input(event: InputEvent) -> void:
 			_close()
 			get_viewport().set_input_as_handled()
 			return
-		# 假 B 站开着的时候，按键归它 —— 否则方向键会被终端当成输入字符
-		if bili != null and bili.visible:
+		# 页面开着的时候，按键归页面 —— 否则方向键会被终端当成输入字符。
+		# 顺序按**层级**来：假浏览器盖在 B 站上面，所以先问它。
+		if web != null and web.visible:
+			web.feed(event)
+		elif bili != null and bili.visible:
 			bili.feed(event)
 		else:
 			terminal.feed(event)
@@ -412,6 +434,7 @@ func _open_bili() -> void:
 	if bili == null:
 		return
 	bili.open()
+	_sync_footer()
 	Sfx.play("ui_open", -8.0)
 	print("[电脑] 打开假 B 站（离线 demo，不联网）")
 
@@ -421,7 +444,35 @@ func _close_bili() -> void:
 	if bili == null:
 		return
 	bili.close()
+	_sync_footer()
 	Sfx.play("ui_close", -8.0)
+
+
+## 终端敲 `archlinux` → 盖上假浏览器（画出来的 archlinux.org 首页）
+func _open_web() -> void:
+	if web == null:
+		return
+	web.open()
+	_sync_footer()
+	Sfx.play("ui_open", -8.0)
+	print("[电脑] 打开假浏览器（archlinux.org 首页，纯手绘，不联网）")
+
+
+## 浏览器里按 Esc 退回终端
+func _close_web() -> void:
+	if web == null:
+		return
+	web.close()
+	_sync_footer()
+	Sfx.play("ui_close", -8.0)
+
+
+## 底部提示行：有页面开着就藏（页面自己底部有说明），回到终端再显示
+func _sync_footer() -> void:
+	if _foot == null:
+		return
+	var page_open := (web != null and web.visible) or (bili != null and bili.visible)
+	_foot.visible = not page_open
 
 
 ## ⚠️ 2026-11-13：原来的 `_open_arona()` / `_close_arona()` / `_open_plana()` /
@@ -441,6 +492,7 @@ func _open() -> void:
 	_using = true
 	_hint.visible = false
 	_overlay.visible = true
+	_sync_footer()
 	terminal.reset()
 	_seat()
 	var p := _player_node()
@@ -491,9 +543,10 @@ func _close() -> void:
 	if not _using:
 		return
 	_using = false
-	# 合上电脑时把假 B 站收掉、把同伴请走 —— 不然下次开机会直接看到上次的画面
+	# 合上电脑时把假 B 站 / 假浏览器收掉、把同伴请走 —— 不然下次开机会直接看到上次的画面
 	if bili != null:
 		bili.close()
+	_close_web()
 	if terminal != null and terminal.companion_active():
 		terminal.dismiss()
 	_overlay.visible = false

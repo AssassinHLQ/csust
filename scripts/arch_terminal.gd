@@ -29,6 +29,8 @@ signal first_input
 ##    Godot 在 Windows 上拿不到输入法的候选文字，硬做中文输入不现实，
 ##    所以这里给几个**英文别名**；中文那个只写在 help 里当注释，敲不进来也无所谓。
 signal open_bili_requested
+## 玩家敲 `archlinux` 时发出：开「假浏览器」看 archlinux.org 首页（见 `arch_web.gd`）
+signal open_web_requested
 ## ⚠️ `arona` / `plana` **没有信号**：她们不再开独立页面，而是**在终端自己的右半屏**
 ##    显示立绘、台词直接进终端正文流（用户 2026-11-12：「不是新开一个界面，
 ##    而是直接在 arch 右半部分显现，遮住系统，她的对话也通过终端发送」）。
@@ -509,6 +511,8 @@ const COMMANDS := [
 	{"name": "sl", "alias": [], "arg": "", "desc": "you typed sl instead of ls again"},
 	{"name": "bilibili", "alias": ["bili", "b23", "blbl"], "arg": "",
 		"desc": "open the fake bilibili window (offline)"},
+	{"name": "archlinux", "alias": ["arch", "www"], "arg": "",
+		"desc": "open archlinux.org in the fake browser"},
 	{"name": "arona", "alias": [], "arg": "1|2", "desc": "ARONA shows up in the right pane"},
 	{"name": "plana", "alias": [], "arg": "1|2", "desc": "PLANA takes over the right pane"},
 	{"name": "dismiss", "alias": ["bye"], "arg": "", "desc": "send whoever it is back to /dev/null"},
@@ -609,6 +613,12 @@ func _run(cmd: String) -> void:
 			_push_line([["正在打开 bilibili ...", KEY_CYAN]])
 			_push_line([["(offline demo -- no network, nothing is really loaded)", DIM]])
 			open_bili_requested.emit()
+		"archlinux":
+			# 用户 2026-11-13：「可以加浏览器吗，输入 ARCHLINUX 进入浏览器页面的这个网站」。
+			# 真 webview 装不了（Godot 没有内置），所以是**画出来的** archlinux.org 首页。
+			_push_line([["正在打开 https://archlinux.org/ ...", KEY_CYAN]])
+			_push_line([["(offline demo -- the page is drawn by the game, nothing is fetched)", DIM]])
+			open_web_requested.emit()
 		"neofetch":
 			_neofetch()
 		"ls":
