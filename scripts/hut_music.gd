@@ -34,15 +34,26 @@ extends Node3D
 const MUSIC_TRACK := "hut"
 ## 触发区比屋内空间**往内缩**多少米（每边）。
 ##
-## ⚠️ 2026-11-12 用户：「为什么占到边上也播放？缩小圈子，要进门才行」。
-##    原来这里是**外扩 1.2 m**（想在门口留余量），结果站在屋外墙边、甚至
-##    只踩在门槛上就开始放音乐了 —— 因为外扩之后触发区比房子还大。
-##    现在反过来**内缩**：必须真正走进屋里才响。
-const MUSIC_INSET := 0.8
-## 触发区高度（米，从地板起）。小屋墙面到 2.5 m 左右，取 2.2 —— 故意**低于屋顶**，
-## 这样「站在屋顶上」时胶囊底部（约 2.6 m）已经高过触发区顶部，不会误触发。
+## ⚠️ 这个数字被用户投诉过两轮，别再随手改大改小：
+##
+##   ① 2026-11-12「为什么占到边上也播放？缩小圈子，要进门才行」
+##      当时是**往外扩 1.2 m**（想在门口留余量）→ 区比房子还大，站墙外就响。
+##   ② 于是四周内缩 0.8 m → 2026-11-13 用户报「站在桌前音乐就停了」：
+##      桌子在小屋局部 (−0.6, **−2.2**)，离 −Z 内壁只有 0.4 m，被内缩排除掉了。
+##   ③ 又改成「门侧缩 1.1 m、其余缩 0.25 m」→ 用户再报
+##      「站在门口里面还是没有音乐」：屋子总共才 6.2 m 宽，1.1 m 等于要求往里走将近一米。
+##
+## ⇒ 最终取 **0.2 m**（≈ 墙厚级别，等于「屋内就是触发区」）。
+##   配合胶囊半径 0.30 的判定，实际效果是：
+##     · 站门口内侧 → 响（胶囊一进屋就碰到区）
+##     · 站屋外贴墙 → 静（胶囊够不到，区边在内壁内侧 0.2 m）
+##     · 桌前贴墙（局部 z=−2.2，区 z 到 −2.4）→ 响
+const MUSIC_INSET := 0.2
+## 触发区高度（米，从地板起）。小屋墙面到 2.5 m 左右，取 **1.9** —— 故意**比屋顶低一截**：
+## 站屋顶时胶囊中心 ≈ 3.65、底部 ≈ 2.60，高于区顶 1.9，不会误触发。
+## 而站在屋里（胶囊中心 ≈ 1.05）完整落在 0~1.9 内。
 ## ⚠️ 不要用 CSG `Walls` 盒的 5.7 m：那个盒子比可见的墙高得多，用它连屋顶都算屋里。
-const MUSIC_HEIGHT := 2.2
+const MUSIC_HEIGHT := 1.9
 ## 触发区节点名（自检按名字找）
 const ZONE_NODE := "MusicZone"
 
@@ -95,16 +106,22 @@ func _build_music_zone() -> void:
 	area.monitoring = true
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	# ⚠️ 水平**内缩** MUSIC_INSET（不是外扩）：用户 2026-11-12 要求
-	#    「缩小圈子，要进门才行」—— 站在墙外/门槛上不该算进屋。
-	box.size = Vector3(
-		maxf(_inner.size.x - MUSIC_INSET * 2.0, 0.6),
-		MUSIC_HEIGHT,
-		maxf(_inner.size.z - MUSIC_INSET * 2.0, 0.6))
+
+	# ── 四面等距内缩（0.2 m，理由见 `MUSIC_INSET` 那段三次投诉记录）──
+	var x0 := _inner.position.x + MUSIC_INSET
+	var x1 := _inner.end.x - MUSIC_INSET
+	var z0 := _inner.position.z + MUSIC_INSET
+	var z1 := _inner.end.z - MUSIC_INSET
+	if x1 - x0 < 0.5 or z1 - z0 < 0.5:
+		push_warning("[HutMusic] 内缩之后触发区太小（%.2f × %.2f），不建"
+			% [x1 - x0, z1 - z0])
+		return
+	box.size = Vector3(x1 - x0, MUSIC_HEIGHT, z1 - z0)
 	cs.shape = box
-	# 从地板往上量 MUSIC_HEIGHT 的一半作为中心（不跟着 CSG 那个 5.7 m 盒走）
-	cs.position = Vector3(_inner.get_center().x,
-		_inner.position.y + MUSIC_HEIGHT * 0.5, _inner.get_center().z)
+	# 中心取「内缩后区间」的中心；y 从地板往上量 MUSIC_HEIGHT 的一半
+	# （不跟着 CSG 那个 5.7 m 盒走）
+	cs.position = Vector3((x0 + x1) * 0.5,
+		_inner.position.y + MUSIC_HEIGHT * 0.5, (z0 + z1) * 0.5)
 	area.add_child(cs)
 	add_child(area)
 	# ⚠️ 用「计数」而不是布尔：玩家被瞬移时可能先 entered B 再 exited A，
@@ -112,7 +129,7 @@ func _build_music_zone() -> void:
 	area.body_entered.connect(_on_music_body.bind(1))
 	area.body_exited.connect(_on_music_body.bind(-1))
 	_music_area = area
-	print("[HutMusic] BGM 触发区：%.2f × %.2f × %.2f m（屋内 %.2f × %.2f × %.2f，水平每边内缩 %.1f）曲目 `%s`"
+	print("[HutMusic] BGM 触发区：%.2f × %.2f × %.2f m（屋内 %.2f × %.2f × %.2f，每边内缩 %.2f）曲目 `%s`"
 		% [box.size.x, box.size.y, box.size.z,
 			_inner.size.x, _inner.size.y, _inner.size.z, MUSIC_INSET, MUSIC_TRACK])
 	# ⚠️ `cs.position` 是本节点（小屋）**局部**空间，换算成世界再打印，

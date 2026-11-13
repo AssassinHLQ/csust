@@ -342,13 +342,27 @@ func _run() -> void:
 			and stop_frames >= 0 and stop_frames < 30
 
 		# 屋顶上：横向还在矩形内，但高过墙顶 → 也算屋外
-		player.velocity = Vector3.ZERO
-		player.global_position = Vector3(cx, float(r609.get("_room_y_hi")) + 0.8, cz)
-		for _f in 3:
-			await process_frame          # 只等 3 帧，再等就被重力拽回屋里了
-		print("[画室屋顶 %s] current=「%s」（应为空）"
-			% [str(player.global_position), Music.current()])
-		r609_roof = Music.current() == ""
+		#
+		# ⚠️ 原来这里只等 3 帧，是个**脆弱判据**（2026-11-13 实测翻过车）：
+		#    `_update_room_bgm()` 要连续 `_EDGE_FRAMES = 2` 帧判「屋外」才停，
+		#    而玩家被放到屋顶后**受重力往下掉**，一旦掉到墙顶以下就会被判回「屋里」、
+		#    把音乐重新开起来 —— 于是「等了 3 帧」到底落在哪一帧全看时序，
+		#    别处多等一帧都可能让结果翻转（本喵加了个门厅测试就把它挤红了）。
+		#
+		# 改成：**每帧把位置钉回屋顶**（不让重力把它拽下去），最多等 10 帧，一停就通过。
+		# 判据本身没变（屋顶 = 屋外），只是不再依赖帧数巧合。
+		var roof_y := float(r609.get("_room_y_hi")) + 0.8
+		var roof_frames := -1
+		for _f in 10:
+			player.velocity = Vector3.ZERO
+			player.global_position = Vector3(cx, roof_y, cz)
+			await process_frame
+			if Music.current() == "":
+				roof_frames = _f + 1
+				break
+		print("[画室屋顶 (%s) y=%.2f] current=「%s」（应为空，用了 %d 帧）"
+			% [str(Vector2(cx, cz)), roof_y, Music.current(), roof_frames])
+		r609_roof = Music.current() == "" and roof_frames > 0
 
 	# ───────────────────── 临时服务器据点（小屋）─────────────────────
 	#
@@ -362,7 +376,8 @@ func _run() -> void:
 	var hut_in := false
 	var hut_out := false
 	var hut_door_silent := false
-	var hut_inside_plays := false
+	var hut_desk_plays := false
+	var hut_outside_silent := false
 	if hut_zone != null:
 		var hcs := hut_zone.get_child(0) as CollisionShape3D
 		var hb := hcs.shape as BoxShape3D
@@ -387,27 +402,37 @@ func _run() -> void:
 			% [str(player.global_position), Music.current(), str(Music.is_playing())])
 		hut_out = Music.current() == "" and not Music.is_playing()
 
-		# ⚠️ 用户 2026-11-12：「为什么占到边上也播放？缩小圈子，要进门才行」。
-		#    所以这里额外验一件事：**站在门槛上/墙外不许响**，必须走进屋里才响。
-		#    小屋世界范围 x 10.7~17.3（门在 −X 侧）、内壁 x≈10.9。
-		#    胶囊半径 0.30，所以「中心 x」和「区边界」差 0.3 —— 判据按实测边界来写。
+		# ⚠️ 这块被用户投诉过三轮，判据最终定成下面两条（别再改回去）：
+		#   ① 2026-11-12「占到边上也播放」→ 当时区比房子还大（外扩 1.2 m）
+		#   ② 2026-11-13「站在桌前音乐就停了」→ 四周内缩 0.8 m 把桌子排除掉了
+		#   ③ 2026-11-13「站在门口里面还是没有音乐」→ 门侧内缩 1.1 m 太深
+		#   现在四面只缩 0.2 m：**门口内侧要响、屋外要静**。
 		var door_x := hc.x - hb.size.x * 0.5      # 触发区靠门那一侧的边界
-		# 门框附近（触发区边界外 0.4 m，约等于站在门槛/墙里侧）→ 不该响
-		player.global_position = Vector3(door_x - 0.4, hut.global_position.y + 0.15, hc.z)
+		# 门口内侧 0.4 m（区边界外 0.1 m 处，胶囊一进屋就会碰到区）→ 必须响
+		player.global_position = Vector3(door_x - 0.1, hut.global_position.y + 0.15, hc.z)
 		player.velocity = Vector3.ZERO
 		for _f in 40:
 			await process_frame
-		print("[小屋门槛 %s] current=「%s」（应为空）"
+		print("[小屋门口内侧 %s] current=「%s」（应为 hut）"
 			% [str(player.global_position), Music.current()])
-		hut_door_silent = Music.current() == ""
-		# 往里 1 m（明确进屋）→ 该响
-		player.global_position = Vector3(door_x + 1.0, hut.global_position.y + 0.15, hc.z)
+		hut_door_silent = Music.current() == "hut" and Music.is_playing()
+		# ⚠️ 2026-11-13 回归：**桌前靠墙**必须有音乐（用户报过这里会停）。
+		#    桌子在小屋局部 (−0.6, −2.2)，世界 = 小屋原点 + 局部。
+		player.global_position = hut.global_position + Vector3(-0.6, 0.15, -2.2)
 		player.velocity = Vector3.ZERO
 		for _f in 40:
 			await process_frame
-		print("[小屋进门 %s] current=「%s」（应为 hut）"
+		print("[小屋桌前 %s] current=「%s」（应为 hut）"
 			% [str(player.global_position), Music.current()])
-		hut_inside_plays = Music.current() == "hut" and Music.is_playing()
+		hut_desk_plays = Music.current() == "hut" and Music.is_playing()
+		# 屋外 1.5 m → 必须静（防止触发区又扩到墙外）
+		player.global_position = Vector3(door_x - 1.5, hut.global_position.y + 0.15, hc.z)
+		player.velocity = Vector3.ZERO
+		for _f in 40:
+			await process_frame
+		print("[小屋门外 1.5m %s] current=「%s」（应为空）"
+			% [str(player.global_position), Music.current()])
+		hut_outside_silent = Music.current() == ""
 
 	# ───────────────────── 蒙德里安大楼 ─────────────────────
 	#
@@ -495,8 +520,9 @@ func _run() -> void:
 			hut_st.get_length()])
 	print("  临时据点：屋里放         %s" % ("✔" if hut_in else "✘"))
 	print("  临时据点：出屋停         %s" % ("✔" if hut_out else "✘"))
-	print("  临时据点：门槛上不响     %s（要进门才放）" % ("✔" if hut_door_silent else "✘"))
-	print("  临时据点：进门就响       %s" % ("✔" if hut_inside_plays else "✘"))
+	print("  临时据点：门口内侧就响   %s" % ("✔" if hut_door_silent else "✘"))
+	print("  临时据点：桌前贴墙也响   %s" % ("✔" if hut_desk_plays else "✘"))
+	print("  临时据点：屋外 1.5m 静音 %s" % ("✔" if hut_outside_silent else "✘"))
 	print("  循环开关（蒙德里安）    %s（长度 %.4f s，应 139.1724）"
 		% [("✔" if mh_st.loop and absf(mh_st.get_length() - 139.1724) < 0.01 else "✘"),
 			mh_st.get_length()])
@@ -518,7 +544,7 @@ func _run() -> void:
 		and es_zone_ok and es_silent_hidden and es_started and es_stopped \
 		and r609_track == "room609" and r609_in and r609_out and r609_roof \
 		and hut_st.loop and absf(hut_st.get_length() - 115.8507) < 0.01 \
-		and hut_in and hut_out and hut_door_silent and hut_inside_plays \
+		and hut_in and hut_out and hut_door_silent and hut_desk_plays and hut_outside_silent \
 		and mh_st.loop and absf(mh_st.get_length() - 139.1724) < 0.01 \
 		and mh_in and mh_porch and mh_out \
 		and hall_in and hall_2f
