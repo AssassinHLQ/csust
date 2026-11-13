@@ -384,16 +384,26 @@ func _input(event: InputEvent) -> void:
 	# `event as InputEventKey`，鼠标事件当场被判成 null 丢掉，滚轮永远到不了终端。
 	# 现在先单独接滚轮（终端里是 `_scroll_by()`）。
 	if _using:
-		var mb := event as InputEventMouseButton
-		if mb != null and mb.pressed \
-				and (mb.button_index == MOUSE_BUTTON_WHEEL_UP
-					or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		# ── 鼠标 ──
+		# 假浏览器要能**点链接**，可 `SubViewport` 的 `handle_input_locally = false`
+		# （GUI 事件根本送不进去），所以这里手动把窗口坐标换算成画布坐标再转给页面。
+		# 顺带把滚轮也交给它（翻页面 / 翻终端历史）。
+		var me := event as InputEventMouse
+		if me != null:
 			if web != null and web.visible:
-				web.feed(event)
-			elif not (bili != null and bili.visible):
+				var c := event.duplicate() as InputEventMouse
+				c.position = _to_canvas(me.position)
+				c.global_position = c.position
+				web.feed(c)
+				get_viewport().set_input_as_handled()
+				return
+			var mb := event as InputEventMouseButton
+			if mb != null and mb.pressed and not (bili != null and bili.visible) \
+					and (mb.button_index == MOUSE_BUTTON_WHEEL_UP
+						or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 				terminal.feed(event)      # B 站页面不吃滚轮，终端才要
-			get_viewport().set_input_as_handled()
-			return
+				get_viewport().set_input_as_handled()
+				return
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return
@@ -427,6 +437,17 @@ func _input(event: InputEvent) -> void:
 	if k.keycode == KEY_F and _in_range:
 		_open()
 		get_viewport().set_input_as_handled()
+
+
+## 窗口/画布坐标 → 终端画布坐标（1280×720）。
+## 屏幕那块 `TextureRect` 是铺满整个覆盖层的，所以按它的 rect 等比换算即可。
+func _to_canvas(p: Vector2) -> Vector2:
+	if _screen == null:
+		return p
+	var r := _screen.get_global_rect()
+	if r.size.x <= 0.0 or r.size.y <= 0.0:
+		return p
+	return (p - r.position) / r.size * Vector2(VP_SIZE)
 
 
 ## 终端敲 `bilibili` → 盖上一层假 B 站（终端画面留着，回来还在）
