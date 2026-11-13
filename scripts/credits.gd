@@ -113,7 +113,7 @@ const ENTRIES := [
 		"group": "角色与 Boss 模型",
 		"path": "assets/plana_frames",
 		"title": "普拉娜（电脑里第二个虚拟助手，终端敲 `plana` 出现）",
-		"author": "bilibili UP 瞿糸（《依旧送送送，普拉娜绿幕素材，想用的可以自己拿》）；"
+		"author": "bilibili UP 瞿黧（《依旧送送送，普拉娜绿幕素材，想用的可以自己拿》，BV1jsN26uEF3）；"
 			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
 		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
 			+ "本仓库不分发，克隆者需自行合法取得",
