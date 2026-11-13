@@ -949,10 +949,11 @@ const COMPANIONS := {
 		],
 	},
 	"plana": {
-		# 两版素材（用户 2026-11-13：「现在要两个 plana」）：
+		# 三版素材：
 		#   ① `plana_frames`   半身带裙 · UP 瞿糸《依旧送送送，普拉娜绿幕素材》
 		#   ② `plana_frames_b` 近景头肩（光环）· UP 星冻qwq《普拉娜自己取》
-		"dirs": ["res://assets/plana_frames", "res://assets/plana_frames_b"],
+		#   ③ `plana_frames_c` 全身木偶（伞）· UP 优香体重100kg《普拉娜木偶绿幕素材》
+		"dirs": ["res://assets/plana_frames", "res://assets/plana_frames_b", "res://assets/plana_frames_c"],
 		"fps": 15.0,
 		"name": "PLANA",
 		"color": Color(0.82, 0.76, 1.0),

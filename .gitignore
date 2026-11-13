@@ -179,6 +179,11 @@ __pycache__/
 /assets/arona_frames_b/
 /assets/plana_frames_b/
 
+#   普拉娜 C：UP 优香体重100kg《普拉娜木偶绿幕素材》1080×1350 → 299 帧 / 26 MB
+#   抠像参数：chromakey=0x00AF43:0.16:0.06 + despill + crop 去 JMComic 水印
+#   授权未核实，只允许本地学习演示，不随仓库分发。
+/assets/plana_frames_c/
+
 # ── 电脑里阿洛娜 / 普拉娜的**中文配音**（2026-11-13）──
 #
 # 用本机 GPT-SoVITS v2pro 生成（脚本 `_tools/gen_companion_voice.py`），
