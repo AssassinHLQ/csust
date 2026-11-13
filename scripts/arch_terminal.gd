@@ -473,8 +473,8 @@ const COMMANDS := [
 	{"name": "sudo", "alias": [], "arg": "rm ...", "desc": "try your luck"},
 	{"name": "bilibili", "alias": ["bili", "b23", "blbl"], "arg": "",
 		"desc": "open the fake bilibili window (offline)"},
-	{"name": "arona", "alias": [], "arg": "", "desc": "ARONA shows up in the right pane"},
-	{"name": "plana", "alias": [], "arg": "", "desc": "PLANA takes over the right pane"},
+	{"name": "arona", "alias": [], "arg": "1|2", "desc": "ARONA shows up in the right pane"},
+	{"name": "plana", "alias": [], "arg": "1|2", "desc": "PLANA takes over the right pane"},
 	{"name": "dismiss", "alias": ["bye"], "arg": "", "desc": "send whoever it is back to /dev/null"},
 	{"name": "clear", "alias": [], "arg": "", "desc": "clear the screen"},
 	{"name": "exit", "alias": ["logout"], "arg": "", "desc": "close the computer"},
@@ -545,10 +545,11 @@ func _run(cmd: String) -> void:
 			# 用户 2026-11-12：「打 arona 可以出现电脑里面的阿洛娜」；之后追加
 			# 「不是新开一个界面，而是直接在 arch 右半部分显现，遮住系统，
 			#   她的对话也通过终端发送」→ 所以这里不开页面，只把她叫到右半屏。
-			summon("arona")
+			# 2026-11-13 给了**两版**素材：不带参数自动轮换，`arona 2` 点名第 2 版。
+			summon("arona", _clip_arg(arg))
 		"plana":
 			# 用户 2026-11-12：「扣绿幕，输入 plana 就出现这」。
-			summon("plana")
+			summon("plana", _clip_arg(arg))
 		"dismiss", "bye":
 			if companion_active():
 				dismiss()
@@ -611,6 +612,14 @@ func _run(cmd: String) -> void:
 			push_warning("[ArchTerminal] 命令 `%s` 在 COMMANDS 里有条目，但 _run() 没有分支" % name)
 
 
+## `arona 1` / `arona 2` → 0 / 1；没写参数或不是数字 → -1（`summon()` 里自动轮换）
+func _clip_arg(arg: String) -> int:
+	var a := arg.strip_edges()
+	if a.is_empty() or not a.is_valid_int():
+		return -1
+	return maxi(a.to_int() - 1, 0)
+
+
 func _say(line: String) -> void:
 	_push_line([[line, FG]])
 
@@ -632,7 +641,11 @@ func _say(line: String) -> void:
 # 提到他时用「他」或第三人称。普拉娜要提醒爱丽丝**早点刷回去**，不然他会生气。
 const COMPANIONS := {
 	"arona": {
-		"dir": "res://assets/arona_frames",
+		# 两版素材（用户 2026-11-13：「现在要两个 arona」）：
+		#   ① `arona_frames`   全身 · UP 香草BA《公益绿幕素材》
+		#   ② `arona_frames_b` 半身木偶（举白纸盒）· UP 忧郁的优_《阿罗娜木偶》
+		# 每叫一次换成下一版（`summon()` 里的轮换），也可以 `arona 2` 直接点名。
+		"dirs": ["res://assets/arona_frames", "res://assets/arona_frames_b"],
 		"fps": 12.0,
 		"name": "ARONA",
 		"color": Color(0.55, 0.82, 1.0),
@@ -660,7 +673,10 @@ const COMPANIONS := {
 		],
 	},
 	"plana": {
-		"dir": "res://assets/plana_frames",
+		# 两版素材（用户 2026-11-13：「现在要两个 plana」）：
+		#   ① `plana_frames`   半身带裙 · UP 瞿糸《依旧送送送，普拉娜绿幕素材》
+		#   ② `plana_frames_b` 近景头肩（光环）· UP 星冻qwq《普拉娜自己取》
+		"dirs": ["res://assets/plana_frames", "res://assets/plana_frames_b"],
 		"fps": 15.0,
 		"name": "PLANA",
 		"color": Color(0.82, 0.76, 1.0),
@@ -709,6 +725,11 @@ const VOICE_DB := -2.0
 
 var _comp := ""                       # 当前同伴（""=没有）
 var _comp_anim: FrameAnim = null
+## 当前用的是这个角色的第几版素材（0 起），以及它对应的目录
+var _comp_var := 0
+var _comp_dir := ""
+## 每个角色下一次叫出来用第几版（`arona` 连叫两次会在两版之间轮换）
+var _comp_pick := {}
 var _comp_line := 0
 var _comp_timer := 0.0
 var _comp_in_open := true
@@ -729,30 +750,59 @@ func companion_name() -> String:
 	return String(COMPANIONS[_comp]["name"]) if companion_active() else ""
 
 
-## 把某个同伴叫到屏幕右半屏（重复调用同一个人 = 换一句台词）
-func summon(who: String) -> void:
+## 当前用的是这个角色的第几版素材（0 起；没同伴 = -1）
+func companion_variant() -> int:
+	return _comp_var if companion_active() else -1
+
+
+## 当前角色一共有几版素材
+func companion_clips() -> int:
+	return Array(COMPANIONS[_comp]["dirs"]).size() if companion_active() else 0
+
+
+## 把某个同伴叫到屏幕右半屏。
+##
+## `want` 是**第几版素材**（0 起，-1 = 自动轮换）。用户 2026-11-13 给了两版
+## 素材，所以：
+##   · 直接敲 `arona`  → 轮换（这次 0、下次 1、再下次 0…），一眼能看到两版；
+##   · 敲 `arona 2`    → 点名第 2 版（`_run()` 里把 1 起的参数换成 0 起传进来）；
+##   · 重复叫**同一个角色同一版** = 只换下一句台词，不重置动画。
+func summon(who: String, want := -1) -> void:
 	if not COMPANIONS.has(who):
 		return
 	var data: Dictionary = COMPANIONS[who]
-	if _comp != who:
-		# 换人：把上一个的动画放掉、把上一个的台词声音停掉
+	var dirs: Array = data["dirs"]
+	if dirs.is_empty():
+		return
+	var v := want
+	if v < 0:
+		v = int(_comp_pick.get(who, 0))
+		_comp_pick[who] = (v + 1) % dirs.size()
+	v = clampi(v, 0, dirs.size() - 1)
+	var dir := String(dirs[v])
+	if _comp != who or _comp_dir != dir:
+		# 换人 / 换版本：把上一个的动画放掉、把上一个的台词声音停掉
 		_stop_voice()
 		if _comp_anim != null:
 			_comp_anim.clear()
 		_comp = who
+		_comp_var = v
+		_comp_dir = dir
 		_comp_anim = FrameAnim.new()
-		var n: int = _comp_anim.load_dir(String(data["dir"]), float(data["fps"]))
+		var n: int = _comp_anim.load_dir(dir, float(data["fps"]))
 		_comp_line = 0
 		_comp_in_open = true
 		_comp_timer = 0.0
+		var clip := "clip %d/%d" % [v + 1, dirs.size()]
 		if n == 0:
 			# 缺素材也要说清楚，别静默当没发生
-			_comp_push([["[%s] frames missing: %s" % [String(data["name"]), data["dir"]],
+			_comp_push([["[%s] frames missing: %s" % [String(data["name"]), dir],
 				RED]])
 		else:
-			_comp_push([["[%s] mounted on /dev/tty0  (%d frames)" % [String(data["name"]), n],
-				Color(data["color"])]])
-			_comp_push([["  Enter / Tab = next line    dismiss = unmount", DIM]])
+			_comp_push([["[%s] mounted on /dev/tty0  (%d frames, %s)"
+				% [String(data["name"]), n, clip], Color(data["color"])]])
+			_comp_push([["  Enter / Tab = next line    dismiss = unmount    `%s 1|2` = pick clip"
+				% who, DIM]])
 			_comp_push([])
 	# 说话
 	_comp_next()
@@ -764,6 +814,7 @@ func dismiss() -> void:
 		return
 	var nm := companion_name()
 	_comp = ""
+	_comp_dir = ""
 	_stop_voice()
 	if _comp_anim != null:
 		_comp_anim.clear()

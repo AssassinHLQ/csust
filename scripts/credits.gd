@@ -113,7 +113,7 @@ const ENTRIES := [
 		"group": "角色与 Boss 模型",
 		"path": "assets/plana_frames",
 		"title": "普拉娜（电脑里第二个虚拟助手，终端敲 `plana` 出现）",
-		"author": "bilibili 空间 3546655668308537（「普拉娜绿幕素材」投稿，昵称未核实）；"
+		"author": "bilibili UP 瞿糸（《依旧送送送，普拉娜绿幕素材，想用的可以自己拿》）；"
 			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
 		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
 			+ "本仓库不分发，克隆者需自行合法取得",
@@ -169,6 +169,41 @@ const ENTRIES := [
 			+ "台词由 `_dump_companion_lines.gd` 从 `arch_terminal.gd` 的 COMPANIONS 导出，"
 			+ "保证屏幕文字与配音同词；生成脚本 `_tools/gen_companion_voice.py`。"
 			+ "`.gitignore` 排除整个目录，缺文件时只静音",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "assets/arona_frames_b",
+		"title": "阿洛娜 第 2 版素材（木偶半身，《阿罗娜木偶》）",
+		"author": "bilibili UP 忧郁的优_（《阿罗娜木偶，可直接用，也可艾特》）；"
+			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
+		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
+			+ "本仓库不分发，克隆者需自行合法取得",
+		"distributed": false,
+		"source": "用户 2026-11-13 下载的 `阿罗娜木偶，可直接用，也可艾特_视频.mp4`"
+			+ "（1290×1078 / 30 fps / 15.0 s，绿幕底色 #05D504）",
+		"license_file": "",
+		"note": "半身素材（举白纸盒）。ffmpeg：按主体包围盒 crop=1000:1068:280:10 → "
+			+ "chromakey=0x05D504 + despill 去绿边 → 12 fps / 720×769 共 180 帧 / 69.8 MB"
+			+ "（脚本 `_tools/fetch_arona_frames_b.ps1`）。终端 `arona` 连叫两次会在"
+			+ "两版素材之间轮换，`arona 2` 直接点名第 2 版。`.gitignore` 排除了整个目录",
+	},
+	{
+		"group": "角色与 Boss 模型",
+		"path": "assets/plana_frames_b",
+		"title": "普拉娜 第 2 版素材（近景头肩，《普拉娜自己取》）",
+		"author": "bilibili UP 星冻qwq（《普拉娜自己取》）；"
+			+ "角色版权属于 NEXON Games / Yostar（Blue Archive）",
+		"license": "授权未核实（素材无许可文件）——仅限本地学习交流、不可商用、不可再分发；"
+			+ "本仓库不分发，克隆者需自行合法取得",
+		"distributed": false,
+		"source": "用户 2026-11-13 下载的 `普拉娜自己取_视频.mp4`"
+			+ "（1280×720 / 30 fps / 20.0 s，绿幕底色 #00DC22）",
+		"license_file": "",
+		"note": "近景（头 + 肩 + 光环）。原画面左上角有上传者水印「小星野大叔 bilibili」，"
+			+ "白字抠不掉、裁顶部又会削到光环，所以先用 drawbox 把那块刷成纯绿让 chromakey "
+			+ "一并吞掉。ffmpeg：drawbox → crop=560:718:372:2 → chromakey=0x00DC22 + "
+			+ "despill → 15 fps / 560×718 共 300 帧 / 66.6 MB"
+			+ "（脚本 `_tools/fetch_plana_frames_b.ps1`）。`.gitignore` 排除了整个目录",
 	},
 	{
 		"group": "角色与 Boss 模型",

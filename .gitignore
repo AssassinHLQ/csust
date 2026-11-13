@@ -171,6 +171,13 @@ __pycache__/
 # 缺帧不影响启动：`arch_terminal.gd::summon()` 只打进一行 `frames missing`，不会崩。
 # ⚠️ 连 `.import` 一起忽略 —— 389 个存根文件进仓库没有意义。
 /assets/arona_frames/
+# 阿洛娜 / 普拉娜的**第二版**素材（2026-11-13 用户：「现在要两个 arona，两个 plana」）
+#   阿洛娜 B：UP 忧郁的优_《阿罗娜木偶》1290×1078 → 180 帧 / 69.8 MB
+#   普拉娜 B：UP 星冻qwq《普拉娜自己取》1280×720 → 300 帧 / 66.6 MB（左上角水印已抠掉）
+#   生成脚本：`_tools/fetch_arona_frames_b.ps1` / `fetch_plana_frames_b.ps1`
+#   两份都是**授权未核实**的第三方素材，只允许本地学习演示，不随仓库分发。
+/assets/arona_frames_b/
+/assets/plana_frames_b/
 
 # ── 电脑里阿洛娜 / 普拉娜的**中文配音**（2026-11-13）──
 #

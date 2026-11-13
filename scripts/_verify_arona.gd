@@ -78,6 +78,30 @@ func _run() -> void:
 		"配音流有效（%.2f s）" % (stream.get_length() if stream != null else 0.0))
 	_check(_voice_files_ok(), "每个角色的每一句都有配音文件（34 个）")
 
+	# ── 1c. 两版素材轮换（用户 2026-11-13：「现在要两个 arona」）──
+	_check(term.companion_clips() == 2, "ARONA 挂了两版素材（%d）" % term.companion_clips())
+	var dir_a := String(term.get("_comp_dir"))
+	_check(dir_a.ends_with("/arona_frames"), "第一次叫出来是第 1 版（%s）" % dir_a)
+	await _cmd("arona")
+	_check(term.companion_variant() == 1,
+		"再叫一次自动换第 2 版（实际第 %d 版）" % (term.companion_variant() + 1))
+	var dir_b := String(term.get("_comp_dir"))
+	_check(dir_b.ends_with("/arona_frames_b"), "第 2 版目录正确（%s）" % dir_b)
+	var anim_b: FrameAnim = term.get("_comp_anim")
+	_check(anim_b != null and anim_b.count() > 100,
+		"第 2 版帧已载入（%d 帧）" % (anim_b.count() if anim_b != null else 0))
+	# 点名也认：`arona 1` 回第 1 版
+	await _cmd("arona 1")
+	_check(term.companion_variant() == 0,
+		"`arona 1` 点名回第 1 版（实际第 %d 版）" % (term.companion_variant() + 1))
+
+	# 第 2 版单独留一张图（构图/抠像要人眼确认：木偶版是半身、裁过包围盒）
+	await _cmd("arona 2")
+	await _wait(12)
+	await _shot("00b_arona_clip2")
+	await _cmd("arona 1")
+	await _wait(4)
+
 	# ── 2. 台词真的进了终端正文 ──
 	var txt := term.screen_text()
 	_check(txt.contains("ARONA:"), "台词以 `ARONA:` 前缀打进终端")
@@ -174,6 +198,17 @@ func _run() -> void:
 	_check(not ptxt.contains("老师"), "普拉娜也不喊老师")
 	_check(String(term.get("_voice_path")).contains("/plana/"),
 		"换人之后配音也换成了普拉娜的（%s）" % String(term.get("_voice_path")))
+
+	# ── 8b. 普拉娜也是两版 ──
+	_check(term.companion_clips() == 2, "PLANA 挂了两版素材（%d）" % term.companion_clips())
+	_check(term.companion_variant() == 0, "第一次是第 1 版")
+	await _cmd("plana")
+	_check(term.companion_variant() == 1,
+		"再叫一次自动换第 2 版（实际第 %d 版）" % (term.companion_variant() + 1))
+	_check(String(term.get("_comp_dir")).ends_with("/plana_frames_b"),
+		"第 2 版目录正确（%s）" % String(term.get("_comp_dir")))
+	await _wait(12)
+	await _shot("02b_plana_clip2")
 
 	await _shot("02_plana_in_terminal")
 
