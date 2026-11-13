@@ -917,11 +917,11 @@ func _days_in_month(year: int, month: int) -> int:
 # 提到他时用「他」或第三人称。普拉娜要提醒爱丽丝**早点刷回去**，不然他会生气。
 const COMPANIONS := {
 	"arona": {
-		# 两版素材（用户 2026-11-13：「现在要两个 arona」）：
+		# 三版素材：
 		#   ① `arona_frames`   全身 · UP 香草BA《公益绿幕素材》
 		#   ② `arona_frames_b` 半身木偶（举白纸盒）· UP 忧郁的优_《阿罗娜木偶》
-		# 每叫一次换成下一版（`summon()` 里的轮换），也可以 `arona 2` 直接点名。
-		"dirs": ["res://assets/arona_frames", "res://assets/arona_frames_b"],
+		#   ③ `arona_frames_c` 全身木偶（纸飞机+伞）· UP 沉迷爱丽丝《绿幕素材分享（阿洛娜木偶）》
+		"dirs": ["res://assets/arona_frames", "res://assets/arona_frames_b", "res://assets/arona_frames_c"],
 		"fps": 12.0,
 		"name": "ARONA",
 		"color": Color(0.55, 0.82, 1.0),
