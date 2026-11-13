@@ -28,6 +28,10 @@ uniform vec3 flash_color : source_color = vec3(1.0, 0.45, 0.40);
 uniform float flash = 0.0;
 // 眼睛/嘴这类 MASK 材质要走 alpha scissor，否则会变成方块
 uniform bool use_alpha = false;
+// 眼睛自发光白光：只给眼嘴那一面开（脚本写），其余面保持 0。
+// 用贴图亮度当遮罩 —— 眼白越白越亮，瞳孔那条暗缝不会被烧平。
+uniform vec3 eye_emit_color : source_color = vec3(1.0, 0.97, 0.93);
+uniform float eye_emit = 0.0;
 
 void fragment() {
 	vec4 tex = use_texture ? texture(albedo_tex, UV) : vec4(1.0);
@@ -35,7 +39,9 @@ void fragment() {
 	float fres = pow(clamp(1.0 - dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), rim_power);
 	vec3 rim = rim_color * fres * (rim_amount + pulse * 1.4);
 	ALBEDO = mix(base, flash_color, clamp(flash, 0.0, 1.0));
-	EMISSION = rim + glow_color * (glow_amount + pulse * 0.35);
+	float eye_lum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 eye_glow = eye_emit_color * (eye_emit * smoothstep(0.15, 0.85, eye_lum));
+	EMISSION = rim + glow_color * (glow_amount + pulse * 0.35) + eye_glow;
 	ROUGHNESS = 0.72;
 	SPECULAR = 0.25;
 	if (use_alpha) {
