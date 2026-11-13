@@ -375,6 +375,12 @@ func _add_slider(parent: Node, key: String) -> void:
 	slider.value = float(GameSettings.value(key))
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.custom_minimum_size.y = 26.0
+	# ⚠️ **滚轮不许改值**（用户 2026-11-13：「这些设置条子，不要让滚轮去改变他们，
+	#    只能够通过鼠标点击拖动更改」）。
+	#    Godot 的 `Slider.scrollable` 默认是 true —— 面板本身在 ScrollContainer 里，
+	#    用户滚动页面时指针正好压在滑条上，值就被顺手改掉了（改完还没察觉）。
+	#    `scrollable = false` 只保留「点一下跳到那里 / 按住拖」这两条路。
+	slider.scrollable = false
 	_style_slider(slider)
 	row.add_child(slider)
 
