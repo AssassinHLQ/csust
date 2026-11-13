@@ -2,6 +2,10 @@ extends Boss
 ## 最终 BOSS「优香-恐怖」（第二关校园，三只霸王龙倒下之后登场）。
 ##
 ## 用户 2026-11-13：「然后最终 boss 优香-恐怖登场！」
+## 用户 2026-11-13 追加：「最终boss做十个技能，血量打完开始第二阶段」
+##              → 「一阶段就放全 10 招，二阶段全部加强」
+##              → 「血量逐渐回复到一半再开，获得 20 秒无敌，
+##                  第二阶段防御力增加 50%，攻击力增加 200%，攻击速度增加 50%」
 ##
 ## ── 用哪个模型 ──
 ## `models/companions/Yuuka.glb`（游戏里那位同伴优香）。理由：
@@ -13,23 +17,37 @@ extends Boss
 ##   原贴图压暗 + 菲涅尔红边（`shaders/horror_skin.gdshader`）+ 红环 + 红光。
 ##   它是"暗黑风格的优香"，不是原作那套建模 —— 这一点必须如实记着。
 ##
-## ── 外观的演进史（别走回头路）──
-##   ① tint 近黑红 + 全身自发光 1.15 + 红光 12 + 辉光 0.62
-##      → 整个人是一坨纯红剪影，头发/脸/制服全糊掉（`_final_phase/6_boss.png`）。
-##   ② tint 提亮到 (0.60, 0.30, 0.32)、自发光降到 0.15
-##      → 看得出身形和光环了，但仍然是"红剪纸"：整块颜色均匀，没有明暗。
-##   ③ 现在：材质换成 `horror_skin` 着色器 —— 贴图只乘一个偏暗的冷灰红，
-##      红色只出现在**掠射角**（边缘一圈红）和一点点呼吸自发光上。
-##      恐怖感来自「暗处一张看得清的脸」，不是红色剪纸。
+## ── 十个技能（一阶段全放，按顺序轮转，一轮 10 招）──
+##   ⚠️ 玩家有机甲形态、**会飞**（`player.gd::SPEED_FLY = 11`，加力 19）。
+##      用户 2026-11-13：「因为机甲是天上飞的，技能更多要大范围可以对空
+##      或者精准小范围对空的。」所以每招都标了它对空靠什么：
 ##
-## ── 打法（三招，都能躲）──
-##   · 冲击波：脚下蓄力 0.9 s → 一圈红环从 6 m 扩到 34 m（12 m/s）。
-##             **踩在地上**才会被扫到，跳起来（>0.9 m）可以躲过。
-##   · 砸击：  落点预警圈（半径 = 伤害半径，和 `boss_attacker.gd` 同一条铁律），
-##             6.5 m / 1.25 s —— 按玩家跑速 6.8 m/s 算，从圈心往外跑得出去。
-##   · 弹幕：  预判 0.6 s 后的位置，甩出 3 发（二阶段 5 发）红色光球。
-##   血量 ≤ 50% 进二阶段：节奏加快、光球变多、红边更亮。
-##   设置页「Boss 攻击」关掉后只挨打不还手（和霸王龙同一个开关）。
+##   1 冲击波    **竖直能量墙**：6→34 m 横扫，从地面到 44 m 全在墙里。
+##              【大范围对空】躲法只有"跑出 34 m"或"待在墙外"。
+##   2 砸击      **落点球** 6.5 m（球心=玩家当时的坐标，含高度），1.25 s。
+##              【精准对空】飞着不动就吃，飞走就躲开。
+##   3 弹幕      预判 0.6 s 的直线光球 ×3（本来就是三维直线）。【对空】
+##   4 激光扫射  刀刃绕身 60°/s 扫 180°，**刀高 60 m**。【大范围对空】
+##   5 陨石雨    玩家周围 5 个落点，陨石**从玩家上空砸下来**。【对空】
+##   6 血刺      **竖直刺柱**：水平半径 2.6 m、从地面**窜到玩家高度**。
+##              【精准对空】飞到 30 m 也照样从下面顶上来。
+##   7 近身爆震  **球形**爆震半径 16 m（球心抬到 6 m）。【大范围对空】
+##   8 幻影冲锋  3 个幻影**三维追踪**玩家坐标，撞上就炸。【精准对空】
+##   9 追踪光箭  慢速三维追踪（转向 75°/s），绕圈能甩掉。【精准对空】
+##   10 引力井    10 m 的井，**三维吸附**（把天上的往井心拽），3 s 后爆。
+##              【大范围对空】
+##
+## ── 数值都按"跑得出去 / 飞得出去"倒推 ──
+## 玩家跑速 6.8 m/s、飞行 11 m/s（加力 19）。每招的预警时间 × 半径都保证
+## 留出这个余量；改数字前先算一遍，别把"可以躲"改成"站着必吃"
+## （`boss_attacker.gd` 文件头那条铁律）。
+##
+## ── 二阶段（血量打空后）──
+##   ① 20 s 无敌，血量从 0 **逐渐回到一半**（7000），血条跟着涨；
+##   ② 无敌结束才开打：攻击 ×3（+200%）、出招间隔 ÷1.5（+50%）、
+##      受到的伤害 ×0.5（防御 +50%）、弹幕/陨石/幻影/光箭各加 1~2 个。
+##   ⚠️ "防御力 +50%" 这里按**受到的伤害减半**实现（玩家口语里最接近的意思），
+##      不是"除以 1.5"。要改就改 `P2_DEFENSE` 一处。
 ##
 ## ── 三个必须注意的坑 ──
 ## ① `Boss._physics_process()` 里有骨骼碰撞盒跟随（`_sync_bone_collisions()`），
@@ -40,35 +58,32 @@ extends Boss
 ##    （攻击/死亡），要自己接回 idle，否则会停在最后一帧。
 
 signal phase_changed(phase: int)
+## 血量打空、开始"回血 + 无敌"的复活演出
+signal revive_started
 
 const SKIN_SHADER := preload("res://shaders/horror_skin.gdshader")
-## 砸击预警圈（半透明 + 亮边；见 `shaders/telegraph_disc.gdshader` 文件头）
+## 砸击/陨石/引力井的地面圈（半透明 + 亮边；见该 shader 文件头）
 const DISC_SHADER := preload("res://shaders/telegraph_disc.gdshader")
 const DISC_ALPHA := 0.26
 
 ## 冲击波
+## 冲击波墙的高度（对空上限）。用户要"大范围对空"，所以这不是贴地环，
+## 而是一道竖直的能量墙：水平距离被扫到，从地面到 44 m 全在墙里。
+const SHOCK_TOP := 44.0
 const SHOCK_MIN_R := 6.0
 const SHOCK_MAX_R := 34.0
 const SHOCK_SPEED := 12.0
 const SHOCK_BAND := 1.8
 const SHOCK_DAMAGE := 30.0
-## 跳起来多高算躲过。
-## ⚠️ 玩家跳跃顶点只有 **1.26 m**（`player.gd`：JUMP 7.1 / GRAVITY），
-##    第一版写了 1.5 —— 等于这个"可以跳过去"的门槛游戏里根本跳不到，
-##    属于骗人的机制。改成 0.9：**掐准时机跳**（或站在台阶/矮墙上）能躲。
-const SHOCK_SAFE_HEIGHT := 0.9
 const SHOCK_WINDUP := 0.9
 
-## 砸击。
-## ⚠️ 半径 vs 蓄力时间必须"跑得出去"：玩家跑速 6.8 m/s
-##    （`player.gd::SPEED_RUN`），第一版 9 m / 1.0 s 要 9 m/s —— 站着必吃，
-##    等于没有闪避。6.5 m / 1.25 s 只需 5.2 m/s，从圈心往外跑能活着出去。
+## 砸击
+## ⚠️ 半径 vs 蓄力时间必须"跑得出去"：玩家跑速 6.8 m/s。
+##    9 m / 1.0 s 要 9 m/s —— 站着必吃；6.5 m / 1.25 s 只需 5.2 m/s。
 const SLAM_RADIUS := 6.5
 const SLAM_WINDUP := 1.25
 const SLAM_DAMAGE := 36.0
 const SLAM_KNOCKBACK := 18.0
-const SLAM_MAX_HEIGHT := 4.0
-## 起手距离：再远就只放冲击波 / 弹幕
 const SLAM_RANGE := 26.0
 
 ## 弹幕
@@ -78,14 +93,75 @@ const ORB_HIT_R := 1.8
 const ORB_LIFE := 6.0
 const ORB_LEAD := 0.6
 
-## 出招节奏
+## 激光扫射
+const SWEEP_WARN := 1.2
+const SWEEP_TIME := 3.0
+const SWEEP_SPAN := PI          # 扫 180°
+const SWEEP_TOL := 1.3          # 到刀线的垂直容差（m）
+const SWEEP_MIN_R := 3.0
+const SWEEP_MAX_R := 60.0
+const SWEEP_DAMAGE := 34.0
+## 刀刃高度（对空）：从地面到 60 m，飞到天上的机甲一样被扫到
+const SWEEP_HEIGHT := 60.0
+
+## 陨石雨
+const METEOR_COUNT := 5
+const METEOR_RADIUS := 4.5
+const METEOR_WARN := 1.3
+const METEOR_FALL := 0.45
+const METEOR_DAMAGE := 28.0
+const METEOR_KNOCK := 12.0
+
+## 血刺
+const SPIKE_COUNT := 6
+const SPIKE_GAP := 4.5
+const SPIKE_FIRST := 5.0
+const SPIKE_HIT_R := 2.6
+const SPIKE_WARN := 0.9
+const SPIKE_DAMAGE := 24.0
+
+## 近身爆震
+const NOVA_RADIUS := 16.0
+const NOVA_WARN := 2.2
+const NOVA_DAMAGE := 42.0
+const NOVA_KNOCK := 26.0
+const NOVA_RANGE := 26.0
+
+## 幻影冲锋
+const GHOST_COUNT := 3
+const GHOST_SPEED := 14.0
+const GHOST_BLAST_R := 4.5
+const GHOST_DAMAGE := 24.0
+const GHOST_LIFE := 4.0
+
+## 追踪光箭
+const HOMING_COUNT := 2
+const HOMING_SPEED := 13.0
+const HOMING_TURN := 75.0      # 度/秒
+const HOMING_DAMAGE := 16.0
+const HOMING_LIFE := 6.0
+
+## 引力井
+const WELL_RADIUS := 10.0
+const WELL_TIME := 3.0
+const WELL_PULL := 2.6         # 每秒往中心拽的位移（m/s），远小于跑速 6.8
+const WELL_DAMAGE := 32.0
+
+## 出招节奏（秒）。二阶段 ÷ P2_SPEED。
 const INTERVAL_1 := 5.5
-const INTERVAL_2 := 3.8
 const INTRO_GRACE := 2.5
 const TURN_SPEED := 45.0
 const TURN_SPEED_2 := 75.0
 
-const SKILL_NAMES := ["shock", "slam", "barrage"]
+## 二阶段三项加成（用户 2026-11-13 指定）
+const P2_DEFENSE := 0.5        # 受到的伤害 ×0.5（"防御力 +50%"）
+const P2_DAMAGE := 3.0         # 攻击"增加 200%" → ×3
+const P2_SPEED := 1.5          # 攻速"增加 50%" → 间隔 ÷1.5
+const REVIVE_TIME := 20.0      # 无敌 20 s
+const REVIVE_TO := 0.5         # 逐渐回到一半血
+
+const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
+	"spikes", "nova", "phantom", "homing", "gravity"]
 
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
@@ -99,14 +175,22 @@ var _skill_i := 0
 var _busy := false
 var _phase := 1
 var _last_skill := ""
-var _counts := {"shock": 0, "slam": 0, "barrage": 0}
-## 实际命中次数（探针按它判定，不靠墙钟 sleep）
-var _hits := {"shock": 0, "slam": 0, "barrage": 0}
-## 扩散中的冲击波：{node, r, hit}
-var _waves: Array[Dictionary] = []
-## 飞着的光球：{node, dir, t}
-var _orbs: Array[Dictionary] = []
+## 放出次数 / 实际命中次数（探针按它判定，不靠墙钟 sleep）
+var _counts := {}
+var _hits := {}
+## 各种进行中的东西
+var _waves: Array[Dictionary] = []      # 冲击波
+var _orbs: Array[Dictionary] = []       # 直线 / 追踪光球
+var _sweeps: Array[Dictionary] = []     # 激光刀刃
+var _wells: Array[Dictionary] = []      # 引力井
+var _phantoms: Array[Dictionary] = []   # 幻影
 var _slam_marks: Array[Node3D] = []
+
+## 复活演出：血量打空 → 20 s 无敌 + 回到一半
+var _reviving := false
+var _invuln := false
+var _revive_t := 0.0
+var _shield_t := 0.0
 var _pulse := 0.0
 
 
@@ -115,7 +199,8 @@ func _init() -> void:
 	model_path = "res://models/companions/Yuuka.glb"
 	# 校园里的楼最高 53 m，它站在操场上要"抬头看"才有压迫感
 	height = 16.0
-	# 玩家武器约 120~240 DPS：20000 要打 85~165 s，太长；14000 约 60~115 s
+	# 两条血：第一阶段 14000 打完 → 无敌 20 s 回到 7000 → 第二阶段再打 7000
+	# （二阶段防御 ×0.5，等效要打 14000 伤害）
 	max_health = 14000.0
 	respawn_on_death = false
 	drop_yuan = 0
@@ -126,6 +211,9 @@ func _init() -> void:
 	collision_mode = Boss.CollisionMode.BOX_PARTS
 	boot_distance = 0.0
 	boot_max_wait = 0.0
+	for n in SKILL_NAMES:
+		_counts[n] = 0
+		_hits[n] = 0
 
 
 func _ready() -> void:
@@ -136,8 +224,8 @@ func _ready() -> void:
 	_setup_anim()
 	_build_aura()
 	_t_skill = INTRO_GRACE
-	print("[YuukaHorror] 登场：身高 %.1f m，血量 %.0f，材质 %d 块，动画 %s" % [
-		height, max_health, _skin_mats.size(),
+	print("[YuukaHorror] 登场：身高 %.1f m，血量 %.0f，%d 个技能，动画 %s" % [
+		height, max_health, SKILL_NAMES.size(),
 		("有（%d 条）" % _ap.get_animation_list().size()) if _ap != null else "无"])
 
 
@@ -191,7 +279,7 @@ func _play_once(clip: String, fade := 0.18) -> void:
 	_ap.play(clip, fade)
 	_ap.speed_scale = 1.0
 	await _ap.animation_finished
-	if _dead or not is_instance_valid(self):
+	if _dead or _reviving or not is_instance_valid(self):
 		return
 	if not _busy:
 		_ap.play("Normal_Idle", 0.25)
@@ -211,8 +299,8 @@ func _build_aura() -> void:
 	_aura_light.position = Vector3(0.0, height * 0.55, 0.0)
 	add_child(_aura_light)
 
-	# 三圈细红环（⚠️ 上一版半径 0.30~0.42 × 16 m = 5~7 m，
-	# 在远处看就是一根横在头顶的红色长条 —— 这次按腰宽给）
+	# 三圈细红环（⚠️ 半径按腰宽给；上一版 0.30~0.42 × 16 m = 5~7 m，
+	# 在远处看就是一根横在头顶的红色长条）
 	var spec := [
 		{"y": 0.28, "r": 0.115, "spin": 0.55},
 		{"y": 0.50, "r": 0.135, "spin": -0.40},
@@ -229,7 +317,6 @@ func _build_aura() -> void:
 		ring.mesh = tm
 		ring.material_override = _additive(Color(1.0, 0.14, 0.09, 0.85))
 		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		# TorusMesh 默认躺在 XZ 平面（环轴 = Y）—— 正好是横向绕腰的环
 		ring.position = Vector3(0.0, float(s["y"]) * height, 0.0)
 		var r := float(s["r"]) * height
 		ring.scale = Vector3(r, maxf(height * 0.035, 0.35), r)
@@ -273,12 +360,25 @@ func _physics_process(delta: float) -> void:
 	_turn_to_player(delta)
 	_tick_waves(delta)
 	_tick_orbs(delta)
-	if _dead or not _boss_attack_enabled():
+	_tick_sweeps(delta)
+	_tick_wells(delta)
+	_tick_phantoms(delta)
+	if _dead:
+		return
+	if _reviving:
+		# 复活演出：血量从 0 逐渐涨到一半，血条跟着走
+		_revive_t = maxf(_revive_t - delta, 0.0)
+		var k := 1.0 - _revive_t / REVIVE_TIME
+		health = max_health * REVIVE_TO * clampf(k, 0.0, 1.0)
+		health_changed.emit(health, max_health)
+		if _revive_t <= 0.0:
+			_end_revive()
+	if not _boss_attack_enabled():
 		return
 	_t_skill -= delta
 	if _t_skill > 0.0 or _busy:
 		return
-	_t_skill = INTERVAL_2 if _phase >= 2 else INTERVAL_1
+	_t_skill = _interval()
 	_cast_skill()
 
 
@@ -287,22 +387,36 @@ func _boss_attack_enabled() -> bool:
 	return bool(GameSettings.value("boss_attack"))
 
 
+## 二阶段的出招间隔（"攻速 +50%" = 间隔 ÷1.5）
+func _interval() -> float:
+	return INTERVAL_1 / P2_SPEED if _phase >= 2 else INTERVAL_1
+
+
+## 二阶段的伤害（"攻击力 +200%" = ×3）
+func _dmg(base: float) -> float:
+	return base * P2_DAMAGE if _phase >= 2 else base
+
+
 func _spin_rings(delta: float) -> void:
 	for r in _rings:
 		var node: Node3D = r["node"]
 		if node == null or not is_instance_valid(node):
 			continue
 		node.rotation.y += float(r["spin"]) * delta
-	# 呼吸：二阶段更急、更亮
+	# 呼吸：二阶段更急、更亮；无敌期间再亮一档
 	var t := float(Time.get_ticks_msec()) * 0.001
-	_pulse = (0.5 + 0.5 * sin(t * (2.6 if _phase >= 2 else 1.5))) \
-		* (0.85 if _phase >= 2 else 0.45)
+	var amp := 0.85 if _phase >= 2 else 0.45
+	if _invuln:
+		amp = 1.2
+	_pulse = (0.5 + 0.5 * sin(t * (2.6 if _phase >= 2 else 1.5))) * amp
 	for m in _skin_mats:
 		if is_instance_valid(m):
 			m.set_shader_parameter("pulse", _pulse)
 	if _aura_light != null and is_instance_valid(_aura_light):
 		var base := 3.5 + 1.2 * sin(t * 1.4)
-		_aura_light.light_energy = base + (2.5 if _phase >= 2 else 0.0)
+		_aura_light.light_energy = base + (2.5 if _phase >= 2 else 0.0) \
+			+ (4.0 if _invuln else 0.0)
+	_shield_t = maxf(_shield_t - delta, 0.0)
 
 
 func _turn_to_player(delta: float) -> void:
@@ -328,7 +442,7 @@ func _find_player() -> Node3D:
 
 # ────────────────────────── 出招 ──────────────────────────
 
-## 三招轮着放（顺序固定：保证三种都会出现，不靠随机）
+## 10 招按顺序轮转（一轮 55 s，玩家能摸清节奏；二阶段同一套但更凶）
 func _cast_skill() -> void:
 	var p := _find_player()
 	if p == null:
@@ -336,22 +450,41 @@ func _cast_skill() -> void:
 	_busy = true
 	var pc := p.global_position
 	var pick := String(SKILL_NAMES[_skill_i % SKILL_NAMES.size()])
-	# 玩家离得远 → 砸击够不着，这一轮换成冲击波
-	if pick == "slam" and global_position.distance_to(pc) > SLAM_RANGE:
-		pick = "shock"
 	_skill_i += 1
+	# 近身技够不着 → 换成不需要距离的那招，别对着空气放
+	var dist := global_position.distance_to(pc)
+	if ((pick == "slam" and dist > SLAM_RANGE)
+			or (pick == "nova" and dist > NOVA_RANGE)):
+		pick = "sweep"
 	_last_skill = pick
 	_counts[pick] += 1
-	print("[YuukaHorror] 出招：%s（第 %d 轮，阶段 %d）" % [pick, _skill_i, _phase])
+	print("[YuukaHorror] 出招：%s（第 %d 轮，阶段 %d，距离 %.0f m）" % [
+		pick, _skill_i, _phase, dist])
 	match pick:
 		"slam":
 			await _skill_slam(pc)
 		"barrage":
 			await _skill_barrage(pc)
+		"sweep":
+			await _skill_sweep(pc)
+		"meteor":
+			await _skill_meteor(pc)
+		"spikes":
+			await _skill_spikes(pc)
+		"nova":
+			await _skill_nova()
+		"phantom":
+			await _skill_phantom(pc)
+		"homing":
+			await _skill_homing(pc)
+		"gravity":
+			await _skill_gravity(pc)
 		_:
 			await _skill_shockwave()
 	_busy = false
 
+
+# ── 1 冲击波 ──
 
 func _skill_shockwave() -> void:
 	_play_once("Exs")
@@ -384,22 +517,26 @@ func _skill_shockwave() -> void:
 func _spawn_wave() -> void:
 	var ring := MeshInstance3D.new()
 	ring.name = "Shockwave"
-	var tm := TorusMesh.new()
-	tm.inner_radius = 0.985
-	tm.outer_radius = 1.0
-	tm.rings = 128
-	tm.ring_segments = 6
-	ring.mesh = tm
+	# 圆筒墙（无盖）：从地面往上 SHOCK_TOP 米 —— 和判定一致
+	var cmesh := CylinderMesh.new()
+	cmesh.top_radius = 1.0
+	cmesh.bottom_radius = 1.0
+	cmesh.height = SHOCK_TOP
+	cmesh.radial_segments = 96
+	cmesh.rings = 1
+	cmesh.cap_top = false
+	cmesh.cap_bottom = false
+	ring.mesh = cmesh
 	ring.material_override = _additive(Color(1.0, 0.20, 0.10, 0.95))
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ring.position = Vector3(0.0, 0.35, 0.0)
-	ring.scale = Vector3(SHOCK_MIN_R, 2.0, SHOCK_MIN_R)
+	ring.position = Vector3(0.0, SHOCK_TOP * 0.5, 0.0)
+	ring.scale = Vector3(SHOCK_MIN_R, 1.0, SHOCK_MIN_R)
 	add_child(ring)
 	_waves.append({"node": ring, "r": SHOCK_MIN_R, "hit": false})
 	Sfx.play("ui_close", -4.0)
 
 
-## 每帧把冲击波往外推；环带扫到玩家当下就结算一次。
+## 每帧把冲击波往外推；**扫掠**判定（取上一帧到这一帧的半径段），低帧率不会跨过玩家。
 func _tick_waves(delta: float) -> void:
 	if _waves.is_empty():
 		return
@@ -411,23 +548,19 @@ func _tick_waves(delta: float) -> void:
 			continue
 		var r0 := float(w["r"])
 		var r := r0 + SHOCK_SPEED * delta
-		node.scale = Vector3(r, 2.0, r)
+		node.scale = Vector3(r, 1.0, r)
 		if p != null and not bool(w["hit"]):
 			var flat := Vector2(p.global_position.x - global_position.x,
 				p.global_position.z - global_position.z).length()
-			# ⚠️ **扫掠判定**，不是"当前半径 ± 带宽"：
-			#    低帧率时环一帧能跳 2~3 m（12 m/s ÷ 5 fps），
-			#    只看当前半径会**直接跨过**玩家（带泼溅出图那轮实测漏判）。
-			#    取 [上一帧半径, 这一帧半径] 这一段，玩家落在段内就算被扫到。
 			if flat >= r0 - SHOCK_BAND and flat <= r + SHOCK_BAND:
-				# 高度按 **BOSS 脚下的地面**算（冲击波是贴地扫的）：
-				#   头顶 1 m 以上的跳跃 / 站上 20 m 的楼顶 → 都不该被扫到。
+				# 竖直墙：从地面往上 SHOCK_TOP 米都算在墙里（对空大范围）。
+				# 想躲只能**往外跑出 34 m**，或者被墙扫过时刚好在墙外。
 				var dy := p.global_position.y - global_position.y
-				if dy >= -1.0 and dy <= SHOCK_SAFE_HEIGHT and p.has_method("take_damage"):
+				if dy >= -2.0 and dy <= SHOCK_TOP and p.has_method("take_damage"):
 					w["hit"] = true
 					_hits["shock"] += 1
-					p.call("take_damage", SHOCK_DAMAGE, global_position, 10.0)
-					print("[YuukaHorror] 冲击波命中（距离 %.1f m，高出 %.2f m）" % [flat, dy])
+					p.call("take_damage", _dmg(SHOCK_DAMAGE), global_position, 10.0)
+					print("[YuukaHorror] 冲击波命中（水平 %.1f m，高 %.1f m）" % [flat, dy])
 		if r >= SHOCK_MAX_R:
 			node.queue_free()
 			continue
@@ -435,6 +568,8 @@ func _tick_waves(delta: float) -> void:
 		keep.append(w)
 	_waves = keep
 
+
+# ── 2 砸击 ──
 
 func _skill_slam(pc: Vector3) -> void:
 	_play_once("Normal_Attack_Start")
@@ -457,11 +592,13 @@ func _skill_slam(pc: Vector3) -> void:
 		return
 	_play_once("Normal_Attack_Ing", 0.08)
 	Sfx.play("ui_close", -1.0)
-	_hit_area(center, SLAM_RADIUS, SLAM_DAMAGE, SLAM_KNOCKBACK)
+	_hit_area(center, SLAM_RADIUS, _dmg(SLAM_DAMAGE), SLAM_KNOCKBACK, "slam")
 	_flash_mark(disc, 1.4, 0.30)
 	_slam_marks.erase(disc)
 	await get_tree().create_timer(0.45).timeout
 
+
+# ── 3 弹幕 ──
 
 func _skill_barrage(pc: Vector3) -> void:
 	_play_once("Stand_Attack_Start")
@@ -470,8 +607,7 @@ func _skill_barrage(pc: Vector3) -> void:
 	var p := _find_player()
 	var vel := (p as CharacterBody3D).velocity if p is CharacterBody3D else Vector3.ZERO
 	var aim := pc + Vector3(vel.x, 0.0, vel.z) * ORB_LEAD
-	print("[YuukaHorror] 弹幕：%d 发，目标 %s（玩家 %s）" % [n, str(aim.snappedf(0.1)),
-		str(pc.snappedf(0.1))])
+	print("[YuukaHorror] 弹幕：%d 发，目标 %s" % [n, str(aim.snappedf(0.1))])
 	for i in n:
 		if _dead or not is_instance_valid(self):
 			return
@@ -479,12 +615,461 @@ func _skill_barrage(pc: Vector3) -> void:
 			-(aim.x - global_position.x))
 		side = side.normalized() if side.length_squared() > 0.01 else Vector3.RIGHT
 		var off := (float(i) - float(n - 1) * 0.5) * 2.4
-		_spawn_orb(aim + side * off)
+		_spawn_orb(aim + side * off, "barrage")
 		await get_tree().create_timer(0.16).timeout
 	await get_tree().create_timer(0.35).timeout
 
 
-func _spawn_orb(target: Vector3) -> void:
+# ── 4 激光扫射 ──
+
+func _skill_sweep(pc: Vector3) -> void:
+	_play_once("Stand_Attack_Start")
+	Sfx.play("fire_beam", -4.0)
+	var yaw0 := atan2(pc.x - global_position.x, pc.z - global_position.z)
+	# 刀刃挂在一个绕 Y 转的支点上：支点在 BOSS 原点，刀身在 +Z 方向伸出去
+	var pivot := Node3D.new()
+	pivot.name = "SweepPivot"
+	pivot.top_level = true
+	pivot.rotation.y = yaw0
+	pivot.global_position = global_position
+	add_child(pivot)
+	var blade := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	# 刀身长度 = 伤害射程（60 m），别画得比打得到的更远
+	bm.size = Vector3(0.5, SWEEP_HEIGHT, SWEEP_MAX_R)
+	blade.mesh = bm
+	# ⚠️ 刀刃用**普通 alpha 混合**而不是加色：
+	#    加色 + 辉光在"镜头正好在刀刃里"时会把整屏烧成白橙色（实测截图）。
+	#    alpha 混合只是一层红色薄雾，贴脸也不会致盲。
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = Color(1.0, 0.18, 0.10, 0.0)
+	blade.material_override = mat
+	blade.position = Vector3(0.0, SWEEP_HEIGHT * 0.5, SWEEP_MAX_R * 0.5)
+	blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pivot.add_child(blade)
+	# 起手：刀刃先半透明亮起来，转不转一眼能看出来
+	var tw0 := create_tween()
+	tw0.tween_property(mat, "albedo_color:a", 0.22, SWEEP_WARN)
+	await tw0.finished
+	if _dead or not is_instance_valid(self):
+		if is_instance_valid(pivot):
+			pivot.queue_free()
+		return
+	# 扫 180°，速度二阶段快 50%
+	var span := SWEEP_SPAN * (P2_SPEED if _phase >= 2 else 1.0)
+	var dur := SWEEP_TIME / (P2_SPEED if _phase >= 2 else 1.0)
+	var tw := create_tween()
+	tw.tween_property(mat, "albedo_color:a", 0.42, 0.1)
+	tw.tween_property(pivot, "rotation:y", yaw0 + span, dur) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var s := {"node": pivot, "t": dur, "hit": false}
+	_sweeps.append(s)
+	await tw.finished
+	_sweeps.erase(s)
+	if is_instance_valid(pivot):
+		var tw2 := create_tween()
+		tw2.tween_property(mat, "albedo_color:a", 0.0, 0.25)
+		tw2.tween_callback(pivot.queue_free)
+
+
+## 激光刀刃：判定用**到刀线的垂直距离**（角度再换算成米），不是角度本身 ——
+## 远处一点点角度差就是几十米，近处同样是 1° 却只有半米。
+func _tick_sweeps(delta: float) -> void:
+	if _sweeps.is_empty():
+		return
+	var p := _find_player()
+	var keep: Array[Dictionary] = []
+	for s in _sweeps:
+		var pivot: Node3D = s["node"]
+		if pivot == null or not is_instance_valid(pivot):
+			continue
+		var t := float(s["t"]) - delta
+		s["t"] = t
+		if p != null and not bool(s["hit"]):
+			var d := p.global_position - global_position
+			var flat := Vector2(d.x, d.z)
+			var dist := flat.length()
+			var in_range: bool = (dist >= SWEEP_MIN_R and dist <= SWEEP_MAX_R
+				and d.y >= -4.0 and d.y <= SWEEP_HEIGHT)
+			if in_range:
+				var ang := atan2(flat.x, flat.y)
+				var diff := wrapf(ang - pivot.rotation.y, -PI, PI)
+				if dist * absf(sin(diff)) <= SWEEP_TOL and p.has_method("take_damage"):
+					s["hit"] = true
+					_hits["sweep"] += 1
+					p.call("take_damage", _dmg(SWEEP_DAMAGE), global_position, 14.0)
+					print("[YuukaHorror] 激光扫中（距离 %.1f m）" % dist)
+		if t > 0.0:
+			keep.append(s)
+	_sweeps = keep
+
+
+# ── 5 陨石雨 ──
+
+func _skill_meteor(pc: Vector3) -> void:
+	_play_once("Exs")
+	Sfx.play("ex_fire", -8.0)
+	var n := METEOR_COUNT + (2 if _phase >= 2 else 0)
+	# 落点：以玩家为中心散开一圈（半径 3~20 m），圈与圈之间留缝
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var ang := TAU * float(i) / float(n) + randf_range(-0.25, 0.25)
+		var r := randf_range(3.0, 20.0)
+		var at := Vector3(pc.x + cos(ang) * r, pc.y, pc.z + sin(ang) * r)
+		_spawn_meteor(at)
+		await get_tree().create_timer(0.08).timeout
+	await get_tree().create_timer(METEOR_WARN + METEOR_FALL).timeout
+
+
+func _spawn_meteor(at: Vector3) -> void:
+	var disc := _make_disc(at, METEOR_RADIUS, Color(1.0, 0.14, 0.06, 0.38))
+	_slam_marks.append(disc)
+	var tw := create_tween()
+	tw.tween_property(disc, "scale", Vector3(METEOR_RADIUS, 1.0, METEOR_RADIUS), METEOR_WARN) \
+		.from(Vector3(METEOR_RADIUS * 0.3, 1.0, METEOR_RADIUS * 0.3))
+	await tw.finished
+	if _dead or not is_instance_valid(self):
+		if is_instance_valid(disc):
+			_slam_marks.erase(disc)
+			disc.queue_free()
+		return
+	# 陨石本体：从 45 m 高处砸下来（只做视觉，判定在落地那一帧）
+	var rock := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 2.2
+	sm.height = 4.4
+	sm.radial_segments = 12
+	sm.rings = 6
+	rock.mesh = sm
+	rock.material_override = _additive(Color(1.0, 0.30, 0.10, 0.9))
+	rock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	rock.top_level = true
+	add_child(rock)
+	rock.global_position = at + Vector3(0.0, 45.0, 0.0)
+	var tw2 := create_tween()
+	tw2.tween_property(rock, "global_position", at + Vector3(0.0, 1.0, 0.0),
+		METEOR_FALL).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await tw2.finished
+	if is_instance_valid(rock):
+		rock.queue_free()
+	_hit_area(at, METEOR_RADIUS, _dmg(METEOR_DAMAGE), METEOR_KNOCK, "meteor")
+	Sfx.play("ui_close", -3.0)
+	_flash_mark(disc, 1.35, 0.28)
+	_slam_marks.erase(disc)
+
+
+# ── 6 血刺 ──
+
+func _skill_spikes(pc: Vector3) -> void:
+	_play_once("Normal_Attack_Ing")
+	Sfx.play("fire_beam", -8.0)
+	var n := SPIKE_COUNT + (2 if _phase >= 2 else 0)
+	var dir := pc - global_position
+	dir.y = 0.0
+	dir = dir.normalized() if dir.length() > 1.0 else facing()
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var at := global_position + dir * (SPIKE_FIRST + SPIKE_GAP * float(i))
+		# 水平位置沿用"她→玩家"的方向；高度上限取玩家当时的高度（对空）
+		_spawn_spike(Vector3(at.x, pc.y, at.z))
+		await get_tree().create_timer(0.07).timeout
+	await get_tree().create_timer(SPIKE_WARN + 0.45).timeout
+
+
+## 一根从地里窜起来、够到玩家高度的血刺。
+##
+## 判定是**竖直的柱子**（水平半径 2.6 m、从地面到刺尖），不是圆球：
+## 用户要"对空"，玩家飞到 30 m 时刺就该窜到 30 m 去够他 ——
+## 而站在地上的玩家仍然要被地面那一截打到。
+func _spawn_spike(at: Vector3) -> void:
+	var gy := _ground_below(at)
+	var top := maxf(gy + 9.0, at.y + 4.0)
+	var disc := _make_disc(Vector3(at.x, gy, at.z), SPIKE_HIT_R,
+		Color(1.0, 0.10, 0.12, 0.42))
+	_slam_marks.append(disc)
+	var tw := create_tween()
+	tw.tween_property(disc, "scale", Vector3(SPIKE_HIT_R, 1.0, SPIKE_HIT_R), SPIKE_WARN) 		.from(Vector3(SPIKE_HIT_R * 0.2, 1.0, SPIKE_HIT_R * 0.2))
+	await tw.finished
+	if _dead or not is_instance_valid(self):
+		if is_instance_valid(disc):
+			_slam_marks.erase(disc)
+			disc.queue_free()
+		return
+	# 刺本体：从地里窜出来的细长圆锥，长度刚好到 top
+	var spike := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.06
+	cm.bottom_radius = 1.6
+	cm.height = top - gy
+	cm.radial_segments = 8
+	spike.mesh = cm
+	spike.material_override = _additive(Color(1.0, 0.18, 0.12, 0.95))
+	spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spike.top_level = true
+	add_child(spike)
+	var mid := Vector3(at.x, (gy + top) * 0.5, at.z)
+	spike.global_position = mid - Vector3(0.0, (top - gy) * 0.5 + 4.0, 0.0)
+	var tw2 := create_tween()
+	tw2.tween_property(spike, "global_position", mid, 0.16) 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await tw2.finished
+	_spike_hit(at, gy, top)
+	_flash_mark(disc, 1.2, 0.25)
+	_slam_marks.erase(disc)
+	var tw3 := create_tween()
+	tw3.tween_interval(0.45)
+	tw3.tween_property(spike, "global_position",
+		mid - Vector3(0.0, (top - gy) * 0.5 + 4.0, 0.0), 0.3)
+	tw3.tween_callback(spike.queue_free)
+
+
+## 竖直柱判定：水平半径内、且高度落在 [地面, 刺尖] 之间
+func _spike_hit(at: Vector3, gy: float, top: float) -> void:
+	var p := _find_player()
+	if p == null or not p.has_method("take_damage"):
+		return
+	var chest := p.global_position + Vector3.UP * 0.9
+	var flat := Vector2(chest.x - at.x, chest.z - at.z).length()
+	if flat <= SPIKE_HIT_R and chest.y >= gy - 1.0 and chest.y <= top + 0.6:
+		_hits["spikes"] += 1
+		p.call("take_damage", _dmg(SPIKE_DAMAGE), Vector3(at.x, chest.y, at.z), 8.0)
+		print("[YuukaHorror] spikes 命中（水平 %.1f m，高度 %.1f / %.1f m）" % [
+			flat, chest.y, top])
+
+
+## 从某点向下打一条射线找地面（给血刺定"从哪儿长出来"）
+func _ground_below(at: Vector3) -> float:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return at.y - 2.0
+	var q := PhysicsRayQueryParameters3D.create(
+		at + Vector3.UP * 200.0, at + Vector3.DOWN * 200.0)
+	q.collision_mask = 1
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return at.y - 2.0
+	return (hit["position"] as Vector3).y
+
+
+# ── 7 近身爆震 ──
+
+func _skill_nova() -> void:
+	_play_once("Vital_Panic")
+	Sfx.play("ex_fire", -3.0)
+	# 收束预警：一圈大红环从 18 m 缩到 3 m —— "它要炸了"
+	var warn := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.97
+	tm.outer_radius = 1.0
+	tm.rings = 128
+	tm.ring_segments = 6
+	warn.mesh = tm
+	warn.material_override = _additive(Color(1.0, 0.16, 0.08, 0.85))
+	warn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	warn.position = Vector3(0.0, 0.4, 0.0)
+	warn.scale = Vector3(NOVA_RADIUS, 2.0, NOVA_RADIUS)
+	add_child(warn)
+	var tw := create_tween()
+	tw.tween_property(warn, "scale", Vector3(2.5, 2.0, 2.5), NOVA_WARN) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await tw.finished
+	if _dead or not is_instance_valid(self):
+		if is_instance_valid(warn):
+			warn.queue_free()
+		return
+	warn.queue_free()
+	# 炸开
+	var ring := MeshInstance3D.new()
+	var tm2 := TorusMesh.new()
+	tm2.inner_radius = 0.94
+	tm2.outer_radius = 1.0
+	tm2.rings = 128
+	tm2.ring_segments = 6
+	ring.mesh = tm2
+	ring.material_override = _additive(Color(1.0, 0.26, 0.12, 0.95))
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.position = Vector3(0.0, 0.4, 0.0)
+	ring.scale = Vector3(2.0, 2.0, 2.0)
+	add_child(ring)
+	var tw2 := create_tween()
+	tw2.tween_property(ring, "scale", Vector3(NOVA_RADIUS, 2.0, NOVA_RADIUS), 0.45)
+	tw2.tween_callback(ring.queue_free)
+	# 球心放在身体中段：脚下 0 m 的球罩不到天上，抬到 6 m 才能"对空"
+	_hit_area(global_position + Vector3.UP * 6.0, NOVA_RADIUS,
+		_dmg(NOVA_DAMAGE), NOVA_KNOCK, "nova")
+	Sfx.play("ex_fire", -1.0)
+
+
+# ── 8 幻影冲锋 ──
+
+func _skill_phantom(pc: Vector3) -> void:
+	_play_once("Vital_Callsign" if _ap != null and _ap.has_animation("Vital_Callsign") \
+		else "Stand_Attack_Start")
+	Sfx.play("fire_beam", -6.0)
+	var n := GHOST_COUNT + (1 if _phase >= 2 else 0)
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var ang := TAU * float(i) / float(n)
+		var off := Vector3(cos(ang), 0.0, sin(ang)) * 6.0
+		_spawn_ghost(global_position + off, pc)
+		await get_tree().create_timer(0.12).timeout
+
+
+## 幻影：一团红色的"优香轮廓"（胶囊 + 头部球），直线扑向目标点，到了就炸。
+func _spawn_ghost(from: Vector3, target: Vector3) -> void:
+	var g := Node3D.new()
+	g.name = "Phantom"
+	g.top_level = true
+	add_child(g)
+	g.global_position = from
+	var body := MeshInstance3D.new()
+	var cm := CapsuleMesh.new()
+	cm.radius = 1.4
+	cm.height = 6.0
+	body.mesh = cm
+	body.material_override = _additive(Color(1.0, 0.12, 0.10, 0.55))
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.position = Vector3(0.0, 3.0, 0.0)
+	g.add_child(body)
+	var head := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.1
+	sm.height = 2.2
+	head.mesh = sm
+	head.material_override = _additive(Color(1.0, 0.30, 0.20, 0.7))
+	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.position = Vector3(0.0, 7.2, 0.0)
+	g.add_child(head)
+	# 三维方向：玩家飞在天上时幻影会爬升追上去（对空）
+	var dir := target - from
+	dir = dir.normalized() if dir.length() > 0.5 else facing()
+	_phantoms.append({"node": g, "dir": dir, "t": GHOST_LIFE})
+
+
+func _tick_phantoms(delta: float) -> void:
+	if _phantoms.is_empty():
+		return
+	var keep: Array[Dictionary] = []
+	for e in _phantoms:
+		var n: Node3D = e["node"]
+		if n == null or not is_instance_valid(n):
+			continue
+		var t := float(e["t"]) - delta
+		e["t"] = t
+		var prev := n.global_position
+		n.global_position = prev + (e["dir"] as Vector3) * GHOST_SPEED * delta
+		# 撞到玩家 / 超时就炸。
+		# ⚠️ 用**线段**判定：低帧率下一帧能飞 2~3 m，只看端点会从人身上穿过去。
+		var done := t <= 0.0
+		var p := _find_player()
+		if p != null:
+			# 用"线段到玩家身体"的最近距离（3D）：幻影会爬升，天上的玩家也算命中。
+			# 半径给 3.0 —— 幻影本体是 ~5 m 高、2.8 m 粗的柱子。
+			var chest := p.global_position + Vector3.UP * 2.0
+			var closest := Geometry3D.get_closest_point_to_segment(
+				chest, prev, n.global_position)
+			if closest.distance_to(chest) < 3.0:
+				done = true
+				n.global_position = closest
+		if done:
+			_hit_area(n.global_position, GHOST_BLAST_R, _dmg(GHOST_DAMAGE), 14.0, "phantom")
+			_blast_fx(n.global_position)
+			n.queue_free()
+			continue
+		keep.append(e)
+	_phantoms = keep
+
+
+func _blast_fx(at: Vector3) -> void:
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.9
+	tm.outer_radius = 1.0
+	tm.rings = 64
+	tm.ring_segments = 5
+	ring.mesh = tm
+	var mat := _additive(Color(1.0, 0.24, 0.12, 0.9))
+	ring.material_override = mat
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.top_level = true
+	add_child(ring)
+	ring.global_position = at + Vector3(0.0, 0.5, 0.0)
+	ring.scale = Vector3(1.5, 2.0, 1.5)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ring, "scale", Vector3(GHOST_BLAST_R, 2.0, GHOST_BLAST_R), 0.4)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.5)
+	tw.chain().tween_callback(ring.queue_free)
+	Sfx.play("ui_close", -5.0)
+
+
+# ── 9 追踪光箭 ──
+
+func _skill_homing(pc: Vector3) -> void:
+	_play_once("Stand_Attack_Start")
+	Sfx.play("fire_beam", -8.0)
+	var n := HOMING_COUNT + (1 if _phase >= 2 else 0)
+	for i in n:
+		if _dead or not is_instance_valid(self):
+			return
+		var off := Vector3(cos(TAU * float(i) / float(n)), 0.0,
+			sin(TAU * float(i) / float(n))) * 4.0
+		_spawn_orb(pc + off * 0.2, "homing", off * 0.5)
+		await get_tree().create_timer(0.2).timeout
+
+
+# ── 10 引力井 ──
+
+func _skill_gravity(pc: Vector3) -> void:
+	_play_once("Normal_Attack_Ing")
+	Sfx.play("ui_open", -4.0)
+	var at := Vector3(pc.x, pc.y, pc.z)
+	var disc := _make_disc(at, WELL_RADIUS, Color(1.0, 0.06, 0.10, 0.30))
+	_wells.append({"node": disc, "t": WELL_TIME, "center": at})
+	print("[YuukaHorror] 引力井：%s（半径 %.0f m，%.1f s）" % [
+		str(at.snappedf(0.1)), WELL_RADIUS, WELL_TIME])
+
+
+## 井里每秒往中心拽 2.6 m/s 的**位移**（远小于跑速 6.8，能走出去）；
+## 时间到就炸一下。
+func _tick_wells(delta: float) -> void:
+	if _wells.is_empty():
+		return
+	var p := _find_player()
+	var keep: Array[Dictionary] = []
+	for w in _wells:
+		var node: MeshInstance3D = w["node"]
+		if node == null or not is_instance_valid(node):
+			continue
+		var center: Vector3 = w["center"]
+		var t := float(w["t"]) - delta
+		w["t"] = t
+		if p != null:
+			# 三维吸附：飞到井上空也会被往下拽（对空）
+			var d := (p.global_position + Vector3.UP * 0.9) - center
+			if d.length() <= WELL_RADIUS and d.length() > 0.4:
+				p.global_position -= d.normalized() * WELL_PULL * delta
+		if t <= 0.0:
+			var pp := _find_player()
+			print("[YuukaHorror] 引力井爆炸（玩家距井心 %.1f m，高差 %.1f m）" % [
+				(pp.global_position - center).length() if pp != null else -1.0,
+				(pp.global_position.y - center.y) if pp != null else -1.0])
+			_hit_area(center, WELL_RADIUS, _dmg(WELL_DAMAGE), 14.0, "gravity")
+			_flash_mark(node, 1.25, 0.3)
+			continue
+		keep.append(w)
+	_wells = keep
+
+
+# ────────────────────────── 光球 ──────────────────────────
+
+## `kind` 只用于统计（barrage / homing）；`side` 给追踪弹一点出生偏移。
+func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO) -> void:
 	var orb := MeshInstance3D.new()
 	orb.name = "HorrorOrb"
 	var sm := SphereMesh.new()
@@ -503,14 +1088,22 @@ func _spawn_orb(target: Vector3) -> void:
 	orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# 从胸口高度甩出去（⚠️ 先进树再设 global_position，理由同 `_make_disc()`）
 	var from := global_position + Vector3(0.0, height * 0.62, 0.0) \
-		+ facing() * height * 0.18
+		+ facing() * height * 0.18 + side
+	orb.top_level = true
 	add_child(orb)
 	orb.global_position = from
 	var dir := target - from
 	dir = dir.normalized() if dir.length_squared() > 0.01 else Vector3.FORWARD
-	_orbs.append({"node": orb, "dir": dir, "t": 0.0})
+	_orbs.append({
+		"node": orb, "dir": dir, "t": 0.0, "kind": kind,
+		"homing": kind == "homing",
+		"life": HOMING_LIFE if kind == "homing" else ORB_LIFE,
+	})
 
 
+## 光球推进。直线弹走 ORB_SPEED；追踪弹有**转向上限**（HOMING_TURN），
+## 速度低、寿命长 —— 绕圈能甩掉。
+## 命中用**扫掠**：取这一段位移到玩家胸口的最近距离，低帧率不会穿过去。
 func _tick_orbs(delta: float) -> void:
 	if _orbs.is_empty():
 		return
@@ -521,21 +1114,37 @@ func _tick_orbs(delta: float) -> void:
 		if node == null or not is_instance_valid(node):
 			continue
 		var t := float(o["t"]) + delta
-		if t > ORB_LIFE:
+		if t > float(o["life"]):
 			node.queue_free()
 			continue
+		var dir: Vector3 = o["dir"]
+		var speed := ORB_SPEED
+		if bool(o["homing"]):
+			speed = HOMING_SPEED
+			if p != null:
+				# ⚠️ 必须**三维**转向：第一版只转 yaw（`want.y = 0`），
+				#    光球从胸口（+9.9 m）甩出来以后永远平飞，打不到地上的人
+				#    （探针实测 0 命中）。
+				var want := (p.global_position + Vector3.UP * 0.9) - node.global_position
+				if want.length_squared() > 0.01:
+					want = want.normalized()
+					var max_turn := deg_to_rad(HOMING_TURN) * delta
+					var ang := dir.angle_to(want)
+					var k := 1.0 if ang < 0.0001 else clampf(max_turn / ang, 0.0, 1.0)
+					dir = dir.slerp(want, k).normalized()
+					o["dir"] = dir
 		var prev := node.global_position
-		var next := prev + (o["dir"] as Vector3) * ORB_SPEED * delta
+		var next := prev + dir * speed * delta
 		node.global_position = next
 		if p != null and p.has_method("take_damage"):
-			# ⚠️ 同样是**扫掠判定**：低帧率下一帧飞 2~3 m，
-			#    只在端点比距离会从玩家边上"穿过去"（带泼溅那轮实测漏判）。
 			var chest := p.global_position + Vector3.UP * 0.9
 			var closest := Geometry3D.get_closest_point_to_segment(chest, prev, next)
 			if closest.distance_to(chest) <= ORB_HIT_R:
-				_hits["barrage"] += 1
-				p.call("take_damage", ORB_DAMAGE, closest, 6.0)
-				print("[YuukaHorror] 光球命中")
+				var kind := String(o["kind"])
+				_hits[kind] = int(_hits.get(kind, 0)) + 1
+				p.call("take_damage",
+					_dmg(HOMING_DAMAGE if kind == "homing" else ORB_DAMAGE), closest, 6.0)
+				print("[YuukaHorror] %s 命中" % kind)
 				node.queue_free()
 				continue
 		o["t"] = t
@@ -543,19 +1152,25 @@ func _tick_orbs(delta: float) -> void:
 	_orbs = keep
 
 
-# ────────────────────────── 范围伤害 ──────────────────────────
+# ────────────────────────── 范围伤害 / 地面圈 ──────────────────────────
 
-## ⚠️ 铁律（`boss_attacker.gd` 文件头）：预警圈半径**就是**伤害半径。
-func _hit_area(center: Vector3, radius: float, dmg: float, knock: float) -> void:
+## ⚠️ 铁律（`boss_attacker.gd` 文件头）：预警半径**就是**伤害半径。
+## ⚠️ 判定是**球（3D 距离）**，不是"水平圆 + 高度带"：
+##    玩家有机甲形态、**会飞**（`player.gd::SPEED_FLY = 11 m/s`，加力 19）。
+##    用户 2026-11-13：「因为机甲是天上飞的，技能更多要大范围可以对空或者精准小范围对空的。」
+##    所以这里的半径既管地上也管天上 —— 圈画在玩家脚下，飞起来一样被罩住。
+func _hit_area(center: Vector3, radius: float, dmg: float, knock: float,
+		kind := "") -> void:
 	var p := _find_player()
 	if p == null or not p.has_method("take_damage"):
 		return
-	var at := p.global_position
-	var flat := Vector2(at.x - center.x, at.z - center.z).length()
-	if flat <= radius and absf(at.y - center.y) <= SLAM_MAX_HEIGHT:
-		_hits["slam"] += 1
+	var chest := p.global_position + Vector3.UP * 0.9
+	var d := chest.distance_to(center)
+	if d <= radius:
+		if kind != "":
+			_hits[kind] = int(_hits.get(kind, 0)) + 1
 		p.call("take_damage", dmg, center, knock)
-		print("[YuukaHorror] 砸击命中（%.1f m / %.0f m）" % [flat, radius])
+		print("[YuukaHorror] %s 命中（%.1f m / %.1f m）" % [kind, d, radius])
 
 
 func _make_disc(center: Vector3, radius: float, col: Color) -> MeshInstance3D:
@@ -572,6 +1187,9 @@ func _make_disc(center: Vector3, radius: float, col: Color) -> MeshInstance3D:
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.scale = Vector3(radius, 1.0, radius)
+	# ⚠️ top_level：BOSS 每帧都在朝玩家转身，普通子节点会被**带着绕它的原点转**
+	#    （实测幻影沿弧线飞、落点圈飘走）。特效一律脱离父变换。
+	mi.top_level = true
 	# ⚠️ 必须**先进树再设 global_position**：不在树里的 Node3D 没有全局变换，
 	#    先设会被丢弃（返回 Transform3D()），圈就落在世界原点了（实测踩过）。
 	add_child(mi)
@@ -599,7 +1217,7 @@ func _flash_mark(mark: Node3D, grow: float, time: float) -> void:
 	if mi != null:
 		var sh := mi.material_override as ShaderMaterial
 		if sh != null:
-			# 预警圈用的是 `telegraph_disc` 着色器 → 淡出它的 alpha
+			# 地面圈用的是 `telegraph_disc` 着色器 → 淡出它的 alpha
 			tw.tween_method(func(v: float) -> void:
 				if is_instance_valid(sh):
 					sh.set_shader_parameter("alpha", v), DISC_ALPHA * 2.4, 0.0, time)
@@ -617,7 +1235,7 @@ func _free_marks() -> void:
 	_slam_marks.clear()
 
 
-# ────────────────────────── 受击 / 死亡 ──────────────────────────
+# ────────────────────────── 受击 / 阶段 / 死亡 ──────────────────────────
 
 func _flash() -> void:
 	# 材质已经换成 ShaderMaterial（基类 `_materials` 里那份不再挂在表面上），
@@ -632,26 +1250,85 @@ func _flash() -> void:
 				m.set_shader_parameter("flash", v), 1.0, 0.0, 0.18)
 
 
-## 二阶段：血量 ≤ 50%。
+## 无敌期间挨打：不扣血，只在身上闪一下"打不进去"的亮光。
+func _flash_shield() -> void:
+	if _shield_t > 0.0:
+		return
+	_shield_t = 0.25
+	Sfx.play("ui_toggle", -6.0)
+	for m in _skin_mats:
+		if not is_instance_valid(m):
+			continue
+		m.set_shader_parameter("flash", 0.55)
+		var tw := create_tween()
+		tw.tween_method(func(v: float) -> void:
+			if is_instance_valid(m):
+				m.set_shader_parameter("flash", v), 0.55, 0.0, 0.22)
+
+
 func take_damage(amount: float, hit_pos := Vector3.ZERO, hit_dir := Vector3.ZERO) -> void:
-	super.take_damage(amount, hit_pos, hit_dir)
-	if not _dead and _phase == 1 and health <= max_health * 0.5:
-		_enter_phase_2()
+	if _dead:
+		return
+	if _invuln:
+		# 复活演出的 20 s：枪打得再准也不掉血
+		_flash_shield()
+		return
+	# 二阶段"防御力 +50%" = 受到的伤害减半
+	var dmg := amount * (1.0 - P2_DEFENSE) if _phase >= 2 else amount
+	super.take_damage(dmg, hit_pos, hit_dir)
 
 
-func _enter_phase_2() -> void:
-	_phase = 2
-	_t_skill = 1.2
-	_play_once("Vital_Panic")
-	phase_changed.emit(2)
-	print("[YuukaHorror] 进入二阶段（血量 %.0f / %.0f）" % [health, max_health])
-
-
-## 死亡自己接管：走 GLB 的 `Vital_Dying_Ing → Vital_Death`，
-## **不用**基类那条"整只模型绕 X 轴向前扑倒"（会和动画打架，变成双重摔倒）。
+## 血量打空 → 不是死，是**复活演出**：20 s 无敌 + 血量逐渐回到一半。
 func _die(by_damage: float) -> void:
 	if _dead:
 		return
+	if _phase == 1 and not _reviving:
+		_begin_revive()
+		return
+	_real_death(by_damage)
+
+
+func _begin_revive() -> void:
+	_reviving = true
+	_invuln = true
+	_revive_t = REVIVE_TIME
+	health = 0.0
+	health_changed.emit(health, max_health)
+	_t_skill = REVIVE_TIME + 0.5
+	Sfx.play("ex_fire", -1.0)
+	_play_once("Vital_Dying_Ing")
+	revive_started.emit()
+	print("[YuukaHorror] 血量打空 → 复活演出（%.0f s 无敌，回血到 %.0f）" % [
+		REVIVE_TIME, max_health * REVIVE_TO])
+	# 先跪 1.2 s，再"挣扎着站起来"
+	await get_tree().create_timer(1.2).timeout
+	if not is_instance_valid(self) or _dead:
+		return
+	_play_once("Vital_Panic")
+	await get_tree().create_timer(1.4).timeout
+	if not is_instance_valid(self) or _dead:
+		return
+	_play_once("Victory_Start")
+
+
+## 无敌结束：正式进入第二阶段（血量就是回满的那一半）
+func _end_revive() -> void:
+	_reviving = false
+	_invuln = false
+	_phase = 2
+	health = max_health * REVIVE_TO
+	health_changed.emit(health, max_health)
+	_t_skill = 1.2
+	_skill_i = 0
+	phase_changed.emit(2)
+	Sfx.play("ui_open", -2.0)
+	_play_once("Victory_End")
+	print("[YuukaHorror] 进入二阶段：血量 %.0f / %.0f，攻击 ×%.1f，间隔 %.2f s，受伤 ×%.2f" % [
+		health, max_health, P2_DAMAGE, _interval(), 1.0 - P2_DEFENSE])
+
+
+## 二阶段的真死：走 GLB 的 Vital_Dying_Ing → Vital_Death（不用基类的整体扑倒）
+func _real_death(by_damage: float) -> void:
 	_dead = true
 	died.emit(by_damage)
 	for c in _collisions:
@@ -668,6 +1345,21 @@ func _die(by_damage: float) -> void:
 		if is_instance_valid(n2):
 			n2.queue_free()
 	_orbs.clear()
+	for s in _sweeps:
+		var n3: Node3D = s["node"]
+		if is_instance_valid(n3):
+			n3.queue_free()
+	_sweeps.clear()
+	for w2 in _wells:
+		var n4: Node3D = w2["node"]
+		if is_instance_valid(n4):
+			n4.queue_free()
+	_wells.clear()
+	for e in _phantoms:
+		var n5: Node3D = e["node"]
+		if is_instance_valid(n5):
+			n5.queue_free()
+	_phantoms.clear()
 	_death_fx()
 
 
@@ -694,27 +1386,37 @@ func _death_fx() -> void:
 	print("[YuukaHorror] 已倒下")
 
 
-## 探针 / 自检用：当前状态 + 各招放出次数
+# ────────────────────────── 探针 / 自检接口 ──────────────────────────
+
 func status() -> Dictionary:
 	return {
 		"health": health,
 		"max_health": max_health,
 		"phase": _phase,
 		"dead": _dead,
+		"reviving": _reviving,
+		"revive_t": _revive_t,
+		"invuln": _invuln,
+		"damage_scale": P2_DAMAGE if _phase >= 2 else 1.0,
+		"take_scale": 1.0 - P2_DEFENSE if _phase >= 2 else 1.0,
+		"interval": _interval(),
 		"last_skill": _last_skill,
 		"counts": _counts.duplicate(),
+		"hits": _hits.duplicate(),
 		"has_anim": _ap != null,
 		"anim": _ap.current_animation if _ap != null else "",
 		"skin_mats": _skin_mats.size(),
 		"waves": _waves.size(),
 		"orbs": _orbs.size(),
+		"sweeps": _sweeps.size(),
+		"wells": _wells.size(),
+		"phantoms": _phantoms.size(),
 		"slam_marks": _slam_marks.size(),
 		"busy": _busy,
-		"hits": _hits.duplicate(),
 	}
 
 
-## 探针用：清掉场上所有特效残骸、把命中计数归零（招式之间互不干扰）
+## 探针用：清掉场上所有特效残骸、把计数归零（招式之间互不干扰）
 func debug_reset() -> void:
 	for w in _waves:
 		var n: Node3D = w["node"]
@@ -726,6 +1428,21 @@ func debug_reset() -> void:
 		if is_instance_valid(n2):
 			n2.queue_free()
 	_orbs.clear()
+	for s in _sweeps:
+		var n3: Node3D = s["node"]
+		if is_instance_valid(n3):
+			n3.queue_free()
+	_sweeps.clear()
+	for w2 in _wells:
+		var n4: Node3D = w2["node"]
+		if is_instance_valid(n4):
+			n4.queue_free()
+	_wells.clear()
+	for e in _phantoms:
+		var n5: Node3D = e["node"]
+		if is_instance_valid(n5):
+			n5.queue_free()
+	_phantoms.clear()
 	_free_marks()
 	for k in _hits.keys():
 		_hits[k] = 0
@@ -737,15 +1454,38 @@ func debug_cast(kind: String) -> void:
 	if p == null:
 		return
 	_busy = true
+	_counts[kind] = int(_counts.get(kind, 0)) + 1
 	await _debug_cast_inner(kind, p)
 	_busy = false
 
 
 func _debug_cast_inner(kind: String, p: Node3D) -> void:
+	var pc := p.global_position
 	match kind:
 		"slam":
-			await _skill_slam(p.global_position)
+			await _skill_slam(pc)
 		"barrage":
-			await _skill_barrage(p.global_position)
+			await _skill_barrage(pc)
+		"sweep":
+			await _skill_sweep(pc)
+		"meteor":
+			await _skill_meteor(pc)
+		"spikes":
+			await _skill_spikes(pc)
+		"nova":
+			await _skill_nova()
+		"phantom":
+			await _skill_phantom(pc)
+		"homing":
+			await _skill_homing(pc)
+		"gravity":
+			await _skill_gravity(pc)
 		_:
 			await _skill_shockwave()
+
+
+## 探针用：跳过 20 s 的最短等待，直接结算复活演出
+func debug_finish_revive() -> void:
+	if _reviving:
+		_revive_t = 0.0
+		_end_revive()

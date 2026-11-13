@@ -615,6 +615,25 @@ func _on_final_boss_spawned(boss: Node3D) -> void:
 		_hud.bind_bosses([b])
 		print("[ConstructivistLevel] Boss 血条 → 优香-恐怖")
 	_show_message("优香-恐怖 登场", 5.0)
+	# 打空第一条血 → 20 s 无敌 + 回血；这段时间枪打不动，必须**当场告诉玩家**，
+	# 否则会被当成"卡了 / 打不中"。
+	if boss.has_signal("revive_started"):
+		boss.connect("revive_started", _on_final_boss_revive)
+	if boss.has_signal("phase_changed"):
+		boss.connect("phase_changed", _on_final_boss_phase)
+
+
+## 血量打空后的复活演出（20 s 无敌）
+func _on_final_boss_revive() -> void:
+	_show_message("优香-恐怖 正在复苏 —— 20 秒内打不动她", 4.0)
+	print("[ConstructivistLevel] 终局：BOSS 进入复活演出（20 s 无敌）")
+
+
+## 二阶段开始（攻击 ×3、出招更快、受伤减半）
+func _on_final_boss_phase(phase: int) -> void:
+	if phase >= 2:
+		_show_message("第二阶段 —— 她的攻击翻了三倍", 4.0)
+		print("[ConstructivistLevel] 终局：BOSS 进入第二阶段")
 
 
 ## 优香-恐怖 倒下、封锁解除。

@@ -59,6 +59,13 @@ func _run() -> void:
 	var ps := load("res://scenes/next_level.tscn") as PackedScene
 	_lvl = ps.instantiate() as Node3D
 	root.add_child(_lvl)
+	# ⚠️ 关掉「掉出广场」的重置：探针要把玩家钉在校园里做判定，
+	#    而它往下掉一次就被送回大厅（−2, 0.6, 5.2），之后 BOSS 的技能
+	#    全部打向那个位置、判定全乱（实测：幻影追到 243 m 外的"玩家"）。
+	var fall := _lvl.get_node_or_null("FallReset") as Area3D
+	if fall != null:
+		fall.set_deferred("monitoring", false)
+		print("[final] 已关闭 FallReset（探针把玩家钉住，不需要坠落兜底）")
 	for _i in 20:
 		await process_frame
 
@@ -192,11 +199,24 @@ func _run() -> void:
 	_boss.call("debug_reset")
 	_boss.set("_t_skill", 9999.0)
 	await _test_shock_hit()
-	await _test_shock_jump()
+	await _test_shock_air()
+	await _test_shock_far()
 	await _test_slam_in()
 	await _test_slam_out()
+	await _test_slam_air()
 	await _test_barrage()
-	await _test_phase2()
+	await _test_sweep()
+	await _test_sweep_air()
+	await _test_meteor()
+	await _test_spikes()
+	await _test_nova_in()
+	await _test_nova_out()
+	await _test_phantom()
+	await _test_homing()
+	await _test_gravity()
+	_test_ten_skills()
+	await _test_revive()
+	await _test_phase2_buffs()
 	_player.set_physics_process(true)
 
 	# ── 打倒 → 封锁解除 ──
@@ -241,26 +261,38 @@ func _test_shock_hit() -> void:
 		"命中 %d 次，%.0f → %.0f" % [hits, hp0, hp1])
 
 
-## 冲击波：同样 18 m，但一直在空中 **1.1 m**（玩家跳跃顶点 1.26 m，够得着）→ 不该掉血
-func _test_shock_jump() -> void:
+## 冲击波：飞到 25 m 高空（水平仍是 18 m）→ 竖直能量墙照样扫到（对空大范围）
+func _test_shock_air() -> void:
 	_boss.call("debug_reset")
 	_set_hp(250.0)
-	var base_y := _player.global_position.y
-	var keep := base_y + 1.1
+	_teleport(safe_spot() + Vector3(0.0, 25.0, 0.0))
+	await _wait(0.25)
 	var hp0 := _hp()
 	_boss.call("debug_cast", "shock")
-	var t0 := Time.get_ticks_msec()
-	while true:
-		_player.global_position.y = keep
-		_player.set("velocity", Vector3.ZERO)
-		await physics_frame
-		var st: Dictionary = _boss.call("status")
-		if int(st["waves"]) == 0 and not bool(st["busy"]) 				and Time.get_ticks_msec() - t0 > 800:
-			break
-	_player.global_position.y = base_y
+	await _until_idle()
 	var hp1 := _hp()
-	_check("冲击波：跳起 1.1 m 躲过", _hits("shock") == 0 and is_equal_approx(hp1, hp0),
+	_check("冲击波：25 m 高空也被扫到（对空）", _hits("shock") >= 1 and hp1 < hp0,
 		"命中 %d 次，%.0f → %.0f" % [_hits("shock"), hp0, hp1])
+	_teleport(safe_spot())
+
+
+## 冲击波：跑到 40 m 外（墙只扫到 34 m）→ 安全
+func _test_shock_far() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	var dir := safe_spot() - _boss.global_position
+	dir.y = 0.0
+	dir = dir.normalized()
+	var far := _boss.global_position + dir * 40.0
+	_teleport(Vector3(far.x, _boss.global_position.y + 0.6, far.z))
+	await _wait(0.25)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "shock")
+	await _until_idle()
+	var hp1 := _hp()
+	_check("冲击波：40 m 外（> 34 m）安全", _hits("shock") == 0 and is_equal_approx(hp1, hp0),
+		"命中 %d 次，%.0f → %.0f" % [_hits("shock"), hp0, hp1])
+	_teleport(safe_spot())
 
 
 ## 砸击：站着不动（圈心 = 自己）→ 掉血；顺便出预警圈截图
@@ -311,15 +343,213 @@ func _test_barrage() -> void:
 		"命中 %d 次，%.0f → %.0f" % [_hits("barrage"), hp0, hp1])
 
 
-func _test_phase2() -> void:
-	var bst: Dictionary = _boss.call("status")
-	# 打到 40%（< 50% 阈值）
-	var target := float(bst["max_health"]) * 0.4
-	_boss.call("take_damage", maxf(float(bst["health"]) - target, 1.0))
-	await _wait(0.4)
+## 砸击：悬在 14 m 高空不动 → 落点球照样罩住（精准小范围对空）
+func _test_slam_air() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot() + Vector3(0.0, 14.0, 0.0))
+	await _wait(0.25)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "slam")
+	await _until_idle()
+	var hp1 := _hp()
+	_check("砸击：14 m 高空命中（对空）", _hits("slam") >= 1 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("slam"), hp0, hp1])
+	_teleport(safe_spot())
+
+
+func _test_sweep() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "sweep")
+	await _until(func() -> bool: return int(_boss.call("status")["sweeps"]) > 0, 10.0)
+	await _wait(0.9)
+	await _shot("11_sweep", _boss.global_position + Vector3(0, 34, 0)
+		+ (_player.global_position - _boss.global_position).normalized() * 26.0,
+		_boss.global_position + Vector3(0, 8, 0))
+	await _until_idle()
+	_check("激光扫射：刀刃扫到人", _hits("sweep") >= 1, "命中 %d 次" % _hits("sweep"))
+
+
+## 激光：悬在 30 m 高空 → 60 m 高的刀刃照样扫到（对空）
+func _test_sweep_air() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot() + Vector3(0.0, 30.0, 0.0))
+	await _wait(0.25)
+	_boss.call("debug_cast", "sweep")
+	await _until_idle()
+	_check("激光：30 m 高空被扫到（对空）", _hits("sweep") >= 1,
+		"命中 %d 次" % _hits("sweep"))
+	_teleport(safe_spot())
+
+
+func _test_meteor() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_boss.call("debug_cast", "meteor")
+	await _until(func() -> bool: return int(_boss.call("status")["slam_marks"]) > 0, 10.0)
+	await _wait(0.8)
+	await _shot("12_meteor", safe_spot() + Vector3(-18, 40, -22),
+		_player.global_position + Vector3(0, 2, 0))
+	await _until_idle(60.0)
+	var st: Dictionary = _boss.call("status")
+	_check("陨石雨：落点圈全部结算完", int(st["slam_marks"]) == 0,
+		"剩 %d 个圈、命中 %d 次" % [int(st["slam_marks"]), _hits("meteor")])
+
+
+func _test_spikes() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "spikes")
+	await _until(func() -> bool: return int(_boss.call("status")["slam_marks"]) > 0, 10.0)
+	await _wait(0.7)
+	await _shot("13_spikes", _boss.global_position + Vector3(0, 26, 0)
+		+ (_player.global_position - _boss.global_position).normalized() * 30.0,
+		(_boss.global_position + _player.global_position) * 0.5)
+	await _until_idle(45.0)
+	_check("血刺：沿玩家方向串起来并打中", _hits("spikes") >= 1,
+		"命中 %d 次" % _hits("spikes"))
+
+
+func _test_nova_in() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(_boss.global_position + Vector3(8.0, 0.6, 0.0))
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "nova")
+	await _until_idle(30.0)
+	var hp1 := _hp()
+	_check("近身爆震：圈内掉血", _hits("nova") >= 1 and hp1 < hp0,
+		"命中 %d 次，%.0f → %.0f" % [_hits("nova"), hp0, hp1])
+
+
+func _test_nova_out() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(_boss.global_position + Vector3(21.0, 0.6, 0.0))
+	await _wait(0.2)
+	var hp0 := _hp()
+	_boss.call("debug_cast", "nova")
+	await _until_idle(30.0)
+	var hp1 := _hp()
+	_check("近身爆震：21 m 外（> 半径 16）不掉血",
+		_hits("nova") == 0 and is_equal_approx(hp1, hp0),
+		"命中 %d 次，%.0f → %.0f" % [_hits("nova"), hp0, hp1])
+	_teleport(safe_spot())
+
+
+func _test_phantom() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "phantom")
+	await _until(func() -> bool: return int(_boss.call("status")["phantoms"]) > 0, 10.0)
+	await _wait(0.7)
+	await _shot("14_phantom", safe_spot() + Vector3(-14, 22, -26),
+		(_boss.global_position + safe_spot()) * 0.5 + Vector3(0, 4, 0))
+	await _until_idle(40.0)
+	_check("幻影冲锋：扑到人身上爆炸", _hits("phantom") >= 1,
+		"命中 %d 次" % _hits("phantom"))
+
+
+func _test_homing() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "homing")
+	await _until_idle(45.0)
+	_check("追踪光箭：能追到站着的人", _hits("homing") >= 1,
+		"命中 %d 次" % _hits("homing"))
+
+
+func _test_gravity() -> void:
+	_boss.call("debug_reset")
+	_set_hp(250.0)
+	var at := safe_spot()
+	_teleport(at)
+	await _wait(0.2)
+	_boss.call("debug_cast", "gravity")
+	await _until(func() -> bool: return int(_boss.call("status")["wells"]) > 0, 10.0)
+	# 挪到井边（5 m），看会不会被拉回中心
+	_teleport(at + Vector3(5.0, 0.0, 0.0))
+	var edge := _player.global_position
+	await _wait(0.8)
+	var pulled := edge.distance_to(_player.global_position)
+	await _shot("15_gravity", at + Vector3(-16, 26, -18), at + Vector3(0, 2, 0))
+	await _until_idle(30.0)
+	_check("引力井：站在井里会被拉向中心", pulled >= 0.3, "被拉了 %.2f m" % pulled)
+	_check("引力井：到点爆炸打中井里的人", _hits("gravity") >= 1,
+		"命中 %d 次" % _hits("gravity"))
+	_teleport(safe_spot())
+
+
+func _test_ten_skills() -> void:
+	var st: Dictionary = _boss.call("status")
+	var counts: Dictionary = st["counts"]
+	var missing: Array[String] = []
+	for n in ["shock", "slam", "barrage", "sweep", "meteor", "spikes",
+			"nova", "phantom", "homing", "gravity"]:
+		if int(counts.get(n, 0)) <= 0:
+			missing.append(n)
+	_check("十个技能都放出来过", missing.is_empty(),
+		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
+
+
+func _test_revive() -> void:
+	_boss.call("debug_reset")
+	_boss.call("take_damage", 1.0e9)
+	await _until(func() -> bool: return bool(_boss.call("status")["reviving"]), 15.0)
+	var st: Dictionary = _boss.call("status")
+	_check("血量打空 → 复活演出（不是直接死）",
+		bool(st["reviving"]) and not bool(st["dead"]) and int(st["phase"]) == 1,
+		"reviving=%s dead=%s phase=%d" % [str(st["reviving"]), str(st["dead"]),
+			int(st["phase"])])
+	_check("复活无敌 20 s", bool(st["invuln"]) and float(st["revive_t"]) > 18.0,
+		"剩 %.1f s" % float(st["revive_t"]))
+	var hp0 := _hp_boss()
+	_boss.call("take_damage", 1000.0)
+	await _wait(0.2)
+	# ⚠️ 复活期间血量本来就在涨，判据是"没有掉 1000"，不是"完全没变"
+	_check("无敌期间打不动", _hp_boss() >= hp0 and _hp_boss() < hp0 + 1000.0,
+		"%.0f → %.0f（只涨不跌）" % [hp0, _hp_boss()])
+	await _until(func() -> bool: return float(_boss.call("status")["health"]) > 0.0, 40.0)
 	var st2: Dictionary = _boss.call("status")
-	_check("半血进二阶段", int(st2["phase"]) == 2,
-		"phase=%d  血量 %.0f" % [int(st2["phase"]), float(st2["health"])])
+	_check("血量逐渐回复（不是瞬间满）", float(st2["health"]) > 0.0,
+		"当前 %.0f / %.0f" % [float(st2["health"]), float(st2["max_health"])])
+	_boss.call("debug_finish_revive")
+	await _wait(0.3)
+	var st3: Dictionary = _boss.call("status")
+	_check("复活结束 → 二阶段、血量回到一半、无敌解除",
+		int(st3["phase"]) == 2
+			and is_equal_approx(float(st3["health"]), float(st3["max_health"]) * 0.5)
+			and not bool(st3["invuln"]),
+		"phase=%d 血量 %.0f 无敌=%s" % [int(st3["phase"]), float(st3["health"]),
+			str(st3["invuln"])])
+
+
+func _test_phase2_buffs() -> void:
+	var st: Dictionary = _boss.call("status")
+	_check("二阶段攻击 +200%（×3）", is_equal_approx(float(st["damage_scale"]), 3.0),
+		"×%.2f" % float(st["damage_scale"]))
+	_check("二阶段攻速 +50%（间隔 ÷1.5）",
+		is_equal_approx(float(st["interval"]), 5.5 / 1.5),
+		"%.2f s" % float(st["interval"]))
+	_check("二阶段防御 +50%（受伤 ×0.5）",
+		is_equal_approx(float(st["take_scale"]), 0.5),
+		"×%.2f" % float(st["take_scale"]))
+	var hp0 := _hp_boss()
+	_boss.call("take_damage", 1000.0)
+	await _wait(0.2)
+	_check("二阶段实际挨 1000 只掉 500", is_equal_approx(hp0 - _hp_boss(), 500.0),
+		"%.0f → %.0f" % [hp0, _hp_boss()])
 
 
 # ────────────────────────── 报告 ──────────────────────────
@@ -396,7 +626,11 @@ func _until_idle(timeout := 30.0) -> void:
 	var t0 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < int(timeout * 1000.0):
 		var st: Dictionary = _boss.call("status")
-		if int(st["waves"]) == 0 and int(st["orbs"]) == 0 				and int(st["slam_marks"]) == 0 and not bool(st["busy"]):
+		var idle: bool = (int(st["waves"]) == 0 and int(st["orbs"]) == 0
+			and int(st["slam_marks"]) == 0 and int(st["sweeps"]) == 0
+			and int(st["wells"]) == 0 and int(st["phantoms"]) == 0
+			and not bool(st["busy"]))
+		if idle:
 			return
 		await process_frame
 	push_warning("[final] BOSS 30 s 内没演完这一招")
@@ -438,6 +672,10 @@ func _wait(sec: float) -> void:
 func _teleport(p: Vector3) -> void:
 	_player.global_position = p
 	_player.set("velocity", Vector3.ZERO)
+
+
+func _hp_boss() -> float:
+	return float(_boss.call("status")["health"])
 
 
 func _hp() -> float:
