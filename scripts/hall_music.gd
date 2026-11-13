@@ -26,8 +26,9 @@ extends Node3D
 
 ## 曲目名（`scripts/music.gd`）
 const MUSIC_TRACK := "mondrian"
-## 比楼板并集再**内缩**多少米（每边）
-const MUSIC_INSET := 0.8
+## 比楼板并集再内缩多少米（每边）。0 = 贴到楼板边，墙角也有音乐；
+## 楼板并集本身就是室内范围，站楼外不会触发，所以不需要内缩。
+const MUSIC_INSET := 0.0
 ## 触发区顶部再往上留多少（米）。三层楼板顶 9.20，留 1.6 覆盖站上三楼的高度。
 const MUSIC_TOP_PAD := 1.6
 ## 触发区节点名（自检按名字找）
