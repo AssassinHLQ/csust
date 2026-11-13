@@ -58,12 +58,15 @@ const SLIDE_SEC := 9.0
 const SLIDE_FADE := 1.0
 ## 开场前预载 PV 纹理最多等多久（秒）。超时就按老路慢慢解，别把开场卡死。
 const PREFETCH_MAX_SEC := 8.0
+## 露脸前最多等第一张图多久（秒）。其余的后台继续解，不让开场黑屏干等。
+const PREFETCH_FIRST_MAX_SEC := 1.0
 ## 点开始之后整层淡出多久（秒）。
 const FADE_OUT := 0.9
 ## 开场音乐音量 / 淡入 / 点开始后的淡出（秒）。
+## 用户 2026-11-11：「不要淡入淡出了，所有的」→ 进出都是 0（硬切）。
 const MUSIC_DB := -7.0
-const MUSIC_IN := 2.0
-const MUSIC_OUT := 1.4
+const MUSIC_IN := 0.0
+const MUSIC_OUT := 0.0
 ## 等世界就绪的**死等保护**（秒）。正常情况根本走不到：冷缓存 50 s、
 ## 暖缓存 2 s，都远小于它。只有加载逻辑真的坏了才会在这里兜底放行。
 const SETTLE_MAX := 180.0
@@ -177,7 +180,6 @@ func play(poll: Callable) -> void:
 	if _root == null or not is_instance_valid(_root):
 		return
 	_layout()
-	_start_music()
 	# 压住房间 BGM：`splat_scene.gd::_update_room_bgm()` 每帧都在调
 	# `Music.play("room609")`，不压住就会和 PV 音乐叠在一起。
 	Music.hold(true)
@@ -189,8 +191,11 @@ func play(poll: Callable) -> void:
 		await _prefetch_slides()
 		await _warm_up_shader()
 	_start_slideshow()
-	print("[TitleIntro] 正片 = %s（%d 张图，音乐 %s）" % [
-		_kind, _slides.size(), "有" if _music != null else "无"])
+	var black_sec := float(Time.get_ticks_msec() - _t_start) / 1000.0
+	# 音乐放到露脸之后再起：解 MP3 的那点时间不该算进黑屏。
+	_start_music()
+	print("[TitleIntro] 正片 = %s（%d 张图，音乐 %s，露脸前黑屏 %.2f s）" % [
+		_kind, _slides.size(), "有" if _music != null else "无", black_sec])
 
 	await _run_loading(poll)
 	await _wait_for_start()
@@ -467,24 +472,28 @@ func _prefetch_slides() -> void:
 			var err := ResourceLoader.load_threaded_request(_slides[i])
 			if err == OK:
 				want.append(i)
-	var pending := want.size()
 	print("[TitleIntro] 预载 %d 张图（后台线程，%d 张没有导入缓存）" % [
 		want.size(), _slides.size() - want.size()])
+	# ★ 只等第一张就露脸（用户 2026-11-13：「开始总是黑屏一阵子」）。
+	#   原来等全部 8 张（~3 s）黑底干等；现在第一张解好就开正片，
+	#   其余交给 _finish_prefetch 后台收 —— 正片 9 s/张，播到第 2 张时早解好了。
+	while _tex_cache[0] == null and float(Time.get_ticks_msec() - t0) / 1000.0 < PREFETCH_FIRST_MAX_SEC:
+		await get_tree().process_frame
+		_collect_slide(0)
+	_finish_prefetch(want, t0)
+
+
+## 后台把剩余预载收完（不阻塞正片）。超时保护同 PREFETCH_MAX_SEC。
+func _finish_prefetch(want: Array[int], t0: int) -> void:
+	var pending := want.size()
 	while pending > 0 and float(Time.get_ticks_msec() - t0) / 1000.0 < PREFETCH_MAX_SEC:
 		await get_tree().process_frame
 		pending = 0
 		for i in want:
-			if _tex_cache[i] != null:
-				continue
-			var st := ResourceLoader.load_threaded_get_status(_slides[i])
-			if st == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			if _tex_cache[i] == null:
+				_collect_slide(i)
+			if _tex_cache[i] == null:
 				pending += 1
-				continue
-			if st != ResourceLoader.THREAD_LOAD_LOADED:
-				continue
-			var res: Variant = ResourceLoader.load_threaded_get(_slides[i])
-			if res is Texture2D:
-				_tex_cache[i] = res as Texture2D
 	var cost := float(Time.get_ticks_msec() - t0) / 1000.0
 	var got := 0
 	for t in _tex_cache:
@@ -492,6 +501,18 @@ func _prefetch_slides() -> void:
 			got += 1
 	_prefetch_done = true
 	print("[TitleIntro] 预载完成：%d/%d 张，耗时 %.2f s" % [got, _slides.size(), cost])
+
+
+## 取回一张已解好的线程化纹理；没解好 / 没请求就跳过。
+func _collect_slide(i: int) -> void:
+	if _tex_cache[i] != null:
+		return
+	var st := ResourceLoader.load_threaded_get_status(_slides[i])
+	if st != ResourceLoader.THREAD_LOAD_LOADED:
+		return
+	var res: Variant = ResourceLoader.load_threaded_get(_slides[i])
+	if res is Texture2D:
+		_tex_cache[i] = res as Texture2D
 
 
 ## 黑底还盖着的时候，先把第一张图**画一两帧**：
@@ -946,12 +967,10 @@ func _start_music() -> void:
 	_music.name = "PvMusic"
 	_music.stream = stream
 	_music.bus = "Master"
-	_music.volume_db = -22.0
+	_music.volume_db = MUSIC_DB
 	_music.process_mode = Node.PROCESS_MODE_ALWAYS
 	_layer.add_child(_music)
 	_music.play()
-	var tw := create_tween()
-	tw.tween_property(_music, "volume_db", MUSIC_DB, MUSIC_IN)
 
 
 ## 优先 `load()`（用了导入缓存）；没导入就现场解 MP3 字节。
