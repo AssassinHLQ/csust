@@ -142,6 +142,32 @@ const BYTES_PER_SPLAT := 240     # = STRUCT_SIZE * 4
 ## 回到范围内之后多久才重载（秒）。同样归零：进门立刻开始后台解码。
 @export var reload_delay := 0.0
 
+## 判「在不在屋里」时**忽略高度上界**（只对校园开）。
+##
+## ── 为什么需要这个开关（用户 2026-11-13 两轮原话）──
+##
+##   ①「为什么飞高了就看不见校园泼溅了」
+##   ②「对了，在下面也要看得到，不只是上面，**609 的泼溅保持原样**，
+##      只需要校园的上下看得见就行」
+##
+## 病根：`_is_inside_room()` 原判据含高度上界（校园实测 y 上限 **35.3 m**）。
+## 玩家飞到 35 m 以上 → 判「屋外」→ `_update_room_exit_unload()` 累计够帧数
+## → `_unload_for_vram()` 把 `splat_node` 整个 `queue_free()`。
+## 表现为：从空中往下看**整片校园消失**（只剩天空 + 楼体网格），
+## 掉下来还要重新解码 40 s。反过来，从校园**下方**看也一样丢。
+##
+## ⚠️ 但上界**不能直接删** —— 那是画室 609 的既有需求
+##    （2026-11-08 用户：「为什么上面也加载?!」，见 `_verify_splat_unload.gd` 2.6 项）。
+##    删掉会让那条断言当场变红：站屋顶（y=5.80 > 墙顶 5.65）也会加载，
+##    平白多占 666 MB 显存。
+##
+## ⇒ 所以做成**每个 SplatScene 实例自己选**：
+##      画室 609 / 其它房间：保持 `false`（原行为，站屋顶不加载）
+##      校园（`campus_venue.tscn`）：设 `true`（飞多高、掉多深都看得见）
+##
+## 「出房间就释放」的**水平**判据不受影响：走出四面墙照样释放，省显存这件事没丢。
+@export var ignore_room_y_hi := false
+
 @export_group("Room BGM")
 ## 走进这个房间时放的 BGM（`scripts/music.gd` 里的逻辑名），空串 = 这间不放。
 ##
@@ -781,6 +807,15 @@ func _side_wall_thickness(col: Node, axis: String, sign: int) -> float:
 
 ## 玩家位置算不算「在屋里」：XZ 在门框矩形内 **且** 高度在窗口内。
 ## 单独抽出来，是因为 `_update_room_exit_unload()` 里要用，别的地方也可能要。
+##
+## ── 高度上界**保留**（2026-11-08 用户：「为什么上面也加载?!」，针对画室 609）──
+##
+## ⚠️ 2026-11-13 一度删掉上界想修「飞高看不见校园泼溅」，**那是错的**：
+##    上界是 609 明确要求的行为（站屋顶不加载），删了会连带弄坏它
+##    （`_verify_splat_unload.gd` 的 2.6 项当场变红）。
+##
+##    校园那件事的正确解法是**只对校园**放宽，见 `ignore_room_y_hi`。
+##    不要在这里动通用判据 —— 这里改一行，609 和校园会一起变。
 func _is_inside_room(pos: Vector3) -> bool:
 	if _room_xz.size == Vector2.ZERO:
 		return true
@@ -792,7 +827,12 @@ func _is_inside_room(pos: Vector3) -> bool:
 	# ⚠️ 用**脚底位置**判，不用头顶：玩家 `global_position` 是胶囊中心附近，
 	#    站屋顶时 y=5.80 已经高于墙顶 5.65。这里比的是「脚有没有踩进屋里」，
 	#    所以把脚下留一点余量 —— 人从屋顶往下掉时才会被判成进屋。
-	return pos.y >= _room_y_lo - _PLAYER_HEIGHT and pos.y <= _room_y_hi
+	if pos.y < _room_y_lo - _PLAYER_HEIGHT:
+		return false
+	# 上界：抬高时**忽略**（校园专供），默认仍然参与判定（609 靠它）
+	if ignore_room_y_hi:
+		return true
+	return pos.y <= _room_y_hi
 
 
 ## 节点离开场景树：反注册设置监听（否则静态 `_listeners` 会越积越多，

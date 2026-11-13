@@ -25,3 +25,4 @@ venue = "campus"
 world_scale = 75.0
 auto_place = true
 top_gap = 12.0
+ignore_room_y_hi = true
