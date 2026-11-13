@@ -54,12 +54,18 @@ static func set_on(on: bool) -> void:
 	GameSettings.set_value(KEY, on)
 
 
-## 切换，返回切换后的状态（F3 用）
-static func toggle() -> bool:
+## 开启（F3 用）。**只开不关**：一旦按下 F3，这一整局都保持开发者模式，
+## 再按 F3 也不会关掉 —— 否则 F4/F5/F6/F7 会跟着失效。
+## （用户 2026-11-13：「f3 按了之后，这一整局游戏都处于开发者模式，
+##   后续再按 f3 不会关闭后面几个 f4567 的功能了」）
+##
+## 帧率浮层的显隐仍由 F3 切换（归 `game.gd` / `next_level.gd`），
+## 但那只是面板，不影响这里的开关。
+## 返回开启后的状态（恒为 true）。
+static func enable() -> bool:
 	ensure_registered()
-	var on := not bool(GameSettings.value(KEY, false))
-	GameSettings.set_value(KEY, on)
-	return on
+	GameSettings.set_value(KEY, true)
+	return true
 
 
 ## `GameSettings` 变更广播回来时什么都不用做 —— 状态就在它那儿。

@@ -16,7 +16,7 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 ##
 ## ⚠️⚠️ 2026-11-11 用户：「为什么第二场景开不了开发者模式」。
 ##
-## 原因：F3 的处理**只写在 `game.gd::_input()` 里**（开帧率浮层 + 调 `DevMode.toggle()`），
+## 原因：F3 的处理**只写在 `game.gd::_input()` 里**（开帧率浮层 + 调 `DevMode.enable()`），
 ## 而 `next_level.gd` 连 `_input` 都没有 —— 第二场景压根没人听 F3。
 ## `player.gd` 那边只认领 F4/F5/F6，而且它们都先判 `DevMode.is_on()`，
 ## 所以第二场景里不仅 F3 没反应，连 F4/F5/F6 也全废（开关永远打不开）。
@@ -246,11 +246,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo:
-			# ── F3：开关开发者模式 + 浮层 ──
+			# ── F3：开启开发者模式（整局锁存，再按不关）+ 浮层显隐 ──
 			if key.keycode == PERF_KEY or key.physical_keycode == PERF_KEY:
 				_toggle_perf_overlay()
-				DevMode.toggle()
-				print("[Dev] F3 → 开发者模式 = %s" % str(DevMode.is_on()))
+				DevMode.enable()
+				print("[Dev] F3 → 开发者模式 = %s（整局保持）" % str(DevMode.is_on()))
 				return
 			# ── F7：自由摄像头（拍摄用；激活时它自己先吃掉 F7/Esc）──
 			if key.keycode == KEY_F7 or key.physical_keycode == KEY_F7:

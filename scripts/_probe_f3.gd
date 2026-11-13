@@ -77,11 +77,11 @@ func _run() -> void:
 		print("       ⚠️ 帧率浮层没建出来 ⇒ 多半是 `game.gd::_input` 没收到 F3：")
 		print("          player 先吃掉并 set_input_as_handled()，game 就轮不到了。")
 
-	print("========== 2. 再按一次 F3 ==========")
+	print("========== 2. 再按一次 F3（整局锁存：开关不关，只藏浮层）==========")
 	_press(KEY_F3)
 	for _i in 10:
 		await process_frame
-	_check(not DevMode.is_on(), "开发者模式 = 关")
+	_check(DevMode.is_on(), "开发者模式仍 = 开（2026-11-13 锁存，F4~F7 不失效）")
 	if perf != null:
 		_check(not perf.visible, "帧率浮层 = 隐藏")
 

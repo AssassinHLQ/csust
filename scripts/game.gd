@@ -216,7 +216,10 @@ func _input(event: InputEvent) -> void:
 				# ⚠️ 暂停时也要开开发者模式：Player 是 PAUSABLE，开菜单时它收不到
 				#    `_input`，只剩本函数（ALWAYS）。不在这里补一刀的话，
 				#    就是「暂停时按 F3，面板出来了但 F4/F5/F6 不生效」。
-				DevMode.toggle()
+				#
+				# ⚠️ 2026-11-13 用户：F3 开启后**整局锁存**，再按不关 ——
+				#    所以这里是 `enable()` 不是 toggle（F4~F7 不会因再按 F3 失效）。
+				DevMode.enable()
 			elif key.keycode == KEY_F7 or key.physical_keycode == KEY_F7:
 				# F7：开发者模式下的自由摄像头（拍摄用）。
 				# 自由摄像头**激活时**它是场景最后一个子节点，会先一步吃掉 F7/Esc，

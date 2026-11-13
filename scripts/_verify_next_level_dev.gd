@@ -8,7 +8,7 @@ extends SceneTree
 ## 本验收做的事：
 ##   ① 直接跑 `next_level.tscn`（不经 game.tscn），确认根节点有 `_input`；
 ##   ② 造一个真的 `InputEventKey(KEY_F3)` 喂进去，读 `DevMode.is_on()` 必须变开；
-##   ③ 再喂一次，必须变关（toggle 语义）；
+##   ③ 再喂一次，开发者模式**保持开**（2026-11-13 整局锁存，再按 F3 不关 F4~F7）；
 ##   ④ 浮层：按 F3 后 `PerfOverlay` 节点存在且 visible；
 ##   ⑤ 跨场景一致性：`DevMode` 的存在和 `game.gd` 用的是同一个 GameSettings 键。
 ##
@@ -70,11 +70,11 @@ func _run() -> void:
 	_check(overlay != null, "③ 性能浮层节点 PerfOverlay 已创建")
 	_check(overlay != null and overlay.visible, "③ 浮层可见")
 
-	# ④ 再按一次 → 关
+	# ④ 再按一次 → 开发者模式**保持开**（2026-11-13 整局锁存），只藏浮层
 	_send_f3(level)
 	for _f in 5:
 		await process_frame
-	_check(not DevMode.is_on(), "④ 再按 F3 → 开发者模式 = 关")
+	_check(DevMode.is_on(), "④ 再按 F3 → 开发者模式仍 = 开（整局锁存）")
 	_check(overlay != null and not overlay.visible, "④ 浮层隐藏")
 
 	# ⑤ 和 game.gd 用同一个存储键（跨场景保留）
