@@ -956,7 +956,7 @@ func _start_music() -> void:
 
 ## 优先 `load()`（用了导入缓存）；没导入就现场解 MP3 字节。
 func _load_music() -> AudioStream:
-	if not FileAccess.file_exists(PV_MUSIC):
+	if not ResourceLoader.exists(PV_MUSIC) and not FileAccess.file_exists(PV_MUSIC):
 		push_warning("[TitleIntro] 找不到开场音乐 %s（PV 照常放，只是没声音）" % PV_MUSIC)
 		return null
 	if ResourceLoader.exists(PV_MUSIC):
