@@ -95,10 +95,16 @@ func _scan_frames() -> void:
 		push_warning("[Plana] 缺帧目录 %s —— 用 _tools/fetch_plana_frames.ps1 重新生成" % FRAME_DIR)
 		print("[Plana] !! 缺 %s" % FRAME_DIR)
 		return
+	var seen := {}
 	for f in d.get_files():
-		# ⚠️ 导入后目录里会多出 `.png.import`，只认 .png
-		if f.ends_with(".png"):
-			_frames.append(FRAME_DIR.path_join(f))
+		# 导出包里只有 `.png.import`（运行时靠它重映射到 .ctex），裸 .png 不进包
+		var name := String(f)
+		if name.ends_with(".png.import"):
+			name = name.substr(0, name.length() - ".import".length())
+		if not name.ends_with(".png") or seen.has(name):
+			continue
+		seen[name] = true
+		_frames.append(FRAME_DIR.path_join(name))
 	_frames.sort()
 	print("[Plana] 帧序列就绪：%d 帧（%.1f s @ %.0f fps）"
 		% [_frames.size(), float(_frames.size()) / FPS, FPS])

@@ -47,10 +47,16 @@ func load_dir(dir: String, fps_hint := 12.0) -> int:
 	if d == null:
 		push_warning("[FrameAnim] 缺帧目录 %s" % dir)
 		return 0
+	var seen := {}
 	for f in d.get_files():
-		# ⚠️ 导入后目录里会多出 `.png.import`，只认 .png
-		if f.ends_with(".png"):
-			frames.append(dir.path_join(f))
+		# 导出包里只有 `.png.import`（运行时靠它重映射到 .ctex），裸 .png 不进包
+		var name := String(f)
+		if name.ends_with(".png.import"):
+			name = name.substr(0, name.length() - ".import".length())
+		if not name.ends_with(".png") or seen.has(name):
+			continue
+		seen[name] = true
+		frames.append(dir.path_join(name))
 	frames.sort()
 	return frames.size()
 
