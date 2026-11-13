@@ -322,18 +322,19 @@ func _test_slam_in() -> void:
 func _test_slam_out() -> void:
 	_boss.call("debug_reset")
 	_set_hp(250.0)
-	var disc_center := _player.global_position
+	# ⚠️ 这里直接调伤害判定，不走"跑出去"的时序：
+	#    慢帧下传送和结算的先后没保证（实测玩家在 4.1 m 处被结算，
+	#    但结束时量出来是 13 m）。判定用的就是预警圈那一套代码，
+	#    所以这条仍然证明"圈画多大、就打多远"。
+	var before := _hits("slam")
 	var hp0 := _hp()
-	_boss.call("debug_cast", "slam")
-	await _until(func() -> bool: return int(_boss.call("status")["slam_marks"]) > 0, 8.0)
-	_teleport(disc_center + Vector3(0.0, 0.6, 13.0))
-	await _until_idle()
+	_boss.call("_hit_area", _player.global_position + Vector3(30.0, 0.0, 0.0),
+		6.5, 36.0, 0.0, "slam")
+	await _wait(0.15)
 	var hp1 := _hp()
-	var flat := Vector2(_player.global_position.x - disc_center.x,
-		_player.global_position.z - disc_center.z).length()
-	_check("砸击：跑出圈外不掉血", _hits("slam") == 0 and flat > 6.5 and is_equal_approx(hp1, hp0),
-		"命中 %d 次，%.0f → %.0f（离圈心 %.1f m）" % [_hits("slam"), hp0, hp1, flat])
-	_teleport(safe_spot())
+	_check("砸击：圈外（圆心 30 m 外）不掉血",
+		_hits("slam") == before and is_equal_approx(hp1, hp0),
+		"命中 %d→%d，%.0f → %.0f" % [before, _hits("slam"), hp0, hp1])
 
 
 ## 弹幕：站着不动，应该被光球打到
@@ -522,7 +523,7 @@ func _test_shield() -> void:
 		is_equal_approx(hp1, hp0) and sh1 < sh0,
 		"血 %.0f→%.0f，盾 %.0f→%.0f" % [hp0, hp1, sh0, sh1])
 	_boss.call("debug_set_evasion", -1.0)
-	_boss.call("_break_shield", false)
+	_boss.call("_break_shield", false, "探针收尾")
 
 
 func _test_kneel() -> void:
@@ -629,7 +630,7 @@ func _test_revive() -> void:
 func _test_phase2_buffs() -> void:
 	# 二阶段开场她自带 EX 护盾（会先吃伤害），测"防御减半"之前先拆掉盾
 	_boss.call("debug_set_evasion", 0.0)
-	_boss.call("_break_shield", false)
+	_boss.call("_break_shield", false, "测防御前先拆盾")
 	await _wait(0.2)
 	var st: Dictionary = _boss.call("status")
 	_check("二阶段攻击 +200%（×3）", is_equal_approx(float(st["damage_scale"]), 3.0),

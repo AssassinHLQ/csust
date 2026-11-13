@@ -69,6 +69,10 @@ const SKIN_SHADER := preload("res://shaders/horror_skin.gdshader")
 ##    硬 `preload` 在缺这张图的机器上会让整份脚本解析失败。
 const HORROR_EYE_MOUTH_PATH := "res://models/companions/Yuuka_Horror_EyeMouth.png"
 const EYE_MOUTH_TEX_PATH := "res://models/companions/Yuuka_Yuuka_Original_EyeMouth.png"
+## 眼睛自发光白光（只作用于眼嘴那一面，见 `horror_skin.gdshader` 的 `eye_emit`）。
+## 着色器拿贴图亮度当遮罩：眼白烧白，瞳孔那条暗缝保持不发光。
+const EYE_EMIT := 2.6
+const EYE_EMIT_COLOR := Color(1.0, 0.97, 0.93)
 ## 砸击/陨石/引力井的地面圈（半透明 + 亮边；见该 shader 文件头）
 const DISC_SHADER := preload("res://shaders/telegraph_disc.gdshader")
 const DISC_ALPHA := 0.26
@@ -291,12 +295,16 @@ func _apply_skin() -> void:
 			sm.shader = SKIN_SHADER
 			if src != null:
 				var tex: Texture2D = src.albedo_texture
-				if tex != null and tex.resource_path == EYE_MOUTH_TEX_PATH:
+				var is_eye := tex != null and tex.resource_path == EYE_MOUTH_TEX_PATH
+				if is_eye:
 					var horror_tex := _horror_eye_tex()
 					if horror_tex != null:
 						tex = horror_tex
 				sm.set_shader_parameter("albedo_tex", tex)
 				sm.set_shader_parameter("use_texture", tex != null)
+				if is_eye:
+					sm.set_shader_parameter("eye_emit", EYE_EMIT)
+					sm.set_shader_parameter("eye_emit_color", EYE_EMIT_COLOR)
 				# 眼睛/嘴是 alpha scissor 材质，丢了这个会变成方块
 				sm.set_shader_parameter("use_alpha",
 					src.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED)
@@ -708,9 +716,10 @@ func _skill_sweep(pc: Vector3) -> void:
 	var pivot := Node3D.new()
 	pivot.name = "SweepPivot"
 	pivot.top_level = true
-	pivot.rotation.y = yaw0
-	pivot.global_position = global_position
+	# ⚠️ 先进树再设 global_position（不然坐标被丢掉，刀刃会从世界原点扫）
 	add_child(pivot)
+	pivot.global_position = global_position
+	pivot.rotation.y = yaw0
 	var blade := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	# 刀身长度 = 伤害射程（60 m），别画得比打得到的更远
@@ -1228,17 +1237,18 @@ func _tick_shield(delta: float) -> void:
 		if m != null:
 			m.albedo_color.a = a
 	if _shield_left <= 0.0:
-		_break_shield(false)
+		_break_shield(false, "时间到")
 
 
-func _break_shield(explode := true) -> void:
+func _break_shield(explode := true, why := "?") -> void:
+	print("[YuukaHorror] 护盾碎了（%s｜剩 %.2f s / %.0f 点）" % [why, _shield_left,
+		_shield_hp])
 	_shield_hp = 0.0
 	_shield_left = 0.0
 	_clear_shield_fx()
 	if explode:
 		_blast_fx(global_position + Vector3.UP * height * 0.42)
 		Sfx.play("ui_close", -3.0)
-	print("[YuukaHorror] 护盾碎了（闪避率回到 0）")
 
 
 ## 被打到护盾：闪一下盾壳
@@ -1328,9 +1338,9 @@ func _skill_beam(pc: Vector3) -> void:
 	var pivot := Node3D.new()
 	pivot.name = "BeamPivot"
 	pivot.top_level = true
-	pivot.rotation.y = atan2(dir.x, dir.z)
-	pivot.global_position = global_position
 	add_child(pivot)
+	pivot.global_position = global_position
+	pivot.rotation.y = atan2(dir.x, dir.z)
 	var blade := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.6, BEAM_TOP, BEAM_LEN)
@@ -1620,7 +1630,7 @@ func take_damage(amount: float, hit_pos := Vector3.ZERO, hit_dir := Vector3.ZERO
 		amount -= absorbed
 		_shield_hit_fx()
 		if _shield_hp <= 0.0:
-			_break_shield()
+			_break_shield(true, "被打碎")
 		if amount <= 0.0:
 			_flash_shield()
 			return
