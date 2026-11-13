@@ -69,7 +69,7 @@ func _run() -> void:
 	# ── ⑤ help <命令> 只讲一条 ──
 	await _type("help arona")
 	var t2 := String(_term.call("screen_text"))
-	_check(t2.contains("wake up ARONA"), "help arona 给出了那一条的说明")
+	_check(t2.contains("ARONA shows up"), "help arona 给出了那一条的说明")
 
 	# ── ⑥ 用别名也能问 ──
 	await _type("help bili")

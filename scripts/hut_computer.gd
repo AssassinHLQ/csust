@@ -56,11 +56,16 @@ var terminal: ArchTerminal
 var viewport: SubViewport
 ## 假 B 站窗口（终端敲 `bilibili` 打开）
 var bili: BiliBrowser
-## 阿洛娜的 3D 舞台与界面层（终端敲 `arona` 打开）
-var arona_stage: AronaStage
-var arona_page: AronaPage
-## 普拉娜的逐帧动画界面层（终端敲 `plana` 打开）
-var plana_page: PlanaPage
+## ⚠️ 阿洛娜 / 普拉娜 **不再挂在这里**。
+##
+## 用户 2026-11-12 中途改了设计：「arona 这个，**不是新开一个界面**，
+## 而是**直接在 arch 右半部分显现，遮住系统**，她的对话也通过终端发送」。
+## 所以她们现在是 `arch_terminal.gd` 里「屏幕里的同伴」那一节（`summon()`），
+## 由终端自己画 —— 不再是盖在终端上面的独立页面。
+##
+## `arona_stage.gd`（3D 版）/ `arona_page.gd` / `plana_page.gd` 三个文件**留在仓库里**，
+## 只是**不再实例化**（3D 舞台还会载入 arona.glb、多占一份显存）。
+## 哪天想回到「整屏 3D」的版本，把 `_build()` 里那几行接回来即可。
 
 var _using := false
 var _in_range := false
@@ -155,28 +160,9 @@ func _build() -> void:
 	bili.close_requested.connect(_close_bili)
 	viewport.add_child(bili)
 
-	# 阿洛娜：先 3D 舞台（`own_world_3d` 已经是 true，见上面那段注释），
-	# 再一层**透明**的界面（名牌 + 对话气泡），后者压在前者上面、不挡 3D。
-	terminal.open_arona_requested.connect(_open_arona)
-	arona_stage = AronaStage.new()
-	arona_stage.name = "AronaStage"
-	viewport.add_child(arona_stage)
-
-	arona_page = AronaPage.new()
-	arona_page.name = "AronaPage"
-	arona_page.set_anchors_preset(Control.PRESET_FULL_RECT)
-	arona_page.visible = false
-	arona_page.close_requested.connect(_close_arona)
-	viewport.add_child(arona_page)
-
-	# 普拉娜：纯 2D 逐帧（绿幕抠像的 PNG 序列），跟阿洛娜同一层位置
-	terminal.open_plana_requested.connect(_open_plana)
-	plana_page = PlanaPage.new()
-	plana_page.name = "PlanaPage"
-	plana_page.set_anchors_preset(Control.PRESET_FULL_RECT)
-	plana_page.visible = false
-	plana_page.close_requested.connect(_close_plana)
-	viewport.add_child(plana_page)
+	# 阿洛娜 / 普拉娜：**不在这里建**。她们由终端自己画在右半屏
+	# （见本文件 `bili` 变量上面那段说明，以及 `arch_terminal.gd` 的
+	#  「屏幕里的同伴」一节）。这里只保证 bili 之后没有别的全屏层。
 
 	var screen_mat := StandardMaterial3D.new()
 	screen_mat.albedo_texture = viewport.get_texture()
@@ -414,10 +400,6 @@ func _input(event: InputEvent) -> void:
 		# 假 B 站开着的时候，按键归它 —— 否则方向键会被终端当成输入字符
 		if bili != null and bili.visible:
 			bili.feed(event)
-		elif arona_page != null and arona_page.visible:
-			arona_page.feed(event)
-		elif plana_page != null and plana_page.visible:
-			plana_page.feed(event)
 		else:
 			terminal.feed(event)
 		get_viewport().set_input_as_handled()
@@ -444,47 +426,15 @@ func _close_bili() -> void:
 	Sfx.play("ui_close", -8.0)
 
 
-## 终端敲 `arona` → 屏幕换成阿洛娜（3D 舞台 + 对话界面）。
+## ⚠️ 2026-11-13：原来的 `_open_arona()` / `_close_arona()` / `_open_plana()` /
+##    `_close_plana()` **整组删掉了**。用户当天改的需求是
+##    「arona 这个，不是新开一个界面，而是**直接在 arch 右半部分显现**，遮住系统，
+##    她的对话也通过终端发送」，所以「切页面 + 把终端藏起来」这套做法不再适用。
+##    现在两个人都由 `arch_terminal.gd` 的「屏幕里的同伴」一节就地画
+##    （入口 `summon()` / `dismiss()`）。
 ##
-## ⚠️ 要把终端**藏起来**：终端的 `_draw()` 每次都铺一整屏不透明底色，
-##    留着它的话阿洛娜的 3D 画面会被盖得一点不剩。
-func _open_arona() -> void:
-	if arona_stage == null or arona_page == null:
-		return
-	terminal.visible = false
-	arona_stage.set_active(true)
-	arona_page.open()
-	Sfx.play("ui_open", -8.0)
-	print("[电脑] 唤醒阿洛娜（3D 模型，离线）")
-
-
-## 从阿洛娜界面退出：恢复终端，把 3D 舞台收掉（省一点渲染）
-func _close_arona() -> void:
-	if arona_stage == null or arona_page == null:
-		return
-	arona_page.close()
-	arona_stage.set_active(false)
-	terminal.visible = true
-	Sfx.play("ui_close", -8.0)
-
-
-## 终端敲 `plana` → 屏幕换成普拉娜（逐帧动画）。
-## 和 `_open_arona()` 一样要把终端藏起来：终端每帧铺一整屏不透明底色。
-func _open_plana() -> void:
-	if plana_page == null:
-		return
-	terminal.visible = false
-	plana_page.open()
-	Sfx.play("ui_open", -8.0)
-	print("[电脑] 切换普拉娜（逐帧 %d 帧，离线）" % plana_page.frame_count())
-
-
-func _close_plana() -> void:
-	if plana_page == null:
-		return
-	plana_page.close()
-	terminal.visible = true
-	Sfx.play("ui_close", -8.0)
+##    想恢复「整屏 3D」：`arona_stage.gd` / `arona_page.gd` / `plana_page.gd`
+##    三个文件都还在，重新 `new()` 出来加进 viewport、把信号接上即可。
 
 
 func _open() -> void:
@@ -543,11 +493,11 @@ func _close() -> void:
 	if not _using:
 		return
 	_using = false
-	# 合上电脑时把假 B 站 / 阿洛娜 / 普拉娜一起收掉 —— 不然下次开机会直接看到上次的画面
+	# 合上电脑时把假 B 站收掉、把同伴请走 —— 不然下次开机会直接看到上次的画面
 	if bili != null:
 		bili.close()
-	_close_arona()
-	_close_plana()
+	if terminal != null and terminal.companion_active():
+		terminal.dismiss()
 	_overlay.visible = false
 	_hint.visible = _in_range
 	_stand()

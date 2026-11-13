@@ -157,6 +157,21 @@ __pycache__/
 # ⚠️ 连 `.import` 一起忽略 —— 443 个存根文件进仓库没有意义。
 /assets/plana_frames/
 
+# ── 阿洛娜的**绿幕帧序列**（终端右半屏那个，`arona` 命令）—— 2026-11-13 ──
+#
+# 来源：bilibili UP「香草BA」空间的绿幕投稿（space.bilibili.com/3546885205789214，
+#      原画面左上角有「浅羽香草 bilibili」水印，用 crop 裁掉了）。
+#      用户 2026-11-12 亲自换掉原来的 3D 模型：「arona 换这个扣绿幕」——
+#      而且这个版本是**直接画在终端右半屏、遮住系统**，不是整屏 3D 舞台。
+#      **授权未核实**，只允许本地学习演示，不随仓库分发 —— 与 `/models/arona/` 同口径。
+#
+# 重新生成：`_tools/fetch_arona_frames.ps1`
+#      （先 crop=720:1172:0:60 裁掉水印，再 chromakey=0x2EDC01 + despill 去绿边）
+#      389 帧 / 300×488 / 44.8 MB
+# 缺帧不影响启动：`arch_terminal.gd::summon()` 只打进一行 `frames missing`，不会崩。
+# ⚠️ 连 `.import` 一起忽略 —— 389 个存根文件进仓库没有意义。
+/assets/arona_frames/
+
 # SpaceX Falcon 9（Sketchfab 作者：Forest Katsch，CC BY-NC 4.0）—— 带 NC（禁商用）条款，
 # 按「第三方素材一律不进仓库」的既有口径排除。缺这个文件时 `rocket_ride.gd` 会
 # 自动换成**程序化占位火箭**，跑酷的去程/回程照常能飞完 —— 和 gamedev_room /
@@ -174,6 +189,10 @@ __pycache__/
 #         --python _tools/export_arona_glb.py
 # 缺档不影响启动：`scripts/arona_stage.gd` 找不到 GLB 只会 push_warning + 打印一行，
 # 终端敲 `arona` 之后屏幕就停在终端画面（不会崩）。
+#
+# ⚠️ 2026-11-13：这个 3D 模型**已经不再挂载**了 —— 用户改成用「香草BA」的绿幕
+#    素材（见上面 `assets/arona_frames/` 那一段），并且要求**画在终端右半屏**，
+#    不再开整屏 3D 舞台。`arona_stage.gd` / `arona_page.gd` 和这个 GLB 都留着备用。
 /models/arona/
 
 # 电竞房 LOD 的**高模 / 中模**（2026-11-08）—— 334 MB 的派生档，不进仓库。
