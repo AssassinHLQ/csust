@@ -602,7 +602,6 @@ func _build_hud() -> void:
 	# 常态**不显示**（用户 2026-11-11）—— 起跑后才淡入，见 `_tick_hud_visibility()`。
 	_debt_label.modulate.a = 0.0
 	_hud_layer.add_child(_debt_label)
-	_update_hud_text()
 
 	# 常驻那一行：**只有银行卡余额**（用户：「到了平台只要留银行卡的余额就行了」）
 	# 位置放在 `Debt` 同一行，两者同时亮的时候不会叠字（`Debt` 在跑酷中会把
@@ -636,7 +635,12 @@ func _build_hud() -> void:
 	_result_label.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95, 1))
 	_result_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_result_label.add_theme_constant_override("outline_size", 5)
-	_result_label.text = "最近结算：—"
+	# ⚠️ 初始**留空**，不要写「最近结算：—」：
+	#    用户 2026-11-13 截图问「为什么常态不显示银行卡余额而显示这个」——
+	#    一行永远填不上的「—」占着位置，反而把真正的信息（银行卡）挤掉了。
+	#    现在这行只在**真的结算过一次**（`_last_settle`）之后才出现，
+	#    `_result_label.text` 由结算 / 捡钱 / 重新开仓那几处赋值。
+	_result_label.text = ""
 	_hud_layer.add_child(_result_label)
 
 	_banner = Label.new()
@@ -704,6 +708,14 @@ func _build_hud() -> void:
 	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_flash)
+
+	# ⚠️ **必须在所有 HUD 标签都建好之后再刷一次文本**。
+	#    这里原来在「建完 `_debt_label`、还没建 `_bank_label`」的时候就调了一次
+	#    `_update_hud_text()`，而那个函数里 `_bank_label` 还是 null 被直接跳过
+	#    ⇒ **银行卡那行永远是空字符串**，常态只看得到「最近结算：—」
+	#    （用户 2026-11-13 截图问的正是这个）。后面只有结算/捡钱/买卖才会再刷，
+	#    所以「啥也没干」的时候余额栏一直是空的。
+	_update_hud_text()
 
 
 # --- 每帧 ---------------------------------------------------------------------
