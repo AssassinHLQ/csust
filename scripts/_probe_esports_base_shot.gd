@@ -1,14 +1,14 @@
 extends SceneTree
-## 出图：电竞房底座缩放 A/B（用户 2026-11-13「底座缩小到 0.95，只长宽不缩高度」）。
-## 同机位各拍旧缩放 (1.5, -1.5, -1.5) 与新缩放 (1.425, -1.5, -1.425)：
+## 出图：电竞房底座缩放 A/B（用户 2026-11-13 二次确认「在 0.95 上再 ×0.95」）。
+## 同机位各拍上一版 (1.425, -1.5, -1.425) 与新版 (1.35375, -1.5, -1.35375)：
 ## 贴地斜视看台阶外沿、俯视看底座轮廓。运行时改 scale，不动场景文件。
 ##   _tools/run_shot.sh res://scripts/_probe_esports_base_shot.gd
 
 const OFFWIN := preload("res://scripts/offscreen_window.gd")
 const LEVEL := "res://scenes/game.tscn"
-const OUT := "_arisu_captures/_esports_base"
-const OLD_SCALE := Vector3(1.5, -1.5, -1.5)
-const NEW_SCALE := Vector3(1.425, -1.5, -1.425)
+const OUT := "_arisu_captures/_esports_base_09025"
+const OLD_SCALE := Vector3(1.425, -1.5, -1.425)
+const NEW_SCALE := Vector3(1.35375, -1.5, -1.35375)
 
 
 func _initialize() -> void:
@@ -45,7 +45,7 @@ func _run() -> void:
 
 	var centre := Vector3(53.26548, 0.0, 13.256798)
 	var shots := [
-		["edge", Vector3(43.6, 1.3, -1.2), Vector3(50.0, 0.7, 10.0)],
+		["edge", Vector3(40.0, 1.5, 0.0), Vector3(48.0, 0.5, 13.0)],
 		["top", centre + Vector3(0, 45, 0), centre],
 	]
 	for tag_scale in [["old", OLD_SCALE], ["new", NEW_SCALE]]:
