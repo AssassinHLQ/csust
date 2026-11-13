@@ -65,6 +65,10 @@ var _dying := false
 const SPEED_WALK := 2.4        # 2.0 → 2.4
 const SPEED_RUN := 6.8         # 5.2 → 6.8（+31%）
 const SPEED_CROUCH := 1.3      # 1.1 → 1.3
+## 蹲伏胶囊高（米）。站姿 1.5；电竞房双层床下铺睡龛净高实测 0.875 m
+## （床垫面 0.556 → 上铺板底 1.431），不缩胶囊永远钻不进去（用户 2026-11-13）。
+const CROUCH_CAPSULE_H := 0.8
+const STAND_CAPSULE_H := 1.5
 const SPEED_AIM := 1.9         # 1.6 → 1.9
 ## 地面加速度。26 在 60 fps 下是每帧 +0.43 m/s → 约 0.27 s 加到满速（原来 12 → 0.57 s）
 const ACCEL_GROUND := 26.0     # 12 → 26
@@ -289,6 +293,7 @@ var _lock_left := 0.0
 @onready var spring: SpringArm3D = $CameraRig/SpringArm3D
 @onready var cam: Camera3D = $CameraRig/SpringArm3D/Camera3D
 @onready var model_root: Node3D = $Arisu
+@onready var _col: CollisionShape3D = $Collision
 @onready var anim: Node = $Arisu/Model/AnimDriver
 @onready var weapon: Node = $Weapon
 
@@ -301,8 +306,36 @@ const ExSystem := preload("res://scripts/ex_system.gd")
 var ex: Node3D = null
 
 
+## 蹲伏缩胶囊、站起复原。站起前先探头顶净空：不够高（例如还在双层床下铺睡龛里）
+## 就保持蹲着，免得头穿进上铺床板。模型按胶囊比例同步下蹲，逐帧平滑避免突跳。
+func _update_crouch_capsule() -> void:
+	var cap := _col.shape as CapsuleShape3D
+	var want := CROUCH_CAPSULE_H if crouching else STAND_CAPSULE_H
+	if not is_equal_approx(cap.height, want):
+		if want < cap.height or _stand_headroom_clear():
+			cap.height = want
+			_col.position.y = want * 0.5
+	model_root.scale.y = lerpf(model_root.scale.y, want / STAND_CAPSULE_H, 0.25)
+
+
+func _stand_headroom_clear() -> bool:
+	var q := PhysicsShapeQueryParameters3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = (_col.shape as CapsuleShape3D).radius
+	cap.height = STAND_CAPSULE_H
+	q.shape = cap
+	# 底面抬离脚底 5 cm：不然 intersect_shape 会把正踩着的地板也算成阻挡。
+	q.transform = Transform3D(Basis(), global_position + Vector3(0, STAND_CAPSULE_H * 0.5 + 0.05, 0))
+	q.collision_mask = collision_mask
+	q.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
+
+
 func _ready() -> void:
 	add_to_group("player")
+	# 胶囊是 player.tscn 的共享 sub_resource：上一个实例若蹲着结束，高度会留在 0.8。
+	(_col.shape as CapsuleShape3D).height = STAND_CAPSULE_H
+	_col.position.y = STAND_CAPSULE_H * 0.5
 	# 2026-10-29 用户：「爱丽丝爬坡能力加强一点点」。
 	# CharacterBody3D 默认 floor_max_angle = 45°，校园里那些 45° 出头的路肩/坡道
 	# 会直接把人挡住或往下滑。放到 52°（仍然上不了垂直墙），台阶也从 0.32 提到 0.38。
@@ -809,6 +842,7 @@ func _physics_process(delta: float) -> void:
 	#    用户 2026-11-08 报的「不能同时加速前进与下降」就是这一句。
 	# ⚠️ 机甲形态（`_carrier_on`）同样不认 crouch：它落地了也不该蹲下去。
 	crouching = Input.is_action_pressed("crouch") and not _flight_lock and not _carrier_on
+	_update_crouch_capsule()
 	# ⚠️ 这里**曾经有一句 `input.y < 0.1`**，本意是「不许倒着跑」。但用户要的正是
 	#    「往后也能跑」，而且它挡掉的不只是 Shift —— `move_back` 的 `input.y` 是 **+1**，
 	#    所以按 S 永远拿不到跑速，表现就是「往后走不能跑步」。现在四个方向一视同仁。

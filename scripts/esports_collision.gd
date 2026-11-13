@@ -59,6 +59,7 @@ func _ready() -> void:
 	_build_music_zone()
 	_build_base_steps()
 	_open_cabinet()
+	_open_beds()
 
 
 ## 对外入口（探针也调）。**幂等**：只报一次。
@@ -523,3 +524,126 @@ func _open_cabinet() -> void:
 
 	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，补两侧 0.1 m 薄墙 + 中缝 %.2f m 分隔板 + %d 块实测板（底/层/顶）"
 		% [killed, CABINET_DIVIDER, boards.size()])
+
+
+# ══════════════════ 双层床：床垫按实测补碰撞，下铺睡龛能钻 ══════════════════
+#
+# 用户 2026-11-13：「床为什么不能钻进去?要能进去的」。
+#
+# ── 原来为什么进不去 ──
+# 下铺睡龛（床垫面 y 0.556 → 上铺板底 y 1.431，净高 0.875 m）**没有任何碰撞盒**：
+# 挡人的是 1.5 m 站姿胶囊自己（蹲伏原先只减速不缩胶囊）。缩胶囊见
+# `player.gd::CROUCH_CAPSULE_H`；但床垫也无碰撞，钻进去脚会陷进床里 5 cm，
+# 所以这里照柜子的先例按网格实测水平面补一块薄盒，顶面 = 睡面。
+#
+# ── 怎么认床 ──
+# ① 上铺床板的烘焙盒世界尺寸 ≈ 0.76 × 0.09 × 1.23、中心 y ≈ 1.48 —— 一板一床格；
+#    护栏 / 梯子 / 床端板 / 隔壁隔板都已有烘焙盒，一律不动。
+# ② 床格 footprint 外扩 0.06 m、y 0.3~0.9 收网格顶点，水平面聚类（同柜子④）；
+# ③ 床垫面簇（厚 0.04~0.2 m、顶面 y 0.5~0.7、顶点数 ≥ 800）补一块薄盒。
+#    枕头/被子的鼓包是曲面，每 2 mm _bin 里凑不满 4 个顶点，不会混进板簇。
+func _open_beds() -> void:
+	var auto_col := get_node_or_null(BAKED_AUTOCOL) as Node3D
+	var glb := get_node_or_null("Room")
+	if auto_col == null or glb == null:
+		return
+	var inv := global_transform.affine_inverse()
+	var scl: Vector3 = global_basis.get_scale().abs()
+	if scl.x < 0.001 or scl.y < 0.001 or scl.z < 0.001:
+		return
+
+	# ── ① 上铺床板 = 床格 ──
+	var cells: Array[AABB] = []
+	for c in auto_col.get_children():
+		var cs := c as CollisionShape3D
+		if cs == null or cs.disabled or not (cs.shape is BoxShape3D):
+			continue
+		var s: Vector3 = cs.global_basis.get_scale().abs() * (cs.shape as BoxShape3D).size
+		if s.y < 0.06 or s.y > 0.14 or s.x < 0.6 or s.x > 0.95 or s.z < 1.0 or s.z > 1.5:
+			continue
+		if cs.global_position.y < 1.3 or cs.global_position.y > 1.7:
+			continue
+		cells.append(AABB(cs.global_position - s * 0.5, s))
+	if cells.is_empty():
+		return
+
+	# 只遍历与床排相交的网格（床垫/床座那几个桶），别全屋顶点扫四遍
+	var row := AABB(cells[0].position, cells[0].size)
+	for cell in cells:
+		row = row.merge(cell)
+	row = row.grow(0.06)
+	row.position.y = 0.3
+	row.size.y = 0.6
+	var meshes: Array[MeshInstance3D] = []
+	for mi in glb.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m == null or m.mesh == null:
+			continue
+		if row.intersects(m.global_transform * m.mesh.get_aabb()):
+			meshes.append(m)
+
+	# ── ② 每格收顶点、聚类水平面 ──
+	var made := 0
+	var top_y := 0.0
+	for cell in cells:
+		var zone := cell.grow(0.06)
+		zone.position.y = 0.3
+		zone.size.y = 0.6
+		var bins := {}
+		for m in meshes:
+			for s in m.mesh.get_surface_count():
+				var vs := (m.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]) as PackedVector3Array
+				for v in vs:
+					var w: Vector3 = m.global_transform * v
+					if not zone.has_point(w):
+						continue
+					var k := snappedf(w.y, 0.002)
+					if not bins.has(k):
+						bins[k] = {"n": 0, "x0": INF, "x1": -INF, "z0": INF, "z1": -INF}
+					var b: Dictionary = bins[k]
+					b["n"] = int(b["n"]) + 1
+					b["x0"] = minf(float(b["x0"]), w.x)
+					b["x1"] = maxf(float(b["x1"]), w.x)
+					b["z0"] = minf(float(b["z0"]), w.z)
+					b["z1"] = maxf(float(b["z1"]), w.z)
+		var planes: Array = []
+		for k in bins:
+			var b: Dictionary = bins[k]
+			if int(b["n"]) >= 4 and float(b["x1"]) - float(b["x0"]) > 0.25 \
+					and float(b["z1"]) - float(b["z0"]) > 0.25:
+				b["y"] = float(k)
+				planes.append(b)
+		planes.sort_custom(func(a, b): return float(a["y"]) < float(b["y"]))
+		var boards: Array = []
+		for p in planes:
+			if boards.is_empty() or float(p["y"]) - float(boards[boards.size() - 1]["y1"]) > 0.01:
+				boards.append({"y0": float(p["y"]), "y1": float(p["y"]), "n": int(p["n"]),
+					"x0": float(p["x0"]), "x1": float(p["x1"]),
+					"z0": float(p["z0"]), "z1": float(p["z1"])})
+			else:
+				var b: Dictionary = boards[boards.size() - 1]
+				b["y1"] = float(p["y"])
+				b["n"] = int(b["n"]) + int(p["n"])
+				b["x0"] = minf(float(b["x0"]), float(p["x0"]))
+				b["x1"] = maxf(float(b["x1"]), float(p["x1"]))
+				b["z0"] = minf(float(b["z0"]), float(p["z0"]))
+				b["z1"] = maxf(float(b["z1"]), float(p["z1"]))
+		# ── ③ 床垫面簇补薄盒 ──
+		for b in boards:
+			var t := float(b["y1"]) - float(b["y0"])
+			if t < 0.04 or t > 0.2 or float(b["y1"]) < 0.5 or float(b["y1"]) > 0.7 \
+					or int(b["n"]) < 800:
+				continue
+			var cs4 := CollisionShape3D.new()
+			var box4 := BoxShape3D.new()
+			box4.size = Vector3(float(b["x1"]) - float(b["x0"]), t,
+				float(b["z1"]) - float(b["z0"])) / scl
+			cs4.shape = box4
+			cs4.position = inv * Vector3((float(b["x0"]) + float(b["x1"])) * 0.5,
+				(float(b["y0"]) + float(b["y1"])) * 0.5,
+				(float(b["z0"]) + float(b["z1"])) * 0.5)
+			auto_col.add_child(cs4)
+			made += 1
+			top_y = float(b["y1"])
+	print("[EsportsCol] 双层床：认出 %d 个床格，补 %d 块床垫实测盒（睡面 y=%.3f；下铺净高靠蹲伏缩胶囊钻入）"
+		% [cells.size(), made, top_y])
