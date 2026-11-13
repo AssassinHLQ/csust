@@ -395,6 +395,10 @@ const CABINET_MESH := "M_Scene_-_Root"
 const CABINET_KEEP_TOP := 0.75
 ## 侧板厚度
 const CABINET_WALL := 0.10
+## 中缝竖分隔板厚度。2026-11-13 用户报「角色直接穿进去分隔板」：挖空下三层时
+## 分隔板那一路也被挖掉，只剩视觉网格。实测板厚 0.038 m、中心正好在柜子 x 中心
+## （`_probe_esports_cabinet_divider.gd` 顶点聚类量得），取 0.04 留 2 mm 余量。
+const CABINET_DIVIDER := 0.04
 
 
 func _open_cabinet() -> void:
@@ -456,7 +460,7 @@ func _open_cabinet() -> void:
 		cs.disabled = true
 		killed += 1
 
-	# ── ③ 左右两片薄墙（世界尺寸 → 本节点空间要除以缩放）──
+	# ── ③ 左右两片薄墙 + 中缝竖分隔板（世界尺寸 → 本节点空间要除以缩放）──
 	var wall_h := ceiling - cab.position.y
 	var y_c := cab.position.y + wall_h * 0.5
 	var depth := cab.end.z - cab.position.z
@@ -468,5 +472,13 @@ func _open_cabinet() -> void:
 		cs2.position = inv * Vector3(float(x), y_c, cab.get_center().z)
 		auto_col.add_child(cs2)
 
-	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，保留柜顶（y<%.2f），补两侧 0.1 m 薄墙；柜内净高 %.2f m"
-		% [killed, ceiling, wall_h])
+	# 中缝分隔板：挖空把这一路也挖没了，不补的话两格之间可以直接穿过去
+	var cs3 := CollisionShape3D.new()
+	var box3 := BoxShape3D.new()
+	box3.size = Vector3(CABINET_DIVIDER, wall_h, depth) / scl
+	cs3.shape = box3
+	cs3.position = inv * Vector3(cab.get_center().x, y_c, cab.get_center().z)
+	auto_col.add_child(cs3)
+
+	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，保留柜顶（y<%.2f），补两侧 0.1 m 薄墙 + 中缝 %.2f m 分隔板；柜内净高 %.2f m"
+		% [killed, ceiling, CABINET_DIVIDER, wall_h])

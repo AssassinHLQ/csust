@@ -96,7 +96,10 @@ func _run() -> void:
 	# ⚠️ 只测**正面（-Z）**能进；+Z 那侧紧贴着房间的墙 `P0003_0`（z 19.48~19.71）——
 	#    柜子背面是墙，那一侧本来就进不去，测它没有意义（第一版当成失败项，是判据错）。
 	#    改成测「侧面横推进不去」，用来验证补的那两片薄墙真的挡住了。
-	player.global_position = Vector3(cx, 0.9, z_lo - 1.5)
+	# ⚠️ 推点必须落在**左格中心**，不能用柜子 x 中心：2026-11-13 补了中缝分隔板碰撞，
+	#    柜子中心现在是一片 0.04 m 的实心薄墙，正对着推只会撞在板上（判据错，不是回归）。
+	var entry_x := cab.position.x + cab.size.x * 0.25
+	player.global_position = Vector3(entry_x, 0.9, z_lo - 1.5)
 	player.velocity = Vector3.ZERO
 	await _wait(12)
 	var inside := 0
