@@ -206,7 +206,18 @@ func start() -> void:
 
 	_active = true
 	_build_help()
-	print("[FreeCam] 开：WASD 平移 / QE 升降 / 鼠标转视角 / Shift 加速 / F8 4K 截图 / F7 退出")
+	print("[FreeCam] 开：WASD 平移 / QE 升降 / 鼠标转视角 / Shift 加速 / P（或 F8）4K 截图 / F7 退出")
+	# 2026-11-13 用户报「f8 怎么还是闪退」—— 查完证据：**根本没崩**。
+	#   ① 系统事件日志、CrashDumps、WER 在 14:57 那个时刻**一条记录都没有**
+	#      （11-11 / 11-12 那几次真崩都有 dmp + Application Error）；
+	#   ② 游戏日志正好断在 `[FreeCam] 开` 这一行，没有 `[FreeCam] 关`、没有报错；
+	#   ③ 本喵按用户的真实窗口尺寸（2560×1334）跑探针连拍 4 次 4K 全部成功。
+	#   ⇒ 进程是**正常退出**的：Godot 编辑器里 F8 = 「停止运行项目」。
+	#      用户的编辑器开着（游戏可能嵌在编辑器窗口里跑），F8 直接被编辑器接走。
+	#   对策：截图键改成 **P**（编辑器不占），F8 保留兼容；从编辑器起跑时明确提醒。
+	if OS.has_feature("editor"):
+		print("[FreeCam] ⚠️ 你现在是从**编辑器**起跑的：编辑器里 F8 = 停止运行项目，"
+			+ "按了游戏会直接退出（不是崩溃）。截图请按 P。")
 
 
 func stop() -> void:
@@ -322,7 +333,8 @@ func _input(event: InputEvent) -> void:
 			stop()
 			get_viewport().set_input_as_handled()
 			return
-		if key.keycode == KEY_F8 or key.physical_keycode == KEY_F8:
+		if key.keycode == KEY_F8 or key.physical_keycode == KEY_F8 \
+				or key.keycode == KEY_P or key.physical_keycode == KEY_P:
 			capture_4k()
 			get_viewport().set_input_as_handled()
 			return
@@ -337,6 +349,19 @@ func _set_speed(v: float) -> void:
 
 ## 拍一张当前画面的 4K 静帧（保持当前画幅比例），存 PNG + 机位参数 txt。
 ## 全程自动恢复窗口尺寸、窗口模式、渲染缩放与 UI。
+## 探针用：打开后 `capture_4k()` 每一步打一行 `[FreeCam4K]`。
+##
+## 2026-11-13 加。目的不是好看，是**硬崩定位**：Vulkan 崩掉时 GDScript 一行报错都
+## 来不及留，只有崩溃前已经 flush 到 stdout 的那几行还在日志末尾。所以把每个
+## `await` 前后都标出来，就能知道死在「建视口」「渲染第几帧」「取图」「存盘」哪一步。
+var debug_trace := false
+
+
+func _tr(stage: String) -> void:
+	if debug_trace:
+		print("[FreeCam4K] %s" % stage)
+
+
 func capture_4k() -> void:
 	if not _active or _capturing:
 		return
@@ -344,6 +369,7 @@ func capture_4k() -> void:
 		push_warning("[FreeCam] headless 下拍不了 4K（没有渲染后端）")
 		return
 	_capturing = true
+	_tr("begin")
 
 	# ⚠️⚠️ 2026-11-12 第三次修：**别再动窗口了**。
 	#
@@ -386,6 +412,8 @@ func capture_4k() -> void:
 	sub.use_taa = vp.use_taa
 	sub.scaling_3d_scale = 1.0
 	add_child(sub)
+	_tr("SubViewport 已建立 %dx%d（msaa=%d ssaa=%d taa=%s）" % [
+		want_w, want_h, sub.msaa_3d, sub.screen_space_aa, str(sub.use_taa)])
 
 	var shot_cam := Camera3D.new()
 	shot_cam.name = "ShotCam"
@@ -400,14 +428,18 @@ func capture_4k() -> void:
 	sub.add_child(shot_cam)
 	shot_cam.global_transform = src_cam.global_transform
 	shot_cam.current = true
+	_tr("ShotCam 就位（compositor %s）" % ("已复制" if shot_cam.compositor != null else "空"))
 
 	# 渲染几帧：第一帧要建 4K 渲染目标 + 泼溅排序
 	var img: Image = null
 	for i in 4:
 		sub.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await get_tree().process_frame
+		_tr("第 %d 帧渲完" % (i + 1))
 	await RenderingServer.frame_post_draw
+	_tr("frame_post_draw 到")
 	img = sub.get_texture().get_image()
+	_tr("取图完成：%s" % (str(img.get_size()) if img != null else "null"))
 
 	var path := ""
 	if img != null and img.get_width() >= 3200:
@@ -429,6 +461,7 @@ func capture_4k() -> void:
 			% (str(img.get_size()) if img != null else "null"))
 
 	# 收掉离屏资源（相机先摘，避免它仍挂着 compositor 被释放）
+	_tr("开始清理离屏资源")
 	if is_instance_valid(shot_cam):
 		shot_cam.current = false
 		sub.remove_child(shot_cam)
@@ -436,6 +469,7 @@ func capture_4k() -> void:
 	if is_instance_valid(sub):
 		sub.queue_free()
 	await get_tree().process_frame
+	_tr("清理完成")
 
 	_capturing = false
 	if path.is_empty():
@@ -559,10 +593,12 @@ func _build_help() -> void:
 func _update_help() -> void:
 	if _help_label == null or not is_instance_valid(_help_label):
 		return
+	# 从编辑器起跑时 F8 是编辑器的「停止运行项目」，提示里就别再劝人按 F8 了
+	var shot_key := "P  4K 截图" if OS.has_feature("editor") else "P / F8  4K 截图"
 	_help_label.text = """自由摄像头（开发者模式）
 WASD 平移 · Q 下降 / E 上升 · 鼠标转视角
 Shift 加速 ×4 · Ctrl 减速 ×0.25 · 滚轮调速度（当前 %.1f m/s）
-F8  4K 截图（HUD/帮助条自动隐藏）  ·  F7 / Esc 退出""" % _speed
+%s（HUD/帮助条自动隐藏）  ·  F7 / Esc 退出""" % [_speed, shot_key]
 
 
 func _show_toast(text: String) -> void:

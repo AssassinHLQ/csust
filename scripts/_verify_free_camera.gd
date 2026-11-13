@@ -96,7 +96,10 @@ func _run() -> void:
 		var txt := help.text
 		_check(txt.contains("WASD") and txt.contains("Q") and txt.contains("E"),
 			"帮助条写了 WASD / Q / E 键位")
-		_check(txt.contains("F8") and txt.contains("4K"), "帮助条写了 F8 4K 截图")
+		# 2026-11-13：截图键加了 P（编辑器里 F8 = 停止运行项目，会被编辑器接走）。
+		# 从编辑器起跑时帮助条只写 P，从导出包起跑时写「P / F8」——两种都算过。
+		_check(txt.contains("4K") and (txt.contains("P") or txt.contains("F8")),
+			"帮助条写了截图键（P / F8）+ 4K")
 
 	# ── ③ WASD / QE 能平移 ──
 	print("\n── ③ WASD 平移 / QE 升降 ──")
