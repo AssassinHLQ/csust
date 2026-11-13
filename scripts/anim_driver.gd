@@ -1186,7 +1186,7 @@ func arms_stray_track_count() -> int:
 	var a := arms.get_animation(ARMS_CLIP)
 	var n := 0
 	for t in a.get_track_count():
-		var bone := _bone_of(String(a.get_track_path(t)))
+		var bone := _bone_of(String(a.track_get_path(t)))
 		if not (_in_keywords(bone, ARM_KEYWORDS) or _in_keywords(bone, WEAPON_KEYWORDS)):
 			n += 1
 	return n
