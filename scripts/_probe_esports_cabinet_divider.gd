@@ -97,6 +97,8 @@ func _run() -> void:
 		% [div_x, div_t, cab.get_center().x])
 
 	# ── ② 真物理：左格朝 +X 横推、右格朝 -X 横推，应被分隔板挡住 ──
+	# 推点脚底 y=1.35（玩家原点在脚底）：高于底板顶 0.574、低于层板底 2.968，
+	# 锁 y 速度是因为本探针只关心水平方向挡不挡。
 	var cz := cab.get_center().z
 	var left_cx := (cab.position.x + div_x) * 0.5
 	var right_cx := (div_x + cab.end.x) * 0.5
@@ -104,12 +106,12 @@ func _run() -> void:
 		var tag: String = side[0]
 		var sx: float = side[1]
 		var vx: float = side[2]
-		player.global_position = Vector3(sx, 0.9, cz)
+		player.global_position = Vector3(sx, 1.35, cz)
 		player.velocity = Vector3.ZERO
 		await _wait(12)
 		var crossed := 0
 		for _f in PUSH_FRAMES:
-			player.velocity = Vector3(vx, player.velocity.y, 0)
+			player.velocity = Vector3(vx, 0, 0)
 			player.move_and_slide()
 			await physics_frame
 			var px := player.global_position.x
@@ -122,12 +124,12 @@ func _run() -> void:
 	# ──  左格正面仍应能走进（分隔板不该堵死入口）──
 	var z_lo := cab.position.z
 	var z_hi := cab.end.z
-	player.global_position = Vector3(left_cx, 0.9, z_lo - 1.5)
+	player.global_position = Vector3(left_cx, 1.35, z_lo - 1.5)
 	player.velocity = Vector3.ZERO
 	await _wait(12)
 	var inside := 0
 	for _f in PUSH_FRAMES:
-		player.velocity = Vector3(0, player.velocity.y, 3.0)
+		player.velocity = Vector3(0, 0, 3.0)
 		player.move_and_slide()
 		await physics_frame
 		var p := player.global_position

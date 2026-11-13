@@ -376,23 +376,23 @@ func _add_step_box_world(body: StaticBody3D, inv: Transform3D,
 # 烘焙工具是按「一件物体一个盒子」出的，它当然不知道柜子应该是个洞。
 #
 # ── 现在怎么做 ──
-#   ① 找出柜子网格的世界包围盒（按名字找，GLB 里它就叫 `M_Scene_-_Root`）；
-#   ② 把**完全落在柜子内部、且顶面低于柜顶一个层高**的那些盒子 `disabled`
-#      —— 也就是挖掉下面 3 层，**保留最顶一层当柜顶**（不然人会从柜子上方飞出去）；
-#   ③ 在左右两侧补两片 0.1 m 厚的薄墙，免得人在柜子里横着穿出侧板。
+#   ① 找出柜子网格的世界包围盒（按名字找，GLB 里它就叫 `M_Scene_-_Root`），
+#      顺手把顶点收到世界空间，供 ④ 量板用；
+#   ② 把**中心落在柜子内部**的盒子全部 `disabled` —— 烘出来的 8 块实心盒一律挖掉；
+#   ③ 左右两侧补两片 0.1 m 薄墙、中缝补一片竖分隔板，免得人横着穿出侧板/隔板。
 #      **前后都不封**：这样不管门朝哪一侧都能走进去（本喵没法从网格可靠判断哪边是正面，
 #      封错一边就直接把人挡在外面了）。
+#   ④ 底板/层板/顶板按网格实测的水平面逐块补薄盒（2026-11-13 用户报「右边的上下板子
+#      怎么没有碰撞」）：碰撞与视觉逐块对齐，不再留「纯视觉层板」。
 #
-# ── 代价（要如实知道）──
-# 柜子里的**层板是纯视觉的**（GLB 网格），碰撞挖空之后玩家会和层板穿插。
-# 玩家胶囊高 1.5 m、柜内净高 2.16 m（0.51 地板 ~ 2.67 柜顶），钻进去是够的。
+# ── 净高 ──
+# 左列挂衣区 0.574~3.366（2.79 m）、右列下格 0.574~2.968（2.39 m），
+# 玩家胶囊高 1.5 m，两列都钻得进去。
 #
 # ── 复烘会怎样 ──
 # 这段逻辑是**按位置**挖的，不认盒子名字，所以重新烘焙（盒子重编号）也不会失效。
 # 但柜子本身挪了位置的话，`M_Scene_-_Root` 的包围盒会跟着变，挖的范围自然也跟着变。
 const CABINET_MESH := "M_Scene_-_Root"
-## 柜顶保留的厚度：等于烘出来的最上一层的层高（0.74 m）
-const CABINET_KEEP_TOP := 0.75
 ## 侧板厚度
 const CABINET_WALL := 0.10
 ## 中缝竖分隔板厚度。2026-11-13 用户报「角色直接穿进去分隔板」：挖空下三层时
@@ -410,6 +410,7 @@ func _open_cabinet() -> void:
 	# ⚠️ 只认 `Room` 实例下面的那个（`Lod/HighModel`、`Lod/MidModel` 里还有同名副本，
 	#    一起 merge 也无所谓 —— 它们位置相同，但显式限定来源更好读）。
 	var cab := AABB()
+	var cab_verts := PackedVector3Array()
 	var found := false
 	var glb := get_node_or_null("Room")
 	if glb == null:
@@ -421,17 +422,20 @@ func _open_cabinet() -> void:
 		var b: AABB = m.global_transform * m.mesh.get_aabb()
 		cab = b if not found else cab.merge(b)
 		found = true
+		for s in m.mesh.get_surface_count():
+			var vs := (m.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]) as PackedVector3Array
+			for v in vs:
+				cab_verts.append(m.global_transform * v)
 	if not found:
 		push_warning("[EsportsCol] 找不到柜子网格 %s，柜子挖空跳过" % CABINET_MESH)
 		return
 
-	var ceiling := cab.end.y - CABINET_KEEP_TOP
 	var inv := global_transform.affine_inverse()
 	var scl: Vector3 = global_basis.get_scale().abs()
 	if scl.x < 0.001 or scl.y < 0.001 or scl.z < 0.001:
 		return
 
-	# ── ② 挖空：中心落在柜内、且顶面低于柜顶的盒子 ──
+	# ── ② 挖空：中心落在柜内的盒子一律禁用 ──
 	#
 	# ⚠️ 判据用「**中心**落在柜内」，不是「整个盒子完全包含在柜内」——
 	#    第一版用后者只挖掉 4 个，最底下那层（y 0.46~1.20）两块没挖掉，
@@ -445,25 +449,15 @@ func _open_cabinet() -> void:
 		var half: Vector3 = cs.global_basis.get_scale().abs() \
 			* (cs.shape as BoxShape3D).size * 0.5
 		var cb := AABB(cs.global_position - half, half * 2.0)
-		var centre := cb.get_center()
-		if not cab.has_point(centre):
-			continue
-		# 「柜顶」= **底面**在柜顶线及以上的那层。
-		#
-		# ⚠️ 这里不能用 `cb.end.y > ceiling`（顶面）判 —— 第一/二版就是这么写的，
-		#    而 y 1.94~2.67 那两块的顶面正好等于 ceiling（2.660）加上浮点误差，
-		#    被误判成「柜顶层」留了下来，结果它们卡在玩家胸口，人还是进不去
-		#    （实测只挖掉 4 个，`_verify_esports_cabinet_walk` 3/6）。
-		#    改判**底面**：顶层的底面 2.67 ≥ 2.640 ✓ 留下；1.94 < 2.640 ⇒ 挖掉。
-		if cb.position.y >= ceiling - 0.02:
+		if not cab.has_point(cb.get_center()):
 			continue
 		cs.disabled = true
 		killed += 1
 
 	# ── ③ 左右两片薄墙 + 中缝竖分隔板（世界尺寸 → 本节点空间要除以缩放）──
-	var wall_h := ceiling - cab.position.y
-	var y_c := cab.position.y + wall_h * 0.5
-	var depth := cab.end.z - cab.position.z
+	var wall_h := cab.size.y
+	var y_c := cab.get_center().y
+	var depth := cab.size.z
 	for x in [cab.position.x + CABINET_WALL * 0.5, cab.end.x - CABINET_WALL * 0.5]:
 		var cs2 := CollisionShape3D.new()
 		var box := BoxShape3D.new()
@@ -480,5 +474,52 @@ func _open_cabinet() -> void:
 	cs3.position = inv * Vector3(cab.get_center().x, y_c, cab.get_center().z)
 	auto_col.add_child(cs3)
 
-	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，保留柜顶（y<%.2f），补两侧 0.1 m 薄墙 + 中缝 %.2f m 分隔板；柜内净高 %.2f m"
-		% [killed, ceiling, CABINET_DIVIDER, wall_h])
+	# ── ④ 底板/层板/顶板：网格水平面聚类成板，逐块补薄盒 ──
+	# 独立盒状板每个水平面只有 4 个顶点，门槛取 4；x/z 跨度 >0.25 m 排除竖板的上下边。
+	var bins := {}
+	for v in cab_verts:
+		var k := snappedf(v.y, 0.002)
+		if not bins.has(k):
+			bins[k] = {"n": 0, "x0": INF, "x1": -INF, "z0": INF, "z1": -INF}
+		var b: Dictionary = bins[k]
+		b["n"] = int(b["n"]) + 1
+		b["x0"] = minf(float(b["x0"]), v.x)
+		b["x1"] = maxf(float(b["x1"]), v.x)
+		b["z0"] = minf(float(b["z0"]), v.z)
+		b["z1"] = maxf(float(b["z1"]), v.z)
+	var planes: Array = []
+	for k in bins:
+		var b: Dictionary = bins[k]
+		if int(b["n"]) >= 4 and float(b["x1"]) - float(b["x0"]) > 0.25 \
+				and float(b["z1"]) - float(b["z0"]) > 0.25:
+			b["y"] = float(k)
+			planes.append(b)
+	planes.sort_custom(func(a, b): return float(a["y"]) < float(b["y"]))
+	# 同一块板的上下表面间距 ≤0.08 m，超过就是另一块板
+	var boards: Array = []
+	for p in planes:
+		if boards.is_empty() or float(p["y"]) - float(boards[boards.size() - 1]["y1"]) > 0.08:
+			boards.append({"y0": float(p["y"]), "y1": float(p["y"]),
+				"x0": float(p["x0"]), "x1": float(p["x1"]),
+				"z0": float(p["z0"]), "z1": float(p["z1"])})
+		else:
+			var b: Dictionary = boards[boards.size() - 1]
+			b["y1"] = float(p["y"])
+			b["x0"] = minf(float(b["x0"]), float(p["x0"]))
+			b["x1"] = maxf(float(b["x1"]), float(p["x1"]))
+			b["z0"] = minf(float(b["z0"]), float(p["z0"]))
+			b["z1"] = maxf(float(b["z1"]), float(p["z1"]))
+	for b in boards:
+		var t := maxf(float(b["y1"]) - float(b["y0"]), 0.02)
+		var cs4 := CollisionShape3D.new()
+		var box4 := BoxShape3D.new()
+		box4.size = Vector3(float(b["x1"]) - float(b["x0"]), t,
+			float(b["z1"]) - float(b["z0"])) / scl
+		cs4.shape = box4
+		cs4.position = inv * Vector3((float(b["x0"]) + float(b["x1"])) * 0.5,
+			(float(b["y0"]) + float(b["y1"])) * 0.5,
+			(float(b["z0"]) + float(b["z1"])) * 0.5)
+		auto_col.add_child(cs4)
+
+	print("[EsportsCol] 柜子挖空：禁用 %d 个实心盒，补两侧 0.1 m 薄墙 + 中缝 %.2f m 分隔板 + %d 块实测板（底/层/顶）"
+		% [killed, CABINET_DIVIDER, boards.size()])

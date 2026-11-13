@@ -99,12 +99,14 @@ func _run() -> void:
 	# ⚠️ 推点必须落在**左格中心**，不能用柜子 x 中心：2026-11-13 补了中缝分隔板碰撞，
 	#    柜子中心现在是一片 0.04 m 的实心薄墙，正对着推只会撞在板上（判据错，不是回归）。
 	var entry_x := cab.position.x + cab.size.x * 0.25
-	player.global_position = Vector3(entry_x, 0.9, z_lo - 1.5)
+	# 脚底 y=1.35（玩家原点在脚底）：高于底板顶 0.574（2026-11-13 底板补了碰撞），
+	# 锁 y 速度只测水平通行。
+	player.global_position = Vector3(entry_x, 1.35, z_lo - 1.5)
 	player.velocity = Vector3.ZERO
 	await _wait(12)
 	var inside := 0
 	for _f in PUSH_FRAMES:
-		player.velocity = Vector3(0, player.velocity.y, 3.0)
+		player.velocity = Vector3(0, 0, 3.0)
 		player.move_and_slide()
 		await physics_frame
 		var p := player.global_position
@@ -116,12 +118,12 @@ func _run() -> void:
 	_check(inside >= 5, "正面（-Z）能走进柜子")
 
 	# 侧面横推：应该被薄墙挡住，进不到柜内
-	player.global_position = Vector3(cab.end.x + 1.2, 0.9, cz)
+	player.global_position = Vector3(cab.end.x + 1.2, 1.35, cz)
 	player.velocity = Vector3.ZERO
 	await _wait(12)
 	var side_in := 0
 	for _f in PUSH_FRAMES:
-		player.velocity = Vector3(-3.0, player.velocity.y, 0)
+		player.velocity = Vector3(-3.0, 0, 0)
 		player.move_and_slide()
 		await physics_frame
 		var p := player.global_position
