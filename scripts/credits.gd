@@ -148,6 +148,28 @@ const ENTRIES := [
 	},
 	{
 		"group": "角色与 Boss 模型",
+		"path": "assets/companion_voice",
+		"title": "阿洛娜 / 普拉娜 的中文配音（电脑右半屏的台词）",
+		"author": "本项目用 GPT-SoVITS 生成（音色取自用户提供的阿洛娜 / 普拉娜"
+			+ "日配数据集训练出的模型）；角色版权属于 NEXON Games / Yostar（Blue Archive）",
+		"license": "授权未核实（角色音色版权 NEXON / Yostar）——仅限本地学习交流、"
+			+ "不可商用、不可再分发；本仓库不分发",
+		"distributed": false,
+		"source": "本机 GPT-SoVITS v2pro（D:\\SOFTWARE\\gptsovits）＋ "
+			+ "阿罗娜 `ALuoNa-e15.ckpt` / `ALuoNa_e16_s224.pth`、"
+			+ "普拉娜 `Plana-e15.ckpt` / `Plana_e16_s208.pth`；"
+			+ "参考音频取日配 `Arona_Academy_Talk_3.wav` / `New_NP0035_Work_Talk_4.wav`",
+		"license_file": "",
+		"note": "2026-11-13 用户「arona 的配音也下好了，需要配音完整看看效果」。"
+			+ "34 句（阿洛娜 18 / 普拉娜 16），32 kHz 单声道 9.4 MB。用 text_lang=zh + "
+			+ "日配参考做跨语种合成：参考音频只提供音色与韵律，它自己说的「先生」"
+			+ "不会出现在生成结果里（「她们不要喊老师」这条不受影响）。"
+			+ "台词由 `_dump_companion_lines.gd` 从 `arch_terminal.gd` 的 COMPANIONS 导出，"
+			+ "保证屏幕文字与配音同词；生成脚本 `_tools/gen_companion_voice.py`。"
+			+ "`.gitignore` 排除整个目录，缺文件时只静音",
+	},
+	{
+		"group": "角色与 Boss 模型",
 		"path": "models/arona",
 		"title": "阿洛娜 3D 模型（已停用，改用上面的绿幕帧序列）",
 		"author": "爱给网（aigei.com）用户上传的「碧蓝档案 阿罗娜 3d模型」，作者未署名；"

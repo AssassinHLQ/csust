@@ -156,6 +156,11 @@ func _ready() -> void:
 	_font = _pick_font()
 	_cjk_font = _pick_cjk_font()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_voice = AudioStreamPlayer.new()
+	_voice.name = "Voice"
+	_voice.bus = &"Master"
+	_voice.volume_db = VOICE_DB
+	add_child(_voice)
 	set_process(true)
 	reset()
 
@@ -220,6 +225,7 @@ func reset() -> void:
 	_text.clear()
 	_cols.clear()
 	_typing = ""
+	_stop_voice()
 	_banner()
 	_prompt_line()
 
@@ -613,12 +619,25 @@ const COMPANIONS := {
 const COMP_LINE_GAP := 7.0
 ## 立绘压板从屏幕宽度的这个比例开始，一直到右边缘
 const COMP_PANEL_X := 0.42
+## 配音目录。**不入库**（`.gitignore` 排除），用 GPT-SoVITS 生成，见
+## `_tools/gen_companion_voice.py`；文件命名 `<who>/<open|loop>_NN.wav`。
+## 目录不存在 / 少了某一句都**只静音**，不报错 —— 克隆者没跑过生成脚本也能正常玩。
+const VOICE_DIR := "res://assets/companion_voice"
+## 配音音量（分贝）。TTS 出来的 wav 实测 RMS ≈ −19 dB、峰值 0.64，还挺响，稍微压一点。
+const VOICE_DB := -2.0
 
 var _comp := ""                       # 当前同伴（""=没有）
 var _comp_anim: FrameAnim = null
 var _comp_line := 0
 var _comp_timer := 0.0
 var _comp_in_open := true
+## 配音播放器。**自己一个**，不走 `Sfx` 的池子（那套是给音效用的，会被下一次音效抢走，
+## 一句台词动辄三四秒，用池子会被掐断）。和 `dialogue_box.gd` 的 `Voice` 同一套做法。
+var _voice: AudioStreamPlayer
+## 当前这句配音的实际路径（没配音 = 空串）。探针用它确认「真的在放」。
+var _voice_path := ""
+## 路径 → AudioStream（含 null：「这一句没有」也只查一次盘）
+var _voice_cache := {}
 
 
 func companion_active() -> bool:
@@ -635,7 +654,8 @@ func summon(who: String) -> void:
 		return
 	var data: Dictionary = COMPANIONS[who]
 	if _comp != who:
-		# 换人：把上一个的动画放掉
+		# 换人：把上一个的动画放掉、把上一个的台词声音停掉
+		_stop_voice()
 		if _comp_anim != null:
 			_comp_anim.clear()
 		_comp = who
@@ -663,6 +683,7 @@ func dismiss() -> void:
 		return
 	var nm := companion_name()
 	_comp = ""
+	_stop_voice()
 	if _comp_anim != null:
 		_comp_anim.clear()
 		_comp_anim = null
@@ -675,15 +696,18 @@ func _comp_next() -> void:
 	if not companion_active():
 		return
 	var data: Dictionary = COMPANIONS[_comp]
-	var lines: Array = data["open"] if _comp_in_open else data["loop"]
+	var group := "open" if _comp_in_open else "loop"
+	var lines: Array = data[group]
 	if _comp_line >= lines.size():
 		# 开场说完了 → 进循环池；循环池也不许为空（空了就只站着不说话）
 		_comp_in_open = false
+		group = "loop"
 		_comp_line = 0
 		lines = data["loop"]
 		if lines.is_empty():
 			return
-	var text := String(lines[_comp_line])
+	var idx := _comp_line
+	var text := String(lines[idx])
 	_comp_line += 1
 	_comp_timer = 0.0
 	# ── 折行 ──
@@ -699,7 +723,37 @@ func _comp_next() -> void:
 		else:
 			# 续行缩进，看起来像一个人一直说话
 			_comp_push([[" ".repeat(_cells(head)), DIM], [String(chunks[i]), FG]])
+	# 说话的同时把配音放上（没有配音文件就静音，不报错）
+	_play_voice(_comp, group, idx)
 	queue_redraw()
+
+
+## 放第 `i` 句的配音。文件不在 / 没导入都只是**静音**，绝不报错。
+##
+## ⚠️ 为什么不用 `Sfx`：那是给音效用的池子，下一次音效会把还在播的台词掐掉。
+##    这里和 `dialogue_box.gd` 的 `Voice` 一样，独占一个 `AudioStreamPlayer`。
+##    解码走 `StoryVoice.load_stream()` —— 它连「刚丢进目录、还没被编辑器导入」
+##    的 wav 都能直接解，省得忘跑 `--import` 就没声音还查不出原因。
+func _play_voice(who: String, group: String, i: int) -> void:
+	if _voice == null:
+		return
+	var path := "%s/%s/%s_%02d.wav" % [VOICE_DIR, who, group, i]
+	_voice.stop()
+	_voice_path = ""
+	if not _voice_cache.has(path):
+		_voice_cache[path] = StoryVoice.load_stream(path)
+	var stream: AudioStream = _voice_cache[path]
+	if stream == null:
+		return
+	_voice.stream = stream
+	_voice_path = path
+	_voice.play()
+
+
+func _stop_voice() -> void:
+	if _voice != null:
+		_voice.stop()
+	_voice_path = ""
 
 
 ## 压板左边还能画多少**显示格**（折行宽度就是这么来的）

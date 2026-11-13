@@ -172,6 +172,24 @@ __pycache__/
 # ⚠️ 连 `.import` 一起忽略 —— 389 个存根文件进仓库没有意义。
 /assets/arona_frames/
 
+# ── 电脑里阿洛娜 / 普拉娜的**中文配音**（2026-11-13）──
+#
+# 用本机 GPT-SoVITS v2pro 生成（脚本 `_tools/gen_companion_voice.py`），
+# 音色来自用户在百度网盘下载的**阿洛娜 / 普拉娜日配数据集**训练出的模型
+# （`ALuoNa-*.ckpt` / `Plana-*.ckpt` + 对应 `*.pth`），配日配参考音频做跨语种合成。
+# 34 句 / 9.4 MB / 32 kHz 单声道。
+#      **授权未核实**（角色音色版权 NEXON Games / Yostar），只允许本地学习演示，
+#      不随仓库分发 —— 与 `/models/arona/`、`/assets/plana_frames/` 同口径。
+#
+# 重新生成：
+#   godot --headless --path . --script res://scripts/_dump_companion_lines.gd
+#   cd D:\SOFTWARE\gptsovits\GPT-SoVITS-v2pro-20250604
+#   runtime\python.exe <项目>/_tools/gen_companion_voice.py \
+#       --lines <项目>/_tools/_tmp/companion_lines.json \
+#       --out <项目>/assets/companion_voice
+# 缺文件不影响玩：`arch_terminal.gd` 找不到配音就静音，屏幕上的台词照常。
+/assets/companion_voice/
+
 # SpaceX Falcon 9（Sketchfab 作者：Forest Katsch，CC BY-NC 4.0）—— 带 NC（禁商用）条款，
 # 按「第三方素材一律不进仓库」的既有口径排除。缺这个文件时 `rocket_ride.gd` 会
 # 自动换成**程序化占位火箭**，跑酷的去程/回程照常能飞完 —— 和 gamedev_room /
@@ -275,6 +293,8 @@ __pycache__/
 #   _backup/          手写 .bak 备份（有 git 之后不该再手写备份，提交历史就是备份）
 /_log/
 /_arisu_captures/
+# 临时中转（探针导出的 JSON、TTS 日志、批量生成的中间文件）—— AGENTS.md：临时产物不入库
+/_tools/_tmp/
 /_sky_upscale/
 /_backup/
 

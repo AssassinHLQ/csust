@@ -63,6 +63,17 @@ func _run() -> void:
 	var n := anim.count() if anim != null else 0
 	_check(n > 300, "阿洛娜序列帧已载入（%d 帧）" % n)
 
+	# ── 1b. 配音（GPT-SoVITS 生成，见 `_tools/gen_companion_voice.py`）──
+	var player: AudioStreamPlayer = term.get("_voice")
+	_check(player != null, "终端有独立的配音播放器（不走 Sfx 池子）")
+	var voice_path := String(term.get("_voice_path"))
+	_check(voice_path == "res://assets/companion_voice/arona/open_00.wav",
+		"第一句台词触发了配音（%s）" % voice_path)
+	var stream: AudioStream = player.stream if player != null else null
+	_check(stream != null and stream.get_length() > 1.0,
+		"配音流有效（%.2f s）" % (stream.get_length() if stream != null else 0.0))
+	_check(_voice_files_ok(), "每个角色的每一句都有配音文件（34 个）")
+
 	# ── 2. 台词真的进了终端正文 ──
 	var txt := term.screen_text()
 	_check(txt.contains("ARONA:"), "台词以 `ARONA:` 前缀打进终端")
@@ -157,6 +168,8 @@ func _run() -> void:
 	var warn := ptxt.contains("刷回") or ptxt.contains("备份") or ptxt.contains("生气")
 	_check(warn, "普拉娜有「刷回去 / 备份 / 他会生气」的提醒")
 	_check(not ptxt.contains("老师"), "普拉娜也不喊老师")
+	_check(String(term.get("_voice_path")).contains("/plana/"),
+		"换人之后配音也换成了普拉娜的（%s）" % String(term.get("_voice_path")))
 
 	await _shot("02_plana_in_terminal")
 
@@ -165,6 +178,7 @@ func _run() -> void:
 	await _wait(6)
 	_check(not term.companion_active(), "dismiss 把同伴收走")
 	_check(term.companion_name() == "", "收走之后名字为空")
+	_check(String(term.get("_voice_path")) == "", "收走之后配音也停了")
 
 	# ── 10. 立绘真的画出来了（像素检查）──
 	#    压板是半透明的，立绘是不透明的 —— 右半屏和左半屏的亮度应该有差。
@@ -178,6 +192,22 @@ func _run() -> void:
 
 
 # ── 工具 ──────────────────────────────────────────────────────────────────────
+
+## 两个角色的**每一句**台词都得有对应配音文件（台词改了没重跑生成脚本 = 缺）。
+func _voice_files_ok() -> bool:
+	var total := 0
+	for who in ["arona", "plana"]:
+		var d: Dictionary = ArchTerminal.COMPANIONS[who]
+		for group in ["open", "loop"]:
+			var cnt: int = Array(d[group]).size()
+			for i in cnt:
+				var p := "res://assets/companion_voice/%s/%s_%02d.wav" % [who, group, i]
+				total += 1
+				if not FileAccess.file_exists(p):
+					print("    缺配音：%s" % p)
+					return false
+	print("    配音文件 %d 个都在" % total)
+	return true
 
 ## 中文 2 格、ASCII 1 格 —— 和 `arch_terminal.gd::_char_cells()` 同一套规则
 func _cells(s: String) -> int:
