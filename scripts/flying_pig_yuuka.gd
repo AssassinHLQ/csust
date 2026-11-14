@@ -431,12 +431,26 @@ func _ground_below() -> float:
 	if space == null:
 		return _ground_y
 	var q := PhysicsRayQueryParameters3D.create(
-		global_position + Vector3.UP * 40.0, global_position + Vector3.DOWN * 60.0)
+		global_position + Vector3.UP * 60.0, global_position + Vector3.DOWN * 90.0)
 	q.collision_mask = 1
+	# ⚠️ 排除自己**和同伴**：不然射线会撞到自己/相邻飞猪的碰撞盒，
+	#    量出来"离地 0 m"甚至负数。
+	q.exclude = _boss_rids()
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
 		return _ground_y
-	return (hit["position"] as Vector3).y
+	var gy := (hit["position"] as Vector3).y
+	if gy < -20.0:
+		return _ground_y
+	return gy
+
+
+func _boss_rids() -> Array[RID]:
+	var out: Array[RID] = [get_rid()]
+	for n in get_tree().get_nodes_in_group("bosses"):
+		if n is CollisionObject3D and n != self:
+			out.append((n as CollisionObject3D).get_rid())
+	return out
 
 
 ## 探针 / 召唤者用
