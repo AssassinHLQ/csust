@@ -260,6 +260,9 @@ func _run() -> void:
 			_boss.global_position.z - c.global_position.z)
 	await _wait(0.2)
 	_boss.call("debug_set_evasion", 0.0)   # 别让闪避把这条测成偶然
+	# ⚠️ 抽袋随机后她可能先抽到 EX 护盾：2200 点盾会把四个技能（合计 ~900）全吃掉，
+	#    血量一点不掉。判定前先把盾拆了。
+	_boss.call("_break_shield", false, "队友技能判定前先拆盾")
 	var skill_rows: Array[String] = []
 	var skill_ok := party_guns.size() == 4
 	var anim_ok := party_guns.size() == 4
@@ -808,6 +811,23 @@ func _test_all_skills() -> void:
 	_check("十八个技能都放出来过", missing.is_empty(),
 		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
 
+	# 抽袋随机：18 手必须覆盖全部 18 招（一轮不重复），且最近 3 手不重复。
+	# ⚠️ `debug_draw_sequence` 抽完会把袋子原样还原，不影响实战。
+	var seq: Array = _boss.call("debug_draw_sequence", 18)
+	var uniq := {}
+	for s in seq:
+		uniq[s] = true
+	_check("抽袋：18 手覆盖全部 18 招且不重复",
+		seq.size() == 18 and uniq.size() == 18,
+		"抽到 %d 种 / %d 手" % [uniq.size(), seq.size()])
+	var long_seq: Array = _boss.call("debug_draw_sequence", 36)
+	var no_rep := true
+	for i in range(1, long_seq.size()):
+		for k in range(1, 4):
+			if i - k >= 0 and String(long_seq[i]) == String(long_seq[i - k]):
+				no_rep = false
+	_check("抽袋：最近 3 手不重复", no_rep, "36 手检查" if no_rep else "出现 3 手内重复")
+
 
 func _test_revive() -> void:
 	_boss.call("debug_reset")
@@ -832,8 +852,10 @@ func _test_revive() -> void:
 	_check("回血完成后**仍然无敌**", bool(st2["invuln"]),
 		"invuln=%s 剩 %.1f s" % [str(st2["invuln"]), float(st2["revive_t"])])
 	# 无敌期间她必须已经在出招
+	# ⚠️ 别用固定 2.5 s：抽袋后她可能在演长招（横扫 3 s / 蓄力炮），
+	#    固定窗口会偶尔错过"下一手"——按出招计数等到真的多放一手为止。
 	var c0 := _total_casts()
-	await _wait(2.5)
+	await _until(func() -> bool: return _total_casts() > c0, 10.0)
 	var st3: Dictionary = _boss.call("status")
 	var c1 := _total_casts()
 	_check("无敌时间里照样进攻", bool(st3["invuln"]) and c1 > c0,

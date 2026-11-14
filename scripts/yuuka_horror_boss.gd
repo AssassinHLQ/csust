@@ -228,6 +228,18 @@ const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
 	"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs",
 	"clones"]
 
+## ── 抽袋随机（用户 2026-11-14：「抽袋随机」）──
+## 18 招装进袋子，**抽完一轮才洗牌**：每招一轮必出一次，但顺序不再固定。
+## 两条附加规则：
+##   ① 最近 3 招不重复 —— 固定轮转不怕连招，随机必须防「连着吃两个新星」；
+##   ② 玩家飞得高（> `AIR_PREFER_HEIGHT`）时优先抽对空招。
+## 为什么不用纯随机：纯随机可能一整场都不放分身/飞猪（玩家做的内容看不到），
+## 也可能同一招连放两次；抽袋两个毛病都没有，而且仍有确定性上界（18 抽必全覆盖），
+## 探针的「十八招都放出来过」照样能守。
+const ANTI_AIR_SKILLS := ["shock", "sweep", "beam", "spikes", "meteor", "gravity"]
+const AIR_PREFER_HEIGHT := 12.0
+const SKILL_NO_REPEAT := 3
+
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
 var _horror_eye_tried := false
@@ -239,6 +251,9 @@ var _aura_built := false
 var _player: Node3D
 var _t_skill := 0.0
 var _skill_i := 0
+## 抽袋随机的袋子与"最近放过的招"（见 `_draw_skill()`）
+var _skill_bag: Array[String] = []
+var _recent_skills: Array[String] = []
 var _busy := false
 var _phase := 1
 var _last_skill := ""
@@ -562,24 +577,73 @@ func _find_player() -> Node3D:
 
 # ────────────────────────── 出招 ──────────────────────────
 
-## 10 招按顺序轮转（一轮 55 s，玩家能摸清节奏；二阶段同一套但更凶）
+## 从袋子里抽一招；袋空就洗牌。规则见 `SKILL_NAMES` 上方注释。
+func _draw_skill(dy: float) -> String:
+	if _skill_bag.is_empty():
+		# ⚠️ 不能写 `_skill_bag = SKILL_NAMES.duplicate()`：duplicate() 返回无类型
+		#    `Array`，直接赋给 `Array[String]` 会 SCRIPT ERROR，袋子永远是空的。
+		_skill_bag.clear()
+		for s in SKILL_NAMES:
+			_skill_bag.append(String(s))
+		_skill_bag.shuffle()
+		_move_first_non_recent()
+	# 玩家在天上：优先挑一张对空招（先避开最近 3 招，避不开再放宽）
+	if dy >= AIR_PREFER_HEIGHT:
+		var i := _find_bag_skill(ANTI_AIR_SKILLS, true)
+		if i < 0:
+			i = _find_bag_skill(ANTI_AIR_SKILLS, false)
+		if i > 0:
+			_skill_bag.insert(0, _skill_bag.pop_at(i))
+	var pick := String(_skill_bag[0])
+	_skill_bag.remove_at(0)
+	return pick
+
+
+## 洗完牌后如果第一张正好是最近放过的，往后换一张
+func _move_first_non_recent() -> void:
+	for i in _skill_bag.size():
+		if not _recent_skills.has(_skill_bag[i]):
+			if i > 0:
+				_skill_bag.insert(0, _skill_bag.pop_at(i))
+			return
+
+
+func _find_bag_skill(names: Array, avoid_recent: bool) -> int:
+	for i in _skill_bag.size():
+		var s := String(_skill_bag[i])
+		if names.has(s) and (not avoid_recent or not _recent_skills.has(s)):
+			return i
+	return -1
+
+
+func _note_skill(pick: String) -> void:
+	_recent_skills.append(pick)
+	if _recent_skills.size() > SKILL_NO_REPEAT:
+		_recent_skills.remove_at(0)
+
+
+## 抽袋随机出招（规则见 `SKILL_NAMES` 上方注释）
 func _cast_skill() -> void:
 	var p := _find_player()
 	if p == null:
 		return
 	_busy = true
 	var pc := p.global_position
-	var pick := String(SKILL_NAMES[_skill_i % SKILL_NAMES.size()])
+	var dy := pc.y - global_position.y
+	var pick := _draw_skill(dy)
 	_skill_i += 1
-	# 近身技够不着 → 换成不需要距离的那招，别对着空气放
+	# 近身技够不着 → 换成不需要距离的那招，别对着空气放。
+	# 被换下的那一招**塞回袋子**，这一轮不会白丢。
 	var dist := global_position.distance_to(pc)
 	if ((pick == "slam" and dist > SLAM_RANGE)
 			or (pick == "nova" and dist > NOVA_RANGE)):
+		_skill_bag.append(pick)
 		pick = "sweep"
 	_last_skill = pick
 	_counts[pick] += 1
-	print("[YuukaHorror] 出招：%s（第 %d 轮，阶段 %d，距离 %.0f m）" % [
-		pick, _skill_i, _phase, dist])
+	_note_skill(pick)
+	print("[YuukaHorror] 出招：%s（第 %d 手，阶段 %d，距离 %.0f m，袋剩 %d）" % [
+		pick, _skill_i, _phase, dist, _skill_bag.size()])
 	match pick:
 		"slam":
 			await _skill_slam(pc)
@@ -1868,6 +1932,9 @@ func _start_phase2() -> void:
 	health_changed.emit(health, max_health)
 	_t_skill = 0.8          # 回血一结束就出招，不留空档
 	_skill_i = 0
+	# 二阶段换一套新顺序（袋子清空即可，抽的时候会重新洗）
+	_skill_bag.clear()
+	_recent_skills.clear()
 	phase_changed.emit(2)
 	Vfx.big_burst(self, global_position + Vector3.UP * height * 0.45,
 		Color(1.0, 0.25, 0.15), 2.4)
@@ -2227,6 +2294,24 @@ func _pig_hits() -> int:
 ## 探针用：把闪避率固定成 v（0 = 必中，方便测护盾吸收）
 func debug_set_evasion(v: float) -> void:
 	_evasion_fixed = v
+
+
+## 探针用：连抽 n 手看袋子行为（抽完把袋子/最近记录**原样还原**，不影响实战）。
+func debug_draw_sequence(n: int) -> Array:
+	var bag: Array[String] = []
+	bag.assign(_skill_bag)
+	var recent: Array[String] = []
+	recent.assign(_recent_skills)
+	_skill_bag.clear()
+	_recent_skills.clear()
+	var out: Array = []
+	for i in n:
+		var s := _draw_skill(0.0)
+		_note_skill(s)
+		out.append(s)
+	_skill_bag = bag
+	_recent_skills = recent
+	return out
 
 
 func debug_reset() -> void:
