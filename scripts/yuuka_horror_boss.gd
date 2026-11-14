@@ -733,7 +733,7 @@ func _skill_slam(pc: Vector3) -> void:
 	Sfx.play("ui_close", -1.0)
 	_hit_area(center, SLAM_RADIUS, _dmg(SLAM_DAMAGE), SLAM_KNOCKBACK, "slam")
 	_flash_mark(disc, 1.4, 0.30)
-	_slam_marks.erase(disc)
+	_drop_mark(disc)
 	await get_tree().create_timer(0.45).timeout
 
 
@@ -877,7 +877,7 @@ func _spawn_meteor(at: Vector3) -> void:
 	await tw.finished
 	if _dead or not is_instance_valid(self):
 		if is_instance_valid(disc):
-			_slam_marks.erase(disc)
+			_drop_mark(disc)
 			disc.queue_free()
 		return
 	# 陨石本体：从 45 m 高处砸下来（只做视觉，判定在落地那一帧）
@@ -902,7 +902,7 @@ func _spawn_meteor(at: Vector3) -> void:
 	_hit_area(at, METEOR_RADIUS, _dmg(METEOR_DAMAGE), METEOR_KNOCK, "meteor")
 	Sfx.play("ui_close", -3.0)
 	_flash_mark(disc, 1.35, 0.28)
-	_slam_marks.erase(disc)
+	_drop_mark(disc)
 
 
 # ── 6 血刺 ──
@@ -940,7 +940,7 @@ func _spawn_spike(at: Vector3) -> void:
 	await tw.finished
 	if _dead or not is_instance_valid(self):
 		if is_instance_valid(disc):
-			_slam_marks.erase(disc)
+			_drop_mark(disc)
 			disc.queue_free()
 		return
 	# 刺本体：从地里窜出来的细长圆锥，长度刚好到 top
@@ -962,7 +962,7 @@ func _spawn_spike(at: Vector3) -> void:
 	await tw2.finished
 	_spike_hit(at, gy, top)
 	_flash_mark(disc, 1.2, 0.25)
-	_slam_marks.erase(disc)
+	_drop_mark(disc)
 	var tw3 := create_tween()
 	tw3.tween_interval(0.45)
 	tw3.tween_property(spike, "global_position",
@@ -1399,7 +1399,7 @@ func _skill_leapslam(pc: Vector3) -> void:
 	_hit_area(center, LEAP_RADIUS, _dmg(LEAP_DAMAGE), LEAP_KNOCK, "leapslam")
 	Sfx.play("ui_close", -1.0)
 	_flash_mark(disc, 1.3, 0.3)
-	_slam_marks.erase(disc)
+	_drop_mark(disc)
 	await get_tree().create_timer(0.3).timeout
 
 
@@ -1743,6 +1743,15 @@ func _flash_mark(mark, grow: float, time: float) -> void:
 			if std != null:
 				tw.tween_property(std, "albedo_color:a", 0.0, time)
 	tw.chain().tween_callback(mark.queue_free)
+
+
+## 从预警圈列表里移除一个圈。
+## ⚠️ 对象可能已经被 `_free_marks()` / `debug_reset()` 清掉了 ——
+##    对已释放对象调 `erase` 会让 TypedArray 报 "previously freed"。
+func _drop_mark(mark) -> void:
+	if mark == null or not is_instance_valid(mark):
+		return
+	_slam_marks.erase(mark)
 
 
 func _free_marks() -> void:

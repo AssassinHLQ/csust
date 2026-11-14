@@ -18,11 +18,14 @@ signal fired(target: Node3D)
 
 @export var enabled := true
 ## 两次射击的间隔（秒）
-@export var attack_interval := 1.8
+## 用户 2026-11-14：「这也太恐怖了，加强主角团」——
+## 原来是 1.8 s 一发、12 伤害（≈6.7 DPS），对着 14000 血的最终 BOSS
+## 等于挠痒。现在 0.55 s 一发、55 伤害（≈100 DPS/人），四个人 ≈400 DPS。
+@export var attack_interval := 0.55
 ## 进场后隔多久开始射击（秒）
-@export var attack_start_delay := 1.2
-@export var attack_range := 24.0
-@export var attack_damage := 12.0
+@export var attack_start_delay := 0.6
+@export var attack_range := 48.0
+@export var attack_damage := 55.0
 ## 目标必须在这个半角内才会开火（度），见文件头第 3 条
 @export_range(1.0, 90.0, 1.0) var aim_half_angle_degrees := 25.0
 ## 枪口：同伴节点上方多高、正前方多远。

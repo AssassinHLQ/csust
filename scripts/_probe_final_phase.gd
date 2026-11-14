@@ -161,6 +161,23 @@ func _run() -> void:
 		"skin_mats=%d" % int(bst["skin_mats"]))
 	_check("BOSS 血量 14000", is_equal_approx(float(bst["max_health"]), 14000.0),
 		"%s" % str(bst["max_health"]))
+	# 主角团：终局开场到场 4 人（不含优香/小雪/诺亚），并且枪被加强了
+	var party_names: Array[String] = []
+	var gun_dmg := 0.0
+	for i in 4:
+		var c := _lvl.get_node_or_null("Party%d" % i)
+		if c == null:
+			continue
+		party_names.append(String(c.get("display_name")))
+		var g := c.get_node_or_null("Gun")
+		if g != null:
+			gun_dmg = float(g.get("attack_damage"))
+			g.set("enabled", false)   # 测技能判定时别让队友的枪掺和
+	_check("主角团到场 4 人（不含优香/小雪/诺亚）", party_names.size() == 4,
+		", ".join(party_names))
+	_check("主角团的枪被加强（≥50 伤害）", gun_dmg >= 50.0, "%.0f 伤害/发" % gun_dmg)
+	await _shot("19_party", safe_spot() + Vector3(-12, 16, 20),
+		safe_spot() + Vector3(0, 4, 0))
 
 	# 让 BOSS 转向玩家后拍全身 / 上半身。
 	# ⚠️ 玩家**不挪窝**：前几轮为了取景把玩家传过去，结果那边是个洞，

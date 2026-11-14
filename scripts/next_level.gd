@@ -594,6 +594,7 @@ func _begin_final_phase() -> void:
 	lock.connect("finished", _on_final_cleared)
 	var env := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	var sun := get_node_or_null("Sun") as DirectionalLight3D
+	_spawn_party()
 	lock.call("start", env, sun, _player, _arena_bounds())
 	# 终局期间死在封锁区里，不该被送回大厅（要重新走进校园打第二遍）。
 	# 存一个**刻意的**封锁区存档点：墙升起来那一刻玩家站的位置
@@ -640,6 +641,56 @@ func _on_final_boss_phase(phase: int) -> void:
 func _on_final_cleared() -> void:
 	_show_message("优香-恐怖 已被击破 —— 校园解除封锁", 6.0)
 	print("[ConstructivistLevel] 终局完成：优香-恐怖 已被击破")
+
+
+## ── 主角团（用户 2026-11-14）──
+## 「加强主角团，主角团就不要带优香了，小雪也不是打仗的暂时下线，诺亚不好打优香，下线」
+## 所以终局到场的是：小桃 / 小绿 / 柚子 / 凯伊。
+## 优香（BOSS 本人）、小雪（不打仗）、诺亚（对优香不好打）都不来。
+const PARTY := [
+	{"name": "小桃", "model": "res://models/companions/Momoi.glb",
+		"slot": Vector3(-2.6, 0.0, 1.6)},
+	{"name": "小绿", "model": "res://models/companions/Midori.glb",
+		"slot": Vector3(2.6, 0.0, 1.6)},
+	{"name": "柚子", "model": "res://models/companions/Yuzu.glb",
+		"slot": Vector3(-3.6, 0.0, -1.8)},
+	{"name": "凯伊", "model": "res://models/companions/Kei_ext.glb",
+		"slot": Vector3(3.6, 0.0, -1.8)},
+]
+
+var _party: Array[Node3D] = []
+
+
+## 终局开场把主角团叫过来（`companion.gd` 自带枪，会自己打 `bosses` 组）
+func _spawn_party() -> void:
+	if _player == null or _party.size() > 0:
+		return
+	var ps := load("res://scenes/companion.tscn") as PackedScene
+	if ps == null:
+		push_warning("[ConstructivistLevel] 找不到 companion.tscn，主角团没来")
+		return
+	var i := 0
+	for spec in PARTY:
+		var c := ps.instantiate() as Node3D
+		if c == null:
+			continue
+		c.name = "Party%d" % i
+		c.set("display_name", String(spec["name"]))
+		c.set("model_path", String(spec["model"]))
+		c.set("slot", spec["slot"])
+		add_child(c)
+		var off: Vector3 = spec["slot"]
+		var at := _player.global_position + off
+		at.y = _player.global_position.y + 0.1
+		c.global_position = at
+		Vfx.ring(self, at + Vector3.UP * 0.1, Color(0.45, 0.75, 1.0, 0.9), 5.0, 0.5)
+		Vfx.burst(self, at + Vector3.UP * 1.0, Color(0.45, 0.75, 1.0), 24, 1.2,
+			10.0, 0.45, -2.0)
+		_party.append(c)
+		i += 1
+	if i > 0:
+		_show_message("队友赶到 —— 一起上", 3.5)
+		print("[ConstructivistLevel] 主角团到场：%d 人（小桃/小绿/柚子/凯伊）" % i)
 
 
 ## 校园围墙的 footprint（= 用户建的那圈墙），给封锁罩用。
