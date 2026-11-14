@@ -23,7 +23,6 @@
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 [ext_resource type="Texture2D" uid="uid://csdfilmb4p6bp" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
 [ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
-[ext_resource type="PackedScene" path="res://scenes/campus_gs.tscn" id="15_campusgs"]
 [ext_resource type="PackedScene" path="res://scenes/trex_yuuka_boss.tscn" id="16_trex"]
 [ext_resource type="PackedScene" path="res://scenes/kei_npc.tscn" id="17_kei"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="18_dialog"]
@@ -275,20 +274,11 @@ low_priority = true
 hide_inside_aabb = AABB(-17, -3, -11, 33, 19, 25)
 preload_on_gate = false
 
-; 校园碰撞（2026-11-14 起）：**GDGS 自带的泼溅→碰撞管线，分块烘出来的完整网格**。
-;   scenes/campus_gs.tscn 是包装场景，下面 28 个 Tile_x_z.scn（每个 4~5 MB）：
-;     · 每块 96 × 96 m、四周多带 2 m 重叠，保证接缝处密度不缺斤两；
-;     · 体素 1.0 m（管线最小体素 0.01 是世界单位，喂的是世界坐标）、marching cubes 平滑面；
-;     · scene_mode = outdoor（向下封实）+ opacity_cutoff 0.05，避免树下/路面出现洞；
-;     · 网格原点由管线对齐到 4 m 块，相邻块的格子天然重合。
-;   总计 350.8 万三角 / 121 MB。烤法见 scripts/_bake_gs_collision.gd（约 12 分钟）。
-;
-; ⚠️ CampusFloor 仍保留作兜底：节点 y −40.02 + 盒子高 80 = 顶面 **−0.02**。
-;    2026-11-14：Collision 子节点上曾残留 y = −100.88573 的旧偏移，把整块板推到地下
-;    100 m（射线全穿到 −100.9、FallReset 在 −60 就先接走了），已删掉。
-; 旧碰撞 campus_collision_walls_final.scn（Poisson 剪贴地面，18.2 万三角）保留备用：
-;   想切回去把 instance 换成 ExtResource("14_campusmesh_upper") 即可。
-[node name="CampusCollision" parent="." unique_id=378990923 instance=ExtResource("15_campusgs")]
+; 校园碰撞：暂用 Poisson 网格 + CampusFloor，恢复已验证的通行行为。
+; 2026-11-14 GDGS 原烘焙版本仅通过 12/96 跑动项；修复候选仍在隔离验证。
+; scenes/campus_gs.tscn 与分块资产保留，验收通过后再启用。
+; CampusFloor 顶面为 -0.02，作为扫描缺失区域的连续地面支撑。
+[node name="CampusCollision" parent="." unique_id=378990923 instance=ExtResource("14_campusmesh_upper")]
 
 [node name="TrexBossA" parent="." unique_id=2052977263 instance=ExtResource("16_trex")]
 transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -95, 0, -96)

@@ -4,6 +4,8 @@ extends SceneTree
 ##
 ##   _tools/run_shot.sh res://scripts/_probe_final_phase.gd
 ##   _tools/run_shot.sh res://scripts/_probe_final_phase.gd --splat=off
+## 无窗玩法回归：godot --headless --path . --script res://scripts/_probe_final_phase.gd -- --no-capture --campus-splat=off --splat=off --story=off
+## headless 模式保留玩法断言，跳过屏幕外窗口检查与截图，不测渲染效果。
 ##
 ## 出图到 `_arisu_captures/_final_phase/`：
 ##   1_before   杀之前（对照）
@@ -47,12 +49,13 @@ func _initialize() -> void:
 func _run() -> void:
 	_out = OUT_DIR
 	DirAccess.make_dir_recursive_absolute(_out)
-	await OffWin.apply(self, Vector2i(1280, 720))
-	var safe: Array = OffWin.is_safe()
-	if not bool(safe[0]):
-		push_error("[final] 窗口没挪到屏幕外：%s" % str(safe[1]))
-		quit(2)
-		return
+	if DisplayServer.get_name() != "headless":
+		await OffWin.apply(self, Vector2i(1280, 720))
+		var safe: Array = OffWin.is_safe()
+		if not bool(safe[0]):
+			push_error("[final] 窗口没挪到屏幕外：%s" % str(safe[1]))
+			quit(2)
+			return
 	# 静音 Master：探针要**验证**这首在不在放，但不能真的把用户吼一脸
 	AudioServer.set_bus_mute(0, true)
 
@@ -70,7 +73,7 @@ func _run() -> void:
 		await process_frame
 
 	# 校园泼溅要不要等（`--splat=off` 跳过，跑得快，但背景是空的）
-	var want_splat := not OS.get_cmdline_user_args().has("--splat=off")
+	var want_splat := DisplayServer.get_name() != "headless" and not OS.get_cmdline_user_args().has("--splat=off")
 	var campus := _lvl.get_node_or_null("Campus")
 	if campus != null:
 		# 探针会把玩家钉住 / 到处传，掉进广场的洞就会低于校园内容盒 → 触发
@@ -1076,6 +1079,8 @@ func _shot(tag: String, eye: Vector3, aim: Vector3) -> void:
 	_cam.look_at_from_position(eye, aim, Vector3.UP)
 	await process_frame
 	await process_frame
+	if DisplayServer.get_name() == "headless":
+		return
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("%s/%s.png" % [_out, tag])
 	print("[final] 出图 %s  (ey=%s)" % [tag, str(eye)])
