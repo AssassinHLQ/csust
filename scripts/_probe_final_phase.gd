@@ -198,6 +198,9 @@ func _run() -> void:
 	await _until_idle(40.0)
 	_boss.call("debug_reset")
 	_boss.set("_t_skill", 9999.0)
+	# 测试期间别让闪现乱触发（会打乱"BOSS 固定在 18 m 外"的前提）
+	_boss.call("debug_set_blink_cd", 999.0)
+	_boss.call("debug_set_chase", false)
 	await _test_shock_hit()
 	await _test_shock_air()
 	await _test_shock_far()
@@ -221,6 +224,9 @@ func _run() -> void:
 	await _test_summon()
 	await _test_rapid()
 	await _test_pigs()
+	await _test_chase()
+	await _test_blink()
+	await _test_clones()
 	_test_all_skills()
 	await _test_revive()
 	await _test_phase2_buffs()
@@ -621,16 +627,94 @@ func _test_pigs() -> void:
 	await _wait(0.8)
 
 
+## 追击：玩家跑到 40 m 外，BOSS 要自己走过来
+func _test_chase() -> void:
+	_boss.call("debug_reset")
+	_set_hp(9999.0)
+	_boss.call("debug_set_blink_cd", 999.0)
+	_boss.call("debug_set_chase", true)
+	var dir := safe_spot() - _boss.global_position
+	dir.y = 0.0
+	dir = dir.normalized()
+	var far := _boss.global_position + dir * 40.0
+	_teleport(Vector3(far.x, _boss.global_position.y + 0.6, far.z))
+	await _wait(0.2)
+	var d0 := _boss.global_position.distance_to(_player.global_position)
+	await _wait(3.5)
+	var d1 := _boss.global_position.distance_to(_player.global_position)
+	var st: Dictionary = _boss.call("status")
+	_check("BOSS 会追人（40 m 外会走过来）", d1 < d0 - 1.5,
+		"距离 %.1f → %.1f m（被挡 %d 帧）" % [d0, d1, int(st.get("chase_blocked", 0))])
+	_boss.call("debug_set_chase", false)
+	_teleport(safe_spot())
+	# 把 BOSS 挪回 18 m 的原位，别影响后面的距离判定
+	_boss.global_position = _player.global_position + Vector3(18.0, 0.0, 0.0)
+	await _wait(0.3)
+
+
+## 闪现：玩家跑远 → 直接出现在**身后**
+func _test_blink() -> void:
+	_boss.call("debug_reset")
+	_set_hp(9999.0)
+	var dir := safe_spot() - _boss.global_position
+	dir.y = 0.0
+	dir = dir.normalized()
+	var far := _boss.global_position + dir * 34.0
+	_teleport(Vector3(far.x, _boss.global_position.y + 0.6, far.z))
+	await _wait(0.2)
+	var before := _boss.global_position.distance_to(_player.global_position)
+	_boss.call("debug_force_blink")
+	await _wait(0.6)
+	var after := _boss.global_position.distance_to(_player.global_position)
+	# 玩家脸朝：用 _facing_yaw 判定"是不是在背后"
+	var yaw := float(_player.get("_facing_yaw"))
+	var facing := Vector3(sin(yaw), 0.0, cos(yaw))
+	var to_boss := _boss.global_position - _player.global_position
+	to_boss.y = 0.0
+	var behind := facing.dot(to_boss.normalized()) < -0.2
+	_check("闪现：直接出现在玩家身后", before > 25.0 and after < 12.0 and behind,
+		"%.1f → %.1f m，点积 %.2f" % [before, after, facing.dot(to_boss.normalized())])
+	_boss.call("debug_set_blink_cd", 999.0)
+	_boss.call("debug_set_chase", false)
+	_teleport(safe_spot())
+	_boss.global_position = _player.global_position + Vector3(18.0, 0.0, 0.0)
+	await _wait(0.3)
+
+
+## 分身：10 个围住玩家，只有本体放技能（分身只会普攻）
+func _test_clones() -> void:
+	_boss.call("debug_reset")
+	_set_hp(9999.0)
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "clones")
+	await _until(func() -> bool: return int(_boss.call("status")["clones"]) >= 10, 20.0)
+	var st: Dictionary = _boss.call("status")
+	_check("分身：10 个出场", int(st["clones"]) == 10, "在场 %d 个" % int(st["clones"]))
+	await _shot("18_clones", safe_spot() + Vector3(0, 30, 34), safe_spot() + Vector3(0, 6, 0))
+	# 分身只会普攻：靠近了就抬手打一下
+	await _until(func() -> bool: return int(_boss.call("status")["clone_hits"]) >= 1, 30.0)
+	var st2: Dictionary = _boss.call("status")
+	_check("分身会普攻（贴脸打）", int(st2["clone_hits"]) >= 1,
+		"合计命中 %d 次" % int(st2["clone_hits"]))
+	# 收掉
+	for c in _boss.get("_clones"):
+		if is_instance_valid(c) and c.has_method("expire"):
+			c.call("expire")
+	await _wait(0.6)
+
+
 func _test_all_skills() -> void:
 	var st: Dictionary = _boss.call("status")
 	var counts: Dictionary = st["counts"]
 	var missing: Array[String] = []
 	for n in ["shock", "slam", "barrage", "sweep", "meteor", "spikes",
 			"nova", "phantom", "homing", "gravity",
-			"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs"]:
+			"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs",
+			"clones"]:
 		if int(counts.get(n, 0)) <= 0:
 			missing.append(n)
-	_check("十七个技能都放出来过", missing.is_empty(),
+	_check("十八个技能都放出来过", missing.is_empty(),
 		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
 
 

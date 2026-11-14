@@ -191,6 +191,22 @@ const RAPID_SIZE := 0.42
 const PIG_SCRIPT := preload("res://scripts/flying_pig_yuuka.gd")
 const PIG_COUNT := 3
 
+## 分身：10 个假身围住玩家，**只有本体放技能**，分身只会追着普攻
+const CLONE_SCRIPT := preload("res://scripts/horror_clone.gd")
+const CLONE_COUNT := 10
+const CLONE_RING := 10.0
+const CLONE_CD := 34.0
+
+## 追击：离得远就走过去（用户 2026-11-13「现在一动不动 boss 需要追击」）
+const CHASE_SPEED := 4.5
+const CHASE_FAR := 17.0
+const CHASE_STEP_MAX := 3.0
+
+## 闪现：长冷却、闪现到**玩家身后**
+const BLINK_CD := 20.0
+const BLINK_MIN_DIST := 22.0
+const BLINK_BEHIND := 7.0
+
 ## 出招节奏（秒）。二阶段 ÷ P2_SPEED。
 const INTERVAL_1 := 5.5
 const INTRO_GRACE := 2.5
@@ -209,7 +225,8 @@ const REVIVE_TO := 0.5         # 回到一半血
 ## （`Exs_Cutin` / `Kneel_Attack_*` / `Move_Jump` / `Normal_Reload` / `Normal_Callsign`）
 const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
 	"spikes", "nova", "phantom", "homing", "gravity",
-	"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs"]
+	"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs",
+	"clones"]
 
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
@@ -253,6 +270,13 @@ var _shield_cd := 0.0
 var _shield_fx: Array[Node3D] = []
 ## 召唤出来的飞猪（挂在 ArenaLock 下，不是 BOSS 的子节点 —— 否则会跟着转身绕圈）
 var _pigs: Array[Node3D] = []
+## 分身（同上，挂在 ArenaLock 下）
+var _clones: Array[Node3D] = []
+var _clone_cd := 0.0
+var _blink_cd := 9.0
+var _blinks := 0
+var _chase_blocked := 0
+var _chase_on := true
 ## 探针用：>=0 时强制这个闪避率（默认 -1 = 用护盾自带的值）
 var _evasion_fixed := -1.0
 
@@ -449,6 +473,12 @@ func _physics_process(delta: float) -> void:
 	_tick_shield(delta)
 	if _dead:
 		return
+	# 追击 / 闪现：出招、复活演出期间不走
+	if not _reviving and not _busy:
+		_chase(delta)
+		_tick_blink(delta)
+	if _clone_cd > 0.0:
+		_clone_cd = maxf(_clone_cd - delta, 0.0)
 	if _reviving:
 		# 用户 2026-11-13：「一阶段结束无敌 20 秒，先 3 秒复活回复到一半血量，
 		# 复活完 boss 直接开始攻击」——前 3 s 回血，回完立刻开打，
@@ -583,6 +613,8 @@ func _cast_skill() -> void:
 			await _skill_rapid(pc)
 		"pigs":
 			await _skill_pigs()
+		"clones":
+			await _skill_clones()
 		_:
 			await _skill_shockwave()
 	_busy = false
@@ -954,10 +986,17 @@ func _ground_below(at: Vector3) -> float:
 	var q := PhysicsRayQueryParameters3D.create(
 		at + Vector3.UP * 200.0, at + Vector3.DOWN * 200.0)
 	q.collision_mask = 1
+	# ⚠️ 排除自己：射线从头顶打下来会先撞到自己身上的碰撞盒
+	q.exclude = [get_rid()]
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
 		return at.y - 2.0
-	return (hit["position"] as Vector3).y
+	var gy := (hit["position"] as Vector3).y
+	# ⚠️ 校园碰撞网格**有洞**：打穿了会一路掉到 y=−100.9 的兜底板。
+	#    这种"地面"不能用，一律当没打到。
+	if gy < -20.0 or gy > at.y + 80.0:
+		return at.y - 2.0
+	return gy
 
 
 # ── 7 近身爆震 ──
@@ -1836,6 +1875,7 @@ func _real_death(by_damage: float) -> void:
 			n5.queue_free()
 	_phantoms.clear()
 	_expire_pigs()
+	_expire_clones()
 	_death_fx()
 
 
@@ -1897,10 +1937,201 @@ func status() -> Dictionary:
 		"pigs": _alive_pigs(),
 		"pig_min_alt": _pig_min_alt(),
 		"pig_hits": _pig_hits(),
+		"clones": _alive_clones(),
+		"clone_hits": _clone_hits(),
+		"blink_cd": _blink_cd,
+		"blinks": _blinks,
+		"chase_blocked": _chase_blocked,
 	}
 
 
 ## 探针用：清掉场上所有特效残骸、把计数归零（招式之间互不干扰）
+# ────────────────────────── 追击 / 闪现 / 分身 ──────────────────────────
+
+## 追玩家：只用"地面射线跟脚 + 前方 3 m 探墙"，不做完整寻路。
+## 校园碰撞是烘焙 trimesh，真正的寻路要 NavMesh；这里只求"会走过来"。
+func _chase(delta: float) -> void:
+	if not _chase_on:
+		return
+	var p := _find_player()
+	if p == null:
+		return
+	var d := p.global_position - global_position
+	var flat := Vector2(d.x, d.z)
+	if flat.length() <= CHASE_FAR:
+		return
+	var dir := Vector3(flat.normalized().x, 0.0, flat.normalized().y)
+	# 直线被挡就左右偏一点绕（校园里树和楼的碰撞到处都是；
+	# 真寻路要 NavMesh，这里只要"别站着不动"）
+	for ang in [0.0, 25.0, -25.0, 50.0, -50.0, 80.0, -80.0]:
+		var d2 := dir.rotated(Vector3.UP, deg_to_rad(float(ang)))
+		if _walk_step(d2, delta):
+			return
+	# 七个方向全被挡（贴墙 / 卡在树缝里）：**保持高度直接平移**。
+	# 宁可擦着墙走，也不要钉在原地 —— 用户明确说了「现在一动不动」。
+	_chase_blocked += 1
+	global_position += Vector3(dir.x, 0.0, dir.z) * CHASE_SPEED * delta
+
+
+## 试走一步：前方 4.5 m 没墙、下一格地面高差 ≤ CHASE_STEP_MAX 才走
+func _walk_step(dir: Vector3, delta: float) -> bool:
+	var space := get_world_3d().direct_space_state
+	# ⚠️ 探墙射线放在 **2 m 低处、只探 2.5 m**：
+	#    放在胸口高度会被树冠误判成"前面有墙"，实测整只钉在原地。
+	var from := global_position + Vector3.UP * 2.0
+	if space != null:
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * 2.5)
+		q.collision_mask = 1
+		q.exclude = [get_rid()]
+		if not space.intersect_ray(q).is_empty():
+			return false
+	var step := CHASE_SPEED * delta
+	var nx := global_position.x + dir.x * step
+	var nz := global_position.z + dir.z * step
+	var gy := _sample_ground(nx, nz)
+	if is_nan(gy):
+		# 校园碰撞网格有洞、采样不到地面 → **保持当前高度**先走过去，
+		# 别因为"量不出地面"就整只钉在原地（实测被挡 2788 帧）。
+		global_position = Vector3(nx, global_position.y, nz)
+		return true
+	if absf(gy - global_position.y) > CHASE_STEP_MAX:
+		return false
+	global_position = Vector3(nx, gy + 0.05, nz)
+	return true
+
+
+## 采样 (x,z) 的地面高度；不可信（打穿了校园网格）时返回 NAN
+func _sample_ground(x: float, z: float) -> float:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return NAN
+	var q := PhysicsRayQueryParameters3D.create(
+		Vector3(x, global_position.y + 200.0, z),
+		Vector3(x, global_position.y - 200.0, z))
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return NAN
+	var gy := (hit["position"] as Vector3).y
+	if gy < -20.0:
+		return NAN
+	return gy
+
+
+## 闪现：长冷却；玩家跑远了她直接出现在**背后**
+func _tick_blink(delta: float) -> void:
+	_blink_cd = maxf(_blink_cd - delta, 0.0)
+	if _blink_cd > 0.0 or _invuln:
+		return
+	var p := _find_player()
+	if p == null:
+		return
+	if global_position.distance_to(p.global_position) < BLINK_MIN_DIST:
+		return
+	_blink_cd = BLINK_CD
+	_blinks += 1
+	_do_blink(p)
+
+
+func _do_blink(p: Node3D) -> void:
+	# 玩家脸朝 = (sin(_facing_yaw), 0, cos(_facing_yaw))（见 `player.gd` 注释）
+	var yaw := float(p.get("_facing_yaw")) if p.get("_facing_yaw") != null else p.rotation.y
+	var facing := Vector3(sin(yaw), 0.0, cos(yaw))
+	var behind := p.global_position - facing * BLINK_BEHIND
+	var gy := _ground_below(Vector3(behind.x, p.global_position.y, behind.z))
+	# 落点地面不可信（打穿了）→ 直接贴玩家那一层，别闪到地底去
+	if absf(gy - p.global_position.y) > 8.0:
+		gy = p.global_position.y - 0.9
+	var at := Vector3(behind.x, gy + 0.05, behind.z)
+	_blast_fx(global_position + Vector3.UP * height * 0.45)
+	global_position = at
+	_blast_fx(at + Vector3.UP * height * 0.45)
+	rotation.y = atan2(p.global_position.x - at.x, p.global_position.z - at.z)
+	Sfx.play("ui_toggle", -3.0)
+	# 落地就接一招，别让闪现只当位移
+	_t_skill = minf(_t_skill, 0.4)
+	print("[YuukaHorror] 闪现到玩家身后：%s（第 %d 次）" % [str(at.snappedf(0.1)), _blinks])
+
+
+## 召唤 10 个分身围住玩家；只有本体放技能，分身只会普攻
+func _skill_clones() -> void:
+	_play_once("Normal_Callsign", 0.15)
+	Sfx.play("ui_open", -3.0)
+	await get_tree().create_timer(0.5).timeout
+	if _dead or not is_instance_valid(self):
+		return
+	_prune_clones()
+	if _clone_cd > 0.0:
+		print("[YuukaHorror] 分身冷却中（剩 %.1f s），这轮不召唤" % _clone_cd)
+		return
+	_clone_cd = CLONE_CD
+	var p := _find_player()
+	if p == null:
+		return
+	var host := get_parent() if get_parent() != null else get_tree().root
+	var center := p.global_position
+	for i in CLONE_COUNT:
+		if _dead or not is_instance_valid(self):
+			return
+		var ang := TAU * float(i) / float(CLONE_COUNT)
+		var x := center.x + cos(ang) * CLONE_RING
+		var z := center.z + sin(ang) * CLONE_RING
+		var gy := _ground_below(Vector3(x, center.y, z))
+		var clone := CLONE_SCRIPT.new() as Node3D
+		if clone == null:
+			continue
+		host.add_child(clone)
+		clone.global_position = Vector3(x, gy + 0.05, z)
+		if clone.has_method("setup"):
+			clone.call("setup", p)
+		_clones.append(clone)
+	print("[YuukaHorror] 分身 ×%d 围住玩家（只有本体放技能）" % CLONE_COUNT)
+
+
+func _prune_clones() -> void:
+	var alive: Array[Node3D] = []
+	for c in _clones:
+		if is_instance_valid(c) and not bool(c.get("_dead")):
+			alive.append(c)
+	_clones = alive
+
+
+func _expire_clones() -> void:
+	for c in _clones:
+		if is_instance_valid(c) and c.has_method("expire"):
+			c.call("expire")
+	_clones.clear()
+
+
+func _alive_clones() -> int:
+	_prune_clones()
+	return _clones.size()
+
+
+func _clone_hits() -> int:
+	var n := 0
+	for c in _clones:
+		if is_instance_valid(c):
+			n += int(c.call("status").get("hits", 0))
+	return n
+
+
+## 探针用：把闪现冷却清零，下一帧就会闪
+func debug_force_blink() -> void:
+	_blink_cd = 0.0
+
+
+## 探针用：直接设定闪现冷却（999 = 测试期间别乱闪）
+func debug_set_blink_cd(v: float) -> void:
+	_blink_cd = v
+
+
+## 探针用：开关追击（测"站桩伤害判定"时要关掉，否则她会自己走进圈里）
+func debug_set_chase(on: bool) -> void:
+	_chase_on = on
+
+
 ## 场上还活着的飞猪数量
 func _alive_pigs() -> int:
 	var n := 0
@@ -2012,6 +2243,8 @@ func _debug_cast_inner(kind: String, p: Node3D) -> void:
 			await _skill_rapid(pc)
 		"pigs":
 			await _skill_pigs()
+		"clones":
+			await _skill_clones()
 		_:
 			await _skill_shockwave()
 
