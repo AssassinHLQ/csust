@@ -12,16 +12,47 @@ extends Node3D
 ##      （`companion.gd` 的朝向逻辑正是按这个设计的）。
 ##
 ## 视觉上刻意**不用**玩家那种「飞行光弹」，而是打一条瞬间出现、0.08 s 淡出的枪线：
-## 7 名同伴同时开火时，飞行光弹会把玩家自己的子弹淹掉，也分不清是谁打的。
+## 多名同伴同时开火时，飞行光弹会把玩家自己的子弹淹掉，也分不清是谁打的。
+##
+## 技能（用户 2026-11-14：「全部队友加强攻速，加技能，攻击力不变」）：
+##   每人一个**大冷却**技能，伤害独立于普通射击，攻击力（55/发）保持不变。
+##   小桃=三连榴弹、小绿=狙击、柚子=霰弹扫射、凯伊=轨道炮。
+##   技能和普通射击共用同一套「射线命中才算数」的规则（文件头第 2 条）。
 
 signal fired(target: Node3D)
+signal skill_cast(kind: String)
+
+## 技能种类。场景里按人配（`game.tscn` / `next_level.gd` 的 PARTY）。
+enum Skill { NONE, GRENADE, SNIPE, SHRED, RAIL }
+
+const SKILL_NAMES := ["none", "grenade", "snipe", "shred", "rail"]
+## 小桃：三连榴弹（落点小范围）
+const GRENADE_COUNT := 3
+const GRENADE_DAMAGE := 90.0
+const GRENADE_RADIUS := 3.8
+const GRENADE_RANGE := 46.0
+## 小绿：单发狙击
+const SNIPE_DAMAGE := 240.0
+const SNIPE_RANGE := 70.0
+## 柚子：霰弹扫射（近距离一梭子）
+const SHRED_PELLETS := 12
+const SHRED_DAMAGE := 20.0
+const SHRED_RANGE := 26.0
+const SHRED_SPREAD_DEG := 9.0
+## 凯伊：轨道炮（穿一条线）
+const RAIL_DAMAGE := 220.0
+const RAIL_RANGE := 80.0
+const RAIL_WIDTH := 1.5
+## 目标缓存多久重扫一次（秒）：BOSS 会中途召分身/飞猪，只扫一次就看不见新目标
+const TARGET_REFRESH := 2.0
 
 @export var enabled := true
 ## 两次射击的间隔（秒）
 ## 用户 2026-11-14：「这也太恐怖了，加强主角团」——
 ## 原来是 1.8 s 一发、12 伤害（≈6.7 DPS），对着 14000 血的最终 BOSS
-## 等于挠痒。现在 0.55 s 一发、55 伤害（≈100 DPS/人），四个人 ≈400 DPS。
-@export var attack_interval := 0.55
+## 等于挠痒。先改成 0.55 s 一发、55 伤害（≈100 DPS/人）；
+## 同日再要求「全部队友加强攻速，攻击力不变」→ 0.30 s 一发（≈183 DPS/人）。
+@export var attack_interval := 0.30
 ## 进场后隔多久开始射击（秒）
 @export var attack_start_delay := 0.6
 @export var attack_range := 48.0
@@ -34,13 +65,22 @@ signal fired(target: Node3D)
 @export var muzzle_forward := 0.35
 @export var tracer_color := Color(0.55, 0.85, 1.0)
 @export var tracer_width := 0.012
+## 技能（见文件头）。NONE = 只会普通射击。
+@export var skill: Skill = Skill.NONE
+## 技能冷却（秒）
+@export var skill_interval := 10.0
+## 进场后隔多久放第一个技能（秒）
+@export var skill_first_delay := 4.0
 
 var _cooldown := 0.0
+var _skill_t := 0.0
+var _refresh_t := 0.0
 var _companion: Companion
 var _targets: Array[Node3D] = []
-var _targets_collected := false
 var _fx_root: Node3D
 var _shots := 0
+var _skills_cast := 0
+var _last_skill := ""
 ## 设置页里的「同伴开火」开关。与 `enabled` 分开存，理由见 `_is_active()`
 var _settings_enabled := true
 
@@ -51,6 +91,8 @@ func _ready() -> void:
 		push_warning("[CompanionGun] 父节点不是 Companion，这把枪不会工作")
 		return
 	_cooldown = attack_start_delay
+	# 四个人错开半秒，别让四个技能同一帧一起炸
+	_skill_t = skill_first_delay + randf() * 0.6
 	# 设置（Esc 菜单）：同伴到底开不开火，由玩家说了算
 	GameSettings.listen(_on_setting_changed)
 	_apply_settings()
@@ -61,7 +103,7 @@ func _ready() -> void:
 ##
 ## ⚠️ 特意**延迟到第一次开火时**才建：在 `_ready()` 里往父节点 `add_child()` 会撞上
 ##    「Parent node is busy setting up children」—— 那一刻父节点还在装自己的孩子
-##    （7 名同伴一次性报 7 条 ERROR）。放到 `_process` 里建就没这个问题。
+##    （当年 7 名同伴一次性报 7 条 ERROR）。放到 `_process` 里建就没这个问题。
 func _ensure_fx_root() -> void:
 	if _fx_root != null:
 		return
@@ -78,9 +120,16 @@ func _process(delta: float) -> void:
 	if not _is_active() or _companion == null:
 		return
 	_ensure_fx_root()
-	if not _targets_collected:
+	_refresh_t -= delta
+	if _refresh_t <= 0.0:
 		_collect_targets()
-		_targets_collected = true
+		_refresh_t = TARGET_REFRESH
+	_skill_t -= delta
+	if _skill_t <= 0.0:
+		var st := _pick_skill_target(_skill_range())
+		if st != null:
+			_cast_skill(st)
+			_skill_t = skill_interval
 	_cooldown -= delta
 	if _cooldown > 0.0:
 		return
@@ -91,8 +140,9 @@ func _process(delta: float) -> void:
 
 
 ## 目标 = 可击毁靶子（`targets` 组）+ 所有 Boss（`bosses` 组）。
-## 只收一次：这些节点不会在运行中被重建 —— 「死亡」只是内部标记 + 重生，
-## 节点本身一直在（见 `Target._die()` / `Boss._die()`），所以缓存是安全的。
+## 每 2 s 重扫一次：BOSS 会在战斗中召分身 / 飞猪，只扫一次的话新目标永远进不来。
+## 「死亡」只是内部标记 + 重生，节点本身一直在（见 `Target._die()` / `Boss._die()`），
+## 所以阵亡的目标仍然靠 `_is_dead()` 过滤，不需要在重扫时剔除。
 func _collect_targets() -> void:
 	_targets.clear()
 	for n in get_tree().get_nodes_in_group("targets"):
@@ -129,9 +179,28 @@ func _pick_target() -> Node3D:
 	return best
 
 
-## 瞄准点：目标中心稍抬高一点（靶子和 Boss 的碰撞盒中心大致在身高一半）
+## 瞄准点：沿身高试几个高度，**取第一个射线真能打中的**。
+##
+## 为什么不能固定一个高度：优香-恐怖 16 m 高、碰撞是「每根骨一个盒子」（BOX_PARTS），
+## 0.375 身高（6 m）正好落在两条大腿之间 —— 从脚下往上打的射线直接从裆下穿过去，
+## 榴弹 / 轨道炮实测全打空（探针日志 `hit=空`）。换个射手站位又可能刚好擦到腿盒，
+## 结果就变成「四个人有时打中有时不中」。
+##
+## 靶子没有 `height` 属性，仍然用原来的 +0.6 m（和以前完全一致）。
+const AIM_FRACTIONS := [0.7, 0.55, 0.4, 0.85]
+
 func _aim_point(t: Node3D) -> Vector3:
-	return t.global_position + Vector3.UP * 0.6
+	var h: Variant = t.get("height")
+	if h == null:
+		return t.global_position + Vector3.UP * 0.6
+	var top := clampf(float(h), 1.2, 20.0)
+	var from := muzzle_position()
+	for f in AIM_FRACTIONS:
+		var p := t.global_position + Vector3.UP * (top * float(f))
+		var hit := _ray(from, p)
+		if not hit.is_empty() and _is_same_target(hit.get("collider"), t):
+			return p
+	return t.global_position + Vector3.UP * (top * 0.55)
 
 
 ## 同伴的脸朝向。模型本体朝 +Z（见 companion.gd 文件头），所以 +Z 就是脸。
@@ -211,24 +280,259 @@ func _fire(target: Node3D) -> void:
 	fired.emit(target)
 
 
+# ────────────────────────── 技能 ──────────────────────────
+
+func skill_name() -> String:
+	var i := int(skill)
+	return String(SKILL_NAMES[i]) if i >= 0 and i < SKILL_NAMES.size() else "none"
+
+
+func _skill_range() -> float:
+	match skill:
+		Skill.GRENADE:
+			return GRENADE_RANGE
+		Skill.SNIPE:
+			return SNIPE_RANGE
+		Skill.SHRED:
+			return SHRED_RANGE
+		Skill.RAIL:
+			return RAIL_RANGE
+	return 0.0
+
+
+## 技能选目标：比普通射击宽 —— 不要求「目标在正前方 ±25° 内」，
+## 只要在技能射程内、有视线就打（技能本来就该是队友主动放的大招）。
+func _pick_skill_target(max_dist: float) -> Node3D:
+	if skill == Skill.NONE:
+		return null
+	var best: Node3D = null
+	var best_dist := INF
+	var eye := muzzle_position()
+	for t in _targets:
+		if not is_instance_valid(t) or _is_dead(t):
+			continue
+		var dist := eye.distance_to(_aim_point(t))
+		if dist > max_dist or dist < 1.0:
+			continue
+		if not _has_line_of_sight(t):
+			continue
+		if dist < best_dist:
+			best_dist = dist
+			best = t
+	return best
+
+
+func _cast_skill(target: Node3D) -> void:
+	if _companion == null or skill == Skill.NONE:
+		return
+	_ensure_fx_root()
+	# 技能里榴弹 / 霰弹 / 轨道炮都要遍历 `_targets`；枪被关掉时 `_process` 不跑，
+	# 不能指望每 2 s 那次重扫，所以放技能时自己再收一次。
+	_collect_targets()
+	var kind := skill_name()
+	var from := muzzle_position()
+	match skill:
+		Skill.GRENADE:
+			_skill_grenade(from, target)
+		Skill.SNIPE:
+			_skill_snipe(from, target)
+		Skill.SHRED:
+			_skill_shred(from, target)
+		Skill.RAIL:
+			_skill_rail(from, target)
+		_:
+			return
+	_skills_cast += 1
+	_last_skill = kind
+	skill_cast.emit(kind)
+
+
+## 小桃：往目标脚下抛三颗榴弹，落地小范围爆炸
+func _skill_grenade(from: Vector3, target: Node3D) -> void:
+	var base := target.global_position + Vector3.UP * 0.4
+	Vfx.flash_light(_fx_root, from, Color(1.0, 0.7, 0.35), 3.0, 0.18, 8.0)
+	for i in GRENADE_COUNT:
+		# 散布压到 0.6 倍半径：再大就有落点到了爆炸圈边缘、三颗里有一颗白扔
+		var r := GRENADE_RADIUS * 0.6
+		var off := Vector3(randf_range(-r, r), 0.0, randf_range(-r, r))
+		_throw_grenade(from, base + off, 0.55 + 0.08 * float(i))
+
+
+func _throw_grenade(from: Vector3, land: Vector3, flight: float) -> void:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.17
+	sm.height = 0.34
+	mi.mesh = sm
+	mi.material_override = _glow_mat(Color(1.0, 0.62, 0.25))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_fx_root.add_child(mi)
+	mi.top_level = true
+	mi.global_position = from
+	var arc := maxf(2.0, from.distance_to(land) * 0.22)
+	var tw := mi.create_tween()
+	tw.tween_method(func(k: float) -> void:
+		if is_instance_valid(mi):
+			var p := from.lerp(land, k)
+			p.y += sin(k * PI) * arc
+			mi.global_position = p,
+		0.0, 1.0, flight)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(mi):
+			mi.queue_free()
+		_explode(land, GRENADE_RADIUS, GRENADE_DAMAGE, Color(1.0, 0.62, 0.25), 1.15))
+
+
+## 爆炸结算：按**水平距离 + 竖直容差**判定（和 BOSS 的冲击波同一套思路）。
+## 只按 3D 球心算的话，10 m 高的目标身上会「炸脚下反而够不着」。
+func _explode(center: Vector3, radius: float, dmg: float, col: Color, scale_ := 1.0) -> void:
+	if _fx_root == null or not is_instance_valid(_fx_root):
+		return
+	var dist := 0.0
+	if _companion != null:
+		dist = _companion.global_position.distance_to(center)
+	Vfx.impact(_fx_root, center, col, scale_, dist)
+	for t in _targets:
+		if not is_instance_valid(t) or _is_dead(t):
+			continue
+		# 按**脚底**结算，不按躯干中心：优香 16 m 高，躯干在 9~14 m 上，
+		# 拿躯干算竖直距离的话一颗贴脚炸开的榴弹反而不算命中。
+		var base := t.global_position
+		var flat := Vector2(base.x - center.x, base.z - center.z).length()
+		if flat > radius + 0.6 or absf(base.y - center.y) > 2.5:
+			continue
+		# 这里**不加视线射线**：爆炸中心就在目标脚边（半径 3.8 m），
+		# 而从地面往躯干打的射线会从两腿之间穿过去、或者一出发就埋进地皮里
+		# （优香 16 m 高，实测 `hit=空`，三颗榴弹全白扔）。这个距离上不存在「隔墙」。
+		_damage(t, dmg, _aim_point(t))
+
+
+## 小绿：单发狙击，命中处一团绿色闪光
+func _skill_snipe(from: Vector3, target: Node3D) -> void:
+	var aim := _aim_point(target)
+	var hit := _ray(from, aim)
+	var at := aim
+	if not hit.is_empty():
+		at = hit.get("position", aim)
+	_beam(from, at, 0.055, Color(0.45, 1.0, 0.78), 0.22, 3.4)
+	Vfx.flash_light(_fx_root, at, Color(0.45, 1.0, 0.78), 5.0, 0.25, 12.0)
+	Vfx.burst(_fx_root, at, Color(0.45, 1.0, 0.78), 18, 1.0, 10.0, 0.4, -4.0)
+	if not hit.is_empty() and _is_same_target(hit.get("collider"), target):
+		_damage(target, SNIPE_DAMAGE, at)
+	Vfx.shake(0.3, 0.16)
+
+
+## 柚子：近距离霰弹扫射，一梭子 12 发
+func _skill_shred(from: Vector3, target: Node3D) -> void:
+	var base := (_aim_point(target) - from).normalized()
+	var total := 0.0
+	for i in SHRED_PELLETS:
+		var dir := _spread_dir(base, SHRED_SPREAD_DEG)
+		var to := from + dir * SHRED_RANGE
+		var hit := _ray(from, to)
+		var at := to
+		var victim: Node3D = null
+		if not hit.is_empty():
+			at = hit.get("position", to)
+			victim = _victim_of(hit.get("collider"))
+		var col := Color(1.0, 0.82, 0.45)
+		_beam(from, at, 0.012, col, 0.09, 2.0)
+		if victim != null and not _is_dead(victim):
+			_damage(victim, SHRED_DAMAGE, at)
+			total += SHRED_DAMAGE
+	Vfx.flash_light(_fx_root, from, Color(1.0, 0.82, 0.45), 4.0, 0.22, 10.0)
+	if total > 0.0:
+		Vfx.burst(_fx_root, _aim_point(target), Color(1.0, 0.82, 0.45), 16, 1.0,
+			9.0, 0.35, -4.0)
+	Vfx.shake(0.4, 0.2)
+
+
+## 凯伊：轨道炮，一条线扫过去（线附近的所有目标都吃伤害）
+func _skill_rail(from: Vector3, target: Node3D) -> void:
+	var dir := (_aim_point(target) - from).normalized()
+	var end := from + dir * RAIL_RANGE
+	# 光束先撞墙就截断在墙面上
+	var wh := _ray(from, end)
+	if not wh.is_empty() and _victim_of(wh.get("collider")) == null:
+		end = wh.get("position", end)
+	var victims: Array[Node3D] = []
+	for t in _targets:
+		if not is_instance_valid(t) or _is_dead(t):
+			continue
+		var p := _aim_point(t)
+		if _point_seg_dist(p, from, end) > RAIL_WIDTH + 0.8:
+			continue
+		var hit := _ray(from, p)
+		if hit.is_empty() or not _is_same_target(hit.get("collider"), t):
+			continue
+		victims.append(t)
+	var col := Color(0.72, 0.4, 1.0)
+	for t in victims:
+		_damage(t, RAIL_DAMAGE, _aim_point(t))
+	_beam(from, end, 0.16, col, 0.35, 4.2)
+	_beam(from, end, 0.05, Color(1.0, 0.92, 1.0), 0.18, 6.0)
+	Vfx.flash_light(_fx_root, from, col, 6.0, 0.3, 20.0)
+	if not victims.is_empty():
+		Vfx.burst(_fx_root, _aim_point(victims[0]), col, 26, 1.4, 14.0, 0.5, -4.0)
+	Vfx.shake(0.55, 0.3)
+
+
+func _spread_dir(base: Vector3, deg: float) -> Vector3:
+	var right := base.cross(Vector3.UP)
+	if right.length() < 0.01:
+		right = Vector3.RIGHT
+	right = right.normalized()
+	var yaw := deg_to_rad(randf_range(-deg, deg))
+	var pitch := deg_to_rad(randf_range(-deg, deg) * 0.55)
+	return base.rotated(Vector3.UP, yaw).rotated(right, pitch).normalized()
+
+
+## 点到线段的距离
+func _point_seg_dist(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 < 0.0001:
+		return p.distance_to(a)
+	var k := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return p.distance_to(a + ab * k)
+
+
+## 射线打到的碰撞体属于哪个可打目标（Boss 的子碰撞体要往上找一层）
+func _victim_of(collider: Variant) -> Node3D:
+	if not (collider is Node):
+		return null
+	var n := collider as Node
+	for t in _targets:
+		if t == n or t == n.get_parent():
+			return t
+	return null
+
+
+func _damage(t: Node3D, amount: float, at: Vector3) -> void:
+	if t.has_method("take_damage"):
+		t.take_damage(amount, at, (muzzle_position() - at).normalized())
+
+
 ## 一条瞬间出现、0.08 s 淡出的枪线（为什么不用飞行光弹见文件头）
 func _spawn_tracer(from: Vector3, to: Vector3) -> void:
+	_beam(from, to, tracer_width, tracer_color, 0.08, 1.8)
+
+
+## 一根加色发光的「枪线 / 光束」。技能和普通射击共用（宽度 / 颜色 / 停留时间可调）。
+func _beam(from: Vector3, to: Vector3, width: float, col: Color, life: float,
+		energy := 1.8) -> void:
 	var total := from.distance_to(to)
 	if total < 0.05 or _fx_root == null:
 		return
 	var mi := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(tracer_width, tracer_width, 1.0)
+	box.size = Vector3(width, width, 1.0)
 	mi.mesh = box
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = tracer_color
-	mat.emission_enabled = true
-	mat.emission = tracer_color
-	mat.emission_energy_multiplier = 1.8
+	var mat := _glow_mat(col)
+	mat.emission_energy_multiplier = energy
 	mi.material_override = mat
 	_fx_root.add_child(mi)
+	mi.top_level = true
 
 	# 局部 +Z 对到射线方向，于是 scale.z 就是枪线长度（盒子 z 边长定义为 1.0）
 	var dir := (to - from).normalized()
@@ -243,13 +547,51 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	mi.global_position = from + dir * (total * 0.5)
 
 	var tw := mi.create_tween()
-	tw.tween_property(mat, "albedo_color:a", 0.0, 0.08)
+	tw.tween_property(mat, "albedo_color:a", 0.0, life)
 	tw.tween_callback(mi.queue_free)
+
+
+## 加色发光的无光照材质（枪线 / 榴弹都用它）
+func _glow_mat(col: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_color = col
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = 1.8
+	return mat
 
 
 ## 开过几枪 —— 自检用
 func shot_count() -> int:
 	return _shots
+
+
+## 放过几次技能 —— 自检用
+func skill_count() -> int:
+	return _skills_cast
+
+
+func last_skill() -> String:
+	return _last_skill
+
+
+## 自检用：无视冷却 / 距离 / 朝向，直接朝目标放一次技能。
+## 返回技能名（放不出来时返回空串）。
+func debug_force_skill(target: Node3D = null) -> String:
+	if _companion == null or skill == Skill.NONE:
+		return ""
+	_ensure_fx_root()
+	var t := target
+	if t == null or not is_instance_valid(t):
+		t = _pick_skill_target(_skill_range())
+	if t == null:
+		return ""
+	_cast_skill(t)
+	_skill_t = skill_interval
+	return skill_name()
 
 
 # --- 设置（Esc 菜单 / scripts/game_settings.gd）---

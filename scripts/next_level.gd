@@ -647,15 +647,21 @@ func _on_final_cleared() -> void:
 ## 「加强主角团，主角团就不要带优香了，小雪也不是打仗的暂时下线，诺亚不好打优香，下线」
 ## 所以终局到场的是：小桃 / 小绿 / 柚子 / 凯伊。
 ## 优香（BOSS 本人）、小雪（不打仗）、诺亚（对优香不好打）都不来。
+## 每人除了枪还有**一个技能**（用户 2026-11-14：「加技能，攻击力不变」）：
+## 小桃=三连榴弹、小绿=狙击、柚子=霰弹扫射、凯伊=轨道炮。见 companion_gun.gd。
 const PARTY := [
 	{"name": "小桃", "model": "res://models/companions/Momoi.glb",
-		"slot": Vector3(-2.6, 0.0, 1.6)},
+		"slot": Vector3(-2.6, 0.0, 1.6), "skill": CompanionGun.Skill.GRENADE,
+		"color": Color(1.0, 0.62, 0.78)},
 	{"name": "小绿", "model": "res://models/companions/Midori.glb",
-		"slot": Vector3(2.6, 0.0, 1.6)},
+		"slot": Vector3(2.6, 0.0, 1.6), "skill": CompanionGun.Skill.SNIPE,
+		"color": Color(0.45, 1.0, 0.78)},
 	{"name": "柚子", "model": "res://models/companions/Yuzu.glb",
-		"slot": Vector3(-3.6, 0.0, -1.8)},
+		"slot": Vector3(-3.6, 0.0, -1.8), "skill": CompanionGun.Skill.SHRED,
+		"color": Color(1.0, 0.82, 0.45)},
 	{"name": "凯伊", "model": "res://models/companions/Kei_ext.glb",
-		"slot": Vector3(3.6, 0.0, -1.8)},
+		"slot": Vector3(3.6, 0.0, -1.8), "skill": CompanionGun.Skill.RAIL,
+		"color": Color(0.72, 0.4, 1.0)},
 ]
 
 var _party: Array[Node3D] = []
@@ -678,6 +684,10 @@ func _spawn_party() -> void:
 		c.set("display_name", String(spec["name"]))
 		c.set("model_path", String(spec["model"]))
 		c.set("slot", spec["slot"])
+		var gun := c.get_node_or_null("Gun")
+		if gun != null:
+			gun.set("skill", int(spec["skill"]))
+			gun.set("tracer_color", spec["color"])
 		add_child(c)
 		var off: Vector3 = spec["slot"]
 		var at := _player.global_position + off

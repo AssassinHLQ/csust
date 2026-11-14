@@ -164,6 +164,9 @@ func _run() -> void:
 	# 主角团：终局开场到场 4 人（不含优香/小雪/诺亚），并且枪被加强了
 	var party_names: Array[String] = []
 	var gun_dmg := 0.0
+	var gun_intervals: Array[float] = []
+	var gun_skills: Array[String] = []
+	var party_guns: Array[Node] = []
 	for i in 4:
 		var c := _lvl.get_node_or_null("Party%d" % i)
 		if c == null:
@@ -171,11 +174,25 @@ func _run() -> void:
 		party_names.append(String(c.get("display_name")))
 		var g := c.get_node_or_null("Gun")
 		if g != null:
-			gun_dmg = float(g.get("attack_damage"))
-			g.set("enabled", false)   # 测技能判定时别让队友的枪掺和
+			gun_dmg = maxf(gun_dmg, float(g.get("attack_damage")))
+			gun_intervals.append(float(g.get("attack_interval")))
+			gun_skills.append(String(g.call("skill_name")))
+			party_guns.append(g)
+			g.set("enabled", false)   # 测 BOSS 招式判定时别让队友的枪掺和
 	_check("主角团到场 4 人（不含优香/小雪/诺亚）", party_names.size() == 4,
 		", ".join(party_names))
 	_check("主角团的枪被加强（≥50 伤害）", gun_dmg >= 50.0, "%.0f 伤害/发" % gun_dmg)
+	var fast := gun_intervals.size() == 4
+	for v in gun_intervals:
+		if v > 0.32:
+			fast = false
+	_check("队友攻速全部加强（≤ 0.32 s/发）", fast,
+		"%s" % str(gun_intervals))
+	var uniq := {}
+	for s in gun_skills:
+		uniq[s] = true
+	_check("四人各带一个技能且互不相同", gun_skills.size() == 4 and uniq.size() == 4,
+		", ".join(gun_skills))
 	await _shot("19_party", safe_spot() + Vector3(-12, 16, 20),
 		safe_spot() + Vector3(0, 4, 0))
 
@@ -218,6 +235,48 @@ func _run() -> void:
 	# 测试期间别让闪现乱触发（会打乱"BOSS 固定在 18 m 外"的前提）
 	_boss.call("debug_set_blink_cd", 999.0)
 	_boss.call("debug_set_chase", false)
+	# ⚠️ 追击是**这之后**才关掉的，`_until_idle` 那几秒它会朝玩家挪窝
+	#    （实测有一次直接贴到队友身上：射线从模型内部出发，榴弹/轨道炮全打空）。
+	#    这里把「18 m 外」重新钉一遍，后面的判定前提才是真的。
+	_boss.global_position = Vector3(stand.x + 18.0, stand.y, stand.z)
+	await _wait(0.3)
+
+	# ── 队友技能：四个都要真的打到 BOSS 身上 ──
+	# BOSS 就在 18 m 外、玩家被钉住 → 四个技能都在射程内（最短的霰弹 26 m）
+	#
+	# ⚠️ 队友在这之前的跟随会被拖进广场的洞里（日志里几十次「被拉回玩家身边」），
+	#    射线从洞里往上打全被地形挡住，四个技能一个都打不到。这里把四个人
+	#    摆到玩家旁边、**关掉跟随物理**，保证射线是从地面上打出去的。
+	for i in party_guns.size():
+		var c := party_guns[i].get_parent() as Node3D
+		c.set_physics_process(false)
+		c.global_position = stand + Vector3(-1.8 + 1.2 * float(i), 0.1, 1.5)
+		c.rotation.y = atan2(_boss.global_position.x - c.global_position.x,
+			_boss.global_position.z - c.global_position.z)
+	await _wait(0.2)
+	_boss.call("debug_set_evasion", 0.0)   # 别让闪避把这条测成偶然
+	var skill_rows: Array[String] = []
+	var skill_ok := party_guns.size() == 4
+	for g in party_guns:
+		var hp0 := _hp_boss()
+		var kind := String(g.call("debug_force_skill", _boss))
+		await _wait(1.5)
+		var dealt := hp0 - _hp_boss()
+		skill_rows.append("%s −%.0f" % [kind, dealt])
+		if kind == "" or dealt < 1.0:
+			skill_ok = false
+	_check("四个队友技能都能打到 BOSS 并扣血", skill_ok, ", ".join(skill_rows))
+
+	# 出图：小桃的榴弹在空中 + 凯伊的轨道炮同时放，留一张「技能」的证据图
+	party_guns[0].call("debug_force_skill", _boss)
+	party_guns[3].call("debug_force_skill", _boss)
+	await _wait(0.2)
+	await _shot("20_party_skills", stand + Vector3(7.0, 13.0, 19.0),
+		stand + Vector3(9.0, 5.0, 0.0))
+
+	_boss.call("debug_set_evasion", -1.0)
+	_boss.call("debug_reset")
+
 	await _test_shock_hit()
 	await _test_shock_air()
 	await _test_shock_far()
