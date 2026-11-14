@@ -9,14 +9,14 @@ extends SceneTree
 ##   4. 许可原文（LICENSE 文件）在位；随仓库分发的素材真在磁盘上
 ##   5. `CREDITS.md` 与 `credits.gd` 没走散（每条 path / 作者都在人读版里出现）
 ##   6. 游戏内面板真的画得出来（Esc → 设置 →「致谢与素材署名」），
-##      并且 5 位 Boss 的 HUD 血条不会压到左上角的泼溅状态行
+##      并且 7 位 Boss 的 HUD 血条不会压到左上角的泼溅状态行
 ##
 ## 用法：godot --path <工程> --script res://scripts/_verify_credits.gd
 
 var _fail := 0
 var _pass := 0
 
-const FIELD_KEYS := ["group", "path", "title", "author", "license",
+const FIELD_KEYS := ["group", "path", "title", "author", "platform", "license",
 	"distributed", "source", "license_file", "note"]
 ## 覆盖率检查的根目录。`story/`、`scripts/` 等本项目自己的目录不在此列
 ## （它们在表里以单条「本项目作者 / MIT」整体登记）。
@@ -60,6 +60,7 @@ func _run() -> void:
 		seen[key] = true
 	for g in Credits.GROUPS:
 		_check(groups_used.has(g), "分组「%s」至少有一条素材" % g)
+	_verify_attribution(entries)
 
 	print("\n========== 2. 覆盖率：每个素材目录都登记过 ==========")
 	for r in COVER_ROOTS:
@@ -90,10 +91,10 @@ func _run() -> void:
 		if _is_dir("res://" + path):
 			if d["distributed"]:
 				continue
-			_check(ignore_text.contains(path),
+			_check(_ignore_mentions_path(ignore_text, path),
 				"「%s」标了不随仓库分发，.gitignore 里确实有 %s" % [d["title"], path])
 		else:
-			_check(true if d["distributed"] else ignore_text.contains(path),
+			_check(true if d["distributed"] else _ignore_mentions_path(ignore_text, path),
 				"「%s」分发标志与 .gitignore 一致" % d["title"])
 
 	print("\n========== 4. 许可原文 / 素材在位 ==========")
@@ -121,6 +122,8 @@ func _run() -> void:
 		var author_key: String = String(d["author"]).split("（")[0].replace("*", "")
 		_check(md.replace("*", "").contains(author_key),
 			"CREDITS.md 里写了「%s」的作者 %s" % [d["title"], d["author"]])
+		if d["platform"] != "":
+			_check(md.contains(d["platform"]), "CREDITS.md 里写了「%s」的平台" % d["title"])
 
 	print("\n========== 6. 游戏内「致谢与素材署名」面板 ==========")
 	var game: Node = (load("res://scenes/game.tscn") as PackedScene).instantiate()
@@ -149,7 +152,10 @@ func _run() -> void:
 				_check(text.contains(who), "正文里写到了作者「%s」" % who)
 			for what in ["霍德", "佩洛洛斯拉", "倭瓜优香", "飞猪优香", "霸王龙优香"]:
 				_check(text.contains(what), "正文里写到了素材「%s」" % what)
-			_check(text.contains("不随仓库分发"), "正文说明了哪些素材不随仓库分发")
+			_check(text.contains("Git 跟踪状态与游戏导出包含规则分开"), "正文分清 Git 与游戏导出包含规则")
+			_check(text.find("作者：Kenney") < text.find("作者：Cup Nooble"), "实际面板先显示 Kenney，再显示 Cup Nooble")
+			for platform in ["itch.io", "模之屋", "Sketchfab", "哔哩哔哩", "GitHub", "爱给网"]:
+				_check(text.contains("平台：" + platform), "实际面板显示平台「%s」" % platform)
 		var scroll := panel.find_child("Scroll", true, false) as ScrollContainer
 		_check(scroll != null, "正文放在可滚动容器里（整张表会超出面板）")
 	menu.close_credits()
@@ -157,7 +163,7 @@ func _run() -> void:
 	menu.close()
 	_check(not menu.is_open, "设置界面可以关闭")
 
-	print("\n========== 7. 五位 Boss 的 HUD 血条不压泼溅状态行 ==========")
+	print("\n========== 7. 七位 Boss 的 HUD 血条不压泼溅状态行 ==========")
 	var hud := game.get_node_or_null("HUD")
 	_check(hud != null, "场景里有 HUD")
 	if hud != null:
@@ -193,6 +199,52 @@ func _run() -> void:
 
 
 # --- 工具 ---
+
+func _verify_attribution(entries: Array) -> void:
+	_check(entries[0]["author"] == "Kenney" and entries[1]["author"] == "Cup Nooble",
+		"首两位致谢固定为 Kenney / Cup Nooble")
+	for e in entries:
+		var omit_platform: bool = e["path"] == "assets/music" and e["author"].contains("Toby Fox")
+		_check(e["platform"] != "" or omit_platform, "「%s」有平台（Toby Fox 为用户明确例外）" % e["title"])
+	for p in ["models/boss", "models/boss_pig", "models/boss_squash", "models/boss_hod",
+		"models/boss_perorozilla", "models/boss_binah", "models/boss_goliath"]:
+		var e := Credits.entry_for(p)
+		_check(e.get("author", "").contains("一个睿智") and e.get("platform", "") == "模之屋",
+			"%s 作者为一个睿智，平台模之屋" % p)
+	for p in ["models/shop_building", "models/rocket_falcon9"]:
+		_check(Credits.entry_for(p).get("platform", "") == "Sketchfab", "%s 标明 Sketchfab" % p)
+	for p in ["assets/arona_frames", "assets/arona_frames_b", "assets/arona_frames_c",
+		"assets/plana_frames", "assets/plana_frames_b", "assets/plana_frames_c"]:
+		_check(Credits.entry_for(p).get("platform", "") == "哔哩哔哩", "%s 视频标明哔哩哔哩" % p)
+	for p in ["assets/companion_voice", "story/voice", "story/voice/shop", "story/voice/kei"]:
+		var e := Credits.entry_for(p)
+		_check(e.get("author", "").contains("SLNeil") and e.get("platform", "").contains("哔哩哔哩")
+			and e.get("source", "").contains("GPT-SoVITS"), "%s 标明 SLNeil / 哔哩哔哩 / GPT-SoVITS" % p)
+	var gdgs := Credits.entry_for("addons/gdgs")
+	for who in ["ReconWorldLab", "4321ba", "beiller", "sodih3iw", "AssassinHLQ"]:
+		_check(gdgs.get("author", "").contains(who), "GDGS 保留开发者 %s" % who)
+	_check(Credits.entry_for("assets/ui/mono.ttf").get("title", "").contains("JetBrains Mono"),
+		"Mono 字体单独登记为 JetBrains Mono")
+	_check(Credits.entry_for("assets/tank_turmoil").get("author", "").begins_with("AssassinHLQ"),
+		"坦克小游戏保留项目作者，算法参考不覆盖作品作者")
+	_check(Credits.entry_for("scripts/tank_turmoil").get("platform", "") == "GitHub", "坦克算法参考注明 GitHub")
+	_check(not Credits.entry_for("_arisu_captures/_shots").is_empty(), "当前开场 PNG 路径有独立署名")
+	var text := Credits.plain_text()
+	_check(text.find("作者：Kenney") >= 0 and text.find("作者：Cup Nooble") > text.find("作者：Kenney"),
+		"生成的正文按指定先后顺序显示作者")
+
+
+func _ignore_mentions_path(ignore_text: String, path: String) -> bool:
+	# 此处核对清单记录与忽略配置的对应；不将 Git 忽略规则用于游戏导出。
+	# 子目录可继承父目录规则，例如 _arisu_captures/_shots。
+	for line in ignore_text.split("\n"):
+		var rule := line.strip_edges()
+		if rule.is_empty() or rule.begins_with("#") or rule.begins_with("!"):
+			continue
+		rule = rule.trim_prefix("/").trim_suffix("/")
+		if path.match(rule) or path.begins_with(rule + "/") or rule.begins_with(path + "/"):
+			return true
+	return false
 
 func _subdirs(path: String) -> PackedStringArray:
 	var out: PackedStringArray = []

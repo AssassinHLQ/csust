@@ -1,118 +1,129 @@
-# 素材署名与许可（CREDITS）
+# 素材署名与致谢
 
-> **这份文件是 `scripts/credits.gd` 的人读版。** 游戏里 Esc → 设置 →「致谢与素材署名」
-> 显示的是同一份数据；`scripts/_verify_credits.gd` 会断言 `models/`、`assets/`、
-> `addons/`、`splatdata/` 下的**每一个目录**都在这张表里登记过 ——
-> 也就是说：**新加一套素材却没署名，自检直接红。**
+本清单与 `scripts/credits.gd` 同步，游戏内入口：Esc → 设置 → 致谢与素材署名。更新日期：2026-11-14。
 
-本项目自己的代码、场景、着色器、文档以 **MIT** 授权，见 [LICENSE](LICENSE)。
-许可分两类：能随仓库分发的（✅）与**只能本地使用、不可再分发**的（❌，已被
-`.gitignore` 排除，克隆者需自己合法取得才能运行对应部分）。
+致谢顺序按使用者要求：**第一位 Kenney，第二位 Cup Nooble**。每条列出作者与平台；Toby Fox 按使用者要求省略平台。
 
-## 画面上最重要的三件事
+作者、下载整理平台与工具作者分别记录。未查明的作者或原始页面保持待查，不将下载站当作原作者。Git 忽略状态仅指源码版本管理，不决定游戏打包是否包含素材，也不代表授权结论。当前开场的 PNG 已纳入导出。
 
-1. **主角、七名同伴、两位 Blue Archive 角色的 Boss、泼溅扫描** —— 版权不属于本项目，
-   只用于本地学习研究，**不得再分发、不得商用、不得用于任何发布产物**。
-   这些模型取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)
-   （Blue Archive 官方素材的解包整理版，整理者 **lihaohong6 / Peterli**）——
-   **解包不改变版权**，它们仍然是 NEXON Games / Yostar 的专有素材。
-2. **四位玩家二创的 Boss（飞猪 / 倭瓜 / 霍德 / 佩洛洛斯拉）出自「一个睿智」**，
-   派生自 Blue Archive，同样是专有版权。署名照下面表格写。
-3. **界面字体 `assets/ui_font/Aa暗夜深渊.ttf` 商用需授权**。发布前要么取得授权，
-   要么删掉它（会自动回退到 OFL 授权的 Fusion Pixel）。
+本项目自有代码使用 MIT（见 `LICENSE`）；坦克小游戏原工程自有代码附 CC0；第三方美术、模型、声音、字体与音乐分别适用其原始条款。
 
-## 一、代码与插件
+## 特别致谢
 
-| 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
-| 全部 GDScript 代码、场景、着色器 | 本项目作者 | MIT | ✅ | `scripts/`、`scenes/`、`project.godot` | 见 [LICENSE](LICENSE) |
-| 全景天空盒（粉/日/夜/黄昏） | AllSky Free（Richard Whitelock） | MIT | ✅ | `assets/sky/`，[AllSkyFree_Godot](https://github.com/rpgwhitelock/AllSkyFree_Godot) | 原图 8192~16384 缩到 4096×2048 JPEG |
-| 空地地砖贴图 + 法线图 | 本项目作者（程序生成） | MIT | ✅ | `assets/tex/`，`tools/make_lot_paver.py` | 完全可平铺 |
-| [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | ReconWorldLab | MIT | ✅ | `addons/gdgs/` | 高斯泼溅渲染插件；原许可保留在 `addons/gdgs/LICENSE` |
-| 校园 GGS 泼溅光栅器（Godot 4.7 移植版） | **2Retr0**（GodotGSplat 原作者）；本项目移植到 4.7，并加了校园专用的 bin 加载与全屏合成 | MIT | ✅ | `addons/ggs_campus/`，[GodotGSplat](https://github.com/2Retr0/GodotGSplat)，许可原文 `addons/ggs_campus/NOTICE.md` | 6.14M 高斯校园 72–83 fps、约 5 GB 显存；不用 Compositor，走全屏 quad + 天空
+| UI Pack: Pixel Adventure 2.0（九宫格面板 / 按钮切片）<br>`assets/ui` | Kenney | Kenney.nl | https://kenney.nl/assets/ui-pack-pixel-adventure | CC0 1.0（公有领域，可商用、无需署名）；原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 优先致谢第一位。提供像素界面素材；面板中心填白等适配由本项目完成。 |
+| Sprout Lands UI Pack（设置界面皮肤）<br>`assets/ui_sprout` | Cup Nooble | itch.io | https://cupnooble.itch.io/sprout-lands-ui-pack | 免费但限非商业，禁止再分发或转售（即使修改过）；原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 优先致谢第二位。作者 Cup Nooble，Sprout Lands UI Pack；原始条款保留在 LICENSE_SproutLands.txt。 |
 
-## 二、角色与 Boss 模型
+## 代码与插件
 
-> 场上默认**只有飞猪优香**一位（不挤）；其余六位在 `scenes/bosses_standby.tscn`
-> 里待命，`-- --bosses=all` 才上场。
->
-> **「分发」一列**：❌ = 不随仓库分发（克隆后要自己合法取得）；✅ = 真的在这仓库里。
-
-| 素材 | 作者 / 版权方 | 许可 | 分发 | 位置 / 来源 | 说明 |
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
-| 比纳（第六位 Boss，备用） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_binah/`，来源 `比纳_by_一个睿智.zip` | `Binah_Original.fbx`，44 骨；3 个材质（本体/环、武器面、光环）；`*_Mask.png` 同上 |
-| 哥利亚（第七位 Boss，备用） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_goliath/`，来源 `哥利亚_by_一个睿智.zip` | `Goliath_Decagram_Vulcan.fbx`，34 骨、单网格单材质 |
-| 霍德（第四位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_hod/`，来源 `霍德_by_一个睿智.zip` | `HOD_Original.fbx`，164 骨、无动画；3 个材质；`*_Mask.png` 是原作者渲染遮罩，游戏里不绑 |
-| 佩洛洛斯拉（第五位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_perorozilla/`，来源 `佩洛洛斯拉_by_一个睿智.zip` | `Perorozilla_Original.fbx`，47 骨、无动画；6 网格共用 1 材质；5 张表情变体只留 1 张 |
-| 倭瓜优香（第三位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_squash/`，来源 `倭瓜优香压缩文件_by_一个睿智.zip` | `倭瓜优香.obj`，纯静态网格、无骨架；4 个材质 |
-| 飞猪优香（第二位 Boss） | **一个睿智** | 专有（Blue Archive 二创） | ❌ | `models/boss_pig/`，来源 `飞猪优香 (2)_by_一个睿智.zip` | `猪猪优香.fbx`；`uv/` 里两张是作者的成品渲染图，已挪到 `ref/` 当贴图基准 |
-| 霸王龙优香（第一位 Boss） | Blue Archive 玩家二创（原作者未标注） | 专有 | ❌ | `models/boss/` | `优香霸王龙.fbx`，73 骨、无动画 |
-| 七名同伴（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/companions/`，来源 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包，整理者 lihaohong6 / Peterli） | 均取初始形态；凯伊用 `Kei_ext.glb` |
-| **普拉娜**（电脑里第二个虚拟助手，终端敲 `plana` 出现） | **bilibili UP 瞿黧**（《依旧送送送，普拉娜绿幕素材，想用的可以自己拿》，BV1jsN26uEF3）；角色 © NEXON Games / Yostar | 授权未核实（素材无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `assets/plana_frames/`（`.gitignore` 排除） | `assets/plana_frames/`，源：用户本地的 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`（720×786 / 30 fps / 29.53 s） | **2026-11-12** 用户要求「扣绿幕，输入 plana 就出现这」。绿幕底色实测 `#46E200`，ffmpeg `chromakey` + `despill=type=green` 去绿边 → 15 fps / 720×786 带 alpha PNG **443 帧 / 126.6 MB**（脚本 `_tools/fetch_plana_frames.ps1`）。⚠️ **Godot 播不了带 alpha 的 .ogv**（实测帧格式是 RGBA8 但最小 alpha=255、半透明采样 0 个；ffmpeg 回解还报 `error in unpack_block_qpis`），所以走序列帧 + 环形缓冲（**16 帧上限**，约 36 MB 显存 —— 2026-11-13 素材放大后从 48 帧降下来）。**2026-11-13** 起改为**画在终端右半屏**（`arch_terminal.gd::summon()`，台词走终端正文），不再开独立页面 |
-| **阿洛娜**（终端右半屏的虚拟助手，敲 `arona` 出现）— **绿幕帧序列** | **bilibili UP 香草BA**（空间 [3546885205789214](https://space.bilibili.com/3546885205789214)，原画面水印「浅羽香草 bilibili」）；角色 © NEXON Games / Yostar | 授权未核实（素材无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `assets/arona_frames/`（`.gitignore` 排除） | `assets/arona_frames/`，源：用户 2026-11-12 下载的绿幕视频 | **2026-11-13** 用户明确要求「arona **换这个**扣绿幕」，而且「**不是新开一个界面**，而是直接在 arch 右半部分显现、遮住系统」。ffmpeg：按比例 `crop` 掉顶部 4.87% 的水印带（源 1080×1848，写死坐标换分辨率会裁歪），再把右上角刷成**纯绿**让 `chromakey` 一起抠掉（水印是白色半透明字，只抠绿会留一行白字），然后 `chromakey=0x2EDC01` + `despill=type=green` → 12 fps / 720×1172 带 alpha PNG **389 帧 / 172 MB**（脚本 `_tools/fetch_arona_frames.ps1`）。和普拉娜共用 `frame_anim.gd` 的环形缓冲（**16 帧上限 ≈ 54 MB**），不会一次性吃掉几百 MB 显存 |
-| **阿洛娜 / 普拉娜 的中文配音**（电脑右半屏的台词） | **本项目用 GPT-SoVITS 生成**（音色取自用户提供的阿洛娜 / 普拉娜日配数据集训练出的模型）；角色 © NEXON Games / Yostar | 授权未核实（角色音色版权 NEXON / Yostar）——仅本地学习交流，不可商用、不可再分发 | ❌ `assets/companion_voice/`（`.gitignore` 排除） | 本机 GPT-SoVITS v2pro ＋ `ALuoNa-e15.ckpt` / `Plana-e15.ckpt` 等微调权重；参考音频取日配 `Arona_Academy_Talk_3.wav` / `New_NP0035_Work_Talk_4.wav` | **2026-11-13** 用户「arona 的配音也下好了，需要配音完整看看效果」。34 句（阿洛娜 18 / 普拉娜 16）/ 32 kHz 单声道 / 9.4 MB，`text_lang=zh` + 日配参考做跨语种合成（参考音频只说音色与韵律，它自己说的「先生」不会出现在结果里）。台词由 `_dump_companion_lines.gd` 从 `arch_terminal.gd` 的 `COMPANIONS` 导出，屏幕与配音同词；生成脚本 `_tools/gen_companion_voice.py` |
-| **阿洛娜 第 2 版素材**（木偶半身，《阿罗娜木偶》） | **bilibili UP 忧郁的优_**（《阿罗娜木偶，可直接用，也可艾特》）；角色 © NEXON Games / Yostar | 授权未核实（素材无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `assets/arona_frames_b/`（`.gitignore` 排除） | 源：用户 2026-11-13 下载的 `阿罗娜木偶，可直接用，也可艾特_视频.mp4`（1290×1078 / 30 fps / 15.0 s，绿幕 #05D504） | 半身素材（举白纸盒）。ffmpeg：按主体包围盒 `crop=1000:1068:280:10` → `chromakey=0x05D504` + `despill` → 12 fps / 720×769 共 **180 帧 / 69.8 MB**（脚本 `_tools/fetch_arona_frames_b.ps1`）。终端 `arona` 连叫两次会在两版素材间轮换，`arona 2` 直接点名 |
-| **普拉娜 第 2 版素材**（近景头肩，《普拉娜自己取》） | **bilibili UP 星冻qwq**（《普拉娜自己取》）；角色 © NEXON Games / Yostar | 授权未核实（素材无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `assets/plana_frames_b/`（`.gitignore` 排除） | 源：用户 2026-11-13 下载的 `普拉娜自己取_视频.mp4`（1280×720 / 30 fps / 20.0 s，绿幕 #00DC22） | 近景（头 + 肩 + 光环）。原画面左上角有上传者水印「小星野大叔 bilibili」——白字抠不掉、裁顶部又会削光环，所以用 `drawbox` 把那块刷成纯绿让 chromakey 一并吞掉。ffmpeg：`drawbox` → `crop=560:718:372:2` → `chromakey=0x00DC22` + `despill` → 15 fps / 560×718 共 **300 帧 / 66.6 MB**（脚本 `_tools/fetch_plana_frames_b.ps1`） |
-| 阿洛娜 3D 模型（**已停用**，改用上面的绿幕帧序列） | 爱给网（aigei.com）用户上传的「碧蓝档案 阿罗娜 3d模型」，作者未署名；角色 © NEXON Games / Yostar | 授权未核实（下载包无许可文件）——仅本地学习交流，不可商用、不可再分发 | ❌ `models/arona/`（`.gitignore` 排除） | `models/arona/arona.glb`，源：用户本地的 `碧蓝档案 阿罗娜 3d模型_爱给网_aigei_com\source\[BlueArchive] - Arona.blend` + 6 张贴图（Body / Eye / Eyebrow / Face / Hair / Halo） | **2026-11-12** 用户要求「打 arona 出现电脑里的阿洛娜」。磁盘上**没有 Live2D**（`moc3` / `model3.json` 全无），所以 Blender 5.2 后台转 GLB（`_tools/export_arona_glb.py`）：原档贴图路径是坏的（`//Arona Body.png` 空格 + 少了 `textures/`），且材质是 MMD 的（每材质 3 个 Material Output，glTF 只认 Principled 那个，否则**静默丢贴图**）—— 脚本里整块重建材质，产物 1.31 MB / 205 骨 / 6 材质贴图内嵌。**2026-11-13 已不再挂载**（`arona_stage.gd` / `arona_page.gd` 与 GLB 都留着备用） |
-| RTX 5090 显卡模型（最后平台房顶的资产） | 爱给网（aigei.com）用户上传，作者未署名 | 专有（仅限学习交流，不可商用） | ❌ | `models/rtx5090/`，来源：爱给网下载的 `RTX5090.obj`（4.5 MB，29,480 面） | 2026-10-20 用户提供并当天换成高模（同目录还留着 945 KB 的 `RTX5090simplified.obj`）；`.gitignore` 排除了整个目录，缺它时屋顶用程序化占位卡 |
-| BANK 招牌模型（最后平台小屋屋顶） | **使用者自制**（Rhino 导出 OBJ） | 归使用者所有 | ✅ `models/bank/BANK.obj` | `models/bank/`，2026-10-20 桌面提供 | 1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 缺失，仓库补了一份最小 `BANK.mtl` |
-| AMD Ryzen 9 9950X3D 处理器模型（609 屋顶的 149 颗，Rhino 源） | 基于用户 Rhino 导出的 9950X3D GLB 减面与分材质；参考模型来自爱给网用户上传 | 处理后的低模随仓库分发；原始 SLDPRT 仅学习交流、不可商用；AMD / RYZEN 是 AMD 商标 | ✅ `models/cpu_9950x3d/ryzen_9950x3d.glb` | `models/cpu_9950x3d/`；参考用户提供的爱给网 `.SLDPRT`（Godot/Blender 读不了）与 `P1.PNG` | Rhino 源减到 12,192 面；蓝基板 + 银 IHS + 32 颗金手指 + IHS 丝印；149 颗摆 609 画室屋顶（模型 ×3 → 36 cm），¥4,599/颗直接进银行卡（京东 2026-10 行情），合计 ¥685,251 |
-| **游戏开发部部室**（商店东侧新地块） | 模型：**起航扬帆了**（Sketchfab）；围合四面墙、天花板与 Rhino 导出由使用者完成 | 授权未核实（下载包无许可文件，原模型页 UID 查 API 返回 404）——仅本地学习演示，不可再分发、不可商用 | ❌ | `models/gamedev_room/`，来源：Sketchfab《游戏开发部部室》by 起航扬帆了，下载包目录名 `游戏开发部部室_by_起航扬帆了_ebd4291471b4ef51514e232113d2c349` | Rhino 导出 6.95 MB（整屋重复一份 + Draco + 坐标轴未转）→ Blender 去重、摆正、合并成 31 个材质面 / 21,892 面，导出 4.56 MB 无 Draco GLB（`tools/build_gamedev_room.py`）；地块东延 24 m 后摆在 (52, 0.01, 0)，门朝西。**2026-11-04**：粉熊那一面改成平滑着色（原为硬边平面着色，顶点法线贴平面 2.1°）—— 面数不变（21,892 → 21,892），脚本 `tools/_smooth_gamedev_bear.py`（模型本体被 gitignore，脚本是唯一记录） |
-| 游戏开发部部室碰撞 | 本项目作者（由部室 GLB 的 31 个材质面推导） | 跟随源模型：仅本地学习演示，不可再分发、不可商用 | ✅ `scenes/gamedev_room.tscn`（`Model/Collision` 下 24 块 `BoxShape3D`） | `scripts/_build_gamedev_collision.gd` 生成（幂等，可重跑） | 2026-11-03 由「1 块 21,892 面凹面 trimesh」换成 24 块具名盒子：墙 4 面（门洞那面拆成左垛 / 右垛 / 门楣）+ 地板 + 天花板 + 16 件家具。盒子在编辑器里能拖、能改 `size`。物理同机位 A/B（240 Hz 物理放大）：旧 trimesh 57.5 fps / 17.40 ms → 盒子 108.7 fps / 9.20 ms。旧 `assets/collision/gamedev_room_trimesh.res` 仍留在盘上做回退 |
-| **壁挂 8×5090 机箱外壳**（游戏开发部活动室） | 爱给网（aigei.com）用户上传的 **CUSTOM GAMING PC**，作者未署名；减面 / 开窗 / 改白漆由本项目完成 | 原始模型仅限学习交流、不可商用；处理后的 2,917 面外壳随仓库分发（非商用同人） | ✅ `models/pc_case/pc_case_shell.glb` | `models/pc_case/`，来源：用户下载的 `游戏电脑机箱主机，白色 i7 RTX3090…_爱给网_aigei_com.zip` 中的 `CUSTOM GAMING PC.blend` | 94 MB / 1,035,668 面 → 只取外壳 Cube.007、开窗、白漆、0.1 比例，导出 2,917 面 / 143 KB（`tools/_export_pc_case_shell.py`）；放大 2.6× 挂南墙，内部 8 张 5090 用 `models/rtx5090_card` 的低模副本、门边双显示器用 `models/monitor`；托板 + 玻璃 + 灯由 `scripts/_build_pc_wall_case.gd` 程序化生成 |
-| **RTX 5090 低模副本**（壁挂机箱里的 8 张） | 爱给网用户上传的 `RTX5090simplified.obj`，作者未署名；低模导出/居中由本项目完成 | 原始模型仅学习交流、不可商用；处理后的 6,854 面低模随仓库分发（非商用同人） | ✅ `models/rtx5090_card/rtx5090_card.glb` | `models/rtx5090_card/`，源：用户 2026-10-20 的 `RTX5090simplified.obj`（945 KB） | 6,854 面 / 299 KB；长边 0.40 m，风扇朝玻璃；8 张两列×四层（`tools/_export_rtx5090_card.py`） |
-| **AM261_029 超宽显示器**（壁挂机箱旁） | 爱给网用户上传的 AM261_029，作者未署名；材质重做/屏幕程序化由本项目完成 | 原始模型仅学习交流、不可商用；处理后的 28,733 面模型随仓库分发；不使用原图贴图 | ✅ `models/monitor/monitor.glb` | `models/monitor/`，源：用户 2026-11-03 的 `29 显示器 屏幕_爱给网_aigei_com/AM261_029.fbx` | 28,733 面 / 897 KB；0.897×0.280×0.463 m；门边并排 2 台；配置单目标是 2×27" 4K 160Hz，这台是过渡（`tools/_export_monitor.py`） |
-| **三星 970 EVO Plus 2TB M.2 固态**（壁挂机箱内 2 颗） | 爱给网（aigei.com）用户上传的 970 EVO Plus M.2，作者未署名；导出/摆位由本项目完成 | 原始模型仅学习交流、不可商用；**不随仓库分发**（用户 2026-11-04 明确要求：第三方素材一律 gitignore，同 `/models/rtx5090/`） | ❌ `models/ssd_970evo/`（`.gitignore` 排除） | 本地目录 `models/ssd_970evo/`，源：用户 2026-11-04 的 `三星970EVOPlus2TB m2固态硬盘ssd_爱给网_aigei_com.zip`（2.4 MB，内含 `.blend`） | 缺文件时 `_build_pc_wall_case.gd` 只 push_warning 并跳过这 2 颗硬盘，机箱照常生成（与 `gamedev_room` 同一套路）。Blender 5.2 导 GLB（脚本见工作区 `_tmp_assets/export_ssd.py`）：9,364 面 / 3.48 MB / 10 材质 / 8 张内嵌贴图；真实尺寸 80.1 × 22.2 × 1.24 mm。缩放 `0.40/0.304 ≈ 1.316`（与 5090 同一比例），两颗贴在 `pc_wall_case` 的主板背板、显卡堆下方，标签朝玻璃（`_build_pc_wall_case.gd` 的 `SSD_SCALE` 可调） |
-| **DDR4 内存条**（跑酷第 9~10 段「内存条市场」，121 根） | **suuugar_mommy**（Sketchfab） | **CC BY-NC 4.0**：必须署名、**不可商用** | ✅ `models/ram/random_access_memory_ram_ddr4.glb` | `models/ram/`，来源 <https://sketchfab.com/3d-models/random-access-memory-ram-ddr4-6f37195ac2b84b21a901471485351b37> | ⚠️ 带 **NC（非商用）** 条款。GLB 的 `asset.extras` 自带这条声明，`tools/glb_meta.py` 可复核。要放进商业版本必须换成程序化盒子模型。**2026-11-03 补登记**：之前只在 README §1.16.4 提过，`credits.gd` 里没有条目，被 `models` 那条整体条目盖住，自检没报 |
-| **SpaceX Falcon 9**（跑酷去程 / 回程的载具，两枚） | 模型：**Forest Katsch**（Sketchfab）；剔特效 / 材质重建 / 降贴图 / 缩放导出由本项目完成 | **CC BY-NC 4.0**：必须署名、**不可商用** —— 本工程是个人非商业同人，符合 NC 条款 | ❌ `models/rocket_falcon9/`（`.gitignore` 排除） | `models/rocket_falcon9/falcon9.glb`，来源 <https://sketchfab.com/3d-models/spacex-falcon-9-block-45-12285ccc02de4d5c91b00632f0722c92>（下载凭证存工作区 `_模型授权存档/12285ccc02de4d5c91b00632f0722c92_授权凭证.txt`） | ⚠️ **带 NC 条款，商业版本必须换掉**。下载包只有 `source/f9-block-5.blend` + 11 张 PNG、**没有 glTF**；GLB 由 `_tools/_blender_export_f9_v4.py` 转出：剔掉 47 个特效占位、把作者的自定义节点组材质**重建成标准 Principled BSDF**（glTF 导出器只认这个，否则贴图全丢）、贴图 4096→1024（12.4 MB→0.86 MB，显存约 1.3 GB→36 MB）、缩放到真实 70 m、原点挪到箭体底面中心。最终 **116,575 面 / 3 材质 / 4.81 MB**。**改动已声明**。缺文件时 `rocket_ride.gd` 用程序化占位火箭顶上，跑酷照常能飞完 |
-| **柴关电脑城的新屋壳**（Sketchfab「Shop」） | 模型：**Nikitos & 3130**（Sketchfab，`vrcityphoto`）；缩放 / 居中 / 碰撞 / 只保留招牌由本项目完成 | **CC BY 4.0**：必须署名，**可商用、可再分发** | ✅ `models/shop_building/shop.glb` | `models/shop_building/`，来源 <https://sketchfab.com/3d-models/42510bda855c4e60bf5cf7ecb9a2a57c> | 极简白色店铺（白墙 + 玻璃隔断 + 吊顶灯带 + 两组玻璃展柜），原生 6.357 × 2.884 × 5.201 m / **1,158 面** / 无贴图。按用户选的「长度对齐」缩放 2.0764 → **13.20 × 10.80 × 5.99 m**，正面 z 对齐老壳，多出的进深往 −Z 长，柜台/芹香位置不动。**只保留招牌**：原程序化屋顶/三面墙/门柱/幕墙/货架全部移除，改为 GLB + 5 块不可见碰撞盒。GLB 原点离网格很远（中心 212.2, −242.0, 1.1），`shop.gd::_build_shell_from_glb()` 现量包围盒再居中；烘焙时保持 instance 引用 |
-| **蒙德里安大楼外壳**（第二关） | 使用者提供（来源未注明） | 授权未核实 —— 暂按「使用者自有」处理，对外发布前必须补证 | ✅ `models/mondrian/mondrian_building.glb` | `models/mondrian/`，源：工作区的 `蒙德里安建筑/mondrian_building.blend`（2026-10-31） | ⚠️ 待补证：GLB 的 `asset` 段没有 `copyright` / `extras`，仓库里也没有对应的导出脚本记录。158 网格 / 8 材质 / 0 贴图；导出时对正门、北门做了布尔切洞。**2026-11-03 补登记**，同样是被 `models` 整体条目盖住 |
-| 主角 Arisu 模型与贴图、校园碰撞网格 | NEXON Games / Yostar（Blue Archive） | 专有 | ❌ | `models/Arisu*.glb`、`Arisu*.png`、`school.collision.glb`，来源同上 | 贴图由 Godot 导入 glb 时自动解包。**2026-11-05 补**：同一套模型站（`BlueArchiveModels`）里还有 4 个爱丽丝形态，已收进本地：`Arisu_Maid.glb`（女仆，184 骨 / 32 动作）、`Arisu_Battle.glb`（临战机甲，191 骨 / 35 动作）、`Arisu_Battle_Scenario.glb`（机甲·剧情，137 骨 / 11 动作）、`Arisu_Battle_Carrier.glb`（机甲·载具，191 骨但**只有 Idle/Walk** 两条动作，当皮肤用会缺待机/攻击）。5 套骨架同族（`Bip001`），关键骨（手/头/眼）全在；差异只在网格根名（`Aris_Original_*` / `CH0200_*` / `CH0334_*`）与动作名 |
-| 校园 / 画室609 高斯泼溅数据 | **知天下 AI 生成**（由使用者提供） | 权利状态未核实（再分发权由使用者确认） | ❌ | `splatdata/*.sogdata` | 校园与画室609 的泼溅由 **知天下 AI** 生成；缺失时用 `-- --splat=off` |
-| 老师（sensei）NPC 模型 | **张伟事务所** | 专有（Blue Archive 二创） | ❌ | `models/npc/`，来源 `Sensei_by_张伟事务所.zip` | **卡通版**：Rigify 骨架 338 骨、**0 条动作**、**0 张贴图**（颜色全在顶点色里）。带 55 个 `cs_*` 控制器网格，载入即删；网格几乎整块绑在 `head.x` 上，手臂只能掰顶点。见 `scripts/sensei_npc.gd` 与 README §8.9 |
-| 老师（sensei）旧版模型与贴图 | **食小派蒙辣** | 专有（Blue Archive 二创） | ❌ | 已换成上面的卡通版；旧文件留在 `_sensei_out/sensei_tex.glb` | MMD/PMX 导出，313 骨、0 动作；本工程曾重导出为 `sensei.glb`（删 307 个刚体、贴图降到 1024、材质重建 —— MMD 材质树 glTF 导出器认不出，会静默丢贴图） |
-| **柴关电脑城店员「黑见芹香」（Serika，校服版）** | 原作 © **NEXON Games / Yostar**（Blue Archive），模型包整理者未署名 | 专有（Blue Archive） | ❌ | `models/npc/serika/serika.glb`，来源：BlueArchiveModels 模型包（2026-10-22 用户指路 `Downloads/BlueArchiveModels-main`） | 93 骨 `Bip001` 骨架、40 条动画，待机播 `Normal_Idle`；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m（`shop_clerk.gd` 自动抬到踩地）。手骨 `Bip001 L/R Hand` 高 0.72 m 低于台面 0.88 m，藏在柜台后；光环 `Serika_Halo` 走 `HaloFix` 抛光。见 `scripts/shop_clerk.gd`。店名 2026-10-26 从「天使24」改成「柴关电脑城」（便利店 → 电脑城，她才有理由站在这儿） |
-| （已停用）天使24 店员「小空」（Sora） | 薛定谔的小问号 | 专有（Blue Archive 二创） | ❌ | `models/npc/sora/`（文件仍在，不再上场） | 2026-10-22 起停用：用户要求「小空出差」，且 338 骨 MMD 精细模型与卡通大头小人的同伴画风不统一 |
+| 校园 GGS 泼溅光栅器（Godot 4.7 移植版）<br>`addons/ggs_campus` | 2Retr0（GodotGSplat 原作者）；本项目移植到 4.7，并加了校园专用 bin 加载与全屏合成 | GitHub | https://github.com/2Retr0/GodotGSplat | MIT（可分发、可商用）；许可原文见 addons/ggs_campus/NOTICE.md；原文 `addons/ggs_campus/NOTICE.md` | 6.14M 高斯校园 72–83 fps、约 5 GB 显存；不走 Compositor，用全屏 quad 画在场景背后 |
+| 全部 GDScript 代码、场景与着色器<br>`scripts` | 本项目作者 | 本项目（本地制作） | 本地来源，尚无外部链接 | MIT；原文 `LICENSE` | 含 scripts/、scenes/、addons 之外的着色器与 project.godot |
+| GDGS 高斯泼溅渲染插件 3.3.0<br>`addons/gdgs` | ReconWorldLab、4321ba、beiller（William / Bill）、sodih3iw（Wu Xinyue）；AssassinHLQ（本项目分支） | GitHub | https://github.com/ReconWorldLab/godot-gaussian-splatting | MIT；原文 `addons/gdgs/LICENSE` | 五位按角色列出：上游仓库四位提交者 ReconWorldLab / 4321ba / beiller / sodih3iw，本项目分支开发 AssassinHLQ。核对日期 2026-11-14；上游 MIT 原文保留。算法上游 2Retr0 与 PlayCanvas 另列，不将其误写为该仓库直接提交者。 |
+| GDGS 高斯渲染与排序算法参考<br>`addons/gdgs/runtime/render` | 2Retr0（上游实现）；GDGS 开发者（移植） | GitHub | https://github.com/2Retr0/GodotGaussianSplatting；https://github.com/ReconWorldLab/godot-gaussian-splatting | MIT；各源码文件的原始署名保留 | 按 GDGS 上游 README Acknowledgements 记录算法与着色器来源。 |
+| GDGS 碰撞管线 / splat-transform 算法参考<br>`addons/gdgs/collision` | PlayCanvas Ltd. / PlayCanvas 团队；GDGS 开发者（GDScript 移植） | GitHub | https://github.com/playcanvas/splat-transform；https://github.com/ReconWorldLab/godot-gaussian-splatting | MIT；上游原始许可与代码署名保留 | 包含体素化、封闭与网格生成算法参考；算法署名与本项目生成的碰撞数据来源分别记录。 |
+| Blue Archive UI 布局与配色参考<br>`scripts/ui_skin.gd` | ywhdzrb（BlueArchiveUI） | GitHub | https://github.com/ywhdzrb/BlueArchiveUI | 按原项目 MIT 许可保留来源；本项目代码见 LICENSE | 来源记录见 ui_skin.gd 的代码注释；参考界面规格，不表示第三方角色、美术一并适用 MIT。 |
+| 坦克动荡小游戏与内置素材<br>`assets/tank_turmoil` | AssassinHLQ（小游戏作者）；内部第三方素材作者见原项目记录 | 本项目原作；百度网盘（旧工程恢复）；GitHub（同名项目及内部素材授权参考） | 本地恢复工程 D:/BaiduNetdiskDownload/tank-turmoil；用户的同名 GitHub 仓库（准确链接待补，当前公开仓库列表未找到） | 原工程自有代码附 CC0 1.0；内部素材各自适用原作者授权，不能将整包素材视为 CC0；原文 `assets/tank_turmoil/LICENSE` | 用户之前制作的小游戏，原本地工程删除后从百度网盘恢复，再接入本作。内部素材对应授权按用户同名 GitHub 项目记录，尚未逐项复核。算法参考另外署名，不能将整个小游戏归为算法参考作者制作。 |
+| 坦克动荡算法参考<br>`scripts/tank_turmoil` | JustDoIt0910 / Zhao Ran（TankTrouble）；AssassinHLQ（小游戏实现与接入） | GitHub | https://github.com/JustDoIt0910/TankTrouble | MIT（算法参考项目）；原工程 CC0 及内部素材许可分别记录；原文 `assets/tank_turmoil/THIRD_PARTY_NOTICES.txt` | 保留 Copyright (c) 2023 Zhao Ran 及完整 MIT 许可原文。 |
 
-## 三、界面与字体
+## 角色与 Boss 模型
 
-| 素材 | 作者 | 许可 | 分发 | 位置 / 来源 | 说明 |
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
-| [UI Pack: Pixel Adventure](https://kenney.nl/assets/ui-pack-pixel-adventure) 2.0 | Kenney | **CC0 1.0** | ✅ | `assets/ui/`，许可原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 九宫格面板 / 按钮切片；`tile_panel.png`、`tile_button_hover.png` 的中心被填成白色（原图中空），CC0 允许修改 |
-| [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/font.ttf`，许可原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 中文像素字体，覆盖 19214/20992 个 CJK 汉字；整套 UI 的兜底字 |
-| Fusion Pixel Font 12px · 游戏开发部招牌子集 | TakWolf | **SIL OFL 1.1** | ✅ | `assets/ui/gamedev_sign_12px.ttf`，许可原文同左 | 只保留招牌/铭牌用字（游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线等，7.5 KB）；12 px 原生网格、关抗锯齿 + nearest 采样，3D 招牌显示为硬边像素字 |
-| Aa 字库「Aa暗夜深渊」 | Aa 字库 | **商用需授权**（个人学习 / 非商业可用） | ❌ | `assets/ui_font/` | 现在实际使用的界面字体；不可再分发，故被 `.gitignore` 排除 |
-| [Sprout Lands UI Pack](https://cupnooble.itch.io/sprout-lands-ui-pack) | Cup Nooble | 免费但**限非商业、禁再分发** | ❌ | `assets/ui_sprout/`，许可原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 没有它时自动回退到上面的 Kenney 皮肤 |
-| 开场 PV 图（8 张宽幅，逐张从左往右缓慢平移） | Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图 | 专有：仅本地学习演示，不可再分发、不可商用 | ❌ | `assets/cg/pv/`，使用者 2026-11-12 提供的 8 张截图 | `scripts/title_intro.gd` 按文件名排序循环播放，盖住高斯泼溅加载；`.gitignore` 排除图片本体与 `.import`，缺图时自动退回「渐变底 + 标题」。AI 超分版 `assets/cg/pv_hd/`（Real-ESRGAN 4× → 高 1440）由 `_tools/upscale_pv_images.ps1` 生成，同样不入库 |
+| RTX 5090 显卡模型（最后平台房顶那件资产）<br>`models/rtx5090` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | https://www.aigei.com/（用户本地下载的 RTX5090.obj，4.5 MB / 29,480 面） | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。模型减面、材质与导入适配由本项目完成。 |
+| AMD Ryzen 9 9950X3D 处理器模型（609 屋顶的 149 颗，Rhino 源）<br>`models/cpu_9950x3d` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | 用户提供的爱给网（aigei.com）`AMD Ryzen9 9950 X3D.SLDPRT`（SolidWorks，Godot/Blender 读不了，仅作外观参考）+ 同包 P1.PNG | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。模型减面、材质与导入适配由本项目完成。 |
+| 游戏开发部部室（商店东侧新地块）<br>`models/gamedev_room` | 起航扬帆了（模型）；AssassinHLQ（围合与导入处理） | 模之屋 | 模之屋创作者「起航扬帆了」；用户下载包《游戏开发部部室_by_起航扬帆了_ebd4291471b4ef51514e232113d2c349》 | 原模型授权资料未留存，许可待核实 | 作者与平台由用户确认；旧版误写 Sketchfab，现更正。围合、去重、材质处理与 Godot 导入由本项目完成。 |
+| 游戏开发部部室碰撞网格<br>`assets/collision` | 起航扬帆了（源模型）；AssassinHLQ（碰撞处理） | 模之屋；本地处理 | 由 models/gamedev_room 的 GLB 烘焙，脚本 scripts/_bake_gamedev_trimesh.gd | 源模型许可待核实；碰撞为其派生数据 | 由 models/gamedev_room 烘焙，原模型作者与来源平台一并保留。 |
+| 普拉娜（电脑里第二个虚拟助手，终端敲 `plana` 出现）<br>`assets/plana_frames` | 哔哩哔哩 UP 瞿黧（《依旧送送送，普拉娜绿幕素材，想用的可以自己拿》，BV1jsN26uEF3）；角色版权属于 NEXON Games / Yostar（Blue Archive） | 哔哩哔哩 | 用户本地的 `依旧送送送，普拉娜绿幕素材，想用的可以自己拿_视频.mp4`（1080×1180 / 30 fps / 29.53 s，绿幕底色 #46E200） | 视频二创素材；具体授权以原作者说明为准，现有记录未附完整许可 | 原视频经抠像转换为 PNG 帧序列；原作角色版权属于 NEXON Games / Yostar。 |
+| 阿洛娜（终端右半屏那个虚拟助手，敲 `arona` 出现）— 绿幕帧序列<br>`assets/arona_frames` | 哔哩哔哩 UP 香草BA（空间 space.bilibili.com/3546885205789214，原画面水印「浅羽香草 bilibili」）；角色版权属于 NEXON Games / Yostar（Blue Archive） | 哔哩哔哩 | 用户 2026-11-12 下载的绿幕视频（bilibili 空间 3546885205789214，源 1080×1848）；ffmpeg 先按比例裁掉顶部 4.87% 的水印带、把右上角刷成纯绿让 chromakey 一起抠掉，再 chromakey=0x2EDC01 + despill | 视频二创素材；具体授权以原作者说明为准，现有记录未附完整许可 | 原视频经抠像转换为 PNG 帧序列；原作角色版权属于 NEXON Games / Yostar。 |
+| 阿洛娜 / 普拉娜 的中文配音（电脑右半屏的台词）<br>`assets/companion_voice` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 音色模型与角色声音按其原始条款；未核实额外再分发许可 | 用户确认：语音用 GPT-SoVITS 合成，音色模型均来自 SLNeil。保留角色、模型作者与合成工具三者的区别。 |
+| 阿洛娜 第 2 版素材（木偶半身，《阿罗娜木偶》）<br>`assets/arona_frames_b` | 哔哩哔哩 UP 忧郁的优_（《阿罗娜木偶，可直接用，也可艾特》）；角色版权属于 NEXON Games / Yostar（Blue Archive） | 哔哩哔哩 | 用户 2026-11-13 下载的 `阿罗娜木偶，可直接用，也可艾特_视频.mp4`（1290×1078 / 30 fps / 15.0 s，绿幕底色 #05D504） | 视频二创素材；具体授权以原作者说明为准，现有记录未附完整许可 | 原视频经抠像转换为 PNG 帧序列；原作角色版权属于 NEXON Games / Yostar。 |
+| 普拉娜 第 2 版素材（近景头肩，《普拉娜自己取》）<br>`assets/plana_frames_b` | 哔哩哔哩 UP 星冻qwq（《普拉娜自己取》）；角色版权属于 NEXON Games / Yostar（Blue Archive） | 哔哩哔哩 | 用户 2026-11-13 下载的 `普拉娜自己取_视频.mp4`（1280×720 / 30 fps / 20.0 s，绿幕底色 #00DC22） | 视频二创素材；具体授权以原作者说明为准，现有记录未附完整许可 | 原视频经抠像转换为 PNG 帧序列；原作角色版权属于 NEXON Games / Yostar。 |
+| 阿洛娜 3D 模型（已停用，改用上面的绿幕帧序列）<br>`models/arona` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | 用户本地下载的 `[BlueArchive] - Arona.blend`（1.3 MB，205 骨骼绑定）+ 6 张贴图（Body / Eye / Eyebrow / Face / Hair / Halo） | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。阿洛娜 3D 模型已停用，保留在本地。 |
+| 壁挂 8×5090 机箱外壳（游戏开发部活动室）<br>`models/pc_case` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | 用户 2026-11-02 下载的 `游戏电脑机箱主机，白色 i7 RTX3090 内存条风扇散热_爱给网_aigei_com.zip` 中的 `CUSTOM GAMING PC.blend`（94 MB / 1,035,668 面） | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。模型减面、材质与导入适配由本项目完成。 |
+| RTX 5090 低模副本（壁挂机箱里的 8 张）<br>`models/rtx5090_card` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | 用户 2026-10-20 下载的 `models/rtx5090/RTX5090simplified.obj`（945 KB，同目录高模不入库） | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。模型减面、材质与导入适配由本项目完成。 |
+| AM261_029 超宽显示器（壁挂机箱旁）<br>`models/monitor` | 原作者未查明；爱给网整理；AssassinHLQ（导入与处理） | 爱给网（下载整理平台）；本地处理 | 用户 2026-11-03 下载的 `29 显示器 屏幕_爱给网_aigei_com/AM261_029.fbx`（30,077 面，含第三方屏摄图） | 原始模型许可待核实；处理与署名不代表已取得再分发授权 | 原作者未查明，侵权必删。模型减面、材质与导入适配由本项目完成。 |
+| BANK 招牌（最后平台小屋屋顶）<br>`models/bank` | 使用者自制（Rhino 导出 OBJ） | 本项目（本地制作） | 用户 2026-10-20 提供的桌面文件 BANK.obj | 归使用者所有，可随仓库分发 | 1765 面；文件自带一圈 `Default` 包围盒，`bank_sign.gd` 按材质名剔掉；原 `mtllib` 没给出来，仓库补了一份最小 `BANK.mtl` |
+| DDR4 内存条（跑酷第 9~10 段「内存条市场」，121 根）<br>`models/ram` | suuugar_mommy（Sketchfab） | Sketchfab | https://sketchfab.com/3d-models/random-access-memory-ram-ddr4-6f37195ac2b84b21a901471485351b37 | **CC BY-NC 4.0** —— 必须署名、**不可商用**；GLB 的 `asset.extras` 自带这条声明，用 `tools/glb_meta.py` 可复核 | ⚠️ NC 条款：要放进商业版本，这个文件必须换成程序化盒子模型。2026-11-03 补登记 —— 之前只在 README §1.16.4 提过，`credits.gd` / `CREDITS.md` 里一直没有，而 `models` 那条整体条目（讲的是 Arisu）把 `models/ram` 前缀盖住了，自检没报 |
+| SpaceX Falcon 9（跑酷去程 / 回程的载具，两枚）<br>`models/rocket_falcon9` | Forest Katsch（Sketchfab，`ForestKatsch`） | Sketchfab | https://sketchfab.com/3d-models/spacex-falcon-9-block-45-12285ccc02de4d5c91b00632f0722c92 | CC BY-NC 4.0（署名、非商业、注明改动） | ⚠️ 带 **NC（非商用）** 条款：一旦要商业发布，这套必须换掉或取得另行授权。下载当时的许可凭证存工作区 `_模型授权存档/12285ccc02de4d5c91b00632f0722c92_授权凭证.txt`（不在仓库内 —— 和 DDR4 内存条同口径，`license_file` 留空）。下载包只有 `source/f9-block-5.blend`（8.7 MB）+ 11 张 PNG，没有 glTF；本工程的 GLB 由 `_tools/_blender_export_f9_v4.py` 转出：剔掉 47 个特效占位（火焰/排气/体积）、把作者的自定义节点组材质**重建为标准 Principled BSDF**（glTF 导出器只认这个，否则贴图全丢）、贴图 4096 降到 1024（12.4 MB → 0.86 MB，显存约 1.3 GB → 36 MB）、缩放到真实 70 m 高、原点挪到箭体底面中心。最终 116,575 面 / 3 材质 / 4.81 MB。**改动已按 CC BY 4.0 惯例声明**（NC 条款同样要求标明改动）。缺文件时 `rocket_ride.gd` 用程序化占位火箭顶上。 |
+| 柴关电脑城的新屋壳（Sketchfab「Shop」）<br>`models/shop_building` | Nikitos & 3130（Sketchfab，`vrcityphoto`） | Sketchfab | https://sketchfab.com/3d-models/42510bda855c4e60bf5cf7ecb9a2a57c | CC BY 4.0（署名、保留来源并注明改动） | 极简白色店铺：白墙 + 玻璃隔断 + 吊顶灯带 + 两组玻璃展柜。原生 6.357 × 2.884 × 5.201 m / 1,158 面 / **无贴图**（纯材质色）。按用户 2026-11-07 选的「长度对齐」缩放 2.0764 → 13.20 × 10.80 × 5.99 m，正面 z 对齐老壳的 shop_depth/2，多出来的进深往 −Z 长，所以柜台/芹香位置不用动。**只保留招牌**：原来的屋顶/三面墙/门柱/幕墙/货架全部不再程序化生成，换成本 GLB + 5 块不可见碰撞盒（后墙 / 东西墙 / 正面门洞左右两段）。GLB 原点离网格很远（中心 (212.2, −242.0, 1.1)），`shop.gd::_build_shell_from_glb()` 会现量包围盒再居中。烘焙进 `scenes/shop_baked.tscn` 时保持 instance 引用（`_bake_buildings.gd::_own()` 对 `scene_file_path` 非空的节点只设 owner、不下钻）。 |
+| 蒙德里安大楼外壳（第二关）<br>`models/mondrian` | AssassinHLQ（本项目作者） | DeepSeek Harness（使用 1017 制作） | 用户确认：使用 DeepSeek Harness 的 1017 制作；原工程为蒙德里安建筑/mondrian_building.blend | 本项目原创（MIT）；原文 `LICENSE` | 保留用户给出的工具标识“1017”，不推断具体模型全名。模型导出、开门洞与场景适配由本项目完成。 |
+| 比纳（第六位 Boss，备用）FBX + 贴图<br>`models/boss_binah` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 比纳_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | Binah_Original.fbx，44 骨、无动画；3 个材质（本体/环、武器面、光环）；*_Mask.png 是作者渲染遮罩，游戏里不绑 |
+| 哥利亚（第七位 Boss，备用）FBX + 贴图<br>`models/boss_goliath` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 哥利亚_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | Goliath_Decagram_Vulcan.fbx，34 骨、单网格单材质；*_Mask.png 同上 |
+| 霍德（第四位 Boss）FBX + 贴图<br>`models/boss_hod` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 霍德_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | HOD_Original.fbx，164 骨、无动画；3 个材质，2 张 *_Mask.png 是原作者渲染用的遮罩，游戏里不绑 |
+| 佩洛洛斯拉（第五位 Boss）FBX + 贴图<br>`models/boss_perorozilla` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 佩洛洛斯拉_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | Perorozilla_Original.fbx，47 骨、无动画；6 网格共用 1 个材质；5 张表情变体只留一张（见 peroro_boss.gd） |
+| 倭瓜优香（第三位 Boss）OBJ + 贴图<br>`models/boss_squash` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 倭瓜优香压缩文件_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | 倭瓜优香.obj，纯静态网格、无骨架；4 个材质 |
+| 飞猪优香（第二位 Boss）FBX + 贴图<br>`models/boss_pig` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 飞猪优香 (2)_by_一个睿智.zip | 专有版权（派生自 Blue Archive，玩家二创） | 猪猪优香.fbx，纯静态网格；uv/ 里两张是**作者的成品渲染图**，挪到 ref/ 当贴图分配基准 |
+| 霸王龙优香（第一位 Boss）FBX + 贴图<br>`models/boss` | 一个睿智（模型二创）；NEXON Games / Yostar（原作角色） | 模之屋 | 模之屋创作者「一个睿智」的霸王龙优香；作者由用户确认，与飞猪优香同一作者 | 专有版权（派生自 Blue Archive） | 优香霸王龙.fbx，73 骨、无动画；贴图要按材质名手工绑（见 boss.gd 的 TEXTURES） |
+| 七名同伴模型（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊）<br>`models/companions` | NEXON Games / Yostar（原作）；lihaohong6 / Peterli（模型整理） | GitHub（BlueArchiveModels） | https://github.com/lihaohong6/BlueArchiveModels | 专有版权 | 官方素材解包（整理者 lihaohong6 / Peterli），均取初始形态；凯伊用 Kei_ext.glb（跑动前折已修） |
+| 主角 Arisu 模型与贴图<br>`models` | NEXON Games / Yostar（原作）；lihaohong6 / Peterli（模型整理） | GitHub（BlueArchiveModels） | https://github.com/lihaohong6/BlueArchiveModels | 原作角色素材专有版权；模型整理不改变原作权利 | Arisu.glb / Arisu_ext.glb / Arisu*.png；校园扫描及碰撞不属于 Blue Archive，另列来源。 |
+| 老师（sensei）NPC 模型与贴图<br>`models/npc` | 张伟事务所（当前老师模型）；食小派蒙辣（旧版备用模型） | 模之屋 | 用户确认当前老师模型作者为张伟事务所；旧版包 sensei_by_食小派蒙辣.zip 仍保留原署名 | 专有版权（派生自 Blue Archive，玩家二创） | 当前游戏使用的老师模型与旧包分别保留作者，避免以旧模型作者代替现用模型作者。 |
+| 柴关电脑城店员「黑见芹香」（Serika，校服版）<br>`models/npc/serika` | NEXON Games / Yostar（原作）；lihaohong6 / Peterli（模型整理） | GitHub（BlueArchiveModels） | https://github.com/lihaohong6/BlueArchiveModels；Serika.glb | 专有版权（Blue Archive），仅本地学习用，不随仓库分发 | 93 骨 Bip001 骨架、40 条动画，待机播 Normal_Idle；包围盒 0.67×1.39×0.50 m、原点在脚上方 0.27 m，shop_clerk.gd 会自动抬到踩地。手骨 Bip001 L/R Hand 高 0.72 m，低于台面 0.88 m，藏在柜台后；头顶光环 Serika_Halo 走 HaloFix 抛光 |
+| （已停用）天使24 店员「小空」（Sora）<br>`models/npc/sora` | 薛定谔的小问号 | 待查（仅保留本地模型包来源） | kong_by_薛定谔的小问号（小空1donzuo.blend，2023-12） | 专有版权（派生自 Blue Archive，玩家二创） | 2026-10-22 起不再上场：用户要求「小空出差」，且她的画风（338 骨 MMD 精细模型）与卡通大头小人的同伴不统一。文件仍留在 models/npc/sora/ 备用 |
+| 校园 / 画室609 高斯泼溅数据（知天下 AI 生成）<br>`splatdata` | 知天下 AI 生成（由使用者提供） | 知天下 AI | 知天下 AI | 权利状态未核实 —— AI 生成，再分发权由使用者确认 | 使用者提供校园 / 画室609 扫描与高斯数据；具体数据的权利与上游模型版权分开记录。 |
+| 校园扫描碰撞网格（保留的历史资产）<br>`models/school.collision.glb` | AssassinHLQ（碰撞生成）；知天下 AI（源扫描数据平台） | 知天下 AI；GitHub（碰撞工具参考） | 由使用者提供的校园扫描派生；工具来源见 GDGS / PlayCanvas splat-transform 条目 | 派生数据按源扫描的权利状态记录，未核实统一再分发许可 | 不将校园碰撞错误归入 NEXON 角色模型。 |
+| 阿洛娜第 3 版绿幕帧序列<br>`assets/arona_frames_c` | 沉迷爱丽丝（视频作者）；NEXON Games / Yostar（原作角色） | 哔哩哔哩 | 哔哩哔哩 UP 沉迷爱丽丝《绿幕素材分享（阿洛娜木偶）》；来源记录见 scripts/arch_terminal.gd 的 COMPANIONS 注释 | 视频二创素材，完整授权资料未留存 | 转换为透明 PNG 帧序列供终端播放；原视频具体链接待补。 |
+| 普拉娜第 3 版绿幕帧序列<br>`assets/plana_frames_c` | 优香体重100kg（视频作者）；NEXON Games / Yostar（原作角色） | 哔哩哔哩 | 哔哩哔哩 UP 优香体重100kg《普拉娜木偶绿幕素材》；来源记录见 scripts/arch_terminal.gd 的 COMPANIONS 注释 | 视频二创素材，完整授权资料未留存 | 转换为透明 PNG 帧序列供终端播放；原视频具体链接待补。 |
+| 电竞房（现代网咖 / 电竞酒店套房）<br>`models/esports_room` | 原作者未查明；爱给网整理；AssassinHLQ（处理与导入） | 爱给网（下载整理平台） | 用户提供的爱给网模型包；https://www.aigei.com/；具体原始作者页未找到 | 授权资料未齐，许可待核实 | 原作者未查明，侵权必删。保留原模型的来源与权利；中间导出文件不是新的独立原创模型。 |
+| 三星 970 EVO SSD 硬件模型<br>`models/ssd_970evo` | 原作者未查明；爱给网整理；AssassinHLQ（处理与导入） | 爱给网（下载整理平台） | 用户提供的爱给网模型包；https://www.aigei.com/；具体原始作者页未找到 | 授权资料未齐，许可待核实 | 原作者未查明，侵权必删。保留原模型的来源与权利；中间导出文件不是新的独立原创模型。 |
+| 电竞酒店模型处理中间资产<br>`models/_wip_esports_hotel` | 原作者未查明；爱给网整理；AssassinHLQ（处理与导入） | 爱给网（下载整理平台） | 用户提供的爱给网模型包；https://www.aigei.com/；具体原始作者页未找到 | 授权资料未齐，许可待核实 | 原作者未查明，侵权必删。保留原模型的来源与权利；中间导出文件不是新的独立原创模型。 |
+| 酒店模型处理中间资产<br>`models/_wip_hotel` | 原作者未查明；爱给网整理；AssassinHLQ（处理与导入） | 爱给网（下载整理平台） | 用户提供的爱给网模型包；https://www.aigei.com/；具体原始作者页未找到 | 授权资料未齐，许可待核实 | 原作者未查明，侵权必删。保留原模型的来源与权利；中间导出文件不是新的独立原创模型。 |
+| 游戏开发部模型处理中间资产<br>`models/_wip_room` | 起航扬帆了（源模型）；AssassinHLQ（导入处理） | 模之屋；本地处理 | 由 models/gamedev_room 的部室模型生成 | 授权资料未齐，许可待核实 | 与原部室模型保留相同作者、平台和权利状态。 |
 
-## 四、音效
+## 界面与字体
 
-| 素材 | 作者 | 许可 | 分发 | 位置 / 来源 | 说明 |
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
-| [Interface Sounds](https://kenney.nl/assets/interface-sounds) / [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) / [RPG Audio](https://kenney.nl/assets/rpg-audio) | Kenney | **CC0 1.0** | ✅ | `assets/sfx/`，许可原文 `assets/sfx/LICENSE_Kenney_CC0.md` | `click_*`、`toggle_*`、`tick_*`、`open_*`、`close_*`、`laserSmall_000..004`、`metalLatch`、`metalClick` |
-| 枪声 | 本项目作者（Python 合成） | MIT | ✅ | `assets/sfx/gunshot_000.wav` ~ `gunshot_004.wav` | 不是采样，是算出来的：噪声 + 包络 + 带通，见 README §1.19。2026-11-11 起 `fire` 改用下面的爱丽丝原声，这 5 条留作备份与 A/B 对比 |
-| 爱丽丝轨道炮音效（换弹 / EX 必杀；连发枪声裁决记录） | NEXON Games / Yostar（Blue Archive 游戏内 SFX）；裁剪：本项目作者（Python） | **专有版权** —— 仅本地学习 / 非商业演示，不得再分发、不得用于发布产物 | ❌ | `assets/sfx/aris/` | 由 `_godot_editor_data/make_aris_sfx.py` 从 `SFX_Common_RG_aris_Reload`（换弹两段）/ `SFX_Skill_Aris_Ex`（EX 爆发段）裁出；`SFX_Public_Aris` / `SFX_Aris_Hit` 也裁了两条连发候选，但 2026-11-11 用户听完 A/B 决定 `fire` 仍用合成枪声，故暂未接线。逐条裁决与被淘汰的候选见 `assets/sfx/aris/README.md`；音频本体被 `.gitignore` 排除，只留 `*.wav.import` |
-| 商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS） | 音色模型：**SLNeil**（B站）；台词由本项目撰写（[B站空间](https://space.bilibili.com/523537077)） | 模型免费、仅供学习交流，禁止商用与违法用途；生成音频沿用 Blue Archive 角色声音，仅本地演示，不可再分发 | ❌ | `story/voice/shop/` | GPT-SoVITS 生成 12 句（serika_01…09 / momoi_01…02 / aris_01）；爱丽丝前半句「邦邦咔邦」替换为用户提供的 DSH 余额挂件皮肤视频原声（BA 角色声音，NEXON/Yostar，仅本地），与 TTS「就这套了」拼接成 aris_01，候选 `aris_01_authentic_v1..3`；整个目录被 `.gitignore` 排除 |
-| 商店 BGM：UNDERTALE「Tem Shop」（40.2094 s 无缝循环版） | Toby Fox / Materia Collective | 专有版权 —— 仅本地学习，不得再分发、不得用于任何发布产物 | ❌ | `assets/music/`，来源 UNDERTALE | 音频本体被 `.gitignore` 排除；`*.ogg.import` 进仓库（循环开关在里面），克隆者需自备文件 |
-| 开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」 | NEXON Games / Yostar（Blue Archive OST） | 专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于发布产物 | ❌ | `assets/music/pv_theme.mp3`，来源 B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2 | 开场 PV 循环播放（有人在开始界面听歌），点「开始游戏」时淡出后交给房间 BGM；`.gitignore` 排除 mp3 与 `.import`，缺文件时 PV 静音、不报错 |
+| 全景天空盒（10 张全收录）<br>`assets/sky` | 原作者未查明；爱给网整理 | 爱给网（下载整理平台） | 用户确认取得自爱给网 https://www.aigei.com/；具体资源页未留存 | 原始许可待核实 | 保留用户提供的下载来源。旧记录曾指向 AllSky Free / Richard Whitelock（https://github.com/rpgwhitelock/AllSkyFree_Godot），但尚无文件对应证据，不能据此认定当前整套天空盒为该作者或统一采用 MIT。原作者未查明，侵权必删。程序生成的末日天空另列。 |
+| 空地地砖贴图 + 法线图<br>`assets/tex` | 本项目作者（程序生成） | 本项目（本地制作） | 本地来源，尚无外部链接 | MIT；原文 `LICENSE` | `tools/make_lot_paver.py` 生成，完全可平铺，不依赖外网素材 |
+| 历史开场 PV 图片与超分版本（保留资产）<br>`assets/cg` | Blue Archive 游戏内画面（NEXON Games / Yostar）+ 使用者本地截图 | Blue Archive 游戏；本项目截图 | 使用者 2026-11-12 提供的 8 张截图（混有 Blue Archive 游戏内画面与本作截图），存于 assets/cg/pv/ | 专有：仅本地学习演示，不可再分发、不可商用 | 旧 PV 图片留存在 assets/cg/pv 与 pv_hd；当前开场改用 _arisu_captures/_shots 下的 PNG，另列。 |
+| Fusion Pixel Font 12px（中文像素字体，整套 UI 的兜底字）<br>`assets/ui/font.ttf` | TakWolf | GitHub | https://github.com/TakWolf/fusion-pixel-font | SIL OFL 1.1（允许随软件分发）；原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 覆盖 19214/20992 个 CJK 汉字；assets/ui_font/ 没放字时就用它 |
+| 游戏开发部/服务器据点/机箱铭牌用的像素子集<br>`assets/ui/gamedev_sign_12px.ttf` | TakWolf（Fusion Pixel Font 子集） | GitHub | https://github.com/TakWolf/fusion-pixel-font | SIL OFL 1.1（允许随软件分发；仅保留招牌/铭牌用字与 notdef）；原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` | 从 font.ttf 子集化（8 KB 级），含游戏开发部、楼梯、临时服务器据点、终点、8×5090x、按F开机、已在线、电竞房、凯伊、9995WX、DDR5 ECC 等；12 px 原生网格，导入关抗锯齿、关子像素定位、开 mipmap，Label3D 用 nearest 采样，招牌才是真·像素字 |
+| Aa 字库「Aa暗夜深渊」（界面显示字体）<br>`assets/ui_font` | Aa 字库 / 翰美互通（厦门）科技有限公司 | 字体管家（字体内嵌官网）；实际下载站未查明 | 字体 name 表：设计者 Aa；版权 ©2020 HanMeiHutong (XiaMen) Technology Co.Ltd.；厂商/设计者网址 http://www.zitiguanjia.com | 字体内嵌名称标注“非商业使用”；具体发行与授权条款待原始页面核实 | 以上从当前 TTF 的版权、厂商与网址元数据核对；不能由内嵌官网反推用户实际下载页面。Mono 是另一个单独登记的等宽字体。 |
+| 末日天空（程序生成）<br>`assets/sky/sky_doom.jpg` | AssassinHLQ（本项目作者） | 本项目（本地制作） | tools/gen_sky_doom.py | MIT；原文 `LICENSE` | 由本项目脚本生成，与爱给网整理的天空盒分开署名。 |
+| 当前开场播放的 PNG 截图<br>`_arisu_captures/_shots` | AssassinHLQ（本作截图）；画面内素材作者分别见本清单 | 本项目（本地制作） | 用户指定的 _arisu_captures/_shots/*.png；scripts/title_intro.gd 按文件名读取 | 截图由使用者提供；画面内第三方素材保留各自权利 | 当前为 5 张 PNG。已取消导出排除，随游戏打包；Git 忽略截图产物与游戏导出包含图片是两件事。 |
+| JetBrains Mono（终端等宽字体）<br>`assets/ui/mono.ttf` | The JetBrains Mono Project Authors；Philipp Nurullin、Konstantin Bulenkov（设计） | JetBrains 官网 / GitHub | https://github.com/JetBrains/JetBrainsMono；https://www.jetbrains.com/lp/mono/ | SIL OFL 1.1；原文 `assets/ui/LICENSE_JetBrainsMono_OFL.txt` | 字体文件名 mono.ttf，已从内嵌元数据确认。Mono 表示等宽，与支持 C# / .NET 的 Godot Mono 引擎版本不同。 |
 
-## 五、剧情与图标
+| Sprout Lands 像素字体（pixelFont-7-8x14-sproutLands）<br>`assets/ui_sprout/font.ttf` | Cup Nooble | itch.io | https://cupnooble.itch.io/sprout-lands-ui-pack | 随 Sprout Lands UI Pack，按原包条款记录；不是 OFL 字体；原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | TTF 内嵌设计者为 Cup Nooble。主要用于数字与拉丁字形，不提供中文字形；中文字体另列。 |
 
-| 素材 | 作者 | 许可 | 分发 | 位置 | 说明 |
+## 音效
+
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
-| 剧情文本（开场 / 设定） | 本项目作者 | MIT | ✅ | `story/` | 角色名来自 Blue Archive，属同人创作 |
-| 项目图标 `icon.png` | **待确认** | 待确认 | ✅ | `icon.png` | 若不是原创请替换为自有图标 |
-| 工具墙图标（7-Zip / GitHub / hashcat / Ollama / 知天下） | Simple Icons（CC0 矢量）+ 各商标持有人；hashcat / 知天下 图标由使用者提供 | 矢量图 CC0 1.0；图标本身是各厂商商标，仅作演示与识别用 | ✅ | `assets/icons/`，[simpleicons.org](https://simpleicons.org/) | CC0 只覆盖著作权、不授予商标权；知天下图标对外发布前需向主办方确认 |
-| 柴关电脑城配置单插图（B300 / 八卡 5090 两张） | 本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 [usa0.top](https://usa0.top)） | 排版与文案原创（MIT）；B300 那张右侧为 AI 生成图，5090 那张右侧为网络整机图（见 SOURCES.md） | ✅ | `assets/story/config_sheet.png`、`config_sheet_5090.png`、`hero_b300.png` | 两张都是 1600×970；中文用微软雅黑排版（AI 直接画中文字会糊） |
-| 配置单悬停用的零件照片（19 张） | NVIDIA / Intel / AMD / 三星 / 金百达 / 超花（Super Flower）/ Corsair 等厂商及知乎、IT之家、搜狐、什么值得买、阿里巴巴、中国制造网等媒体/商城 | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | ❌ | `assets/story/parts/` | gpu / server / cpu / ram / ssd_m2b / ssd / nic / cooling / psu / gpu5090 / hero_5090 / frame / cpu_tr / ram_udimm / ssd_m2 / ssd_t705 / psu_atx / cooling_fan / monitor，统一裁成 492×560 深色底；两张单九行都是各自独立的照片，没有一张重复；**逐张出处见 [`assets/story/parts/SOURCES.md`](assets/story/parts/SOURCES.md)**；缺图时配置单照常显示，只是悬停不换图 |
-| 游戏开发部活动室配图（买完电脑 · 确认收货地址） | Blue Archive 游戏内场景（NEXON Games / Yostar）；截图由使用者提供 | 专有：仅本地学习演示，不可商用、不可再分发 | ❌ `assets/story/gamedev_room.jpg` | `资产/story/`；用户 2026-11 提供 `BG_GameDevRoom.jpg` | 商店买完整机后「确认收货地址」弹图，配文「千禧年学院一年级游戏开发部活动室」；`.gitignore` 排除 |
+| 商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS）<br>`story/voice/shop` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 音色模型与角色声音按其原始条款；未核实额外再分发许可 | 用户确认：语音用 GPT-SoVITS 合成，音色模型均来自 SLNeil。保留角色、模型作者与合成工具三者的区别。 |
+| 商店 BGM：UNDERTALE「Tem Shop」<br>`assets/music` | Toby Fox / Materia Collective | 依用户要求省略 | UNDERTALE | Toby Fox / Materia Collective 的原作音乐权利；未核实额外再分发许可 | 按用户要求，Toby Fox 保留作者名，不额外标注平台；本条只代表 Tem Shop，其余曲目逐项列出。 |
+| 开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」<br>`assets/music/pv_theme.mp3` | NEXON Games / Yostar（Blue Archive OST） | 哔哩哔哩（音乐合集） | B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定 | Blue Archive OST 专有版权；具体录音与作者条款适用 | 开场音乐为 Constant Moderato；PNG 图片换新不改变音乐作者。 |
+| 界面 / 武器 / 换弹音效（Interface Sounds、Sci-fi Sounds、RPG Audio）<br>`assets/sfx` | Kenney | Kenney.nl | https://kenney.nl/assets/interface-sounds | CC0 1.0（公有领域，可商用、无需署名）；原文 `assets/sfx/LICENSE_Kenney_CC0.md` | click_* / toggle_* / tick_* / open_* / close_*、laserSmall_000..004、metalLatch、metalClick |
+| 枪声 gunshot_000..004（5 条）<br>`assets/sfx/gunshot_000.wav` | 本项目作者（Python 合成：噪声 + 包络 + 带通） | 本项目（本地制作） | 本地来源，尚无外部链接 | MIT；原文 `LICENSE` | 不是采样，是算出来的；替换 laserSmall_*.ogg 是为了听起来像枪（见 README §1.19）。2026-11-11 起 fire 改用爱丽丝原声（见下一条），这 5 条留在磁盘上做备份与 A/B 对比 |
+| 爱丽丝轨道炮音效（开枪 / 换弹，裁自游戏内 SFX）<br>`assets/sfx/aris` | NEXON Games / Yostar（Blue Archive 游戏内 SFX）；裁剪：本项目作者（Python） | Blue Archive 游戏素材（本地提取） | 本地来源，尚无外部链接 | 专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于任何发布产物 | 由 _godot_editor_data/make_aris_sfx.py 从 SFX_Public_Aris / SFX_Aris_Hit / SFX_Common_RG_aris_Reload / SFX_Skill_Aris_Ex 裁出（前两条是连发枪声的候选，2026-11-11 用户听完 A/B 决定 fire 仍用合成枪声，故暂未接线）；逐条裁决见 assets/sfx/aris/README.md。音频本体被 .gitignore 排除，只留 *.wav.import |
+| 凯伊 GPT-SoVITS 配音<br>`story/voice/kei` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 音色模型与角色声音按其原始条款；未核实额外再分发许可 | 用户确认所有音色模型均来自 SLNeil。 |
+| 开场及其他剧情语音（GPT-SoVITS）<br>`story/voice` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 角色声音与音色模型的原始条款；不因剧情代码为 MIT 而改变 | 用户确认语音为 GPT-SoVITS 合成，音色模型均来源 SLNeil；商店与凯伊另列明细。 |
+| Blue Archive OST「Pixel Time」<br>`assets/music/gamedev_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
+| Blue Archive OST「Colorful Mess」<br>`assets/music/esports_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
+| Blue Archive OST「Lemonade Diary」<br>`assets/music/art609_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
+| Blue Archive OST「Daily Routine 247」<br>`assets/music/hut_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
+| Blue Archive OST「Midsummer Cat」<br>`assets/music/mondrian_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
+| Blue Archive OST「Encroached Sky」<br>`assets/music/doom_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 已核对实际曲目；doom_theme.ogg 的曲名是 Encroached Sky，不是 DOOM 音乐。 |
 
-> ⚠️ `assets/story/parts/` 里那 19 张是网上找来的产品照，**没有授权**。
-> 本地玩没问题，**任何形式的发布前必须换成**厂商 press kit、CC0 图或自己拍的，
-> 换完记得同步 `SOURCES.md` 与本表，再跑 `_verify_credits.gd`。
+## 剧情与图标
 
-## 怎么改
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
+|---|---|---|---|---|---|
+| 工具墙图标（7-Zip / GitHub / hashcat / Ollama / 知天下）<br>`assets/icons` | Simple Icons（CC0 矢量）+ 各商标持有人；hashcat / 知天下 图标由使用者提供 | Simple Icons 官网 / GitHub；用户提供 | https://simpleicons.org/ | 矢量图 CC0 1.0；图标本身是各厂商商标，仅作演示与识别用 | CC0 只覆盖著作权、不授予商标权；知天下图标对外发布前需向主办方确认 |
+| 剧情文本（开场 / 设定）<br>`story` | 本项目作者 | 本项目（本地制作） | 本地来源，尚无外部链接 | MIT；原文 `LICENSE` | story/开场.txt、story/设定.md；角色名来自 Blue Archive，属同人创作 |
+| 项目图标<br>`icon.png` | 待确认 | 待查（现有记录未注明来源平台） | 本地来源，尚无外部链接 | 待确认（若不是原创请替换） |  |
+| 柴关电脑城配置单插图（B300 / 八卡 5090 两张）<br>`assets/story` | 本项目作者（Pillow 排版）+ AI 生成（GPT-Image 2.5，接口 usa0.top） | 本地 Pillow 排版；usa0.top（GPT-Image 2.5 接口） | https://usa0.top | 排版与文案为本项目原创（MIT）；B300 那张右侧为 AI 生成图，5090 那张右侧为网络整机图（见 SOURCES.md）；原文 `LICENSE` | 两张都是 1600×970：config_sheet.png（B300）、config_sheet_5090.png（八卡 5090）、hero_b300.png（AI 机器照）；中文用微软雅黑排版 |
+| 游戏开发部活动室配图（买完电脑 · 确认收货地址）<br>`assets/story/gamedev_room.jpg` | Blue Archive 游戏内场景（NEXON Games / Yostar）；截图由使用者提供 | Blue Archive 游戏（用户提供截图） | 用户 2026-11 提供的桌面文件 BG_GameDevRoom.jpg | 专有：仅本地学习演示，不可商用、不可再分发 | 商店买完整机后，选「确认收货地址」弹出；下方配文「千禧年学院一年级游戏开发部活动室」。`.gitignore` 排除，缺图时对话会跳过这一步 |
+| 配置单悬停用的零件照片（19 张）<br>`assets/story/parts` | NVIDIA / Intel / AMD / 三星 / 金百达 / 超花（Super Flower）/ Corsair 等厂商及知乎、IT之家、搜狐、什么值得买、阿里巴巴、中国制造网等媒体/商城 | 厂商官网；知乎 / IT之家 / 搜狐 / 什么值得买 / 阿里巴巴 / 中国制造网等 | 逐张出处见 assets/story/parts/SOURCES.md | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | 逐张作者、平台与网址保留在 assets/story/parts/SOURCES.md，不将网络产品照片写成本项目原创。 |
 
-1. 加一套素材 → 在 `scripts/credits.gd` 的 `ENTRIES` 里加一条（`path` 写目录即可覆盖其下全部文件）。
-2. 同步这张表与 `THIRD_PARTY.md`（前者面向「谁做了什么」，后者面向「许可合规」）。
-3. 跑 `--script res://scripts/_verify_credits.gd`：漏登记、缺许可原文、把私有素材漏进仓库，都会红。
+## 核对依据与待补信息
+
+- GDGS：GitHub 上游 contributors API 核对为 ReconWorldLab、4321ba、beiller、sodih3iw；本项目分支 contributors API 为 AssassinHLQ。以四位上游提交者加一位本项目分支作者列出五人，角色分开；2Retr0 与 PlayCanvas 是另列的算法上游。
+- 上游核对接口：`https://api.github.com/repos/ReconWorldLab/godot-gaussian-splatting/contributors?per_page=100`；本项目分支接口：`https://api.github.com/repos/AssassinHLQ/godot-gaussian-splatting/contributors?per_page=100`。算法依据为上游 README 的 Acknowledgements 与本地源码署名。
+- Aa暗夜深渊：直接读取 `assets/ui_font/Aa暗夜深渊.ttf` 的 name 表，确认 Aa、翰美互通、字体管家网址与“非商业使用”标注；实际下载站未找到。Fusion Pixel 与 JetBrains Mono 的来源、作者和 OFL 原文均在本地许可文件。
+- 天空盒、硬件、电竞房：用户确认来自爱给网；原始作者与资源页未查明。天空盒的旧 AllSky 归属缺少当前文件对应证据，保留为未核实历史线索。原作者未查明，侵权必删。
+- 模之屋作者、语音模型 SLNeil、蒙德里安制作方式及坦克小游戏恢复经过按使用者本次确认更新。语音作者统一拼写 SLNeil，与已有哔哩哔哩 UID 523537077 对应。
+- 两组第 3 版视频作者按 `scripts/arch_terminal.gd` 的源素材注释补齐。部分视频具体链接、音乐作曲者和天空盒原作者仍待补，未编造。
+- 坦克小游戏的用户同名 GitHub 仓库当前公开列表未找到，准确链接待补；内部素材授权暂按用户提供的来源说明保留待核记录。`JustDoIt0910/TankTrouble` 仅是已留有 MIT 原文的算法参考项目。

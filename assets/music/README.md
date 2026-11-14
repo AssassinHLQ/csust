@@ -6,14 +6,19 @@
 
 ## 需要放什么
 
-| 文件名 | 用在哪 | 来源 |
-|---|---|---|
-| `shop_theme.ogg` | 商店「柴关电脑城」的 BGM（走进去开、走出去停） | UNDERTALE「Tem Shop」，© Toby Fox / Materia Collective |
-| `gamedev_theme.ogg` | 游戏开发部活动室的 BGM（走进房间开、走出去停） | 「碧蓝档案OST Vol.1」P70「Pixel Time（游戏开发部）」，© NEXON Games / Yostar |
-| `esports_theme.ogg` | 电竞房的 BGM（走进房间开、走出去停；房子买回来之前不出声） | 「碧蓝档案OST Vol.1」P8「Colorful Mess」，© NEXON Games / Yostar |
-| `art609_theme.ogg` | 画室 609 的 BGM（范围按「出门」定，与泼溅释放同一套边界） | 「碧蓝档案OST Vol.1」P37「Lemonade Diary（咖啡厅）」，© NEXON Games / Yostar |
-| `hut_theme.ogg` | 「临时服务器据点」小屋的 BGM（走进去开、走出去停） | 「碧蓝档案OST Vol.1」P44「Daily Routine 247（阿罗娜／彩奈）」，© NEXON Games / Yostar |
-| `mondrian_theme.ogg` | 蒙德里安大楼的 BGM（进屋开、出门停） | 「碧蓝档案OST Vol.1」P5「Midsummer Cat」，© NEXON Games / Yostar |
+| 文件名 | 用在哪 | 作者 / 权利记录 | 来源平台与曲名 |
+|---|---|---|---|
+| `shop_theme.ogg` | 商店「柴关电脑城」 | Toby Fox / Materia Collective | UNDERTALE「Tem Shop」；按使用者要求省略平台 |
+| `gamedev_theme.ogg` | 游戏开发部活动室 | NEXON Games / Yostar（原作 OST 权利记录，作曲署名待补） | 哔哩哔哩音乐合集 Vol.1 P70「Pixel Time」 |
+| `esports_theme.ogg` | 电竞房 | 同上 | 哔哩哔哩音乐合集 Vol.1 P8「Colorful Mess」 |
+| `art609_theme.ogg` | 画室 609 | 同上 | 哔哩哔哩音乐合集 Vol.1 P37「Lemonade Diary」 |
+| `hut_theme.ogg` | 临时服务器据点 | 同上 | 哔哩哔哩音乐合集 Vol.1 P44「Daily Routine 247」 |
+| `mondrian_theme.ogg` | 蒙德里安大楼与门厅 | 同上 | 哔哩哔哩音乐合集 Vol.1 P5「Midsummer Cat」 |
+| `pv_theme.mp3` | 开场 | 同上 | 哔哩哔哩音乐合集 Vol.1 P2「Constant Moderato」 |
+| `doom_theme.ogg` | 终局 Boss | 同上 | 哔哩哔哩合集「Encroached Sky」；不是 DOOM 配乐 |
+
+来源平台、录音权利与作曲者分别记录，不把上传者当作作曲者。完整署名见
+`CREDITS.md` / `scripts/credits.gd`；本表不会改变音频的游戏导出包含规则。
 
 ⚠️ `mondrian_theme.ogg` **两处共用**：`game.tscn` 里的蒙德里安大楼（`MondrianHouse`）
 和 `next_level.tscn` 里的门厅（`Hall`）放的是同一首、同一个曲目名 `mondrian`，

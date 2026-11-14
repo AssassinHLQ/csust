@@ -112,6 +112,13 @@ func _request(path: String) -> void:
 		print("[EsportsLOD] 没有 %s —— 跳过这一档（画质降一级，功能不受影响）"
 			% path.get_file())
 		return
+	if DisplayServer.get_name() == "headless":
+		# dummy 渲染器下避免纹理后台初始化与碰撞侧读取 mesh 数组交错。
+		# 保留全部 LOD 实例供结构自检；有窗口的游戏继续走后台加载。
+		var t0 := Time.get_ticks_msec()
+		var ps := load(path) as PackedScene
+		_attach(path, ps, Time.get_ticks_msec() - t0)
+		return
 	var err := ResourceLoader.load_threaded_request(path)
 	if err != OK:
 		push_warning("[EsportsLOD] %s 后台加载发起失败（错误 %d）" % [path.get_file(), err])

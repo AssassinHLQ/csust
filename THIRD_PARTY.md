@@ -1,82 +1,62 @@
-# 第三方组件与素材许可说明
+# 第三方组件、素材来源与许可记录
 
-本仓库**自己的代码**（GDScript、场景、着色器、项目配置、文档）以 **MIT** 授权，见 [LICENSE](LICENSE)。
+完整逐项清单见 [CREDITS.md](CREDITS.md)，游戏内由 `scripts/credits.gd` 提供。每条记录作者、来源平台、资源位置与已有许可；本页说明来源核对方式与保留的许可原文。更新日期：2026-11-14。
 
-下面这些**不属于** MIT 覆盖范围。其中私有素材**不在本仓库中分发**，
-`.gitignore` 已强制排除 —— 克隆本仓库后需要你自己补齐才能运行（见各目录下的 README）。
+## 优先致谢
 
-## 一览
+1. **Kenney — Kenney.nl**：Pixel Adventure UI、Interface Sounds、Sci-fi Sounds、RPG Audio，CC0 1.0。原文分别保留在 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md`、`assets/sfx/LICENSE_Kenney_CC0.md`。
+2. **Cup Nooble — itch.io**：Sprout Lands UI Pack，原包条款限非商业项目，并限制素材再分发与转售。来源：<https://cupnooble.itch.io/sprout-lands-ui-pack>；原文 `assets/ui_sprout/LICENSE_SproutLands.txt`。
 
-| 组件 | 许可 | 是否随仓库分发 | 说明 |
-|---|---|---|---|
-| [Godot Engine](https://godotengine.org) 4.7.1 | MIT | ❌ 不包含 | 需要自行安装（本工程用 mono 版验证，不含 C# 代码） |
-| [GDGS](https://github.com/ReconWorldLab/godot-gaussian-splatting) 3.3.0 | MIT | ✅ 包含于 `addons/gdgs/` | 高斯泼溅渲染插件，作者 ReconWorldLab；原许可文件保留在 `addons/gdgs/LICENSE` |
-| [UI Pack - Pixel Adventure](https://kenney.nl/assets/ui-pack-pixel-adventure) 2.0 | **CC0 1.0**（公有领域，可商用、无需署名） | ✅ 包含于 `assets/ui/` | 设置界面的九宫格面板 / 按钮切片（`tile_*.png`），作者 Kenney。原许可保留在 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md`。⚠️ 其中 `tile_panel.png` / `tile_button_hover.png` 的**中心被填成了白色**（原图是中空边框，直接当面板用会透出背后的游戏画面）—— CC0 允许修改 |
-| [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px | **SIL OFL 1.1** | ✅ 包含于 `assets/ui/` | **中文像素字体**（`assets/ui/font.ttf`），作者 TakWolf。实测覆盖 19214/20992 个 CJK 统一汉字、100% 中文标点、100% 假名与谚文。它是现在整套 UI 字体（`ui_skin.gd` 的 `UI_FONT_CANDIDATES`）的**兜底**：本地没放 `assets/ui_font/` 时就用它，所以克隆仓库的人一定有一套能显示中文的字。OFL 允许随软件分发，许可原文在 `assets/ui/LICENSE_FusionPixel_OFL.txt` |
-| Aa 字库「Aa暗夜深渊」 | **商用需授权**（字体压缩包内附 `获取商用授权.url`）；个人学习 / 非商业使用 | ❌ **不包含** | `assets/ui_font/Aa暗夜深渊.ttf`（3.86 MB）。现在整套 UI 用的显示字体。实测覆盖游戏里**实际会显示的 189 个字一个不缺**（含全部中文标点、同伴与 Boss 名字；`tools/font/font_needed.py` 可复现）。和 Sprout Lands 皮肤同一类处理：**可本地使用、不可再分发** —— `.gitignore` 排除该目录（只保留一份 README 说明），克隆者会自动回退到上面的 Fusion Pixel。**发布任何产物前请自行取得商用授权，或换一套允许分发的字体（如思源黑体 / 霞鹜文楷等 OFL 字体）** |
-| Sprout Lands UI Pack（美术：Cup Nooble） | **免费但限非商业**：可修改，但**不可再分发或转售（即使修改过）**，且只能用于非商业项目 | ❌ **不包含** | `assets/ui_sprout/`（设置界面的 Sprout Lands 皮肤）。授权原文抄在该目录的 `LICENSE_SproutLands.txt`。**因为禁止再分发**，这一套被 `.gitignore` 排除 —— 克隆后需自行从 [itch](https://cupnooble.itch.io/sprout-lands-ui-pack) 取得；没有它时设置界面会**自动回退**到上面的 Kenney 皮肤，不会报错 |
-| [Interface Sounds](https://kenney.nl/assets/interface-sounds) 1.0 | **CC0 1.0**（公有领域，可商用、无需署名） | ✅ 包含于 `assets/sfx/` | 界面音效，作者 Kenney：`click_001.ogg`（空仓干响）/ `click_002.ogg`（按钮）/ `toggle_001.ogg`（开关）/ `tick_002.ogg`（滑条）/ `open_001.ogg`、`close_001.ogg`（菜单开 / 关）。原许可保留在 `assets/sfx/LICENSE_Kenney_CC0.md` |
-| [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) | 同上 | ✅ 包含于 `assets/sfx/` | 枪声：`laserSmall_000` ~ `laserSmall_004`（**5 条候选随机播 + 音高抖动**，免得连发听起来像复读机）。挑它是因为武器打的是可见的光弹（§1.6），能量枪声比写实枪声更贴 |
-| [RPG Audio](https://kenney.nl/assets/rpg-audio) | 同上 | ✅ 包含于 `assets/sfx/` | 换弹两声：`metalLatch.ogg`（拔弹匣 / 松卡榫）、`metalClick.ogg`（推上弹匣） |
-| Blue Archive 「Arisu」角色模型与贴图 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `models/Arisu.glb`、`models/Arisu_ext.glb` 与自动解包的 `Arisu*.png`。取自 [BlueArchiveModels](https://github.com/lihaohong6/BlueArchiveModels)（官方素材解包整理版，整理者 **lihaohong6 / Peterli**）—— **解包不改变版权**，仍然只能本地学习。**仅用于本地学习研究，不得再分发、不得商用、不得用于任何发布产物** |
-| Blue Archive 同伴模型「未花 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊」 | **专有版权**（同上） | ❌ 不包含 | `models/companions/**`（`Mika.glb` / `Yuuka.glb` / `Noa.glb` / `Momoi.glb` / `Midori.glb` / `Yuzu.glb` / `Kei.glb` / `Kei_ext.glb`（凯伊的重导版，见 README §8.8），均取**初始形态**）。来源同上（BlueArchiveModels）。同样仅供本地学习 |
-| 「霸王龙优香」Boss 模型（FBX） | **专有版权**（同上，玩家二创） | ❌ 不包含 | `models/boss/**`（`优香霸王龙.fbx` + 贴图 + ASCII 副本）。同样仅供本地学习 |
-| 「飞猪优香」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_pig/**`（`猪猪优香.fbx` + `uv/` + `tex/` + `ref/` 作者的对照渲染图）。同样仅供本地学习 |
-| 「倭瓜优香」Boss 模型（OBJ，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_squash/**`（`倭瓜优香.obj` + `textures/` 4 张贴图）。同样仅供本地学习 |
-| 「霍德」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_hod/**`（`HOD_Original.fbx` + 3 张贴图 + 2 张作者渲染遮罩） |
-| 「佩洛洛斯拉」Boss 模型（FBX，作者：**一个睿智**） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_perorozilla/**`（`Perorozilla_Original.fbx` + 贴图 + 表情遮罩） |
-| 「比纳」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_binah/**`（`Binah_Original.fbx` + 贴图 + 渲染遮罩） |
-| 「哥利亚」Boss 模型（FBX，作者：**一个睿智**，备用） | **专有版权**（派生自 Blue Archive，玩家二创） | ❌ 不包含 | `models/boss_goliath/**`（`Goliath_Decagram_Vulcan.fbx` + 贴图 + 渲染遮罩） |
-| 高斯泼溅数据（校园 / 画室 609） | **知天下 AI 生成**；权利状态未核实 | ❌ 不包含 | `splatdata/*.sogdata`（含 `room609.sogdata`）。由使用者提供，再分发权未由本项目核实 |
-| 校园碰撞网格 | 派生自上一项 | ❌ 不包含 | `models/school.collision.glb` |
-| UNDERTALE「Tem Shop」 | **专有版权**（© Toby Fox / Materia Collective） | ❌ 不包含 | `assets/music/shop_theme.ogg`（商店「柴关电脑城」的 BGM，40.2094 s 无缝循环版）。**仅用于本地学习，不得再分发、不得用于任何发布产物**。`.gitignore` 排除音频本体，但保留 `shop_theme.ogg.import`（循环开关在里面）。裁剪与循环点的推导见 `assets/music/README.md` 与 `tools/audio/make_loop.py` |
-| Blue Archive OST「Constant Moderato（PV1）」 | **专有版权**（© NEXON Games / Yostar） | ❌ 不包含 | `assets/music/pv_theme.mp3`（开场 PV 循环播放，点「开始游戏」时淡出）。来源 B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2。**仅用于本地学习 / 非商业演示，不得再分发、不得用于任何发布产物**。`.gitignore` 排除 mp3 与 `.import`，缺文件时 PV 静音、不报错 |
-| 开场 PV 图（8 张宽幅） | **混有专有版权素材**：部分为 Blue Archive 游戏内画面（© NEXON Games / Yostar），部分为本作截图 | ❌ 不包含 | `assets/cg/pv/*.jpg`（`scripts/title_intro.gd` 按文件名排序循环平移；`.gitignore` 排除图片本体与 `.import`）。原图偏软，另有 `assets/cg/pv_hd/`（Real-ESRGAN ncnn 4× 超分 → 高 1440，由 `_tools/upscale_pv_images.ps1` 生成）优先使用，同样不入库。缺图时自动退回「渐变底 + 标题」，启动、进度条、开始按钮都不受影响 |
-| 项目图标 `icon.png` | 待确认 | ✅ 包含 | 来源需仓库作者确认；若不是原创请替换为自有图标 |
+## 代码、插件与算法
 
-## 克隆后怎么补齐
+| 组件 | 作者与平台 | 来源与许可记录 |
+|---|---|---|
+| 本项目自有代码、场景与文档 | AssassinHLQ；本地创作 / GitHub | MIT，见根目录 `LICENSE`；第三方素材另按原始条款 |
+| Godot Engine | Godot Engine contributors；Godot 官网 / GitHub | MIT；本工程使用支持 C# / .NET 的 Godot Mono 发行版，工程主要代码为 GDScript；这里的 Mono 与 JetBrains Mono 字体不同 |
+| GDGS | ReconWorldLab、4321ba、beiller（William / Bill）、sodih3iw（Wu Xinyue）；AssassinHLQ（本项目分支）；GitHub | 四位上游提交者加一位本项目分支作者分别列出，原 MIT 许可在 `addons/gdgs/LICENSE`。上游：<https://github.com/ReconWorldLab/godot-gaussian-splatting>；本项目分支：<https://github.com/AssassinHLQ/godot-gaussian-splatting> |
+| 高斯渲染 / 排序算法参考 | 2Retr0；GitHub | GDGS 上游 README 的 Acknowledgements 指向 <https://github.com/2Retr0/GodotGaussianSplatting>。校园 GGS 移植另参考 GodotGSplat，原始 MIT 许可保留在 `addons/ggs_campus/NOTICE.md` |
+| 碰撞体素化与网格算法参考 | PlayCanvas Ltd. / PlayCanvas 团队；GitHub | <https://github.com/playcanvas/splat-transform>；GDGS 上游记录为其 GDScript 移植；保留上游 MIT 及代码署名 |
+| Blue Archive 界面规格参考 | ywhdzrb；GitHub | <https://github.com/ywhdzrb/BlueArchiveUI>，来源说明保留于 `scripts/ui_skin.gd`；不把界面参考项目的许可扩展到角色与原作美术 |
+| 坦克动荡小游戏 | AssassinHLQ；原作恢复自百度网盘，内部素材授权参考用户同名 GitHub 项目 | 用户先前制作的独立小游戏，恢复后接入本作；自有代码原工程附 CC0 1.0，原文保留在 `assets/tank_turmoil/LICENSE`。内部第三方素材分别适用原许可。用户同名仓库的准确链接待补，当前公开列表未找到 |
+| 坦克小游戏算法参考 | JustDoIt0910 / Zhao Ran；GitHub | <https://github.com/JustDoIt0910/TankTrouble>；保留 Copyright (c) 2023 Zhao Ran 与完整 MIT 原文：`assets/tank_turmoil/THIRD_PARTY_NOTICES.txt`。该作者是算法参考作者，不是整个小游戏的作者 |
 
-```text
-_arisu_learn/
-├─ models/              ← 放入你自己合法获得的角色模型（见 models/README.md）
-│  ├─ companions/       ← 可选：七名同伴的 glb（来源：BlueArchiveModels）
-│  ├─ boss/             ← 可选：霸王龙优香 FBX + 贴图
-│  ├─ boss_pig/         ← 可选：飞猪优香 FBX + 贴图
-│  ├─ boss_squash/      ← 可选：倭瓜优香 OBJ + 贴图
-│  ├─ boss_hod/         ← 可选：霍德 FBX + 贴图
-│  ├─ boss_perorozilla/ ← 可选：佩洛洛斯拉 FBX + 贴图
-│  ├─ boss_binah/       ← 可选：比纳 FBX + 贴图（备用，`-- --bosses=all` 才上场）
-│  └─ boss_goliath/     ← 可选：哥利亚 FBX + 贴图（备用，同上）
-├─ assets/
-│  ├─ ui_font/          ← 可选：界面显示字体（现在是「Aa暗夜深渊.ttf」，商用需授权）
-│  │                       丢进来就整套 UI 换字；没有它会**自动回退**到下面的
-│  │                       Fusion Pixel，不会报错。放进去后要导入一次：
-│  │                       `--headless --path . --import`。见 assets/ui_font/README.md
-│  ├─ ui_sprout/        ← 可选：Sprout Lands 皮肤（panel.png / button*.png / font.ttf）
-│  │                          没有它会**自动回退**到仓库自带的 Kenney 皮肤，不会报错
-│  └─ sfx/              ← **不用补**：13 个 Kenney 音效（CC0）已经在仓库里，
-│                            克隆下来就有声音；没有文件时也只是静默、不报错（§1.14）
-└─ splatdata/           ← 可选：放入校园 / 画室609 的 .sogdata（见 splatdata/README.md）
-                          两份都没有也能跑：`-- --splat=off`
-```
+GDGS 的人数按实际角色核对：2026-11-14 上游 contributors API 为四位，本项目分支为 AssassinHLQ。算法上游作者另列，不混作该仓库的直接提交者。核对接口见 `CREDITS.md`。
 
-角色模型与泼溅数据**都是可选的第二块**：没有泼溅数据时，用
-`-- --splat=off` 运行即可只玩射击部分（只想留一份泼溅用 `-- --venue=room|campus`，
-两份同时在 8 GB 显卡上显存偏紧，见 README §6.8）；没有同伴 / Boss 素材时，
-把 `game.tscn` 里对应的 `Companion*` / `Boss` / `BossPig` / `BossSquash` / `BossHod` /
-`BossPeroro` 节点删掉即可；没有主角模型时工程无法运行（`scenes/player.tscn` 直接引用该模型）。
+## 模型、扫描与图像
 
-> **逐项署名**（谁做了什么、能不能分发）见 [CREDITS.md](CREDITS.md)，
-> 游戏里 Esc → 设置 →「致谢与素材署名」显示的是同一份数据。
+| 素材 | 作者与平台 | 记录 |
+|---|---|---|
+| 老师模型 | 张伟事务所；模之屋 | 当前模型按用户确认署名；保留在本地的旧版 sensei 包另署食小派蒙辣 |
+| 七个 Boss，包括霸王龙优香与飞猪优香 | 一个睿智；模之屋 | 霸王龙、飞猪、倭瓜、霍德、佩洛洛斯拉、比纳、哥利亚统一登记；原作角色权利仍属于相应版权方 |
+| 游戏开发部部室 | 起航扬帆了；模之屋 | 更正旧记录中的 Sketchfab；导入、围合与碰撞处理不改变源模型署名 |
+| 商店 Shop | Nikitos & 3130 / vrcityphoto；Sketchfab | CC BY 4.0；作者、模型链接与缩放 / 材质 / 烘焙改动保留在完整清单 |
+| Falcon 9 火箭 | Forest Katsch / ForestKatsch；Sketchfab | CC BY-NC 4.0；保留作者、来源及模型处理说明 |
+| DDR4 内存条 | suuugar_mommy；Sketchfab | CC BY-NC 4.0；原 GLB 元数据有来源与许可记录 |
+| 天空盒 | 原作者未查明；爱给网整理 | 用户确认下载整理平台为爱给网。旧记录中 AllSky Free / Richard Whitelock 与当前文件缺少对应证据，作为待核实线索保留，不再据此将整包标为 MIT。原作者未查明，侵权必删。程序生成的 `sky_doom.jpg` 另署本项目作者 |
+| 电竞房、硬件与保留的处理中间模型 | 原作者未查明；爱给网整理；本项目处理与导入 | 原始作者与具体资源页未找到；原作者未查明，侵权必删。完整清单逐目录登记 RTX 5090、CPU、显示器、机箱、970 EVO 与电竞房等 |
+| 蒙德里安建筑 | AssassinHLQ；DeepSeek Harness（使用 1017） | 用户确认系自行使用该工具制作；保留“1017”原始标识，不推测模型全名 |
+| Arisu、同伴与芹香模型 | NEXON Games / Yostar；模型整理 lihaohong6 / Peterli；GitHub（BlueArchiveModels） | 模型包来源 <https://github.com/lihaohong6/BlueArchiveModels>；整理与解包不改变原作版权。校园扫描不是 Blue Archive 角色素材 |
+| 校园 / 画室609 扫描及派生碰撞 | 用户提供；知天下 AI；碰撞工具参考 GitHub 项目 | 具体数据的原始权利与工具代码的 MIT 许可分别记录，不混为同一许可 |
+| 当前开场 PNG | AssassinHLQ（本作截图）；本地提供 | `_arisu_captures/_shots` 下当前 5 张 PNG 已纳入导出。截图内的模型、美术等第三方素材保留各自署名与权利；历史 PV 图片另列 |
 
-## 关于 `..\_blender_arisu\`
+“侵权必删”是使用者指定的联系与移除说明，不代替原始作者，也不作为授权证明。
 
-Blender 动作生成管线**不在本仓库内**，而且它的产物是上述专有模型的派生数据，
-同样**不可分发**。本仓库只保留了「怎么改动作」的文档（README 第五节）。
+## 字体
 
-## 你自己也要注意
+| 文件 | 作者与来源平台 | 已核实信息 |
+|---|---|---|
+| `assets/ui/font.ttf` 及招牌子集 | TakWolf；GitHub | Fusion Pixel Font，<https://github.com/TakWolf/fusion-pixel-font>；SIL OFL 1.1，原文 `assets/ui/LICENSE_FusionPixel_OFL.txt` |
+| `assets/ui/mono.ttf` | The JetBrains Mono Project Authors；设计 Philipp Nurullin、Konstantin Bulenkov；JetBrains 官网 / GitHub | JetBrains Mono 等宽字体；内嵌元数据与 `assets/ui/LICENSE_JetBrainsMono_OFL.txt` 均确认 SIL OFL 1.1；<https://github.com/JetBrains/JetBrainsMono> |
+| `assets/ui_sprout/font.ttf` | Cup Nooble；itch.io | 内嵌家族名 pixelFont-7-8x14-sproutLands、设计者 Cup Nooble；随 Sprout Lands UI Pack，按原包条款记录，不标为 OFL；主要用于数字与拉丁字形 |
+| `assets/ui_font/Aa暗夜深渊.ttf` | Aa / 翰美互通（厦门）科技有限公司；字体管家内嵌官网，实际下载站待查 | TTF name 表标 ©2020 HanMeiHutong (XiaMen) Technology Co.Ltd.、设计者 Aa、`http://www.zitiguanjia.com`，字体家族名为“Aa暗夜深渊 (非商业使用)”。当前缺原始下载页面与完整发行条款，不从官网地址推断实际下载渠道 |
 
-- 若你把本工程改成自己的角色与场景，请把 `LICENSE` 里的版权行换成你的名字，
-  并删掉本文件中不再适用的条目。
-- MIT 是宽松许可，但它**不覆盖**你放进 `models/`、`splatdata/` 的素材 ——
-  别把它们一起推上去。
+## 视频、语音与音乐
+
+- 绿幕视频逐位标作者与 **哔哩哔哩**：香草BA、忧郁的优_、沉迷爱丽丝（阿洛娜）；瞿黧、星冻qwq、优香体重100kg（普拉娜）。具体保留的视频名与链接见 `CREDITS.md`；未找到的具体链接明确待补。
+- 配音：**SLNeil — 哔哩哔哩**，<https://space.bilibili.com/523537077>。按使用者确认，音色模型均来自 SLNeil，语音由 **GPT-SoVITS** 合成，覆盖终端、商店、凯伊与开场剧情。项目台词、音色模型、合成工具与原作角色声音分别记录；工具来源为 GitHub 的 `RVC-Boss/GPT-SoVITS`。
+- 商店 Tem Shop：**Toby Fox / Materia Collective**，按使用者要求省略来源平台。
+- 其他音乐按具体曲目列入完整清单，包括 Constant Moderato、Pixel Time、Colorful Mess、Lemonade Diary、Daily Routine 247、Midsummer Cat、Encroached Sky；本地合集来源记录为哔哩哔哩，具体作曲署名仍待补。`doom_theme.ogg` 实际为 Encroached Sky，不能按文件名署成 DOOM 音乐。
+
+## 版本管理与导出
+
+`.gitignore` 管理 Git 跟踪，`export_presets.cfg` 管理游戏导出；两者分开。本次署名更新不添加素材导出排除，不把未入 Git 的本地素材说成磁盘缺失，也不由“已归位”推断已取得额外授权。未知作者、失落链接与许可待核项保留在清单，已有第三方许可原文不删除、不改写权利人。

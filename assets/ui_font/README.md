@@ -6,12 +6,22 @@
 
 ## 现在放的是
 
-`Aa暗夜深渊.ttf`（Aa 字库，**商用需授权**）。
+`Aa暗夜深渊.ttf`。2026-11-14 从当前字体文件的 `name` 表核实：
 
-⚠️ **这个文件不在版本库里。** `.gitignore` 排除了本目录，只保留这份说明 ——
-理由和 `models/`、`splatdata/`、`assets/ui_sprout/` 一样：
-**能本地用，但不能随仓库再分发**。放这个目录里的字体请自行确认授权，
-本仓库不分发它们。详见 [../../THIRD_PARTY.md](../../THIRD_PARTY.md)。
+- 作者 / 厂商：Aa 字库、翰美互通（厦门）科技有限公司。
+- 版权：©2020 HanMeiHutong (XiaMen) Technology Co.Ltd.
+- 字体家族名：`Aa暗夜深渊 (非商业使用)`。
+- 内嵌厂商 / 设计者官网：字体管家，`http://www.zitiguanjia.com`。
+- 用户实际下载站与原始资源页未找到；内嵌官网不能证明实际下载渠道，完整发行条款仍待核。
+
+字体本体被 Git 忽略；这只描述版本管理，不决定游戏导出包含规则。逐项署名见
+[../../CREDITS.md](../../CREDITS.md)，许可记录见 [../../THIRD_PARTY.md](../../THIRD_PARTY.md)。
+
+另外两款字体均有原始许可：`assets/ui/font.ttf` 为 TakWolf 的 Fusion Pixel（GitHub），
+`assets/ui/mono.ttf` 为 JetBrains Mono（JetBrains 官网 / GitHub），均为 SIL OFL 1.1。
+Mono 在字体名中指等宽，与支持 C# / .NET 的 Godot Mono 发行版不同。
+`assets/ui_sprout/font.ttf` 是 Sprout Lands 包自带的像素字体，内嵌设计者为 Cup Nooble，
+来源 itch.io，按素材包条款记录，主要用于数字与拉丁字形。
 
 ## 换成别的字体
 

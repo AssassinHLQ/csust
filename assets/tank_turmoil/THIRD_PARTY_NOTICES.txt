@@ -1,3 +1,11 @@
+Project origin: Tank Turmoil by AssassinHLQ, an earlier independent project
+restored from Baidu Netdisk and integrated into this game.
+The original project's own code includes a CC0 license (see LICENSE).
+Third-party assets retain their original terms; the user identifies their
+same-name GitHub repository as the reference for those internal attributions.
+The exact repository URL and asset-by-asset records remain to be verified.
+The algorithm reference below is separate from authorship of the whole game.
+
 Algorithm reference: TankTrouble by JustDoIt0910
 https://github.com/JustDoIt0910/TankTrouble
 

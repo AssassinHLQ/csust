@@ -6041,23 +6041,26 @@ match path.get_extension().to_lower():
 
 ## 11.1 结论
 
-**除模型与美术素材外，本仓库全部以 [MIT](LICENSE) 授权。**
+**本项目自有代码以 [MIT](LICENSE) 授权；接入的坦克小游戏原工程自有代码附 CC0，第三方组件和素材分别适用原许可。**
 **逐项署名在 [CREDITS.md](CREDITS.md)**（谁做了什么）与 [THIRD_PARTY.md](THIRD_PARTY.md)（许可合规）。
 这两份 + 游戏内 Esc → 设置 →「致谢与素材署名」面板，数据都来自 `scripts/credits.gd` 的同一张表。
+
+致谢顺序为 **Kenney 第一、Cup Nooble 第二**。完整清单逐项写作者与平台：模之屋、Sketchfab、哔哩哔哩、itch.io、GitHub 等；爱给网整理但原作者未查明的素材如实保留待查。Git 跟踪状态与游戏导出包含配置分开，当前开场 `_arisu_captures/_shots` 的 PNG 已纳入导出。
 
 | 内容 | 许可 | 在仓库里？ |
 |---|---|---|
 | 本项目作者编写的全部代码与文档（`scripts/`、`scenes/`、`project.godot`、README…） | **MIT** | ✅ |
-| `addons/gdgs/`（GDGS 3.3.0，ReconWorldLab） | MIT（作者原许可保留在 `addons/gdgs/LICENSE`） | ✅ |
+| `addons/gdgs/`（ReconWorldLab、4321ba、beiller、sodih3iw；AssassinHLQ 为本项目分支开发者，GitHub） | MIT（作者原许可保留在 `addons/gdgs/LICENSE`）；算法上游另见完整清单 | ✅ |
 | `assets/ui/`（UI Pack 切片，作者 Kenney） | **CC0 1.0** | ✅ |
 | `assets/ui/font.ttf`（Fusion Pixel 12px，作者 TakWolf） | **SIL OFL 1.1** | ✅ |
-| `assets/ui_font/Aa暗夜深渊.ttf`（Aa 字库） | **商用需授权** | ❌ 被 `.gitignore` 排除 |
-| `assets/ui_sprout/` | Sprout Lands 皮肤（Cup Nooble，禁止再分发） | ❌ 被 `.gitignore` 排除 |
+| `assets/ui/mono.ttf`（JetBrains Mono 等宽字体；JetBrains 官网 / GitHub） | **SIL OFL 1.1** | ✅ |
+| `assets/ui_font/Aa暗夜深渊.ttf`（Aa / 翰美互通；内嵌官网为字体管家，实际下载页待查） | 内嵌字体名注明“非商业使用”；完整发行条款待核 | ❌ 被 `.gitignore` 排除 |
+| `assets/ui_sprout/` | Sprout Lands 皮肤（Cup Nooble / itch.io，原条款见完整清单） | ❌ 被 `.gitignore` 排除 |
 | `assets/sfx/*.ogg`（13 个，Kenney Interface/Sci-fi/RPG Audio） | **CC0** | ✅ **随仓库分发**（§1.14） |
 | `assets/sfx/gunshot_000..004.wav`（本项目合成） | **MIT** | ✅ |
 | `models/Arisu*.glb` + 解包贴图 | © NEXON Games / Yostar，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/companions/*.glb`（小雪 / 优香 / 诺亚 / 小桃 / 小绿 / 柚子 / 凯伊） | 同上，**专有** | ❌ 被 `.gitignore` 排除 |
-| `models/boss/优香霸王龙.fbx` + 贴图 | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
+| `models/boss/优香霸王龙.fbx` + 贴图（一个睿智 / 模之屋，与飞猪同作者） | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/boss_pig/`（飞猪优香，作者：一个睿智） | 派生自 Blue Archive，**专有** | ❌ 被 `.gitignore` 排除 |
 | `models/boss_squash/`（倭瓜优香，作者：一个睿智） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `models/boss_hod/`（霍德，作者：一个睿智） | 同上 | ❌ 被 `.gitignore` 排除 |
@@ -6065,6 +6068,7 @@ match path.get_extension().to_lower():
 | `models/boss_binah/`（比纳，作者：一个睿智，备用） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `models/boss_goliath/`（哥利亚，作者：一个睿智，备用） | 同上 | ❌ 被 `.gitignore` 排除 |
 | `story/`（剧情文本，本项目作者） | **MIT** | ✅ |
+| `assets/tank_turmoil/` / `scripts/tank_turmoil/`（AssassinHLQ 的旧小游戏，百度网盘恢复） | 自有代码原工程附 CC0；内部素材与 GitHub 算法参考分别保留原许可 | 部分代码与许可记录已纳入 |
 | `splatdata/*.sogdata`、`models/school.collision.glb` | 权利状态未核实 | ❌ 被 `.gitignore` 排除 |
 | `icon.png` | 待仓库作者确认 | ✅（如非原创请替换） |
 
