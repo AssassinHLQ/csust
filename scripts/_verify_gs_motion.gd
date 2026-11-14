@@ -60,6 +60,7 @@ var _regression_routes := ""
 var _safe_margin := -1.0
 var _jump_obstacles := false
 var _expect_outline_guards := false
+var _ground_reference := PackedFloat32Array()
 var _player_ms: Array[float] = []
 
 func _initialize() -> void:
@@ -87,6 +88,12 @@ func _initialize() -> void:
 			_regression_routes = a.trim_prefix("--regression-routes=")
 		elif a.begins_with("--safe-margin="):
 			_safe_margin = float(a.trim_prefix("--safe-margin="))
+		elif a.begins_with("--ground-reference="):
+			_ground_reference = FileAccess.get_file_as_bytes(a.trim_prefix("--ground-reference=")).to_float32_array()
+	if not _ground_reference.is_empty() and _ground_reference.size() != 1153 * 979:
+		push_error("Ground reference must contain 1153x979 float32 samples")
+		quit(2)
+		return
 	_run.call_deferred()
 
 func _check(ok: bool, label: String, detail: Variant = "") -> void:
@@ -238,6 +245,7 @@ func _run() -> void:
 	var trials: Array[Dictionary] = []
 	for route in _routes:
 		route["guarded"] = _expect_outline_guards and _guarded_route(route)
+		route["obstructed"] = not _ground_reference.is_empty() and _reference_obstruction(route)
 		for sprint in [false, true]:
 			for sign_ in [-1.0, 1.0]:
 				trials.append(await _walk(route, sprint, sign_))
@@ -248,6 +256,7 @@ func _run() -> void:
 		movement_label = "real player traverses terrain with walking, running and obstacle jumps"
 	if _expect_outline_guards:
 		movement_label += "; scan-edge routes stop at guards"
+		movement_label += "; measured obstacles require ordinary steering escape"
 	_check(not trials.is_empty() and failed.is_empty(), movement_label, {"trials": trials.size(), "failed": failed.size()})
 	_report["player_update_ms"] = _stats(_player_ms)
 	_report["memory_mib"] = OS.get_static_memory_usage() / 1048576.0
@@ -540,6 +549,21 @@ func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 	var ground := _ray(start.x, start.z, 8.0, -20.0) if _terrain_routes else _ray(start.x, start.z)
 	if not ground.is_empty():
 		start.y = float(ground["position"].y)
+	var requested_start := start
+	# Old fixed routes can put their endpoint inside a newly retained tree or
+	# low shell. Keep that coordinate in the report, and begin the approach
+	# from the nearest capsule-clear point behind it (at most 2 m away).
+	# The approach still has to reach or stop safely at the original obstacle.
+	if not _ground_reference.is_empty() and not _spawn_clear(start):
+		for offset in range(1, 9):
+			var approach := requested_start - direction * offset * .25
+			var support := _ray(approach.x, approach.z, requested_start.y + 1.5, requested_start.y - 1.5)
+			if support.is_empty():
+				continue
+			approach.y = float(support["position"].y)
+			if _spawn_clear(approach):
+				start = approach
+				break
 	_player.global_position = start + Vector3.UP * 0.12
 	_player.velocity = Vector3.ZERO
 	_player.set("_yaw", atan2(-direction.x, -direction.z))
@@ -563,6 +587,7 @@ func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 	var jumps := 0
 	var last_jump := -90
 	var touched_guard := false
+	var minimum_clearance := INF
 	var guarded: bool = route.get("guarded", false)
 	for i in limit:
 		await physics_frame
@@ -585,26 +610,101 @@ func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 			trace.append({"frame": i, "position": str(_player.global_position), "velocity": str(_player.velocity), "floor_normal": str(_player.get_floor_normal())})
 		progress = (_player.global_position - start).dot(direction)
 		min_y = minf(min_y, _player.global_position.y)
+		var expected_y := _reference_height(_player.global_position)
+		if is_finite(expected_y):
+			minimum_clearance = minf(minimum_clearance, _player.global_position.y - expected_y)
 		if _player.is_on_floor():
 			floor_frames += 1
 		_player_ms.append(ms)
 		timings.append(ms)
-		if progress >= 8.0 or min_y < (center.y - 3.0 if _terrain_routes else -4.0):
+		var fell := minimum_clearance < -1.4 if not _ground_reference.is_empty() else min_y < (center.y - 3.0 if _terrain_routes else -4.0)
+		if progress >= 8.0 or fell:
 			break
 	_release()
 	var lateral := absf((_player.global_position - start).dot(Vector3(-direction.z, 0.0, direction.x)))
 	var minimum_allowed_y := center.y - 1.4 if _terrain_routes else -0.4
-	var ok := grounded_start and progress >= 7.8 and min_y >= minimum_allowed_y and lateral < 0.8
-	if guarded and touched_guard:
-		ok = grounded_start and min_y >= minimum_allowed_y and progress < 8.5
+	var safe_height := minimum_clearance >= -1.4 if not _ground_reference.is_empty() else min_y >= minimum_allowed_y
+	var ok := grounded_start and progress >= 7.8 and safe_height and lateral < 0.8
+	var end_position := _player.global_position
+	var retreat := 0.0
+	var escape := 0.0
+	var escape_action := ""
+	var obstructed: bool = route.get("obstructed", false)
+	if (_expect_outline_guards and touched_guard) or (obstructed and not ok):
+		# A safety stop is valid only if the player can leave it by normal
+		# reverse movement or steering. This catches the small guard cages that trap users.
+		Input.action_press("move_back")
+		for i in 90:
+			await physics_frame
+			_player.call("_physics_process", 1.0 / Engine.physics_ticks_per_second)
+		retreat = (end_position - _player.global_position).dot(direction)
+		_release()
+		escape = Vector2(_player.global_position.x - end_position.x, _player.global_position.z - end_position.z).length()
+		escape_action = "move_back"
+		if escape <= 1.0:
+			for action in ["move_left", "move_right"]:
+				Input.action_press(action)
+				for i in 90:
+					await physics_frame
+					_player.call("_physics_process", 1.0 / Engine.physics_ticks_per_second)
+				_release()
+				escape = Vector2(_player.global_position.x - end_position.x, _player.global_position.z - end_position.z).length()
+				escape_action = action
+				if escape > 1.0:
+					break
+		var landing := _ray(_player.global_position.x, _player.global_position.z, _player.global_position.y + .4, _player.global_position.y - .7)
+		ok = grounded_start and safe_height and progress < 8.5 and escape > 1.0 and not landing.is_empty()
 	var contacts: Array = []
 	for i in _player.get_slide_collision_count():
 		var contact := _player.get_slide_collision(i)
 		contacts.append({"body": str(contact.get_collider().get_path()), "position": str(contact.get_position()), "normal": str(contact.get_normal())})
-	var result := {"tag": route["tag"], "sprint": sprint, "direction": sign_, "jumps": jumps, "guarded": guarded, "guard_contact": touched_guard, "start": str(start), "settled": str(settled), "end": str(_player.global_position), "distance": progress, "lateral_m": lateral, "minimum_y": min_y, "grounded_start": grounded_start, "floor_frames": floor_frames, "frames": frames, "player_update_ms": _stats(timings), "contacts": contacts, "trace": trace, "ok": ok}
+	var result := {"tag": route["tag"], "sprint": sprint, "direction": sign_, "jumps": jumps, "guarded": guarded, "guard_contact": touched_guard, "obstructed_before_motion": obstructed, "requested_start": str(requested_start), "spawn_approach_offset_m": start.distance_to(requested_start), "guard_retreat_m": retreat, "escape_m": escape, "escape_action": escape_action, "minimum_terrain_clearance_m": minimum_clearance if is_finite(minimum_clearance) else null, "start": str(start), "settled": str(settled), "end": str(end_position), "distance": progress, "lateral_m": lateral, "minimum_y": min_y, "grounded_start": grounded_start, "floor_frames": floor_frames, "frames": frames, "player_update_ms": _stats(timings), "contacts": contacts, "trace": trace, "ok": ok}
 	if not ok:
 		print("[collision] WALK FAIL ", result)
 	return result
+
+func _spawn_clear(at: Vector3) -> bool:
+	var capsule := (_player.get_node("Collision") as CollisionShape3D).shape as CapsuleShape3D
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = 1
+	query.exclude = [_player.get_rid()]
+	query.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * .77)
+	return _space.intersect_shape(query, 1).is_empty()
+
+## The retained regression coordinates can cross a real tree, wall or steep
+## bank in a new bake. Identify those BEFORE motion, using the measured grade
+## rather than a ray that could pick the top of the obstacle itself. Keep the
+## trial and require ordinary reverse movement or steering to escape each stop.
+func _reference_obstruction(route: Dictionary) -> bool:
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = .34
+	capsule.height = 1.58
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = 1
+	query.exclude = [_player.get_rid()]
+	for i in range(-16, 17):
+		var point: Vector3 = route["center"] + route["axis"] * i * .25
+		point.y = _reference_height(point) + 1.08
+		query.transform = Transform3D(Basis.IDENTITY, point)
+		if not _space.intersect_shape(query, 1).is_empty():
+			return true
+	return false
+
+func _reference_height(at: Vector3) -> float:
+	if _ground_reference.is_empty():
+		return NAN
+	# The isolated input-control platform is outside the scan reference.
+	if at.x < -288.0 or at.x > 288.0 or at.z < -564.0 or at.z > -75.0:
+		return NAN
+	var x := clampf((at.x + 288.0) * 2.0, 0, 1152)
+	var z := clampf((at.z + 564.0) * 2.0, 0, 978)
+	var ix := mini(floori(x), 1151)
+	var iz := mini(floori(z), 977)
+	var a := lerpf(_ground_reference[iz * 1153 + ix], _ground_reference[iz * 1153 + ix + 1], x - ix)
+	var b := lerpf(_ground_reference[(iz + 1) * 1153 + ix], _ground_reference[(iz + 1) * 1153 + ix + 1], x - ix)
+	return lerpf(a, b, z - iz)
 
 func _ray_benchmark() -> void:
 	var samples: Array[float] = []

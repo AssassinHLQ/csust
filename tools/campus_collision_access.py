@@ -136,10 +136,19 @@ def guards(top, points, width):
         nearest = np.argmin(np.linalg.norm(delta - fraction[:, None] * vectors, axis=1))
         return points[nearest, 1] * (1 - fraction[nearest]) + points[nearest + 1, 1] * fraction[nearest]
     supported = np.isfinite(top)
-    # One missing 0.5 m cell is narrower than the player's capsule diameter.
+    # Do not erect tiny cages around narrow sampling pinholes. Test the void
+    # at 0.25 m resolution against the real 0.30 m capsule radius; substantial
+    # interior holes and all exterior missing regions keep their guards.
     missing, count = ndimage.label(~supported)
-    sizes = np.bincount(missing.ravel())
-    supported |= (sizes[missing] == 1) & (missing > 0)
+    fine_void = np.repeat(np.repeat(~supported, 2, 0), 2, 1)
+    fine_labels = np.repeat(np.repeat(missing, 2, 0), 2, 1)
+    radius = ndimage.maximum(ndimage.distance_transform_edt(fine_void) * .25,
+                              labels=fine_labels, index=np.arange(count + 1))
+    narrow = radius < .3
+    exterior = np.unique(np.r_[missing[0], missing[-1], missing[:, 0], missing[:, -1]])
+    narrow[exterior] = False
+    narrow[0] = False
+    supported |= narrow[missing]
     # Samples become cells centred at their world positions.
     faces, edges = [], []
     padded = np.pad(supported, 1)
@@ -185,6 +194,8 @@ def main():
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--target', nargs=3, type=float, default=[-62, 5.5, -148])
     parser.add_argument('--width', type=float, default=2.6)
+    parser.add_argument('--support-mask', type=Path)
+    parser.add_argument('--surface', type=Path)
     args = parser.parse_args()
     if args.out.exists():
         raise FileExistsError(args.out)
@@ -201,7 +212,14 @@ def main():
         raise ValueError("Landing ramp exceeds the bridge grade limit")
     points = np.vstack((points, landing))
     bridge, floor, rails = bridge_geometry(points, args.width)
-    boundary, edges = guards(top, points, args.width)
+    boundary_top = top
+    if args.support_mask or args.surface:
+        if not (args.support_mask and args.surface):
+            parser.error('--support-mask and --surface must be supplied together')
+        support = np.fromfile(args.support_mask, dtype='u1').reshape(979, 1153).astype(bool)
+        surface = np.fromfile(args.surface, dtype='<f4').reshape(979, 1153)
+        boundary_top = np.where(support, surface, np.nan)
+    boundary, edges = guards(boundary_top, points, args.width)
     args.out.mkdir(parents=True)
     for name, triangles in [('ScanBoundary', boundary), ('CampusBridgeExtension', bridge),
                             ('BridgeDeck', floor), ('BridgeRails', rails)]:
@@ -210,7 +228,8 @@ def main():
               'boundary_triangles': len(boundary), 'bridge_triangles': len(bridge),
               'bridge_width_m': args.width, 'bridge_points': points.tolist(),
               'bridge_length_m': float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
-              'edges': edges, 'support': 'native ray hits; missing columns are not filled'}
+              'edges': edges,
+              'support': 'measured ground cells; narrow interior sampling holes have no cages; missing columns are not filled' if args.support_mask else 'native ray hits; missing columns are not filled'}
     (args.out / 'access.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({k: v for k, v in report.items() if k != 'edges'}, indent=2))
 

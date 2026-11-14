@@ -3,6 +3,7 @@ extends CharacterBody3D
 
 ## 上台阶辅助。用 `preload` 而不是 `class_name` 引用 —— 见 `step_climb.gd` 文件头第一条。
 const StepClimb := preload("res://scripts/step_climb.gd")
+const CollisionEscape := preload("res://scripts/collision_escape.gd")
 ## 开发者快捷键（F3/F4/F5/F6）用到的两个静态工具
 const DevMode := preload("res://scripts/dev_mode.gd")
 const SceneFlowDev := preload("res://scripts/scene_flow.gd")
@@ -912,41 +913,23 @@ func _physics_process(delta: float) -> void:
 	_blocked_last_frame = StepClimb.blocked(
 		global_position - before, horiz * delta)
 
-	# ── 卡角自救（2026-11-02 用户：「卡在这个角落居然出不来」）──
-	# 家具碰撞是轴对齐盒，桌子和椅子之间可能留下 < 胶囊直径的 V 形口袋；
-	# 同时贴两面墙、推了 0.8 s 还几乎没动，就沿两面法线之和轻推 0.28 m 出来。
-	#
-	# ⚠️ 2026-11-11 用户：「**碰撞总是卡住人**，这个校园到底怎么了」——
-	#    校园不是盒子，是**烘焙出来的 trimesh**（614 万点那份点云烘的），
-	#    三角面接缝 + 起伏路面到处都是 < 胶囊直径的凹口，比家具那种 V 形口袋常见得多，
-	#    而且人一卡就是好几秒。所以这一轮收紧了两处：
-	#      · 触发时间 1.0 s → **0.5 s**（原来是「推满一秒才承认自己卡了」，太慢）
-	#      · 外推距离 0.22 → **0.35 m**（要能一次跨出三角面接缝的宽度）
-	#    同时 `player.tscn` 把 `safe_margin` 从 Godot 默认的 **0.001 m** 提到 **0.04 m** ——
-	#    这才是根上的那条：margin 太小，胶囊本来就贴着三角面走，一遇到凹边就楔进去。
+	# Genuine corner recovery uses a collision sweep and checks landing support.
+	# A single wall must not repeatedly teleport the player backwards.
 	_unstick_cool = maxf(_unstick_cool - delta, 0.0)
-	var hs := Vector2(velocity.x, velocity.z).length()
+	var travelled := global_position - before
+	var hs := Vector2(travelled.x, travelled.z).length() / maxf(delta, .000001)
 	var pushing := dir.length_squared() > 0.01
 	if is_on_floor() and pushing and hs < 0.20:
 		_stuck_t += delta
 	else:
 		_stuck_t = 0.0
 	if _stuck_t > 0.5 and _unstick_cool <= 0.0:
-		# 先按墙法线退；法线拿不到就沿输入反方向退
-		var away := Vector3.ZERO
-		for ci in get_slide_collision_count():
-			away += get_slide_collision(ci).get_normal()
-		away.y = 0.0
-		if away.length_squared() < 0.01:
-			away = -dir
-			away.y = 0.0
-		if away.length_squared() > 0.01:
-			var was := global_position
-			global_position += away.normalized() * 0.35
+		var was := global_position
+		if CollisionEscape.recover(self, dir):
 			velocity = Vector3.ZERO
-			_stuck_t = 0.0
-			_unstick_cool = 0.6
 			print("[Player] 卡角自救：%s → %s" % [str(was.snappedf(0.01)), str(global_position.snappedf(0.01))])
+		_stuck_t = 0.0
+		_unstick_cool = 0.6
 
 	# --- 角色朝向：开火/开镜时必对准准星，否则对着移动方向 ---
 	#

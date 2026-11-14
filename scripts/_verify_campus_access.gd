@@ -8,11 +8,14 @@ var _passed := 0
 var _failed := 0
 var _results: Array = []
 var _access := "res://scenes/campus_splattransform/manifest.json"
+var _scene := SCENE
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--access="):
 			_access = arg.trim_prefix("--access=")
+		elif arg.begins_with("--scene="):
+			_scene = arg.trim_prefix("--scene=")
 	if DisplayServer.get_name() != "headless" or not OS.get_cmdline_user_args().has("--no-capture"):
 		quit(2)
 		return
@@ -52,7 +55,7 @@ func _run() -> void:
 	AudioServer.set_bus_mute(0, true)
 	_world = Node3D.new()
 	root.add_child(_world)
-	_world.add_child((load(SCENE) as PackedScene).instantiate())
+	_world.add_child((load(_scene) as PackedScene).instantiate())
 	_player = (load("res://scenes/player.tscn") as PackedScene).instantiate() as CharacterBody3D
 	_player.safe_margin = .004
 	_world.add_child(_player)
@@ -158,6 +161,7 @@ func _guards(edges: Array) -> void:
 	_check(candidates.size() >= 16, "distributed guard motion samples", candidates.size())
 	var stopped := 0
 	var detours := 0
+	var scan_stops := 0
 	var details: Array = []
 	for candidate in candidates:
 		var start: Vector3 = candidate["start"]
@@ -170,6 +174,7 @@ func _guards(edges: Array) -> void:
 		var supported_frames := 0
 		var lowest := _player.global_position.y
 		var touched := false
+		var touched_scan := false
 		Input.action_press("move_forward")
 		for i in 100:
 			await physics_frame
@@ -184,20 +189,58 @@ func _guards(edges: Array) -> void:
 				var collider: Object = _player.get_slide_collision(ci).get_collider()
 				if collider is Node and collider.name == "ScanBoundary":
 					touched = true
+				elif collider is Node and collider.name.begins_with("Tile_") and absf(_player.get_slide_collision(ci).get_normal().y) < .7:
+					touched_scan = true
 		Input.action_release("move_forward")
 		var travel := (_player.global_position - start).dot(direction)
 		var sideways := absf((_player.global_position - start).dot(Vector3(-direction.z, 0, direction.x)))
 		# Finite holes have corners: walking around one on measured ground is
 		# valid. Keep those samples and require support on every simulated frame.
 		var detour := travel >= .9 and sideways > .3 and supported_frames == 100
-		var ok := stood and touched and (travel < .9 or detour) and lowest >= start.y - .7
-		details.append({"start": str(start), "end": str(_player.global_position), "contact": touched,
+		var scan_stop := not touched and touched_scan and travel < .9 and supported_frames == 100
+		var end := _player.global_position
+		Input.action_press("move_back")
+		for i in 90:
+			await physics_frame
+			_player.call("_physics_process", 1.0 / 60)
+		Input.action_release("move_back")
+		var retreat := (end - _player.global_position).dot(direction)
+		var escape := Vector2(_player.global_position.x - end.x, _player.global_position.z - end.z).length()
+		var escape_action := "move_back"
+		# A second real wall may limit straight reverse movement. Try ordinary
+		# steering along the boundary and record that separately from reversing.
+		if escape <= 1.0:
+			for actions in [["move_left"], ["move_right"], ["move_back", "move_left"], ["move_back", "move_right"]]:
+				for action in actions:
+					Input.action_press(action)
+				for i in 90:
+					await physics_frame
+					_player.call("_physics_process", 1.0 / 60)
+				for action in actions:
+					Input.action_release(action)
+				escape = Vector2(_player.global_position.x - end.x, _player.global_position.z - end.z).length()
+				escape_action = str(actions)
+				if escape > 1.0:
+					break
+		# Descending scanned terrain can leave a short airborne interval after
+		# releasing movement. Require an actual landing before accepting escape.
+		for i in 60:
+			if _player.is_on_floor():
+				break
+			await physics_frame
+			_player.call("_physics_process", 1.0 / 60)
+		var support := _ray(_player.global_position, _player.global_position.y + .4)
+		var escaped_safely := escape > 1.0 and not support.is_empty() and absf(_player.global_position.y - float(support["position"].y)) < .7
+		var ok := stood and (touched or scan_stop) and (travel < .9 or detour) and lowest >= start.y - .7 and escaped_safely
+		details.append({"start": str(start), "end": str(end), "contact": touched,
 			"travel": travel, "sideways": sideways, "supported_frames": supported_frames,
-			"kind": "supported detour" if detour else "stopped", "ok": ok})
+			"retreat_m": retreat, "escape_m": escape, "escape_action": escape_action, "kind": "supported detour" if detour else ("scan barrier before edge" if scan_stop else "guard stop"), "ok": ok})
 		if ok:
 			stopped += 1
 			if detour:
 				detours += 1
+			if scan_stop:
+				scan_stops += 1
 		else:
 			print("[access] guard detail ", {"start": str(start), "settled": str(settled), "stood": stood, "end": str(_player.global_position), "contact": touched, "travel": travel, "trace": trace})
-	_check(stopped == candidates.size(), "real player stays protected from scan void", {"protected": stopped, "samples": candidates.size(), "supported_detours": detours, "details": details})
+	_check(stopped == candidates.size(), "real player stays protected from scan void and can steer away", {"protected": stopped, "samples": candidates.size(), "supported_detours": detours, "native_scan_stops": scan_stops, "details": details})
