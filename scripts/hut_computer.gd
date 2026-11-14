@@ -60,12 +60,34 @@ const SEAT_EYE_Y := 1.05
 ## 右边 37% 是**留给阿洛娜 / 普拉娜的立绘区**（见 `arch_terminal.gd` 的同伴一节）。
 const VP_SIZE := Vector2i(1280, 720)
 
+## ── 坦克动荡 ──
+## 逻辑尺寸（它的 `W` / `H`）。改这里必须同步改 `tank_main.gd` 的同名常量。
+const TANK_SIZE := Vector2i(1000, 800)
+const TANK_SCENE := "res://scripts/tank_turmoil/tank_main_scene.tscn"
+## 小游戏开着时，电竞房 BGM 压到原来的多少倍（用户 2026-11-14：「小游戏音效，电竞房音乐」——
+## 音乐继续放、音量让一点，好让枪声 / 爆炸听得见）。
+const TANK_BGM_GAIN := 0.45
+
 var terminal: ArchTerminal
 var viewport: SubViewport
 ## 假 B 站窗口（终端敲 `bilibili` 打开）
 var bili: BiliBrowser
 ## 假浏览器（终端敲 `archlinux` 打开，画的是 archlinux.org 首页）
 var web: ArchWeb
+
+## ── 坦克动荡小游戏（2026-11-14）──
+## 用户：「能不能内置到爱丽丝梦游长理的电竞房当小游戏」→ 做在**小屋这台电脑**上。
+##
+## 为什么不开独立窗口：它自己的 `project.godot` 带 `window/size/mode=2`（最大化），
+## 一旦当成独立场景跑就会弹一个全屏窗口抢前台。塞进 `SubViewport` 之后
+## **一行窗口代码都不需要**，画面直接贴到桌上显示器 + 全屏覆盖层。
+##
+## 资源：`scripts/tank_turmoil/`（代码 85 KB）+ `assets/tank_turmoil/`（立绘 + 音效 3.4 MB）。
+## **37.9 MB 的曲库、3.2 MB 的开场视频、284 MB 的导出产物全都没搬进来。**
+var tank: Node2D
+## 坦克动荡专用 viewport。尺寸必须是 **1000 × 800**（游戏逻辑尺寸写死在这个比例），
+## 和终端那个 1280 × 720 分开 —— 混用一个会把小游戏拉变形。
+var tank_viewport: SubViewport
 ## ⚠️ 阿洛娜 / 普拉娜 **不再挂在这里**。
 ##
 ## 用户 2026-11-12 中途改了设计：「arona 这个，**不是新开一个界面**，
@@ -92,6 +114,12 @@ var _hint: Label
 ## 而且它会压在页面内容上（实拍图里正好盖住包名那几行）。
 var _foot: Label
 var _beam: OmniLight3D
+## 坦克动荡的状态
+var _tank_wide: Control
+var _tank_foot: Label
+var _tank_using := false
+## 打开小游戏前显示器那块材质（关掉时要换回去）
+var _screen_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -123,7 +151,10 @@ func _settings_menu() -> Node:
 ## 万一以后菜单能从别的入口打开（快捷键、脚本、剧情演出），终端就会**盖在菜单上面**，
 ## 用户 2026-10-26 实拍到的正是这个画面。宁可多合一次电脑，也不要那种画面。
 func _on_menu_opened(open: bool) -> void:
-	if open and _using:
+	if open and _tank_using:
+		print("[小游戏] 设置菜单开了，坦克动荡让位（关掉小游戏）")
+		_close_tank()
+	elif open and _using:
 		print("[电脑] 设置菜单开了，终端让位（合上电脑）")
 		_close()
 
@@ -183,6 +214,17 @@ func _build() -> void:
 	web.visible = false
 	web.close_requested.connect(_close_web)
 	viewport.add_child(web)
+
+	# 坦克动荡（2026-11-14）：自己一个 1000×800 的 SubViewport。
+	# 开关**懒做** —— 第一次按 G 才把 85 KB 的脚本 + 6 张立绘 load 进来，
+	# 不给整局开机时间添负担（`PLAN.md` 第 1 条就是嫌启动慢）。
+	tank_viewport = SubViewport.new()
+	tank_viewport.name = "TankViewport"
+	tank_viewport.size = TANK_SIZE
+	tank_viewport.transparent_bg = false
+	tank_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	tank_viewport.handle_input_locally = false
+	add_child(tank_viewport)
 
 	# 阿洛娜 / 普拉娜：**不在这里建**。她们由终端自己画在右半屏
 	# （见本文件 `bili` 变量上面那段说明，以及 `arch_terminal.gd` 的
@@ -261,7 +303,7 @@ func _build_ui() -> void:
 	# 靠近时的提示（小、在屏幕下方）
 	_hint = Label.new()
 	_hint.name = "Hint"
-	_hint.text = "按 F 使用电脑"
+	_hint.text = "按 F 使用电脑 · 按 G 玩坦克动荡"
 	_hint.add_theme_font_size_override("font_size", 20)
 	_hint.add_theme_color_override("font_color", Color(1, 1, 1))
 	_hint.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
@@ -321,6 +363,39 @@ func _build_ui() -> void:
 	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(foot)
 
+	# ── 坦克动荡的全屏画面（2026-11-14）──
+	# 和终端用同一套「一份画布、两处显示」：这里这块只负责全屏覆盖，
+	# 桌上那台显示器在 `_open_tank()` 里临时换成这块纹理。
+	# ⚠️ 1000 × 800 是 5:4，窗口是 16:9 —— 用 `STRETCH_KEEP_ASPECT_CENTERED` 留黑边，
+	#    不能拉满，否则坦克和迷宫全被拉扁（手机触控那套坐标也全是按 1000×800 写的）。
+	var wide := TextureRect.new()
+	_tank_wide = wide
+	wide.name = "TankTexture"
+	wide.texture = tank_viewport.get_texture()
+	wide.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	wide.set_anchors_preset(Control.PRESET_FULL_RECT)
+	wide.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wide.visible = false
+	_overlay.add_child(wide)
+
+	# 坦克动荡的底部提示（盖在终端那行上面，两个不会同时可见）
+	var tank_foot := Label.new()
+	_tank_foot = tank_foot
+	tank_foot.name = "TankFooter"
+	tank_foot.text = "WASD 移动 · 空格/J 开火 · Esc 暂停 · G 退出小游戏"
+	tank_foot.add_theme_font_size_override("font_size", 15)
+	tank_foot.add_theme_color_override("font_color", Color(0.62, 0.72, 0.85))
+	if term_font != null:
+		tank_foot.add_theme_font_override("font", term_font)
+	tank_foot.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	tank_foot.offset_top = -40
+	tank_foot.offset_left = -360
+	tank_foot.offset_right = 360
+	tank_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tank_foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tank_foot.visible = false
+	_overlay.add_child(tank_foot)
+
 
 ## 终端用的等宽字体。和 `arch_terminal.gd::_pick_font()` 同一套优先级：
 ## 优先找真正的等宽字体（Arch 风格界面就该等宽），找不到再退回 CJK 字体。
@@ -379,6 +454,27 @@ func _physics_process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# ── 坦克动荡开着：键盘 / 鼠标**全部**转给小游戏，这里一个键都不留 ──
+	# ⚠️ 退出键用 `G`（不是 Esc）：Esc 在小游戏里是「暂停」。
+	#    `G` 在小游戏的键位表里没有（`P1_KEYS` 只有 WASD/空格/J/Z），所以不会误伤。
+	if _tank_using:
+		var tk := event as InputEventKey
+		if tk != null and tk.pressed and not tk.echo and tk.keycode == KEY_G:
+			_close_tank()
+			get_viewport().set_input_as_handled()
+			return
+		if tank != null and is_instance_valid(tank):
+			# 鼠标坐标要换算成 1000×800 画布坐标（覆盖层是 16:9，画布是 5:4 居中留黑边）
+			var tm := event as InputEventMouse
+			if tm != null:
+				var dup := event.duplicate() as InputEventMouse
+				dup.position = _to_tank_canvas(tm.position)
+				dup.global_position = dup.position
+				tank.call("feed", dup)
+			else:
+				tank.call("feed", event)
+		get_viewport().set_input_as_handled()
+		return
 	# ── 鼠标滚轮：转给终端翻历史 ──
 	# 用户 2026-11-13：「怎么不能滚轮滑动」。原来这段第一句就是
 	# `event as InputEventKey`，鼠标事件当场被判成 null 丢掉，滚轮永远到不了终端。
@@ -437,6 +533,26 @@ func _input(event: InputEvent) -> void:
 	if k.keycode == KEY_F and _in_range:
 		_open()
 		get_viewport().set_input_as_handled()
+	elif k.keycode == KEY_G and _in_range:
+		_open_tank()
+		get_viewport().set_input_as_handled()
+
+
+## 窗口坐标 → 小游戏画布坐标（1000×800）。
+## 覆盖层里那块 `TankTexture` 是 `STRETCH_KEEP_ASPECT_CENTERED`（留黑边），
+## 所以要先按「等比缩放 + 居中」求实际显示区，再换算。
+func _to_tank_canvas(p: Vector2) -> Vector2:
+	if _tank_wide == null:
+		return p
+	var r := _tank_wide.get_global_rect()
+	if r.size.x <= 0.0 or r.size.y <= 0.0:
+		return p
+	var scale := minf(r.size.x / float(TANK_SIZE.x), r.size.y / float(TANK_SIZE.y))
+	if scale <= 0.0:
+		return p
+	var shown := Vector2(TANK_SIZE) * scale
+	var origin := r.position + (r.size - shown) * 0.5
+	return (p - origin) / scale
 
 
 ## 窗口/画布坐标 → 终端画布坐标（1280×720）。
@@ -450,7 +566,147 @@ func _to_canvas(p: Vector2) -> Vector2:
 	return (p - r.position) / r.size * Vector2(VP_SIZE)
 
 
+# ══════════════════ 坦克动荡（2026-11-14）══════════════════
+#
+# 用户：「能不能内置到爱丽丝梦游长理的电竞房当小游戏」→
+#      「不并入音乐，全程同步电竞房音乐，五人模式大地图，主角爱丽丝」。
+#
+# ── 为什么做在**小屋**这台电脑上，而不是电竞房 ──
+# 电竞房工位那排显示器是 GLB 里的纯网格（`models/esports_room/esports_room.glb`
+# 合并出来的材质桶），**没有控制器**：想在上面跑小游戏得先挑一台显示器、量出它的
+# 世界包围盒、再挂 `SubViewport`，而且整间屋是 `Y=-1` 翻转 + 1.5 倍缩放的，
+# 坐标要重新算。小屋这台电脑现成有「靠近提示 + 按 F 坐下 + 输入让位」三条通路，
+# 复用它们风险最低。**以后想搬进电竞房**：把 `_open_tank()` / `_close_tank()` 整段
+# 搬进 `esports_collision.gd` 或新写一个 `esports_arcade.gd`，逻辑不用改。
+
+func is_tank_open() -> bool:
+	return _tank_using
+
+
+## 第一次按 G 才 load 这 3.4 MB 资源（不给整局开机添负担）。
+func _ensure_tank() -> bool:
+	if tank != null and is_instance_valid(tank):
+		return true
+	var packed := load(TANK_SCENE) as PackedScene
+	if packed == null:
+		push_warning("[小游戏] 载不到 %s" % TANK_SCENE)
+		return false
+	tank = packed.instantiate() as Node2D
+	if tank == null:
+		return false
+	tank.name = "TankTurmoil"
+	tank_viewport.add_child(tank)
+	return true
+
+
+## 打开小游戏：和打开终端一样要「坐下 + 让出输入 + 放出鼠标」，但画面换一块。
+func _open_tank() -> void:
+	if _tank_using or _using:
+		return
+	if not _ensure_tank():
+		return
+	_tank_using = true
+	_hint.visible = false
+	_overlay.visible = true
+	_screen.visible = false
+	_foot.visible = false
+	_tank_wide.visible = true
+	_tank_foot.visible = true
+	# 桌上那台显示器也切成小游戏画面（不然贴着看还是终端）
+	var scr := get_node_or_null("Screen") as MeshInstance3D
+	if scr != null:
+		_screen_mat = scr.material_override as StandardMaterial3D
+		if _screen_mat != null:
+			# ⚠️ 复制一份再改：`material_override` 是共享资源，直接改会把终端那块也换掉
+			var m: StandardMaterial3D = _screen_mat.duplicate()
+			m.albedo_texture = tank_viewport.get_texture()
+			m.emission_texture = tank_viewport.get_texture()
+			scr.material_override = m
+	tank.call("release_all")
+	_seat()
+	var p := _player_node()
+	if p != null:
+		if p is CharacterBody3D:
+			(p as CharacterBody3D).velocity = Vector3.ZERO
+		p.set_physics_process(false)
+		p.set_process(false)
+		p.set_process_input(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_duck_room_music(true)
+	Sfx.play("ui_open", -6.0)
+	print("[小游戏] 打开坦克动荡（五人模式 · 音乐仍由电竞房播放，音量压到 %d%%）"
+		% int(TANK_BGM_GAIN * 100.0))
+
+
+## 关掉小游戏：恢复终端那套画面 + 把人和音乐都还回去。
+func _close_tank() -> void:
+	if not _tank_using:
+		return
+	_tank_using = false
+	if tank != null and is_instance_valid(tank) and tank.has_method("release_all"):
+		tank.call("release_all")
+	_tank_wide.visible = false
+	_tank_foot.visible = false
+	_screen.visible = true
+	_foot.visible = true
+	_overlay.visible = false
+	var scr := get_node_or_null("Screen") as MeshInstance3D
+	if scr != null and _screen_mat != null:
+		scr.material_override = _screen_mat
+		_screen_mat = null
+	_hint.visible = _in_range
+	_stand()
+	var p := _player_node()
+	if p != null:
+		p.set_physics_process(true)
+		p.set_process(true)
+		p.set_process_input(true)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_duck_room_music(false)
+	Sfx.play("ui_close", -6.0)
+	print("[小游戏] 关掉坦克动荡")
+
+
+## 电竞房 BGM 让一让（用户 2026-11-14：「小游戏音效，电竞房音乐」）。
+##
+## **刻意做得很保守**：只碰 `Music` 内部那个播放器的 `volume_db`，进出各改一次，
+## 关的时候原样还原。`Music.play()` 在同一首正在放时直接 return，所以下一帧
+## `esports_collision.gd::_refresh_music()` 不会把音量顶回去；真换曲了也无所谓 ——
+## 那说明玩家已经出了房间，小游戏的声音本来就该更大。
+##
+## ⚠️ 不往 `music.gd` 里加任何 API：那个文件 2026-11-14 有另一个会话在改
+##    （`git status` 里是 M），加东西会撞车。
+##
+## ⚠️ `Music` 是**静态类**，`Music.get("_player")` 在 GDScript 里会直接报
+##    「Cannot call non-static function "get()" on the class "Music" directly」——
+##    所以这里**不从 `Music` 里偷播放器**，而是按节点树找它建出来的那个：
+##    `music.gd::_ensure_host()` 在 `tree.root` 下挂了 `MusicHost`，子节点叫 `Bgm`。
+##    找不到就静默跳过：压不了音量不影响玩，只是枪效会小一点。
+var _bgm_saved := false
+var _bgm_db := 0.0
+
+
+func _room_music_player() -> AudioStreamPlayer:
+	var player := get_tree().root.get_node_or_null("MusicHost/Bgm") as AudioStreamPlayer
+	return player
+
+
+func _duck_room_music(on: bool) -> void:
+	var player := _room_music_player()
+	if player == null:
+		return
+	if on:
+		if not _bgm_saved:
+			_bgm_db = player.volume_db
+			_bgm_saved = true
+		player.volume_db = _bgm_db + linear_to_db(TANK_BGM_GAIN)
+	elif _bgm_saved:
+		player.volume_db = _bgm_db
+		_bgm_saved = false
+
+
 ## 终端敲 `bilibili` → 盖上一层假 B 站（终端画面留着，回来还在）
+
 func _open_bili() -> void:
 	if bili == null:
 		return
@@ -604,6 +860,15 @@ func use_for_test() -> void:
 
 func close_for_test() -> void:
 	_close()
+
+
+## 坦克动荡：探针用（不走距离判定）
+func open_tank_for_test() -> void:
+	_open_tank()
+
+
+func close_tank_for_test() -> void:
+	_close_tank()
 
 
 func screen_mesh() -> MeshInstance3D:
