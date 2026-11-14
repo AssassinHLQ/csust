@@ -587,13 +587,15 @@ func _draw_skill(dy: float) -> String:
 			_skill_bag.append(String(s))
 		_skill_bag.shuffle()
 		_move_first_non_recent()
-	# 玩家在天上：优先挑一张对空招（先避开最近 3 招，避不开再放宽）
+	# 玩家在天上：优先挑一张对空招（只挑**不在最近 3 手**里的）
 	if dy >= AIR_PREFER_HEIGHT:
 		var i := _find_bag_skill(ANTI_AIR_SKILLS, true)
-		if i < 0:
-			i = _find_bag_skill(ANTI_AIR_SKILLS, false)
 		if i > 0:
 			_skill_bag.insert(0, _skill_bag.pop_at(i))
+	# ⚠️ 每抽一次都要检查袋口：只在洗完牌时换一次是不够的（第二轮抽到第 4、5 手
+	#    就可能是最近 3 手里的）。袋子 18 张 > 最近 3 手，必然找得到一张非最近。
+	if _recent_skills.has(_skill_bag[0]):
+		_move_first_non_recent()
 	var pick := String(_skill_bag[0])
 	_skill_bag.remove_at(0)
 	return pick
@@ -2341,6 +2343,10 @@ func debug_reset() -> void:
 			n5.queue_free()
 	_phantoms.clear()
 	_free_marks()
+	# 召唤物也要清：抽袋随机后「飞猪 / 分身」可能在开场几招就出来，
+	# 不清的话它们会一直追着被打测试的玩家啃（探针实测：冲击波 40 m 外反而掉 24 血）。
+	_expire_pigs()
+	_expire_clones()
 	for k in _hits.keys():
 		_hits[k] = 0
 

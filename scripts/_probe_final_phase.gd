@@ -100,13 +100,29 @@ func _run() -> void:
 		quit(1)
 		return
 	_player = player
-	var spot := Vector3(-120.0, 2.0, -200.0)
-	for cand in [Vector3(-120.0, 2.0, -200.0), Vector3(-60.0, 2.0, -250.0),
-			Vector3(0.0, 2.0, -200.0), Vector3(-40.0, 2.0, -320.0)]:
+	# ⚠️ 完碰撞后 `_ground()` 从 200 m 往下打会先撞到**楼顶**（实测 -120,-200 是 48 m 的楼）。
+	#    这里优先选**街面高度**（-3 ~ 6 m）的候选点，找不到才退回第一个可用点。
+	var spot := Vector3.ZERO
+	var fallback := Vector3.ZERO
+	for cand in [Vector3(-60.0, 2.0, -140.0), Vector3(120.0, 2.0, -140.0),
+			Vector3(-60.0, 2.0, -200.0), Vector3(0.0, 2.0, -200.0),
+			Vector3(-120.0, 2.0, -200.0), Vector3(-40.0, 2.0, -320.0),
+			Vector3(60.0, 2.0, -260.0)]:
 		var g := _ground(cand.x, cand.z)
-		if g != null:
-			spot = Vector3(cand.x, float(g) + 1.2, cand.z)
+		if g == null:
+			continue
+		var p := Vector3(cand.x, float(g) + 1.2, cand.z)
+		if fallback == Vector3.ZERO:
+			fallback = p
+		if float(g) >= -3.0 and float(g) <= 6.0:
+			spot = p
 			break
+	if spot == Vector3.ZERO:
+		spot = fallback
+	if spot == Vector3.ZERO:
+		push_error("[final] 找不到落脚点")
+		quit(1)
+		return
 	player.global_position = spot
 	player.set("velocity", Vector3.ZERO)
 	_safe = spot
@@ -275,6 +291,10 @@ func _run() -> void:
 		if a == null or String(a.call("current_state_name")) != "Fire":
 			anim_ok = false
 		await _wait(1.5)
+		# 帧率很低时 tween 回调可能落在 process_frame 之后；多给两帧再读血量，
+		# 否则榴弹会「记到下一招头上」（实测 snipe −510 = 240 + 270）。
+		await process_frame
+		await process_frame
 		var dealt := hp0 - _hp_boss()
 		skill_rows.append("%s −%.0f" % [kind, dealt])
 		if kind == "" or dealt < 1.0:
