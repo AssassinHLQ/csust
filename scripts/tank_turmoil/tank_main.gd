@@ -758,8 +758,8 @@ const P2_KEYS := {
 	"fire": [KEY_ENTER, KEY_KP_ENTER],
 }
 ## 本节点用到的「菜单键」。宿主看到这些键就别再转给终端/浏览器了。
-const MENU_KEYS := [KEY_ESCAPE, KEY_SPACE, KEY_M, KEY_R, KEY_ENTER, KEY_KP_ENTER, KEY_1, KEY_2,
-	KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_W, KEY_A, KEY_S, KEY_D]
+const MENU_KEYS := [KEY_ESCAPE, KEY_P, KEY_SPACE, KEY_M, KEY_R, KEY_ENTER, KEY_KP_ENTER,
+	KEY_1, KEY_2, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_W, KEY_A, KEY_S, KEY_D]
 var _keys_down := {}
 ## 这一帧新按下的键（`feed()` 里进、`_process()` 里清）
 var _keys_pressed := {}
@@ -782,6 +782,22 @@ func feed(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if mb != null and mb.button_index == MOUSE_BUTTON_LEFT:
 		_mouse_down = mb.pressed
+
+
+## 宿主用：把**界面**那一路也走一遍。
+##
+## ⚠️ 以前宿主只调 `feed()`，结果整套菜单是**点不动**的：
+##    菜单按键在 `_handle_menu_keys` 里、按钮点击在 `_handle_gameplay_mouse` 里，
+##    两者原本挂在 `_unhandled_input` 上；本节点在主工程里装在
+##    `SubViewport`（`handle_input_locally = false`）下，那两个回调永远不触发。
+##    表现就是「能进菜单，但「开始对战」怎么点都没反应」。
+##    `feed()` 只管键位表（玩法），所以界面必须单独喂这一口。
+##
+## 独立加载（探针 / 原工程）时没人调这个，`_input` / `_unhandled_input` 照旧生效，
+## 两条路互不影响。
+func ui_event(event: InputEvent) -> void:
+	_handle_menu_keys(event)
+	_handle_gameplay_mouse(event)
 
 ## ⚠️ 拼错键名 / 写错字不会报错，只会「点了没反应」—— 所以这里一并自检。
 func is_down(action: String, player := 1) -> bool:
@@ -1534,7 +1550,7 @@ func _handle_menu_keys(event: InputEvent) -> void:
 		elif event.keycode == KEY_SPACE and round_over and next_round_timer <= 0.0: new_round()
 		elif event.keycode == KEY_1: start_game(1)
 		elif event.keycode == KEY_2: start_game(2)
-		elif event.keycode == KEY_ESCAPE and mode > 0: paused = not paused
+		elif (event.keycode == KEY_ESCAPE or event.keycode == KEY_P) and mode > 0: paused = not paused
 		elif event.keycode == KEY_M and paused: return_to_menu()
 		elif event.keycode == KEY_R and mode > 0: scores = [0, 0]; new_round()
 
@@ -1814,7 +1830,7 @@ func _draw() -> void:
 			draw_rect(Rect2(875 + hp_index * 25, 54, 18, 12), Color("333333"), false, 1.0)
 	draw_touch_controls()
 	if not mobile:
-		draw_string(ThemeDB.fallback_font, Vector2(175, H - 12.0), "WASD 移动转向 · 空格 / J 开火 · 鼠标右键也能开火 · Esc 暂停", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("666666"))
+		draw_string(ThemeDB.fallback_font, Vector2(175, H - 12.0), "WASD 移动转向 · 空格 / J 开火 · 鼠标右键也能开火 · P 暂停 · Esc 退出", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("666666"))
 	if paused:
 		if pause_settings_open:
 			draw_rect(Rect2(0, 0, W, H), ui_background())
@@ -1899,7 +1915,7 @@ func draw_menu() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(374, 268), "爱丽丝 VS 四队友", HORIZONTAL_ALIGNMENT_CENTER, 252, 17, ui_text())
 	draw_button(Rect2(270, 315, 460, 54), "开始对战", Color("46a96b"))
 	draw_button(Rect2(270, 381, 460, 54), "设置", Color("537a8a"))
-	draw_string(ThemeDB.fallback_font, Vector2(235, 470), "WASD 移动 · 空格开火 · Esc 暂停 · M 回主页", HORIZONTAL_ALIGNMENT_CENTER, 530, 15, ui_muted())
+	draw_string(ThemeDB.fallback_font, Vector2(235, 470), "WASD 移动 · 空格开火 · P 暂停 · M 回主页 · Esc 退出", HORIZONTAL_ALIGNMENT_CENTER, 530, 15, ui_muted())
 	draw_string(ThemeDB.fallback_font, Vector2(235, 496), "音乐由电竞房统一播放", HORIZONTAL_ALIGNMENT_CENTER, 530, 14, ui_muted())
 
 func draw_settings() -> void:

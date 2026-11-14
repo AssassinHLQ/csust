@@ -181,9 +181,9 @@ func _process(_delta: float) -> bool:
 
 func _check_host() -> void:
 	# ⚠️ 这一整段**只能同步跑**：本函数在 `_process()` 的调用栈里被调，里面一 `await`
-	#    整个主循环就挂起（实测日志每次都断在半路）。宿主 `_ready()` 里要紧的东西
-	#    （viewport / 屏幕材质 / UI）都是同步建好的，不等也行。
-	print("  … 开始检查宿主接线（电竞房街机柜）")
+	#    整个主循环就挂起（实测日志每次都断在半路）。
+	#    实例化的功能检查在 `scripts/_verify_esports_play.gd`，这里只做静态接线。
+	print("  … 开始检查宿主接线（电竞房「坐下开黑」过场）")
 
 	# ── ① 小屋电脑**不该**再有坦克入口（用户 2026-11-14：「搬到电竞房」）──
 	var hut := load("res://scripts/hut_computer.gd") as Script
@@ -202,51 +202,32 @@ func _check_host() -> void:
 		var gm := []
 		for m in gs.get_script_method_list():
 			gm.append(str(m["name"]))
-		_check(gm.has("_build_esports_arcade"), "game.gd 有 _build_esports_arcade()")
-		_check(gm.has("_sync_arcade_visibility"), "game.gd 有显隐同步 _sync_arcade_visibility()")
+		_check(gm.has("_build_esports_desk_play"), "game.gd 有 _build_esports_desk_play()")
+		_check(gm.has("_sync_esports_play_visibility"), "game.gd 有显隐同步 _sync_esports_play_visibility()")
+		_check(not gm.has("_build_esports_arcade"), "旧的街机柜入口已经拿掉")
 
-	# ── ③ 街机柜本体 ──
-	var script := load("res://scripts/esports_arcade.gd") as Script
-	_check(script != null, "街机柜脚本 esports_arcade.gd 能加载")
-	if script == null:
-		_finish()
-		return
-	var host := script.new() as Node3D
-	_check(host != null, "街机柜脚本能 new 出节点")
-	if host == null:
-		_finish()
-		return
-	get_root().add_child(host)
+	# ── ③ 新宿主脚本在、接口齐 ──
+	var host_script := load("res://scripts/esports_desk_play.gd") as Script
+	_check(host_script != null, "过场脚本 esports_desk_play.gd 能加载")
+	if host_script != null:
+		var hm := []
+		for m in host_script.get_script_method_list():
+			hm.append(str(m["name"]))
+		for want in ["begin", "is_playing", "screens", "tick_for_test", "_process"]:
+			_check(hm.has(want), "过场脚本有 %s()" % want)
 
-	# 落点/朝向是**实测**出来的，写成常量；这里只是钉住，免得以后被悄悄改掉。
-	var consts: Dictionary = script.get_script_constant_map()
-	var want_pos: Vector3 = consts.get("ARCADE_POS", Vector3.ZERO)
-	_check(want_pos.distance_to(Vector3(50.55, 0.51, 11.60)) < 0.001,
-		"柜子落在电竞房走道实测点 %s" % str(want_pos))
-	_check(is_equal_approx(float(consts.get("YAW_DEG", 0.0)), 90.0),
-		"柜子正面朝 +X（对着走道），YAW = %.0f°" % float(consts.get("YAW_DEG", 0.0)))
-	_check(host.has_method("is_open") and host.has_method("open_for_test"),
-		"街机柜暴露了开关（is_open / open_for_test）")
-
-	var vp := host.get("tank_viewport") as SubViewport
-	_check(vp != null and vp.size == Vector2i(1000, 800),
-		"小游戏画布是 1000×800（实际 %s）" % (str(vp.size) if vp != null else "无"))
-	var scr := host.call("screen_mesh") as MeshInstance3D
-	_check(scr != null, "柜体上有屏幕网格")
-	if scr != null and vp != null:
-		var smat := scr.material_override as StandardMaterial3D
-		_check(smat != null and smat.albedo_texture == vp.get_texture(),
-			"柜体屏幕上贴的就是小游戏那张画布（同一份内容）")
-
-	host.call("open_for_test")
-	_check(bool(host.call("is_open")), "按 F 能打开小游戏")
-	var node: Node = host.get("tank")
-	_check(node != null and is_instance_valid(node), "坦克动荡节点已实例化并挂进画布")
-	var att: Node = host.get("_attract") as Node
-	_check(att != null and not att.visible, "开局后待机画面藏起来（`_AttractScreen`）")
-	host.call("close_for_test")
-	_check(not bool(host.call("is_open")), "关得掉（G 键 / 设置菜单 / 探针三条路）")
-	host.queue_free()
+	# ── ④ 本小游戏给「界面那一路」留了入口（`ui_event`）──
+	# ⚠️ 没有它，菜单里点「开始对战」是没反应的：菜单走 `_handle_menu_keys` /
+	#    `_handle_gameplay_mouse`，而宿主在 SubViewport 里、那两个回调不会被触发。
+	var tank_script := load("res://scripts/tank_turmoil/tank_main_scene.tscn") as PackedScene
+	var tank_methods := []
+	if tank_script != null:
+		var inst := tank_script.instantiate()
+		if inst != null:
+			for m in inst.get_script().get_script_method_list():
+				tank_methods.append(str(m["name"]))
+			inst.free()
+	_check(tank_methods.has("ui_event"), "坦克动荡暴露出 ui_event()（菜单能点）")
 
 
 
