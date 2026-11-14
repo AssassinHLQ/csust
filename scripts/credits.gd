@@ -24,6 +24,9 @@ extends RefCounted
 ##   license_file 许可原文在本仓库里的位置（没有就空串）
 ##   note        补充说明（没有就空串）
 
+## 使用目的声明；不修改任何第三方或本项目已有的许可证。
+const DISCLAIMER := "本项目仅供学习交流，无意分发。第三方名称、商标、角色、模型、图像、音乐及语音等权利归原作者或相应权利人所有。署名、致谢及本声明不替代原始授权，也不变更既有开源许可。如有侵权或署名遗漏，请联系项目作者核实、补正或删除。"
+
 const GROUPS := [
 	"特别致谢",
 	"代码与插件",
@@ -31,6 +34,7 @@ const GROUPS := [
 	"界面与字体",
 	"音效",
 	"剧情与图标",
+	"参考与社区致谢",
 ]
 
 const ENTRIES := [
@@ -774,9 +778,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（音乐合集）",
 		"license": "Blue Archive OST 专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定",
+		"source": "B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "开场音乐为 Constant Moderato；PNG 图片换新不改变音乐作者。",
+		"note": "开场音乐为 Constant Moderato；PNG 图片换新不改变音乐作者。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -846,9 +850,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。",
+		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -858,9 +862,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。",
+		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -870,9 +874,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。",
+		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -882,9 +886,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。",
+		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -894,9 +898,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。",
+		"note": "本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "音效",
@@ -906,9 +910,9 @@ const ENTRIES := [
 		"platform": "哔哩哔哩（下载合集；原始发行属 Blue Archive）",
 		"license": "原作音乐专有版权；具体录音与作者条款适用",
 		"distributed": false,
-		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集",
+		"source": "本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
 		"license_file": "",
-		"note": "已核对实际曲目；doom_theme.ogg 的曲名是 Encroached Sky，不是 DOOM 音乐。",
+		"note": "已核对实际曲目；doom_theme.ogg 的曲名是 Encroached Sky，不是 DOOM 音乐。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。",
 	},
 	{
 		"group": "剧情与图标",
@@ -982,6 +986,90 @@ const ENTRIES := [
 		"license_file": "",
 		"note": "逐张作者、平台与网址保留在 assets/story/parts/SOURCES.md，不将网络产品照片写成本项目原创。",
 	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/parkour_futures.gd",
+		"title": "同花顺等交易软件的界面与交互参考",
+		"author": "同花顺产品、设计与开发团队",
+		"platform": "同花顺交易软件 / 官网",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "https://www.10jqka.com.cn/；用户确认借鉴同花顺等交易软件的行情与交互表达",
+		"license_file": "",
+		"note": "借鉴参照包括行情呈现、K 线、数字与涨跌颜色等交易软件界面语言；仅说明参考关系，不表示本项目与原产品存在合作或背书。",
+	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/parkour_futures.gd",
+		"title": "币安等交易软件的界面与交互参考",
+		"author": "Binance（币安）产品、设计与开发团队",
+		"platform": "Binance（币安）交易软件 / 官网",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "https://www.binance.com/；用户补充的交易软件界面与交互参考",
+		"license_file": "",
+		"note": "与同花顺等交易软件一并作为界面、行情与交易概念的参考；原产品名称和商标归相应权利人所有。",
+	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/arch_terminal.gd",
+		"title": "Linux 系统与终端文化参考",
+		"author": "Linus Torvalds 与 Linux 内核及开源社区贡献者",
+		"platform": "kernel.org / Linux 开源社区",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "https://www.kernel.org/；游戏内终端与系统概念参考",
+		"license_file": "",
+		"note": "感谢 Linux 及相关开源社区提供的技术基础、终端文化与公开资料；本条为参考致谢，具体开源组件仍按各自许可记录。",
+	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/arch_web.gd",
+		"title": "Arch Linux 发行版、官网与社区参考",
+		"author": "Arch Linux 开发团队与社区贡献者",
+		"platform": "Arch Linux 官网 / 开源社区",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "https://archlinux.org/；游戏内 Arch 终端与仿浏览器页面参考",
+		"license_file": "",
+		"note": "发行版、官网视觉和社区文化参考；游戏内仿浏览器由本项目绘制。Arch Linux 的标识与原站内容保留原权利和条款。",
+	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/hut_computer.gd",
+		"title": "ArchWiki 文档资料致谢",
+		"author": "ArchWiki 条目作者、编辑者与维护社区",
+		"platform": "ArchWiki / Arch Linux",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "https://wiki.archlinux.org/；https://wiki.archlinux.org/title/Main_page_(简体中文)",
+		"license_file": "",
+		"note": "感谢公开维护的安装、配置、系统与软件使用资料；与 Arch Linux 发行版团队分别致谢，引用文档适用原站条款。",
+	},
+	{
+		"group": "参考与社区致谢",
+		"path": "scripts/cost_gauge.gd",
+		"title": "蔚蓝档案 Wiki 游戏资料参考",
+		"author": "蔚蓝档案 Wiki 社区维护者与条目贡献者",
+		"platform": "蔚蓝档案 Wiki（社区资料站）",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": true,
+		"source": "用户补充的蔚蓝档案 Wiki；现有源码保留的资料链接 https://bluearchive.wiki/wiki/Cost；具体中文 Wiki 站点未注明",
+		"license_file": "",
+		"note": "感谢角色、技能与机制资料的社区整理。现有 Cost 源码注释区分了用户指定数值与曾尝试访问的 Wiki，本站点致谢不表示每个数值均已从 Wiki 查证。",
+	},
+	{
+		"group": "音效",
+		"path": "assets/music",
+		"title": "蔚蓝档案音乐合集收集整理致谢",
+		"author": "雷月夜（音乐收集整理者）",
+		"platform": "哔哩哔哩",
+		"license": "参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录",
+		"distributed": false,
+		"source": "https://space.bilibili.com/76847448",
+		"license_file": "",
+		"note": "用户补充此账号为音乐收集整理来源；2026-11-14 经哔哩哔哩账号接口核对昵称与 UID 76847448。收集整理不等同作曲或原曲版权；原曲作者、录音权利与整理来源分别记录，具体合集视频链接待补。",
+	},
 ]
 
 
@@ -1035,5 +1123,8 @@ static func plain_text() -> String:
 			if e["note"] != "":
 				out.append("    备注：%s" % e["note"])
 		out.append("")
+	out.append("【免责声明】")
+	out.append(DISCLAIMER)
+	out.append("")
 	out.append("完整表格见仓库根目录 CREDITS.md / THIRD_PARTY.md。")
 	return "\n".join(out)

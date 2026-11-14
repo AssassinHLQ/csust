@@ -11,7 +11,8 @@ extends SceneTree
 ##   6. 游戏内面板真的画得出来（Esc → 设置 →「致谢与素材署名」），
 ##      并且 7 位 Boss 的 HUD 血条不会压到左上角的泼溅状态行
 ##
-## 用法：godot --path <工程> --script res://scripts/_verify_credits.gd
+## 用法：godot --headless --render-thread safe --single-threaded-scene --path <工程>
+##       --script res://scripts/_verify_credits.gd -- --no-capture --bosses=all
 
 var _fail := 0
 var _pass := 0
@@ -232,6 +233,21 @@ func _verify_attribution(entries: Array) -> void:
 	var text := Credits.plain_text()
 	_check(text.find("作者：Kenney") >= 0 and text.find("作者：Cup Nooble") > text.find("作者：Kenney"),
 		"生成的正文按指定先后顺序显示作者")
+	for name in ["同花顺", "币安", "Linux", "Arch Linux", "ArchWiki", "蔚蓝档案 Wiki", "雷月夜", "76847448"]:
+		_check(text.contains(name), "游戏内正文包含补充致谢「%s」" % name)
+	_check(text.contains(Credits.DISCLAIMER), "游戏内包含完整免责声明")
+	_check(Credits.DISCLAIMER.contains("仅供学习交流，无意分发"), "声明保留用户指定的使用目的")
+	for doc in ["CREDITS.md", "THIRD_PARTY.md", "README.md"]:
+		_check(FileAccess.get_file_as_string("res://" + doc).contains(Credits.DISCLAIMER),
+			"%s 与游戏内免责声明一致" % doc)
+	var collector_found := false
+	for e in entries:
+		if e["author"].begins_with("雷月夜"):
+			collector_found = e["platform"] == "哔哩哔哩" and e["source"] == "https://space.bilibili.com/76847448"
+		if e["path"].begins_with("assets/music/"):
+			_check(e["source"].contains("雷月夜") and e["source"].contains("76847448"),
+				"%s 保留原曲署名并补音乐合集整理来源" % e["path"])
+	_check(collector_found, "音乐整理者独立署名雷月夜 / 哔哩哔哩 UID 76847448")
 
 
 func _ignore_mentions_path(ignore_text: String, path: String) -> bool:

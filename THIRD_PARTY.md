@@ -22,6 +22,19 @@
 
 GDGS 的人数按实际角色核对：2026-11-14 上游 contributors API 为四位，本项目分支为 AssassinHLQ。算法上游作者另列，不混作该仓库的直接提交者。核对接口见 `CREDITS.md`。
 
+## 参考软件与社区资料致谢
+
+| 参考项目 | 作者 / 贡献者 | 平台与来源 | 用途 |
+|---|---|---|---|
+| 同花顺等交易软件 | 同花顺产品、设计与开发团队 | 同花顺交易软件 / 官网，<https://www.10jqka.com.cn/> | 行情、K 线、涨跌表达及界面交互参考 |
+| 币安等交易软件 | Binance（币安）产品、设计与开发团队 | Binance 交易软件 / 官网，<https://www.binance.com/> | 交易界面、行情与交互表达参考 |
+| Linux | Linus Torvalds 与 Linux 内核及开源社区贡献者 | kernel.org / Linux 开源社区，<https://www.kernel.org/> | 系统、终端文化与技术资料参考 |
+| Arch Linux | Arch Linux 开发团队与社区贡献者 | Arch Linux 官网 / 开源社区，<https://archlinux.org/> | 发行版、终端、仿官网与社区文化参考 |
+| ArchWiki | ArchWiki 条目作者、编辑者与维护社区 | ArchWiki / Arch Linux，<https://wiki.archlinux.org/> | 安装、配置、系统与软件使用资料 |
+| 蔚蓝档案 Wiki | 蔚蓝档案 Wiki 社区维护者与条目贡献者 | 蔚蓝档案 Wiki 社区资料站；现有源码资料链接 <https://bluearchive.wiki/wiki/Cost> | 游戏角色、技能与机制资料参考；具体中文站点未注明，不推断每个数值都已由 Wiki 查证 |
+
+以上是参考与社区贡献致谢；产品名称、标识及原站内容保留相应权利与条款，不表示本项目获得其合作、授权或背书。
+
 ## 模型、扫描与图像
 
 | 素材 | 作者与平台 | 记录 |
@@ -55,8 +68,13 @@ GDGS 的人数按实际角色核对：2026-11-14 上游 contributors API 为四�
 - 绿幕视频逐位标作者与 **哔哩哔哩**：香草BA、忧郁的优_、沉迷爱丽丝（阿洛娜）；瞿黧、星冻qwq、优香体重100kg（普拉娜）。具体保留的视频名与链接见 `CREDITS.md`；未找到的具体链接明确待补。
 - 配音：**SLNeil — 哔哩哔哩**，<https://space.bilibili.com/523537077>。按使用者确认，音色模型均来自 SLNeil，语音由 **GPT-SoVITS** 合成，覆盖终端、商店、凯伊与开场剧情。项目台词、音色模型、合成工具与原作角色声音分别记录；工具来源为 GitHub 的 `RVC-Boss/GPT-SoVITS`。
 - 商店 Tem Shop：**Toby Fox / Materia Collective**，按使用者要求省略来源平台。
+- 蔚蓝档案音乐合集收集整理：**雷月夜 — 哔哩哔哩（UID 76847448）**，<https://space.bilibili.com/76847448>。用户补充此音乐整理来源，账号昵称已于 2026-11-14 通过哔哩哔哩账号接口核对；具体合集视频链接待补。整理者与作曲者、录音权利人分别署名。
 - 其他音乐按具体曲目列入完整清单，包括 Constant Moderato、Pixel Time、Colorful Mess、Lemonade Diary、Daily Routine 247、Midsummer Cat、Encroached Sky；本地合集来源记录为哔哩哔哩，具体作曲署名仍待补。`doom_theme.ogg` 实际为 Encroached Sky，不能按文件名署成 DOOM 音乐。
 
 ## 版本管理与导出
 
 `.gitignore` 管理 Git 跟踪，`export_presets.cfg` 管理游戏导出；两者分开。本次署名更新不添加素材导出排除，不把未入 Git 的本地素材说成磁盘缺失，也不由“已归位”推断已取得额外授权。未知作者、失落链接与许可待核项保留在清单，已有第三方许可原文不删除、不改写权利人。
+
+## 免责声明
+
+本项目仅供学习交流，无意分发。第三方名称、商标、角色、模型、图像、音乐及语音等权利归原作者或相应权利人所有。署名、致谢及本声明不替代原始授权，也不变更既有开源许可。如有侵权或署名遗漏，请联系项目作者核实、补正或删除。

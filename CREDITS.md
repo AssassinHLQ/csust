@@ -85,7 +85,6 @@
 | 末日天空（程序生成）<br>`assets/sky/sky_doom.jpg` | AssassinHLQ（本项目作者） | 本项目（本地制作） | tools/gen_sky_doom.py | MIT；原文 `LICENSE` | 由本项目脚本生成，与爱给网整理的天空盒分开署名。 |
 | 当前开场播放的 PNG 截图<br>`_arisu_captures/_shots` | AssassinHLQ（本作截图）；画面内素材作者分别见本清单 | 本项目（本地制作） | 用户指定的 _arisu_captures/_shots/*.png；scripts/title_intro.gd 按文件名读取 | 截图由使用者提供；画面内第三方素材保留各自权利 | 当前为 5 张 PNG。已取消导出排除，随游戏打包；Git 忽略截图产物与游戏导出包含图片是两件事。 |
 | JetBrains Mono（终端等宽字体）<br>`assets/ui/mono.ttf` | The JetBrains Mono Project Authors；Philipp Nurullin、Konstantin Bulenkov（设计） | JetBrains 官网 / GitHub | https://github.com/JetBrains/JetBrainsMono；https://www.jetbrains.com/lp/mono/ | SIL OFL 1.1；原文 `assets/ui/LICENSE_JetBrainsMono_OFL.txt` | 字体文件名 mono.ttf，已从内嵌元数据确认。Mono 表示等宽，与支持 C# / .NET 的 Godot Mono 引擎版本不同。 |
-
 | Sprout Lands 像素字体（pixelFont-7-8x14-sproutLands）<br>`assets/ui_sprout/font.ttf` | Cup Nooble | itch.io | https://cupnooble.itch.io/sprout-lands-ui-pack | 随 Sprout Lands UI Pack，按原包条款记录；不是 OFL 字体；原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | TTF 内嵌设计者为 Cup Nooble。主要用于数字与拉丁字形，不提供中文字形；中文字体另列。 |
 
 ## 音效
@@ -94,18 +93,19 @@
 |---|---|---|---|---|---|
 | 商店配音（芹香 / 小桃 / 爱丽丝，GPT-SoVITS）<br>`story/voice/shop` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 音色模型与角色声音按其原始条款；未核实额外再分发许可 | 用户确认：语音用 GPT-SoVITS 合成，音色模型均来自 SLNeil。保留角色、模型作者与合成工具三者的区别。 |
 | 商店 BGM：UNDERTALE「Tem Shop」<br>`assets/music` | Toby Fox / Materia Collective | 依用户要求省略 | UNDERTALE | Toby Fox / Materia Collective 的原作音乐权利；未核实额外再分发许可 | 按用户要求，Toby Fox 保留作者名，不额外标注平台；本条只代表 Tem Shop，其余曲目逐项列出。 |
-| 开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」<br>`assets/music/pv_theme.mp3` | NEXON Games / Yostar（Blue Archive OST） | 哔哩哔哩（音乐合集） | B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定 | Blue Archive OST 专有版权；具体录音与作者条款适用 | 开场音乐为 Constant Moderato；PNG 图片换新不改变音乐作者。 |
+| 开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」<br>`assets/music/pv_theme.mp3` | NEXON Games / Yostar（Blue Archive OST） | 哔哩哔哩（音乐合集） | B站「碧蓝档案OST🎵 音乐合集 Vol.1（320K）」P2；使用者 2026-11-12 指定；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | Blue Archive OST 专有版权；具体录音与作者条款适用 | 开场音乐为 Constant Moderato；PNG 图片换新不改变音乐作者。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
 | 界面 / 武器 / 换弹音效（Interface Sounds、Sci-fi Sounds、RPG Audio）<br>`assets/sfx` | Kenney | Kenney.nl | https://kenney.nl/assets/interface-sounds | CC0 1.0（公有领域，可商用、无需署名）；原文 `assets/sfx/LICENSE_Kenney_CC0.md` | click_* / toggle_* / tick_* / open_* / close_*、laserSmall_000..004、metalLatch、metalClick |
 | 枪声 gunshot_000..004（5 条）<br>`assets/sfx/gunshot_000.wav` | 本项目作者（Python 合成：噪声 + 包络 + 带通） | 本项目（本地制作） | 本地来源，尚无外部链接 | MIT；原文 `LICENSE` | 不是采样，是算出来的；替换 laserSmall_*.ogg 是为了听起来像枪（见 README §1.19）。2026-11-11 起 fire 改用爱丽丝原声（见下一条），这 5 条留在磁盘上做备份与 A/B 对比 |
 | 爱丽丝轨道炮音效（开枪 / 换弹，裁自游戏内 SFX）<br>`assets/sfx/aris` | NEXON Games / Yostar（Blue Archive 游戏内 SFX）；裁剪：本项目作者（Python） | Blue Archive 游戏素材（本地提取） | 本地来源，尚无外部链接 | 专有版权 —— 仅本地学习 / 非商业演示，不得再分发、不得用于任何发布产物 | 由 _godot_editor_data/make_aris_sfx.py 从 SFX_Public_Aris / SFX_Aris_Hit / SFX_Common_RG_aris_Reload / SFX_Skill_Aris_Ex 裁出（前两条是连发枪声的候选，2026-11-11 用户听完 A/B 决定 fire 仍用合成枪声，故暂未接线）；逐条裁决见 assets/sfx/aris/README.md。音频本体被 .gitignore 排除，只留 *.wav.import |
 | 凯伊 GPT-SoVITS 配音<br>`story/voice/kei` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 音色模型与角色声音按其原始条款；未核实额外再分发许可 | 用户确认所有音色模型均来自 SLNeil。 |
 | 开场及其他剧情语音（GPT-SoVITS）<br>`story/voice` | SLNeil（音色模型）；AssassinHLQ（台词与 GPT-SoVITS 合成）；NEXON Games / Yostar（原作角色） | 哔哩哔哩（SLNeil）；GitHub（GPT-SoVITS） | https://space.bilibili.com/523537077；GPT-SoVITS：https://github.com/RVC-Boss/GPT-SoVITS | 角色声音与音色模型的原始条款；不因剧情代码为 MIT 而改变 | 用户确认语音为 GPT-SoVITS 合成，音色模型均来源 SLNeil；商店与凯伊另列明细。 |
-| Blue Archive OST「Pixel Time」<br>`assets/music/gamedev_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
-| Blue Archive OST「Colorful Mess」<br>`assets/music/esports_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
-| Blue Archive OST「Lemonade Diary」<br>`assets/music/art609_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
-| Blue Archive OST「Daily Routine 247」<br>`assets/music/hut_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
-| Blue Archive OST「Midsummer Cat」<br>`assets/music/mondrian_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 |
-| Blue Archive OST「Encroached Sky」<br>`assets/music/doom_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集 | 原作音乐专有版权；具体录音与作者条款适用 | 已核对实际曲目；doom_theme.ogg 的曲名是 Encroached Sky，不是 DOOM 音乐。 |
+| Blue Archive OST「Pixel Time」<br>`assets/music/gamedev_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| Blue Archive OST「Colorful Mess」<br>`assets/music/esports_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| Blue Archive OST「Lemonade Diary」<br>`assets/music/art609_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| Blue Archive OST「Daily Routine 247」<br>`assets/music/hut_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| Blue Archive OST「Midsummer Cat」<br>`assets/music/mondrian_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 本项目只调整裁剪、循环与音量，不据此取得原曲版权。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| Blue Archive OST「Encroached Sky」<br>`assets/music/doom_theme.ogg` | NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲署名待补） | 哔哩哔哩（下载合集；原始发行属 Blue Archive） | 本地曲目与 scripts/music.gd 的映射；碧蓝档案 OST 音乐合集；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448 | 原作音乐专有版权；具体录音与作者条款适用 | 已核对实际曲目；doom_theme.ogg 的曲名是 Encroached Sky，不是 DOOM 音乐。 音乐整理来源由用户补充；收集整理者与作曲者、原曲权利人分别署名，具体合集视频链接待补。 |
+| 蔚蓝档案音乐合集收集整理致谢<br>`assets/music` | 雷月夜（音乐收集整理者） | 哔哩哔哩 | https://space.bilibili.com/76847448 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 用户补充此账号为音乐收集整理来源；2026-11-14 经哔哩哔哩账号接口核对昵称与 UID 76847448。收集整理不等同作曲或原曲版权；原曲作者、录音权利与整理来源分别记录，具体合集视频链接待补。 |
 
 ## 剧情与图标
 
@@ -118,6 +118,21 @@
 | 游戏开发部活动室配图（买完电脑 · 确认收货地址）<br>`assets/story/gamedev_room.jpg` | Blue Archive 游戏内场景（NEXON Games / Yostar）；截图由使用者提供 | Blue Archive 游戏（用户提供截图） | 用户 2026-11 提供的桌面文件 BG_GameDevRoom.jpg | 专有：仅本地学习演示，不可商用、不可再分发 | 商店买完整机后，选「确认收货地址」弹出；下方配文「千禧年学院一年级游戏开发部活动室」。`.gitignore` 排除，缺图时对话会跳过这一步 |
 | 配置单悬停用的零件照片（19 张）<br>`assets/story/parts` | NVIDIA / Intel / AMD / 三星 / 金百达 / 超花（Super Flower）/ Corsair 等厂商及知乎、IT之家、搜狐、什么值得买、阿里巴巴、中国制造网等媒体/商城 | 厂商官网；知乎 / IT之家 / 搜狐 / 什么值得买 / 阿里巴巴 / 中国制造网等 | 逐张出处见 assets/story/parts/SOURCES.md | 第三方新闻 / 商品图，**未获授权**：仅限本地学习演示，不得再分发、不得商用 | 逐张作者、平台与网址保留在 assets/story/parts/SOURCES.md，不将网络产品照片写成本项目原创。 |
 
+## 参考与社区致谢
+
+| 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
+|---|---|---|---|---|---|
+| 同花顺等交易软件的界面与交互参考<br>`scripts/parkour_futures.gd` | 同花顺产品、设计与开发团队 | 同花顺交易软件 / 官网 | https://www.10jqka.com.cn/；用户确认借鉴同花顺等交易软件的行情与交互表达 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 借鉴参照包括行情呈现、K 线、数字与涨跌颜色等交易软件界面语言；仅说明参考关系，不表示本项目与原产品存在合作或背书。 |
+| 币安等交易软件的界面与交互参考<br>`scripts/parkour_futures.gd` | Binance（币安）产品、设计与开发团队 | Binance（币安）交易软件 / 官网 | https://www.binance.com/；用户补充的交易软件界面与交互参考 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 与同花顺等交易软件一并作为界面、行情与交易概念的参考；原产品名称和商标归相应权利人所有。 |
+| Linux 系统与终端文化参考<br>`scripts/arch_terminal.gd` | Linus Torvalds 与 Linux 内核及开源社区贡献者 | kernel.org / Linux 开源社区 | https://www.kernel.org/；游戏内终端与系统概念参考 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 感谢 Linux 及相关开源社区提供的技术基础、终端文化与公开资料；本条为参考致谢，具体开源组件仍按各自许可记录。 |
+| Arch Linux 发行版、官网与社区参考<br>`scripts/arch_web.gd` | Arch Linux 开发团队与社区贡献者 | Arch Linux 官网 / 开源社区 | https://archlinux.org/；游戏内 Arch 终端与仿浏览器页面参考 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 发行版、官网视觉和社区文化参考；游戏内仿浏览器由本项目绘制。Arch Linux 的标识与原站内容保留原权利和条款。 |
+| ArchWiki 文档资料致谢<br>`scripts/hut_computer.gd` | ArchWiki 条目作者、编辑者与维护社区 | ArchWiki / Arch Linux | https://wiki.archlinux.org/；https://wiki.archlinux.org/title/Main_page_(简体中文) | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 感谢公开维护的安装、配置、系统与软件使用资料；与 Arch Linux 发行版团队分别致谢，引用文档适用原站条款。 |
+| 蔚蓝档案 Wiki 游戏资料参考<br>`scripts/cost_gauge.gd` | 蔚蓝档案 Wiki 社区维护者与条目贡献者 | 蔚蓝档案 Wiki（社区资料站） | 用户补充的蔚蓝档案 Wiki；现有源码保留的资料链接 https://bluearchive.wiki/wiki/Cost；具体中文 Wiki 站点未注明 | 参考与致谢；原产品、文档、商标或素材按各自原始权利及条款记录 | 感谢角色、技能与机制资料的社区整理。现有 Cost 源码注释区分了用户指定数值与曾尝试访问的 Wiki，本站点致谢不表示每个数值均已从 Wiki 查证。 |
+
+## 免责声明
+
+本项目仅供学习交流，无意分发。第三方名称、商标、角色、模型、图像、音乐及语音等权利归原作者或相应权利人所有。署名、致谢及本声明不替代原始授权，也不变更既有开源许可。如有侵权或署名遗漏，请联系项目作者核实、补正或删除。
+
 ## 核对依据与待补信息
 
 - GDGS：GitHub 上游 contributors API 核对为 ReconWorldLab、4321ba、beiller、sodih3iw；本项目分支 contributors API 为 AssassinHLQ。以四位上游提交者加一位本项目分支作者列出五人，角色分开；2Retr0 与 PlayCanvas 是另列的算法上游。
@@ -127,3 +142,6 @@
 - 模之屋作者、语音模型 SLNeil、蒙德里安制作方式及坦克小游戏恢复经过按使用者本次确认更新。语音作者统一拼写 SLNeil，与已有哔哩哔哩 UID 523537077 对应。
 - 两组第 3 版视频作者按 `scripts/arch_terminal.gd` 的源素材注释补齐。部分视频具体链接、音乐作曲者和天空盒原作者仍待补，未编造。
 - 坦克小游戏的用户同名 GitHub 仓库当前公开列表未找到，准确链接待补；内部素材授权暂按用户提供的来源说明保留待核记录。`JustDoIt0910/TankTrouble` 仅是已留有 MIT 原文的算法参考项目。
+
+- 音乐收集整理者：用户提供哔哩哔哩 UID 76847448；通过 `https://api.bilibili.com/x/web-interface/card?mid=76847448` 核对昵称为“雷月夜”。音乐合集的具体视频链接待补，未将该账号写成原曲作曲者或权利人。
+- 交易软件、Linux、Arch Linux、ArchWiki 与蔚蓝档案 Wiki 按用户补充列为界面、概念及资料参考。蔚蓝档案 Wiki 的具体中文站点未注明，保留现有源码中的 Blue Archive Wiki 资料链接及其查证范围。
