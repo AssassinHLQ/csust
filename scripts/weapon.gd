@@ -329,6 +329,8 @@ func trigger_up() -> void:
 
 
 func shoot() -> bool:
+	if _player != null and _player.is_downed():
+		return false
 	# 巡航者模式（`carrier_form.gd` 按 T 进）期间武器关闭，扣扳机也不出弹。
 	if disabled:
 		return false

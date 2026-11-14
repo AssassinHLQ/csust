@@ -819,15 +819,7 @@ func _notify_save(station: int) -> void:
 
 
 func _on_player_died() -> void:
-	# 和摔落同一条规则：回本段起点。玩家 0.6 s 后才传送，先把复活点改掉。
-	var back := respawn_station()
-	var pos := respawn_position()
-	if _island_cp == Vector3.INF:
-		checkpoint = back
-	_player.set_respawn_point(pos)
-	print("[Parkour] 玩家倒下 → %s" % [
-		"回结束平台" if _island_cp != Vector3.INF
-		else "回第 %d 段起点（第 %d 站 %s）" % [segment_of(back) + 1, back + 1, label_at(back)]])
+	print("[Parkour] 玩家倒下 → 5 秒后原地复活，保留跑酷检查点")
 
 
 ## 岛上的传送台：踏上去回主平台。

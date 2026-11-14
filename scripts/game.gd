@@ -1064,9 +1064,9 @@ func _process(delta: float) -> void:
 		print("[game] 掉出平台，已送回出生点")
 
 
-## 被 boss 打倒：玩家自己在 0.6 s 后回到本场景唯一的存档点，这里只记一笔。
+## 被击倒后等待 5 秒原地复活，坠落救援仍使用场景存档点。
 func _on_player_died() -> void:
-	print("[game] 玩家倒下 → 送回本场景的存档点 %s" % str(_spawn.snappedf(0.01)))
+	print("[game] 玩家倒下 → 5 秒后原地复活")
 
 
 func _on_target_died(_by: float) -> void:

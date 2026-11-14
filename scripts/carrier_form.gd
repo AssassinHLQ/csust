@@ -1384,6 +1384,9 @@ func _physics_process(delta: float) -> void:
 func _tick_flight(delta: float) -> void:
 	if not _on or _player == null:
 		return
+	if _player.is_downed():
+		_player.velocity = Vector3.ZERO
+		return
 
 	var on_floor := _player.is_on_floor()
 	var now_ms := float(Time.get_ticks_msec())
@@ -2468,6 +2471,8 @@ func _play(name_: String, force: bool) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _player != null and _player.is_downed():
+		return
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return

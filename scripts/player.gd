@@ -29,15 +29,17 @@ const SceneFlowDev := preload("res://scripts/scene_flow.gd")
 signal aim_changed(aiming: bool)
 signal health_changed(current: float, maximum: float)
 ## 血量归零。关卡接这个信号做自己的善后（进度清零 / 提示），
-## 真正的传送和回血由 `_respawn_now()` 在 0.6 s 后完成。
+## 等待 5 秒后由玩家原地恢复满血。
 signal died
 
 @export var max_health := 250.0
 var health := 250.0
-## 倒下后送回哪儿。**一个场景一个存档点**：由各关卡在进场景时设一次
+## 坠落救援的位置。**一个场景一个存档点**：由各关卡在进场景时设一次
 ## （`set_respawn_transform`），默认取 _ready 时的位置。
 var _respawn_xform := Transform3D.IDENTITY
 var _dying := false
+const REVIVE_DELAY := 5.0
+var _downed_xform := Transform3D.IDENTITY
 ## 2026-10-20 用户：「爱丽丝增强，血量变成 250」—— 原来是 100（盖特 Boss 一下 26、
 ## 倭瓜优香的天降一击 40，所以 250 才够吃几下）。注意 `health` 的初值也要跟着改，
 ## 否则 `_ready()` 里 `health = max_health` 之前 HUD 会闪一帧 100。
@@ -501,7 +503,7 @@ func _input(event: InputEvent) -> void:
 	#
 	# 判据用 `button_index` 白名单而不是 `event is InputEventMouseButton`：
 	# 左键（开火）也是 InputEventMouseButton，按类型放行会连开火一起放进来。
-	if _ride_active and not (event is InputEventMouseMotion):
+	if (_ride_active or _dying) and not (event is InputEventMouseMotion):
 		if not (event is InputEventMouseButton and _is_wheel(event as InputEventMouseButton)):
 			return
 
@@ -788,6 +790,14 @@ func is_carrier_form() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	if _dying:
+		global_transform = _downed_xform
+		velocity = Vector3.ZERO
+		rig.rotation.y = _yaw
+		_apply_camera(delta)
+		if anim != null and anim.has_method("set_locomotion"):
+			anim.set_locomotion(0.0, true, 0.0)
+		return
 	if _ride_active:
 		# 人挂在火箭上：不落重力、不吃移动输入、不做 move_and_slide。
 		# 位置由 `rocket_ride.gd::_carry_player()` 每帧写入，这里只管相机。
@@ -1280,7 +1290,7 @@ func take_damage(amount: float, hit_from := Vector3.ZERO, knockback := 0.0) -> v
 			velocity += Vector3(cos(a), 0.0, sin(a)) * knockback
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
-		# 血量见底 = 像掉进虚空一样被送回本场景的存档点，不再原地回血。
+		# 击倒原地等待复活；坠落救援仍由关卡独立处理。
 		_die_and_respawn()
 
 
@@ -1297,26 +1307,38 @@ func respawn_point() -> Vector3:
 	return _respawn_xform.origin
 
 
-## 倒下 → 短促停顿 → 送回存档点并回满血。0.6 s 的停顿是为了让击杀有一拍反馈，
-## 同时给关卡接 `died` 信号做善后（清进度、弹提示）。
+func is_downed() -> bool:
+	return _dying
+
+
+## 击倒后锁住当前位置与战斗输入，游戏时间经过 5 秒后原地恢复满血。
+## 暂停菜单会同时暂停倒计时；空中机甲也保留被击倒的位置。
 func _die_and_respawn() -> void:
 	if _dying:
 		return
 	_dying = true
+	_downed_xform = global_transform
 	velocity = Vector3.ZERO
+	_fire_held = false
+	_aim_held = false
+	_set_aiming(false)
+	_jump_at = -99999.0
+	_air_since = -99999.0
+	if weapon != null:
+		weapon.trigger_up()
 	died.emit()
-	await get_tree().create_timer(0.6).timeout
-	if not is_instance_valid(self):
+	await get_tree().create_timer(REVIVE_DELAY, false).timeout
+	if not is_inside_tree():
 		return
-	global_transform = _respawn_xform
+	global_transform = _downed_xform
 	velocity = Vector3.ZERO
 	health = max_health
-	health_changed.emit(health, max_health)
 	_dying = false
+	health_changed.emit(health, max_health)
 
 
 func heal(amount: float) -> void:
-	if amount <= 0.0:
+	if amount <= 0.0 or _dying:
 		return
 	health = minf(health + amount, max_health)
 	health_changed.emit(health, max_health)

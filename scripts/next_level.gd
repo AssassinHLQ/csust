@@ -819,15 +819,10 @@ func _on_fall(body: Node3D) -> void:
 	print("[ConstructivistLevel] 玩家掉出广场，已送回出生点")
 
 
-## 被 boss 打倒：血量归零 → 玩家自己会在 0.6 s 后回到本场景的存档点，
-## 这里只负责提示和把进度相关的表现收一下。
+## 被击倒后由玩家自己等待 5 秒原地复活，关卡只负责提示。
 func _on_player_died() -> void:
-	if _final_started:
-		_show_message("被击倒 —— 送回封锁区入口", 3.0)
-		print("[ConstructivistLevel] 玩家倒下，等待重生到封锁区存档点")
-		return
-	_show_message("被击倒 —— 送回大厅入口", 3.0)
-	print("[ConstructivistLevel] 玩家倒下，等待重生到入口")
+	_show_message("被击倒 —— 5 秒后原地复活", 5.0)
+	print("[ConstructivistLevel] 玩家倒下，5 秒后原地复活")
 
 
 ## 北门下沉（动画 1.8 s），把碰撞一起沉到地板下面。
