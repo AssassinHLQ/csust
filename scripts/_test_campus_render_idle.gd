@@ -132,6 +132,7 @@ func _run() -> void:
 	_check(not raster._can_reuse_last_frame(), "intro guard prevents premature reuse")
 	_test_upload_budget(raster, context.device)
 	_test_shader_cache()
+	_test_workspace_plan()
 	raster.context = null
 	camera.free()
 	print("campus_render_idle: %d passed, %d failed" % [_pass, _fail])
@@ -202,6 +203,37 @@ func _test_shader_cache() -> void:
 	var recovered := RenderContext._compile_shader_once(device, "projection", "source B")
 	_check(recovered == edited and device.calls == 5,
 		"a failed source edit preserves the last successfully compiled revision")
+
+
+func _test_workspace_plan() -> void:
+	var campus = load("res://scripts/campus_ggs.gd").new()
+	var planned = Rasterizer.new({"size": 100}, Vector2i(16, 16), Texture2DRD.new(), null)
+	campus._coarse_points = 200
+	campus._chunk_list = [
+		{"name": "Chunk_0_0", "points": 100},
+		{"name": "Chunk_1_0", "points": 150},
+		{"name": "Chunk_2_0", "bytes": 200 * 240}]
+	campus._configure_workspace(planned)
+	_check(planned.workspace_points == 450, "workspace covers the densest whole window, including raw byte counts")
+	var replacement = Rasterizer.new({"size": 300}, Vector2i(16, 16), Texture2DRD.new(), null)
+	campus._configure_workspace(replacement)
+	_check(replacement.workspace_group == planned.workspace_group and replacement.workspace_points == 450,
+		"replacement windows keep a stable workspace group and capacity")
+	var oversized = Rasterizer.new({"size": 451}, Vector2i(16, 16), Texture2DRD.new(), null)
+	campus._configure_workspace(oversized)
+	_check(oversized.workspace_group.is_empty(), "unexpected oversized input safely uses private scratch")
+	campus._coarse_off = true
+	var solo = Rasterizer.new({"size": 1}, Vector2i(16, 16), Texture2DRD.new(), null)
+	campus._configure_workspace(solo)
+	_check(solo.workspace_group.is_empty(), "single-layer mode avoids reserving the full-campus workspace")
+	campus._coarse_off = false
+	campus._workspace_points = 0
+	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://splatdata/campus_sog/chunks.json"))
+	campus._coarse_points = int(manifest["coarse"]["points"])
+	campus._chunk_list = manifest["chunks"]
+	campus._configure_workspace(planned)
+	_check(planned.workspace_points == 1608101, "real 97-chunk manifest sizes scratch for all 3x3 windows")
+	campus.free()
 
 
 func _dispatch_reset_count(updates: Array) -> int:

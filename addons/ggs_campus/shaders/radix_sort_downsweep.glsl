@@ -209,6 +209,9 @@ void main() {
 
     for (uint i = index; i < PARTITION_SIZE; i += WORKGROUP_SIZE) {
         uint value = local_histogram[i];
-        values[local_keys[i / WORKGROUP_SIZE] + out_offset] = value;
+        uint dst_offset = local_keys[i / WORKGROUP_SIZE];
+        if (dst_offset < element_count) {
+            values[dst_offset + out_offset] = value;
+        }
     }
 }

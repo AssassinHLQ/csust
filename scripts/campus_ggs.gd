@@ -85,6 +85,7 @@ const WINDOW_SIDE := 3
 ## 实际使用的窗口边长，`--ggs-window=N` 可以临时改（量「多大才够看」用）。
 ## 3×3 ≈ 60×50 m，校园本体 ≈ 200×150 m —— 见 `_probe_campus_window_shot.gd` 的对照图。
 var window_side := WINDOW_SIDE
+var _workspace_points := 0
 ## 双缓冲：换窗口时在**后台线程**把新窗口写进另一个文件，当前这份继续渲染。
 ## 单文件做不到 —— 写的时候会把正在读的那份覆盖掉，画面会闪一下破烂数据。
 ##
@@ -531,6 +532,7 @@ func _make_bundle() -> bool:
 	ply.size = count
 	rasterizer = Rasterizer.new(ply, get_viewport().get_size(), tex, cam)
 	rasterizer.bin_path = _bin_path
+	_configure_workspace(rasterizer)
 	rasterizer.model_scale[0] = 1.0
 	rasterizer.cov_scale[0] = _cov_scale
 	rasterizer.cov_limit[0] = _cov_cap
@@ -573,6 +575,7 @@ func _ensure_coarse_raster() -> void:
 			_quad_mat.set_shader_parameter("coarse_texture", coarse_tex)
 	coarse_rasterizer = Rasterizer.new(cply, vs2, coarse_tex, cam)
 	coarse_rasterizer.bin_path = _coarse_path
+	_configure_workspace(coarse_rasterizer)
 	coarse_rasterizer.model_scale[0] = 1.0
 	coarse_rasterizer.cov_scale[0] = _cov_scale
 	coarse_rasterizer.cov_limit[0] = _cov_cap
@@ -583,6 +586,33 @@ func _ensure_coarse_raster() -> void:
 	coarse_rasterizer.texture_size = vs2
 	_sync_raster_size(coarse_rasterizer)
 	_coarse_done = true
+
+
+## Both layers are submitted sequentially; only their output textures persist.
+## Size scratch for every possible window to avoid reallocating it while moving.
+func _configure_workspace(raster) -> void:
+	if _coarse_off or _chunk_list.is_empty() or maxi(_coarse_total, _coarse_points) <= 0:
+		return
+	if _workspace_points == 0:
+		_workspace_points = maxi(_coarse_total, _coarse_points)
+		var counts: Dictionary = {}
+		for c in _chunk_list:
+			counts[String(c["name"])] = maxi(int(c.get("points", 0)), int(c.get("bytes", 0)) / BYTES_PER_SPLAT)
+		var half := window_side / 2
+		for c in _chunk_list:
+			var ij := _parse_ij(String(c["name"]))
+			if ij.is_empty():
+				continue
+			var points := 0
+			for i in range(int(ij["i"]) - half, int(ij["i"]) + half + 1):
+				for j in range(int(ij["j"]) - half, int(ij["j"]) + half + 1):
+					points += int(counts.get("Chunk_%d_%d" % [i, j], 0))
+			_workspace_points = maxi(_workspace_points, points)
+	# Unexpected source sizes use private scratch rather than overflowing a pool.
+	if raster.point_cloud.size > _workspace_points:
+		return
+	raster.workspace_group = "campus:%d" % get_instance_id()
+	raster.workspace_points = _workspace_points
 
 
 ## 按**当前视口**把某个光栅器的渲染尺寸同步过去（新建之后必须调一次）。
@@ -895,6 +925,7 @@ func _is_dev_build() -> bool:
 ##   `push_warning` 就跳过）—— 表现为「校园有一部分是空的」，不崩、难查。
 ##   现在缺块就直接返回 false，让上层回退 `campus_ggs.bin` 全量，画面至少完整。
 func _load_manifest() -> bool:
+	_workspace_points = 0
 	_frame_basis = Basis.IDENTITY
 	_frame_origin = Vector3.ZERO
 	_frame_scale = 1.0

@@ -4,6 +4,7 @@ extends Resource
 const TILE_SIZE = 16
 const PlyFileScript = preload("res://addons/ggs_campus/ply_file.gd")
 const RenderContextScript = preload("res://addons/ggs_campus/render_context.gd")
+const SharedWorkspace := preload("res://addons/ggs_campus/shared_workspace.gd")
 const WORKGROUP_SIZE = 512 # Same as defined in `radix_sort_upsweep.glsl`
 const RADIX = 256 # Same as defined in `radix_sort_upsweep.glsl`
 const PARTITION_DIVISION = 8 # Same as defined in `radix_sort_upsweep.glsl`
@@ -16,6 +17,12 @@ var shaders : Dictionary
 var pipelines : Dictionary
 var descriptors : Dictionary
 var descriptor_sets : Dictionary
+## Opt in only for layers submitted sequentially. A stable upper bound lets
+## window replacements reuse the same allocation without resizing live buffers.
+var workspace_group := ""
+var workspace_points := 0
+var _workspace
+var _sort_capacity := 0
 
 var point_cloud
 var render_texture : Texture2DRD
@@ -147,6 +154,11 @@ func init_gpu() -> void:
 	
 	# --- DESCRIPTOR PREPARATION ---
 	var num_sort_elements_max = point_cloud.size * 10 # FIXME: This should not be a static value!
+	if not workspace_group.is_empty() and workspace_points >= point_cloud.size:
+		_workspace = SharedWorkspace.acquire(context.device, workspace_group, workspace_points)
+		context.shared_workspace = _workspace
+		num_sort_elements_max = _workspace.sort_capacity
+	_sort_capacity = num_sort_elements_max
 	var num_partitions = (num_sort_elements_max + PARTITION_SIZE - 1) / PARTITION_SIZE
 	var block_dims : PackedInt32Array; block_dims.resize(2*3); block_dims.fill(1)
 	
@@ -169,11 +181,15 @@ func init_gpu() -> void:
 	#    `Uniform buffer supplied (N) is smaller than size of shader uniform: (48)`，
 	#    descriptor set 建不出来 ⇒ 投影 pass 整条不跑。
 	descriptors['uniforms'] = context.create_uniform_buffer(12*4)
-	descriptors['culled_splats'] = context.create_storage_buffer(point_cloud.size * 12*4, [], 0, false)
 	descriptors['grid_dimensions'] = context.create_storage_buffer(2*3*4, block_dims.to_byte_array(), RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)
-	descriptors['histogram'] = context.create_storage_buffer(4 + (1 + 4*RADIX + num_partitions*RADIX)*4)
-	descriptors['sort_keys'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
-	descriptors['sort_values'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
+	if _workspace != null:
+		for name_ in _workspace.descriptors:
+			descriptors[name_] = _workspace.descriptors[name_]
+	else:
+		descriptors['culled_splats'] = context.create_storage_buffer(point_cloud.size * 12*4, [], 0, false)
+		descriptors['histogram'] = context.create_storage_buffer(4 + (1 + 4*RADIX + num_partitions*RADIX)*4)
+		descriptors['sort_keys'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
+		descriptors['sort_values'] = context.create_storage_buffer(num_sort_elements_max*4*2, [], 0, false)
 	descriptors['tile_bounds'] = context.create_storage_buffer(tile_dims.x*tile_dims.y * 2*4)
 	descriptors['tile_splat_pos'] = context.create_storage_buffer(4*4)
 	descriptors['render_texture'] = context.create_texture(texture_size, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
@@ -234,9 +250,10 @@ func init_gpu() -> void:
 	num_splats_loaded[0] = 0
 	# 2026-11-05：把「分配缓冲 + 编译着色器」这一段单独计时 ——
 	# 换窗口的卡顿主要嫌疑就是它（每换一次要重建约 450 MB 的缓冲和 6 个着色器）。
-	var mb := float(point_cloud.size) * 448.0 / 1048576.0
-	print("[ggs] init_gpu：缓冲 %.0f MB 用 %.1f ms，管线用 %.1f ms，合计 %.1f ms" % [
-		mb, float(_t_buffers - _t_alloc) / 1000.0,
+	var mb := float(point_cloud.size) * (240.0 if _workspace != null else 448.0) / 1048576.0
+	var shared_mb := float(workspace_points) * 208.0 / 1048576.0 if _workspace != null else 0.0
+	print("[ggs] init_gpu：层内缓冲约 %.0f MiB（共享工作区约 %.0f MiB）用 %.1f ms，管线用 %.1f ms，合计 %.1f ms" % [
+		mb, shared_mb, float(_t_buffers - _t_alloc) / 1000.0,
 		float(Time.get_ticks_usec() - _t_buffers) / 1000.0,
 		float(Time.get_ticks_usec() - _t_alloc) / 1000.0])
 	if bin_path != "":
@@ -386,6 +403,7 @@ func cleanup_gpu():
 	#    `ERROR: Attempted to free invalid ID`。给 `texture_rd_rid` 赋值是
 	#    **拥有权转移**（会释放原来持有的那个 RID），不是单纯改指针。
 	if render_texture: render_texture.texture_rd_rid = RID()
+	_workspace = null
 	if context: context.free()
 
 ## 切场景专用：把 splats 缓冲**当帧**还给驱动。
@@ -440,6 +458,7 @@ func release_all_now() -> void:
 	descriptors.clear()
 	shaders.clear()
 	pipelines.clear()
+	_workspace = null
 	if ctx != null:
 		ctx.release_all()
 	print("[ggs] 切场景：光栅器 context 已当帧释放")
@@ -480,7 +499,7 @@ func rasterize() -> void:
 	# Then, run the sort and gsplat_rasterize pipelines with block sizes based on the
 	# amount of points to sort determined in the projection pipeline.
 	compute_list = context.compute_list_begin()
-	var sort_n = point_cloud.size * 10
+	var sort_n = _sort_capacity if _sort_capacity > 0 else point_cloud.size * 10
 	for radix_shift_pass in range(4):
 		var off_in = sort_n * (radix_shift_pass % 2)
 		var off_out = sort_n * (1 - (radix_shift_pass % 2))
@@ -508,6 +527,8 @@ func rasterize() -> void:
 		context.device.capture_timestamp('Render')
 
 	_rendered_once = true
+	if _workspace != null:
+		_workspace.last_writer_id = context.get_instance_id()
 	_last_size = frame_size
 	_last_frame_key = frame_key
 
@@ -529,6 +550,13 @@ func _frame_cache_key() -> Array:
 		cov_limit[0], cov_limit[1], should_enable_heatmap[0]]
 
 func get_splat_position(screen_position : Vector2i) -> Vector3:
+	if context == null or not is_loaded:
+		return Vector3.INF
+	# Another layer may have overwritten shared culled/sort data while our
+	# completed texture remained cached. Picking needs this layer's scratch.
+	if _workspace != null and _workspace.last_writer_id != context.get_instance_id():
+		_rendered_once = false
+		rasterize()
 	var tile : Vector2i = screen_position * render_scale[0] / TILE_SIZE
 	var tile_id = tile.y*tile_dims.x + tile.x
 	

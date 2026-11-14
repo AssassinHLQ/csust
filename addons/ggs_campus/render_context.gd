@@ -60,6 +60,8 @@ var device : RenderingDevice
 var deletion_queue := DeletionQueue.new()
 var shader_cache : Dictionary
 var needs_sync := false
+## Retain borrowed scratch until this context's descriptor sets are released.
+var shared_workspace: RefCounted
 
 ## CPU-only SPIR-V survives individual fine-window contexts. A cold projection
 ## compile alone took about 100 ms on the test PC; rebuilds avoid that compiler.
@@ -91,6 +93,7 @@ func _notification(what):
 		# All resources must be freed after use to avoid memory leaks.
 		deletion_queue.flush(device)
 		shader_cache.clear()
+		shared_workspace = null
 
 ## **立刻**释放这份 context 持有的全部 RID，不等 GC（切场景用）。
 ##
@@ -104,6 +107,7 @@ func _notification(what):
 func release_all() -> void:
 	deletion_queue.flush(device)
 	shader_cache.clear()
+	shared_workspace = null
 	
 # --- WRAPPER FUNCTIONS ---
 func submit() -> void: device.submit(); needs_sync = true
