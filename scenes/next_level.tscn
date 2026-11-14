@@ -22,7 +22,7 @@
 [ext_resource type="Script" uid="uid://jk6hyvped6dl" path="res://scripts/target.gd" id="7_target"]
 [ext_resource type="PackedScene" path="res://scenes/campus_venue.tscn" id="8_campus"]
 [ext_resource type="Texture2D" uid="uid://csdfilmb4p6bp" path="res://assets/sky/sky_pink.jpg" id="11_sky_preview"]
-[ext_resource type="PackedScene" path="res://scenes/campus_collision_walls_final.scn" id="14_campusmesh_upper"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform.tscn" id="14_campusmesh_upper"]
 [ext_resource type="PackedScene" path="res://scenes/trex_yuuka_boss.tscn" id="16_trex"]
 [ext_resource type="PackedScene" path="res://scenes/kei_npc.tscn" id="17_kei"]
 [ext_resource type="Script" uid="uid://b57tnfc7taavf" path="res://scripts/dialogue_box.gd" id="18_dialog"]
@@ -251,6 +251,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -40.02, -316.7)
 
 [node name="Collision" type="CollisionShape3D" parent="CampusFloor" unique_id=1013946386]
 shape = SubResource("Shape_campus_floor")
+disabled = true
 
 [node name="CampusPlinth2" type="MeshInstance3D" parent="." unique_id=949021841]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -40.02, -560.15265)
@@ -274,14 +275,13 @@ low_priority = true
 hide_inside_aabb = AABB(-17, -3, -11, 33, 19, 25)
 preload_on_gate = false
 
-; 校园碰撞：暂用 Poisson 网格 + CampusFloor，恢复已验证的通行行为。
-; 2026-11-14 GDGS 原烘焙版本仅通过 12/96 跑动项；修复候选仍在隔离验证。
-; scenes/campus_gs.tscn 与分块资产保留，验收通过后再启用。
-; CampusFloor 顶面为 -0.02，作为扫描缺失区域的连续地面支撑。
+; 校园碰撞：SplatTransform 0.25 m 原生分块 + 近地去噪，世界坐标单位变换。
+; 扫描空白不补地板；边界护栏与延长连接桥包含在包装场景中。
+; CampusFloor 仅保留 footprint 数据供终局封锁量范围，碰撞已禁用。
 [node name="CampusCollision" parent="." unique_id=378990923 instance=ExtResource("14_campusmesh_upper")]
 
 [node name="TrexBossA" parent="." unique_id=2052977263 instance=ExtResource("16_trex")]
-transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -95, 0, -96)
+transform = Transform3D(0.196, 0, -0.981, 0, 1, 0, 0.981, 0, 0.196, -118, 0.119907, -109)
 attack_range = 26.0
 display_name = "暗影霸王龙优香"
 height = 9.0
@@ -289,7 +289,7 @@ respawn_on_death = false
 tint = Color(0.32, 0.26, 0.46, 1)
 
 [node name="TrexBossB" parent="." unique_id=489813376 instance=ExtResource("16_trex")]
-transform = Transform3D(0.293, 0, -0.956, 0, 1, 0, 0.956, 0, 0.293, -120, 0, -115)
+transform = Transform3D(0.293, 0, -0.956, 0, 1, 0, 0.956, 0, 0.293, -138, -1.18507, -121)
 attack_start_delay = 4.0
 attack_range = 24.0
 display_name = "炫彩霸王龙优香"
@@ -298,7 +298,7 @@ respawn_on_death = false
 rainbow_flow = true
 
 [node name="TrexBossC" parent="." unique_id=964474950 instance=ExtResource("16_trex")]
-transform = Transform3D(0.41, 0, -0.912, 0, 1, 0, 0.912, 0, 0.41, -135, 0, -140)
+transform = Transform3D(0.41, 0, -0.912, 0, 1, 0, 0.912, 0, 0.41, -133.5, -1.203228, -140)
 attack_start_delay = 6.0
 attack_range = 28.0
 display_name = "经典霸王龙优香"
@@ -402,6 +402,7 @@ hint = "走近这扇门，按 F 返回第一场景（蒙德里安大楼）"
 
 [node name="Player" parent="." unique_id=1280127304 instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.55, 5.2)
+safe_margin = 0.004
 
 [node name="HUD" parent="." unique_id=1539620965 instance=ExtResource("3_hud")]
 

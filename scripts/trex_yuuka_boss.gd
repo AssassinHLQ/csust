@@ -263,9 +263,12 @@ func _tick_chase(delta: float) -> void:
 		_face_towards(target, delta)
 		# 朝**当前朝向**走，而不是直接朝目标走 —— 这样它是「先转身再迈步」，
 		# 不会横着平移过去（大块头横向滑步特别假）
+		var previous := global_position
 		global_position += facing() * chase_speed * delta
 		_walking = true
-		_snap_to_ground()
+		if not _snap_to_ground():
+			global_position = previous
+			_walking = false
 	else:
 		_walking = false
 		# 站住的时候也慢慢转向玩家（对峙感）
@@ -284,21 +287,24 @@ func _face_towards(dir: Vector3, delta: float) -> void:
 
 
 ## 向下打一条射线贴地：走坡不浮空也不陷进去。
-## 射线起点在头顶上方 8 m —— 霸王龙有 9~10.5 m 高，从原点往下打会先撞到自己的碰撞盒。
-func _snap_to_ground() -> void:
+## 只查询场景地形并排除自身；缺地或高度突变时停止前进，避免悬在扫描空白上。
+func _snap_to_ground() -> bool:
 	var space := get_world_3d().direct_space_state
 	if space == null:
-		return
-	var from := Vector3(global_position.x, _home.y + 8.0, global_position.z)
-	var to := from - Vector3.UP * 24.0
-	var q := PhysicsRayQueryParameters3D.create(from, to)
+		return false
+	var from := global_position + Vector3.UP * 2.0
+	var to := global_position + Vector3.DOWN * 3.0
+	var q := PhysicsRayQueryParameters3D.create(from, to, 1)
 	q.exclude = [get_rid()]
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
-		return
+		return false
 	var gy: float = (hit["position"] as Vector3).y
+	if absf(gy - global_position.y) > 1.0:
+		return false
 	# 平滑贴地：地面有起伏时不要一格一格地跳
 	global_position.y = lerpf(global_position.y, gy, 0.5)
+	return true
 
 
 # --- 程序化摆腿 ---
@@ -344,7 +350,24 @@ func _attack(player: Player) -> void:
 	var radius: float = cfg.radius
 	var center := global_position + facing() * reach
 	_set_telegraph_color(cfg.color)
-	_telegraph.global_position = Vector3(center.x, 0.10, center.z)
+	# Keep the warning on the scanned surface. Shorten its reach at missing
+	# scan regions rather than drawing a floating disk over an unscanned void.
+	var space := get_world_3d().direct_space_state
+	var surface: Dictionary = {}
+	for fraction in [1.0, .75, .5, .25, 0.0]:
+		center = global_position + facing() * reach * float(fraction)
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(center.x, global_position.y + 3.0, center.z),
+			Vector3(center.x, global_position.y - 6.0, center.z), 1)
+		query.exclude = [get_rid()]
+		surface = space.intersect_ray(query)
+		if not surface.is_empty():
+			break
+	if surface.is_empty():
+		_busy = false
+		_attacking = false
+		return
+	_telegraph.global_position = Vector3(center.x, float(surface["position"].y) + .10, center.z)
 	_telegraph.scale = Vector3(radius * 0.55, 1.0, radius * 0.55)
 	_telegraph.visible = true
 

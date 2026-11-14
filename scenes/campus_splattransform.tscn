@@ -1,0 +1,103 @@
+[gd_scene load_steps=34 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_0_0.scn" id="Tile_0_0"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_1_0.scn" id="Tile_1_0"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_0.scn" id="Tile_2_0"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_0.scn" id="Tile_3_0"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_0_1.scn" id="Tile_0_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_1_1.scn" id="Tile_1_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_1.scn" id="Tile_2_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_1.scn" id="Tile_3_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_4_1.scn" id="Tile_4_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_5_1.scn" id="Tile_5_1"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_0_2.scn" id="Tile_0_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_1_2.scn" id="Tile_1_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_2.scn" id="Tile_2_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_2.scn" id="Tile_3_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_4_2.scn" id="Tile_4_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_5_2.scn" id="Tile_5_2"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_0_3.scn" id="Tile_0_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_1_3.scn" id="Tile_1_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_3.scn" id="Tile_2_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_3.scn" id="Tile_3_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_4_3.scn" id="Tile_4_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_5_3.scn" id="Tile_5_3"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_0_4.scn" id="Tile_0_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_1_4.scn" id="Tile_1_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_4.scn" id="Tile_2_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_4.scn" id="Tile_3_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_4_4.scn" id="Tile_4_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_5_4.scn" id="Tile_5_4"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_2_5.scn" id="Tile_2_5"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_3_5.scn" id="Tile_3_5"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/Tile_4_5.scn" id="Tile_4_5"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/ScanBoundary.scn" id="ScanBoundary"]
+[ext_resource type="PackedScene" path="res://scenes/campus_splattransform/CampusBridgeExtension.scn" id="CampusBridgeExtension"]
+
+[node name="CampusSplatTransform" type="Node3D"]
+
+[node name="Tile_0_0" parent="." instance=ExtResource("Tile_0_0")]
+
+[node name="Tile_1_0" parent="." instance=ExtResource("Tile_1_0")]
+
+[node name="Tile_2_0" parent="." instance=ExtResource("Tile_2_0")]
+
+[node name="Tile_3_0" parent="." instance=ExtResource("Tile_3_0")]
+
+[node name="Tile_0_1" parent="." instance=ExtResource("Tile_0_1")]
+
+[node name="Tile_1_1" parent="." instance=ExtResource("Tile_1_1")]
+
+[node name="Tile_2_1" parent="." instance=ExtResource("Tile_2_1")]
+
+[node name="Tile_3_1" parent="." instance=ExtResource("Tile_3_1")]
+
+[node name="Tile_4_1" parent="." instance=ExtResource("Tile_4_1")]
+
+[node name="Tile_5_1" parent="." instance=ExtResource("Tile_5_1")]
+
+[node name="Tile_0_2" parent="." instance=ExtResource("Tile_0_2")]
+
+[node name="Tile_1_2" parent="." instance=ExtResource("Tile_1_2")]
+
+[node name="Tile_2_2" parent="." instance=ExtResource("Tile_2_2")]
+
+[node name="Tile_3_2" parent="." instance=ExtResource("Tile_3_2")]
+
+[node name="Tile_4_2" parent="." instance=ExtResource("Tile_4_2")]
+
+[node name="Tile_5_2" parent="." instance=ExtResource("Tile_5_2")]
+
+[node name="Tile_0_3" parent="." instance=ExtResource("Tile_0_3")]
+
+[node name="Tile_1_3" parent="." instance=ExtResource("Tile_1_3")]
+
+[node name="Tile_2_3" parent="." instance=ExtResource("Tile_2_3")]
+
+[node name="Tile_3_3" parent="." instance=ExtResource("Tile_3_3")]
+
+[node name="Tile_4_3" parent="." instance=ExtResource("Tile_4_3")]
+
+[node name="Tile_5_3" parent="." instance=ExtResource("Tile_5_3")]
+
+[node name="Tile_0_4" parent="." instance=ExtResource("Tile_0_4")]
+
+[node name="Tile_1_4" parent="." instance=ExtResource("Tile_1_4")]
+
+[node name="Tile_2_4" parent="." instance=ExtResource("Tile_2_4")]
+
+[node name="Tile_3_4" parent="." instance=ExtResource("Tile_3_4")]
+
+[node name="Tile_4_4" parent="." instance=ExtResource("Tile_4_4")]
+
+[node name="Tile_5_4" parent="." instance=ExtResource("Tile_5_4")]
+
+[node name="Tile_2_5" parent="." instance=ExtResource("Tile_2_5")]
+
+[node name="Tile_3_5" parent="." instance=ExtResource("Tile_3_5")]
+
+[node name="Tile_4_5" parent="." instance=ExtResource("Tile_4_5")]
+
+[node name="ScanBoundary" parent="." instance=ExtResource("ScanBoundary")]
+
+[node name="CampusBridgeExtension" parent="." instance=ExtResource("CampusBridgeExtension")]

@@ -54,6 +54,12 @@ var _candidate := ""
 var _tile_overrides := ""
 var _report_tag := ""
 var _route_tag := ""
+var _terrain_routes := false
+var _terrain_min_routes := 24
+var _regression_routes := ""
+var _safe_margin := -1.0
+var _jump_obstacles := false
+var _expect_outline_guards := false
 var _player_ms: Array[float] = []
 
 func _initialize() -> void:
@@ -63,6 +69,9 @@ func _initialize() -> void:
 		return
 	_old = OS.get_cmdline_user_args().has("--collision=old")
 	_integration = OS.get_cmdline_user_args().has("--integration")
+	_terrain_routes = OS.get_cmdline_user_args().has("--terrain-routes")
+	_jump_obstacles = OS.get_cmdline_user_args().has("--jump-obstacles")
+	_expect_outline_guards = OS.get_cmdline_user_args().has("--expect-outline-guards")
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--collision-scene="):
 			_candidate = a.trim_prefix("--collision-scene=")
@@ -72,6 +81,12 @@ func _initialize() -> void:
 			_report_tag = a.trim_prefix("--report-tag=")
 		elif a.begins_with("--route-tag="):
 			_route_tag = a.trim_prefix("--route-tag=")
+		elif a.begins_with("--terrain-min-routes="):
+			_terrain_min_routes = maxi(1, int(a.trim_prefix("--terrain-min-routes=")))
+		elif a.begins_with("--regression-routes="):
+			_regression_routes = a.trim_prefix("--regression-routes=")
+		elif a.begins_with("--safe-margin="):
+			_safe_margin = float(a.trim_prefix("--safe-margin="))
 	_run.call_deferred()
 
 func _check(ok: bool, label: String, detail: Variant = "") -> void:
@@ -101,6 +116,12 @@ func _run() -> void:
 				campus_collision.add_child((load(_tile_overrides + "/" + file) as PackedScene).instantiate())
 		root.add_child(_world)
 		current_scene = _world
+		if _terrain_routes:
+			# Original scanned terrain includes ground below the old flat plane.
+			# The collision candidate must supply its own support for this test.
+			var flat_floor := _world.get_node_or_null("CampusFloor") as StaticBody3D
+			if flat_floor != null:
+				flat_floor.collision_layer = 0
 		_player = _world.get_node("Player") as CharacterBody3D
 		_collision = _world.get_node("CampusCollision") as Node3D
 		# Remove combat/reset interference; keep all scenery and its collisions.
@@ -155,7 +176,15 @@ func _run() -> void:
 		if FileAccess.file_exists(manifest_path):
 			var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
 			_check(shapes.size() == manifest["tiles"].size(), "all candidate chunks present", shapes.size())
-	if not _integration and not _old:
+	if _terrain_routes:
+		_scan_terrain_routes()
+		if not _regression_routes.is_empty():
+			var prior: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_regression_routes))
+			# Retain prior coordinates even if a revised surface would not select them.
+			for route in prior["routes"]:
+				_routes = _routes.filter(func(r: Dictionary) -> bool: return r["tag"] != route["tag"])
+				_routes.append({"tag": route["tag"], "center": Vector3(route["x"], route["y"], route["z"]), "axis": Vector3.RIGHT if route["axis"] == "x" else Vector3.BACK})
+	elif not _integration and not _old:
 		_survey()
 		_find_seams()
 		for z in [-180.0, -276.0, -372.0, -468.0]:
@@ -167,12 +196,17 @@ func _run() -> void:
 			_routes.append({"tag": r[0], "center": Vector3(r[1], r[2], r[3]), "axis": Vector3.RIGHT if r[4] else Vector3.BACK})
 		if _integration:
 			_integration_survey()
-	_check(_routes.size() >= 10, "street routes cover campus", _routes.size())
+	_check(_routes.size() >= (_terrain_min_routes if _terrain_routes else 10), "street routes cover campus", _routes.size())
 	if not _route_tag.is_empty():
 		_routes = _routes.filter(func(r: Dictionary) -> bool: return r["tag"] == _route_tag)
 	if _player == null:
 		_player = (load("res://scenes/player.tscn") as PackedScene).instantiate() as CharacterBody3D
 		_world.add_child(_player)
+	if _safe_margin >= 0.0:
+		_player.safe_margin = _safe_margin
+	_report["safe_margin_m"] = _player.safe_margin
+	_report["jump_obstacles"] = _jump_obstacles
+	_report["expect_outline_guards"] = _expect_outline_guards
 	# Prevent expensive idle carrier prewarming from contaminating measurements.
 	var carrier := _player.get_node_or_null("Arisu/CarrierForm")
 	if carrier != null:
@@ -203,18 +237,25 @@ func _run() -> void:
 	_player_ms.clear()
 	var trials: Array[Dictionary] = []
 	for route in _routes:
+		route["guarded"] = _expect_outline_guards and _guarded_route(route)
 		for sprint in [false, true]:
 			for sign_ in [-1.0, 1.0]:
 				trials.append(await _walk(route, sprint, sign_))
 	_report["walk_trials"] = trials
 	var failed := trials.filter(func(t: Dictionary) -> bool: return not t["ok"])
-	_check(not trials.is_empty() and failed.is_empty(), "real player walks/runs both ways without falling or sticking", {"trials": trials.size(), "failed": failed.size()})
+	var movement_label := "real player walks/runs both ways without falling or sticking"
+	if _jump_obstacles:
+		movement_label = "real player traverses terrain with walking, running and obstacle jumps"
+	if _expect_outline_guards:
+		movement_label += "; scan-edge routes stop at guards"
+	_check(not trials.is_empty() and failed.is_empty(), movement_label, {"trials": trials.size(), "failed": failed.size()})
 	_report["player_update_ms"] = _stats(_player_ms)
 	_report["memory_mib"] = OS.get_static_memory_usage() / 1048576.0
 	_ray_benchmark()
 	_check(Input.mouse_mode != Input.MOUSE_MODE_CAPTURED, "mouse remains free")
 	_report["checks"] = _checks
 	_report["routes"] = []
+	_report["terrain_routes"] = _terrain_routes
 	for r in _routes:
 		var p: Vector3 = r["center"]
 		_report["routes"].append({"tag": r["tag"], "x": p.x, "y": p.y, "z": p.z, "axis": "x" if r["axis"] == Vector3.RIGHT else "z"})
@@ -361,12 +402,142 @@ func _clear_route(center: Vector3, axis: Vector3) -> bool:
 			return false
 	return true
 
+func _clear_terrain_route(center: Vector3, axis: Vector3, query: PhysicsShapeQueryParameters3D) -> bool:
+	var previous_y := center.y
+	for sample in range(-20, 21):
+		var p := center + axis * sample * 0.25
+		var h := _ray(p.x, p.z, 8.0, -20.0)
+		if h.is_empty():
+			return false
+		var y := float(h["position"].y)
+		if absf(y - center.y) > 1.0 or (sample > -20 and absf(y - previous_y) > 0.3):
+			return false
+		previous_y = y
+		query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, y + 1.08, p.z))
+		if not _space.intersect_shape(query, 1).is_empty():
+			return false
+	return true
+
+## Source-terrain acceptance is separate from BASELINE_ROUTES, which assume
+## the previous flat floor. Keep the original regression mode unchanged.
+## Choose routes by geometric clearance BEFORE running any movement trials;
+## record every selected route and every failure, without retrying failures.
+func _scan_terrain_routes() -> void:
+	var counts := {"columns": 0, "supported": 0, "missing": 0}
+	var heights: Array[float] = []
+	var columns: Array = []
+	for iz in range(61):
+		for ix in range(73):
+			var x := -288.0 + ix * 8.0
+			var z := -560.0 + iz * 8.0
+			if x < X0 or x > X1 or z < Z0 or z > Z1:
+				continue
+			counts["columns"] += 1
+			var hit := _ray(x, z, 120.0, -40.0)
+			if hit.is_empty():
+				counts["missing"] += 1
+				columns.append([x, z, null])
+			else:
+				counts["supported"] += 1
+				heights.append(float(hit["position"].y))
+				columns.append([x, z, float(hit["position"].y)])
+	_report["terrain_coverage"] = counts
+	_report["terrain_columns"] = columns
+	_report["surface_height_m"] = _stats(heights)
+	# Dense scans leave real missing regions, particularly at their edge.
+	# Report coverage explicitly; don't substitute the old flat floor.
+	print("[collision] original terrain coverage ", counts)
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.34
+	capsule.height = 1.58
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = 1
+	var selected_cells := {}
+	for z in range(-544, -82, 12):
+		for x in range(-276, 277, 12):
+			for axis in [Vector3.RIGHT, Vector3.BACK]:
+				var cell := "%d_%d_%s" % [floori((x + 288.0) / 96.0), floori((z + 564.0) / 96.0), "x" if axis == Vector3.RIGHT else "z"]
+				if selected_cells.has(cell):
+					continue
+				var center := Vector3(float(x), 0.0, float(z))
+				var center_hit := _ray(center.x, center.z, 8.0, -20.0)
+				if center_hit.is_empty() or float(center_hit["position"].y) > 6.0:
+					continue
+				center.y = float(center_hit["position"].y)
+				if _clear_terrain_route(center, axis, query):
+					selected_cells[cell] = true
+					_routes.append({"tag": "terrain_%d_%d_%s" % [x, z, "x" if axis == Vector3.RIGHT else "z"], "center": center, "axis": axis})
+	_check(_routes.size() >= _terrain_min_routes, "original terrain has distributed open routes", _routes.size())
+	var seams := 0
+	for axis_index in 2:
+		for k in range(1, 6):
+			var axis := Vector3.RIGHT if axis_index == 0 else Vector3.BACK
+			var boundary := -288.0 + k * 96.0 if axis_index == 0 else -564.0 + k * 96.0
+			# Try the original coarse locations first, then inspect intervening roads.
+			var positions: Array[float] = []
+			for sample in range(1, 30):
+				positions.append(-550.0 + sample * 16.0 if axis_index == 0 else -280.0 + sample * 18.0)
+			for sample in range(1, 141):
+				positions.append(-558.0 + sample * 3.4 if axis_index == 0 else -287.0 + sample * 4.0)
+			for coordinate in positions:
+				var center := Vector3(boundary, 0.0, coordinate) if axis_index == 0 else Vector3(coordinate, 0.0, boundary)
+				var h := _ray(center.x, center.z, 8.0, -20.0)
+				if h.is_empty():
+					continue
+				center.y = float(h["position"].y)
+				if _clear_terrain_route(center, axis, query):
+					_routes.append({"tag": "terrain_seam_%d_%d" % [axis_index, k], "center": center, "axis": axis})
+					seams += 1
+					break
+	_report["terrain_seam_routes"] = seams
+	if _terrain_min_routes >= 24:
+		_check(seams >= 6, "original terrain routes cross tile boundaries", seams)
+
+## Determine guard intersections before movement. Keeping those routes tests
+## the requested stop-before-void behaviour rather than demanding passage
+## through a newly installed safety barrier. Ordinary routes retain all limits.
+func _guarded_route(route: Dictionary) -> bool:
+	var guard := _collision.get_node_or_null("ScanBoundary") as StaticBody3D
+	if guard == null:
+		return false
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = .32
+	capsule.height = 1.5
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = 1
+	var excluded: Array[RID] = []
+	for node in _world.find_children("*", "CollisionObject3D", true, false):
+		if node != guard:
+			excluded.append((node as CollisionObject3D).get_rid())
+	query.exclude = excluded
+	var center: Vector3 = route["center"]
+	var axis: Vector3 = route["axis"]
+	for i in range(-17, 18):
+		var point := center + axis * i * .25
+		var hit := _ray(point.x, point.z, 8, -20)
+		if hit.is_empty():
+			continue
+		point.y = float(hit["position"].y) + .78
+		query.transform = Transform3D(Basis.IDENTITY, point)
+		if not _space.intersect_shape(query, 1).is_empty():
+			return true
+	return false
+
 func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 	_release()
 	var center: Vector3 = route["center"]
+	# A retained route keeps its X/Z and direction, but a new surface can have
+	# a different elevation. Compare the unchanged drop limit with this bake's
+	# measured center, not an elevation stored by an earlier candidate.
+	if _terrain_routes:
+		var center_hit := _ray(center.x, center.z, 8.0, -20.0)
+		if not center_hit.is_empty():
+			center.y = float(center_hit["position"].y)
 	var direction: Vector3 = route["axis"] * sign_
 	var start := center - direction * 4.0
-	var ground := _ray(start.x, start.z)
+	var ground := _ray(start.x, start.z, 8.0, -20.0) if _terrain_routes else _ray(start.x, start.z)
 	if not ground.is_empty():
 		start.y = float(ground["position"].y)
 	_player.global_position = start + Vector3.UP * 0.12
@@ -378,6 +549,8 @@ func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 		await physics_frame
 		_player.call("_physics_process", 1.0 / Engine.physics_ticks_per_second)
 	var grounded_start := _player.is_on_floor()
+	var settled := _player.global_position
+	var trace: Array = []
 	Input.action_press("move_forward")
 	if sprint:
 		Input.action_press("sprint")
@@ -387,28 +560,48 @@ func _walk(route: Dictionary, sprint: bool, sign_: float) -> Dictionary:
 	var floor_frames := 0
 	var frames := 0
 	var timings: Array[float] = []
+	var jumps := 0
+	var last_jump := -90
+	var touched_guard := false
+	var guarded: bool = route.get("guarded", false)
 	for i in limit:
 		await physics_frame
+		Input.action_release("jump")
+		if _jump_obstacles and not guarded and jumps < 2 and i - last_jump > 45 and _player.is_on_floor():
+			var raised := _player.global_transform.translated(Vector3.UP * .20)
+			if _player.test_move(raised, direction * .65):
+				Input.action_press("jump")
+				jumps += 1
+				last_jump = i
 		var started := Time.get_ticks_usec()
 		_player.call("_physics_process", 1.0 / Engine.physics_ticks_per_second)
 		var ms := (Time.get_ticks_usec() - started) / 1000.0
+		for ci in _player.get_slide_collision_count():
+			var collider := _player.get_slide_collision(ci).get_collider() as Node
+			if collider != null and collider.name == "ScanBoundary":
+				touched_guard = true
 		frames += 1
+		if i % 30 == 0:
+			trace.append({"frame": i, "position": str(_player.global_position), "velocity": str(_player.velocity), "floor_normal": str(_player.get_floor_normal())})
 		progress = (_player.global_position - start).dot(direction)
 		min_y = minf(min_y, _player.global_position.y)
 		if _player.is_on_floor():
 			floor_frames += 1
 		_player_ms.append(ms)
 		timings.append(ms)
-		if progress >= 8.0 or min_y < -4.0:
+		if progress >= 8.0 or min_y < (center.y - 3.0 if _terrain_routes else -4.0):
 			break
 	_release()
 	var lateral := absf((_player.global_position - start).dot(Vector3(-direction.z, 0.0, direction.x)))
-	var ok := grounded_start and progress >= 7.8 and min_y >= -0.4 and lateral < 0.8
+	var minimum_allowed_y := center.y - 1.4 if _terrain_routes else -0.4
+	var ok := grounded_start and progress >= 7.8 and min_y >= minimum_allowed_y and lateral < 0.8
+	if guarded and touched_guard:
+		ok = grounded_start and min_y >= minimum_allowed_y and progress < 8.5
 	var contacts: Array = []
 	for i in _player.get_slide_collision_count():
 		var contact := _player.get_slide_collision(i)
 		contacts.append({"body": str(contact.get_collider().get_path()), "position": str(contact.get_position()), "normal": str(contact.get_normal())})
-	var result := {"tag": route["tag"], "sprint": sprint, "direction": sign_, "start": str(start), "end": str(_player.global_position), "distance": progress, "minimum_y": min_y, "grounded_start": grounded_start, "floor_frames": floor_frames, "frames": frames, "player_update_ms": _stats(timings), "contacts": contacts, "ok": ok}
+	var result := {"tag": route["tag"], "sprint": sprint, "direction": sign_, "jumps": jumps, "guarded": guarded, "guard_contact": touched_guard, "start": str(start), "settled": str(settled), "end": str(_player.global_position), "distance": progress, "lateral_m": lateral, "minimum_y": min_y, "grounded_start": grounded_start, "floor_frames": floor_frames, "frames": frames, "player_update_ms": _stats(timings), "contacts": contacts, "trace": trace, "ok": ok}
 	if not ok:
 		print("[collision] WALK FAIL ", result)
 	return result

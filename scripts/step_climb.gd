@@ -97,8 +97,11 @@ static func _capsule_radius(body: CharacterBody3D) -> float:
 ## 走平地时不挡（比值 ≈ 1），斜着蹭墙也不判挡（比值仍有 0.7 以上），
 ## 只有正对着墙/台阶（比值 ≈ 0）才算，避免无谓的 `test_move` 开销。
 static func blocked(actual: Vector3, intended: Vector3, ratio := 0.35) -> bool:
-	var a := Vector2(actual.x, actual.z).length()
 	var b := Vector2(intended.x, intended.z).length()
 	if b < 1e-6:
 		return false
+	# Sideways deflection by an oblique riser is not forward progress. Using
+	# travelled length prevented the step probe while a scan bump pushed the
+	# capsule sideways; the next frame then accelerated into the same bump.
+	var a := Vector2(actual.x, actual.z).dot(Vector2(intended.x, intended.z) / b)
 	return a < b * ratio
