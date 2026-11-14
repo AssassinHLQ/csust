@@ -26,6 +26,7 @@ const SceneFlow := preload("res://scripts/scene_flow.gd")
 const DevMode := preload("res://scripts/dev_mode.gd")
 ## 终局「校园封锁 + 最终 BOSS」（用户 2026-11-13）。见 `scripts/arena_lock.gd`。
 const ArenaLockScript := preload("res://scripts/arena_lock.gd")
+const EndingPVScript := preload("res://scripts/ending_pv.gd")
 ## 自由摄像头（开发者模式 F7，2026-11-12 用户要的拍摄工具）。见 `free_camera.gd`。
 const FreeCamScript := preload("res://scripts/free_camera.gd")
 ## 和 `game.gd::PERF_KEY` 保持一致
@@ -122,6 +123,7 @@ var _pad_on: Material
 var _trex_total := 0
 var _trex_left := 0
 var _final_started := false
+var _ending_started := false
 var _arena_lock: Node3D
 
 
@@ -639,8 +641,18 @@ func _on_final_boss_phase(phase: int) -> void:
 
 ## 优香-恐怖 倒下、封锁解除。
 func _on_final_cleared() -> void:
-	_show_message("优香-恐怖 已被击破 —— 校园解除封锁", 6.0)
+	if _ending_started:
+		return
+	_ending_started = true
 	print("[ConstructivistLevel] 终局完成：优香-恐怖 已被击破")
+	# 先让 Boss 的 died 回调清掉召唤物与技能，再进入片尾。
+	_play_ending.call_deferred()
+
+
+func _play_ending() -> void:
+	var ending := EndingPVScript.new()
+	add_child(ending)
+	ending.start(self)
 
 
 ## ── 主角团（用户 2026-11-14）──

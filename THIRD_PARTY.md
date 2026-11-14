@@ -7,6 +7,8 @@
 1. **Kenney — Kenney.nl**：Pixel Adventure UI、Interface Sounds、Sci-fi Sounds、RPG Audio，CC0 1.0。原文分别保留在 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md`、`assets/sfx/LICENSE_Kenney_CC0.md`。
 2. **Cup Nooble — itch.io**：Sprout Lands UI Pack，原包条款限非商业项目，并限制素材再分发与转售。来源：<https://cupnooble.itch.io/sprout-lands-ui-pack>；原文 `assets/ui_sprout/LICENSE_SproutLands.txt`。
 
+3. **知天下 AI 团队 — 知天下 AI**：校园与画室609扫描及高斯泼溅生成支持。团队成员与具体官网待补，源扫描许可按原始记录保留。
+
 ## 代码、插件与算法
 
 | 组件 | 作者与平台 | 来源与许可记录 |
@@ -15,7 +17,7 @@
 | Godot Engine | Godot Engine contributors；Godot 官网 / GitHub | MIT；本工程使用支持 C# / .NET 的 Godot Mono 发行版，工程主要代码为 GDScript；这里的 Mono 与 JetBrains Mono 字体不同 |
 | GDGS | ReconWorldLab、4321ba、beiller（William / Bill）、sodih3iw（Wu Xinyue）；AssassinHLQ（本项目分支）；GitHub | 四位上游提交者加一位本项目分支作者分别列出，原 MIT 许可在 `addons/gdgs/LICENSE`。上游：<https://github.com/ReconWorldLab/godot-gaussian-splatting>；本项目分支：<https://github.com/AssassinHLQ/godot-gaussian-splatting> |
 | 高斯渲染 / 排序算法参考 | 2Retr0；GitHub | GDGS 上游 README 的 Acknowledgements 指向 <https://github.com/2Retr0/GodotGaussianSplatting>。校园 GGS 移植另参考 GodotGSplat，原始 MIT 许可保留在 `addons/ggs_campus/NOTICE.md` |
-| 碰撞体素化与网格算法参考 | PlayCanvas Ltd. / PlayCanvas 团队；GitHub | <https://github.com/playcanvas/splat-transform>；GDGS 上游记录为其 GDScript 移植；保留上游 MIT 及代码署名 |
+| splat-transform 点云处理、碰撞生成工具与算法参考 | PlayCanvas Ltd. / PlayCanvas 团队；GitHub | <https://github.com/playcanvas/splat-transform>；工具独立署名，GDGS 上游记录为其 GDScript 移植；保留上游 MIT 及代码署名 |
 | Blue Archive 界面规格参考 | ywhdzrb；GitHub | <https://github.com/ywhdzrb/BlueArchiveUI>，来源说明保留于 `scripts/ui_skin.gd`；不把界面参考项目的许可扩展到角色与原作美术 |
 | 坦克动荡小游戏 | AssassinHLQ；原作恢复自百度网盘，内部素材授权参考用户同名 GitHub 项目 | 用户先前制作的独立小游戏，恢复后接入本作；自有代码原工程附 CC0 1.0，原文保留在 `assets/tank_turmoil/LICENSE`。内部第三方素材分别适用原许可。用户同名仓库的准确链接待补，当前公开列表未找到 |
 | 坦克小游戏算法参考 | JustDoIt0910 / Zhao Ran；GitHub | <https://github.com/JustDoIt0910/TankTrouble>；保留 Copyright (c) 2023 Zhao Ran 与完整 MIT 原文：`assets/tank_turmoil/THIRD_PARTY_NOTICES.txt`。该作者是算法参考作者，不是整个小游戏的作者 |

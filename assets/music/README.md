@@ -16,6 +16,9 @@
 | `mondrian_theme.ogg` | 蒙德里安大楼与门厅 | 同上 | 哔哩哔哩音乐合集 Vol.1 P5「Midsummer Cat」 |
 | `pv_theme.mp3` | 开场 | 同上 | 哔哩哔哩音乐合集 Vol.1 P2「Constant Moderato」 |
 | `doom_theme.ogg` | 终局 Boss | 同上 | 哔哩哔哩合集「Encroached Sky」；不是 DOOM 配乐 |
+| `ending_theme.ogg` | 最终胜利后的滚动署名 | NEXON Games / Yostar；作曲与钢琴编曲署名待补 | 哔哩哔哩／雷月夜整理，Vol.1 P98「Constant Moderato Piano Ver.」 |
+
+结尾音轨由使用者指定的 `D:/Downloads/MUSIC/` 下 Vol.1 P98 音频 MP4 转为 Ogg Vorbis（q6、48 kHz、立体声），完整保留约185.301秒，不裁剪、不循环。运行时使用工程内的 `ending_theme.ogg`，不依赖下载目录。与其他音乐一样纳入 `all_resources` 游戏导出。
 
 来源平台、录音权利与作曲者分别记录，不把上传者当作作曲者。完整署名见
 `CREDITS.md` / `scripts/credits.gd`；本表不会改变音频的游戏导出包含规则。

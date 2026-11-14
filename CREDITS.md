@@ -15,7 +15,11 @@
 | UI Pack: Pixel Adventure 2.0（九宫格面板 / 按钮切片）<br>`assets/ui` | Kenney | Kenney.nl | https://kenney.nl/assets/ui-pack-pixel-adventure | CC0 1.0（公有领域，可商用、无需署名）；原文 `assets/ui/LICENSE_Kenney_UI-Pack_CC0.md` | 优先致谢第一位。提供像素界面素材；面板中心填白等适配由本项目完成。 |
 | Sprout Lands UI Pack（设置界面皮肤）<br>`assets/ui_sprout` | Cup Nooble | itch.io | https://cupnooble.itch.io/sprout-lands-ui-pack | 免费但限非商业，禁止再分发或转售（即使修改过）；原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | 优先致谢第二位。作者 Cup Nooble，Sprout Lands UI Pack；原始条款保留在 LICENSE_SproutLands.txt。 |
 
+特别致谢 **知天下 AI 团队／知天下 AI**，提供校园与画室609扫描、高斯泼溅生成支持（`splatdata`）。具体官网与团队成员署名待补，源数据许可仍按已有记录保留。Kenney 第一、Cup Nooble 第二的顺序保持不变。
+
 ## 代码与插件
+
+独立致谢 **splat-transform**：作者 **PlayCanvas Ltd. / PlayCanvas 团队**，平台 **GitHub**，来源 https://github.com/playcanvas/splat-transform，MIT。项目接入记录位于 `scripts/_import_splattransform_collision.gd`；GDGS 的算法移植另列。
 
 | 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|
@@ -88,6 +92,8 @@
 | Sprout Lands 像素字体（pixelFont-7-8x14-sproutLands）<br>`assets/ui_sprout/font.ttf` | Cup Nooble | itch.io | https://cupnooble.itch.io/sprout-lands-ui-pack | 随 Sprout Lands UI Pack，按原包条款记录；不是 OFL 字体；原文 `assets/ui_sprout/LICENSE_SproutLands.txt` | TTF 内嵌设计者为 Cup Nooble。主要用于数字与拉丁字形，不提供中文字形；中文字体另列。 |
 
 ## 音效
+
+结尾 PV：**Constant Moderato Piano Ver.（伊甸条约篇～第3章BGM）**，`assets/music/ending_theme.ogg`。作者与权利记录：**NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲与钢琴编曲署名待补）**。平台：**哔哩哔哩（音乐合集）**；收集整理：**雷月夜**（UID 76847448）。来源为用户指定的本地 Vol.1 P98 音频 MP4，完整转码约185.301秒，不裁剪、不循环。Blue Archive OST 专有版权；具体录音与作者条款适用。
 
 | 素材 / 位置 | 作者 | 平台 | 来源 | 许可与原文 | 备注 |
 |---|---|---|---|---|---|

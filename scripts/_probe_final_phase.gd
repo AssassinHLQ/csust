@@ -4,7 +4,7 @@ extends SceneTree
 ##
 ##   _tools/run_shot.sh res://scripts/_probe_final_phase.gd
 ##   _tools/run_shot.sh res://scripts/_probe_final_phase.gd --splat=off
-## 无窗玩法回归：godot --headless --path . --script res://scripts/_probe_final_phase.gd -- --no-capture --campus-splat=off --splat=off --story=off
+## 无窗玩法回归：godot --headless --render-thread safe --single-threaded-scene --path . --script res://scripts/_probe_final_phase.gd -- --no-capture --campus-splat=off --splat=off --story=off
 ## headless 模式保留玩法断言，跳过屏幕外窗口检查与截图，不测渲染效果。
 ##
 ## 出图到 `_arisu_captures/_final_phase/`：
@@ -58,6 +58,14 @@ func _run() -> void:
 			return
 	# 静音 Master：探针要**验证**这首在不在放，但不能真的把用户吼一脸
 	AudioServer.set_bus_mute(0, true)
+	if DisplayServer.get_name() == "headless":
+		root.size = Vector2i(1600, 900)
+		# 大场景的模型创建期间不要再首次初始化字体图集。
+		var font := preload("res://scripts/ui_skin.gd").ui_font()
+		if font != null:
+			font.get_string_size("COST 0123456789", HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
+		await process_frame
+		await process_frame
 
 	var ps := load("res://scenes/next_level.tscn") as PackedScene
 	_lvl = ps.instantiate() as Node3D
@@ -348,10 +356,34 @@ func _run() -> void:
 	_player.set_physics_process(true)
 
 	# ── 打倒 → 封锁解除 ──
+	_check("第一阶段复苏不提前触发结尾", _lvl.get_node_or_null("EndingPV") == null, "")
+	_boss.call("debug_set_evasion", 0.0)
+	_boss.call("_break_shield", false, "片尾触发验收前先拆盾")
 	_boss.call("take_damage", 1.0e9)
 	await _until(func() -> bool: return bool(_boss.call("status")["dead"]), 10.0)
 	var dead_st: Dictionary = _boss.call("status")
 	_check("BOSS 已倒下", bool(dead_st["dead"]), "health=%.0f" % float(dead_st["health"]))
+	await process_frame
+	await process_frame
+	var ending := _lvl.get_node_or_null("EndingPV")
+	_check("最终死亡触发片尾并暂停战斗", ending != null and paused, "")
+	if ending != null:
+		ending.set_process(false)
+		_lvl.call("_on_final_cleared")
+		await process_frame
+		var ending_count := 0
+		for child in _lvl.get_children():
+			if child.get_script() == preload("res://scripts/ending_pv.gd"):
+				ending_count += 1
+		_check("重复终局信号不叠加片尾", ending_count == 1, "")
+		ending.call("_advance", 4.0)
+		ending.call("_advance", 4.5)
+		_check("黑屏后钢琴片尾开始", int(ending.get("phase")) == 3, "")
+		ending.call("_advance", 1000.0)
+		ending.call("return_to_campus")
+		ending.call("_advance", 1.5)
+		await process_frame
+		_check("片尾后恢复校园", not paused and not MusicLib.is_held(), "")
 	await _shot("10_cleared_pre", _boss.global_position + Vector3(34, 26, 46),
 		_boss.global_position + Vector3(0, 10, 0))
 	# 慢帧下墙下沉 / 天空还原都要按状态等（墙 2.6 s + 天空再等 2.4 s 是**游戏时间**）
@@ -854,6 +886,9 @@ func _test_all_skills() -> void:
 
 func _test_revive() -> void:
 	_boss.call("debug_reset")
+	# 验复活触发时排除上一招残留护盾的随机闪避，保证这发致死伤害命中。
+	_boss.call("debug_set_evasion", 0.0)
+	_boss.call("_break_shield", false, "复活验收前先拆盾")
 	# 玩家血量拉高：无敌期间她会真的开打，别让探针玩家被打死送回大厅
 	_set_hp(9999.0)
 	_boss.call("take_damage", 1.0e9)

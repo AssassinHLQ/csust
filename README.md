@@ -1,5 +1,7 @@
 # 爱丽丝梦游长理
 
+最终 Boss 优香的第二阶段被击破后，显示“你拯救了长沙理工大学”，停留4秒，再用4.5秒缓慢淡到黑底片尾。署名由 `scripts/credits.gd` 同步生成并竖向匀速滚动，按 Kenney、Cup Nooble 的优先顺序致谢，包含 splat-transform（PlayCanvas／GitHub）与知天下 AI 团队。片尾配乐为用户指定的 P98「Constant Moderato Piano Ver.」，完整播放约3分5秒。片尾暂停战斗并屏蔽校园 BGM；结束显示“返回校园”，可恢复漫游。播放5秒后也可点击“跳过片尾”。音轨保存在 `assets/music/ending_theme.ogg`，随游戏导出，不依赖原始下载路径。
+
 > 工程与窗口标题：`爱丽丝梦游长理`（`project.godot` 的 `config/name`）。
 > 历史名：`长沙理工：2067`（文档正文里仍会用「长沙理工」指代**地点**，那是游戏里的地名，不是工程名）。
 > 下面是这个沙盒里做过的事。

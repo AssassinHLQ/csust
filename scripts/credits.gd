@@ -63,6 +63,30 @@ const ENTRIES := [
 		"note": "优先致谢第二位。作者 Cup Nooble，Sprout Lands UI Pack；原始条款保留在 LICENSE_SproutLands.txt。",
 	},
 	{
+		"group": "特别致谢",
+		"path": "splatdata",
+		"title": "校园与画室609扫描、高斯泼溅生成支持",
+		"author": "知天下 AI 团队",
+		"platform": "知天下 AI",
+		"license": "扫描数据与平台标识按原始权利记录；具体许可待核实",
+		"distributed": false,
+		"source": "使用者提供的校园与画室609扫描；知天下 AI 平台；具体官网及团队成员署名待补",
+		"license_file": "",
+		"note": "独立致谢生成平台与团队；不将平台名称当作具体个人作者，不改变源扫描数据的已有权利记录。",
+	},
+	{
+		"group": "代码与插件",
+		"path": "scripts/_import_splattransform_collision.gd",
+		"title": "splat-transform 点云处理与碰撞生成工具",
+		"author": "PlayCanvas Ltd. / PlayCanvas 团队",
+		"platform": "GitHub",
+		"license": "MIT；保留上游许可与作者署名",
+		"distributed": true,
+		"source": "https://github.com/playcanvas/splat-transform",
+		"license_file": "",
+		"note": "按用户要求独立署名；本项目扫描处理与碰撞工作流使用、参考该工具，GDGS 的 GDScript 移植另列。",
+	},
+	{
 		"group": "代码与插件",
 		"path": "addons/ggs_campus",
 		"title": "校园 GGS 泼溅光栅器（Godot 4.7 移植版）",
@@ -772,6 +796,18 @@ const ENTRIES := [
 	},
 	{
 		"group": "音效",
+		"path": "assets/music/ending_theme.ogg",
+		"title": "结尾 PV 音乐：Constant Moderato Piano Ver.（伊甸条约篇～第3章BGM）",
+		"author": "NEXON Games / Yostar（Blue Archive OST 权利记录；具体作曲与钢琴编曲署名待补）",
+		"platform": "哔哩哔哩（音乐合集）",
+		"license": "Blue Archive OST 专有版权；具体录音与作者条款适用",
+		"distributed": false,
+		"source": "用户指定本地「碧蓝档案OST」Vol.1（320K）P98 音频 MP4；音乐合集收集整理：雷月夜（哔哩哔哩 UID 76847448），https://space.bilibili.com/76847448",
+		"license_file": "",
+		"note": "完整音轨转 Ogg Vorbis，约185.301秒，不裁剪、不循环；原曲与整理者分别记录。",
+	},
+	{
+		"group": "音效",
 		"path": "assets/music/pv_theme.mp3",
 		"title": "开场 PV 音乐：Blue Archive OST「Constant Moderato（PV1）」",
 		"author": "NEXON Games / Yostar（Blue Archive OST）",
@@ -1128,3 +1164,27 @@ static func plain_text() -> String:
 	out.append("")
 	out.append("完整表格见仓库根目录 CREDITS.md / THIRD_PARTY.md。")
 	return "\n".join(out)
+
+
+## 片尾展示同一份署名数据；同组相同作者/平台合并作品，顺序保持不变。
+## 不把 Git 跟踪状态、调试路径与维护备注放进演出。
+static func ending_sections() -> Array[Dictionary]:
+	var sections: Array[Dictionary] = []
+	for group in GROUPS:
+		var rows: Array[Dictionary] = []
+		var indices := {}
+		for entry in ENTRIES:
+			if entry["group"] != group:
+				continue
+			var key: String = entry["author"] + "\n" + entry["platform"]
+			if not indices.has(key):
+				indices[key] = rows.size()
+				rows.append({"author": entry["author"], "platform": entry["platform"],
+					"titles": PackedStringArray()})
+			var index: int = indices[key]
+			var titles: PackedStringArray = rows[index]["titles"]
+			if not titles.has(entry["title"]):
+				titles.append(entry["title"])
+			rows[index]["titles"] = titles
+		sections.append({"group": group, "rows": rows})
+	return sections
