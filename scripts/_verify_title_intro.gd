@@ -57,9 +57,15 @@ func _run() -> void:
 	var probe := TitleIntroScript.new() as Node
 	_check(String(probe.call("kind")) == "pv",
 		"正片类型 = pv（实测 %s）" % String(probe.call("kind")))
-	var slides: Array = probe.call("_list_images", "res://assets/cg/pv")
+	var slides: Array = probe.call("_pv_slides")
 	print("  PV 目录里的图：%d 张" % slides.size())
-	_check(slides.size() == 8, "PV 图数量 = 8（实测 %d）" % slides.size())
+	var expected: Array[String] = []
+	for file in DirAccess.get_files_at("res://_arisu_captures/_shots"):
+		if file.get_extension().to_lower() == "png":
+			expected.append("res://_arisu_captures/_shots/" + file)
+	expected.sort()
+	_check(not slides.is_empty() and slides == expected,
+		"播放列表与 _shots 实际 PNG 完全一致、按文件名排序（%d 张）" % slides.size())
 	var loaded := 0
 	for p in slides:
 		if probe.call("_load_texture", p) != null:
@@ -73,17 +79,8 @@ func _run() -> void:
 		_check(mp3 != null, "音乐是 MP3（实测 %s）" % stream.get_class())
 		_check(mp3 != null and mp3.loop, "音乐已设循环播放（能在开始界面听完整首）")
 
-	# AI 超分版（用户 2026-11-12：「这些实机画面太糊了」）
-	var hd: Array = probe.call("_list_images", "res://assets/cg/pv_hd")
-	print("  HD 超分图：%d / %d 张" % [hd.size(), slides.size()])
-	_check(hd.size() == slides.size(),
-		"HD 超分图与原图一一对应（%d / %d）" % [hd.size(), slides.size()])
-	var chosen: Array = probe.call("_pv_slides")
-	var all_hd := chosen.size() == slides.size()
-	for p in chosen:
-		if not String(p).contains("pv_hd"):
-			all_hd = false
-	_check(all_hd, "实际播放优先用 `pv_hd/` 的 HD 版（%d 张）" % chosen.size())
+	_check(int(probe.call("slide_count")) == expected.size(),
+		"开场报告的图片数量与截图目录一致")
 	var mat: ShaderMaterial = probe.call("_slide_material")
 	_check(mat != null and mat.shader != null
 		and mat.shader.code.contains("sharpen"),
@@ -107,6 +104,9 @@ func _run() -> void:
 			"ready": bool(state["ready"]), "names": names}
 	var pending: Variant = intro.call("play", poll)
 	await process_frame
+	# play 会先异步预载纹理；等音乐启动才检查播放阶段的状态。
+	_check(await _wait_until(func() -> bool:
+		return bool(intro.call("has_music")), 10.0), "后台预载完成并开始播放")
 
 	_check(intro.get_node_or_null("TitleIntro") != null, "开场层建出来了")
 	var btn := intro.get_node_or_null("TitleIntro/Root/Ui/StartButton") as Button

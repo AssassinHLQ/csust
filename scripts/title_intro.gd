@@ -26,7 +26,7 @@ extends Node
 ## `ready` 为真的那一刻，进度条强制满格并弹出「开始游戏」。
 ##
 ## ── 正片优先级（先有谁用谁）──
-##   ① `res://assets/cg/pv/*.png`      ← 现在用的这套 BA 风 PV 图（按文件名排序循环）
+##   ① `res://_arisu_captures/_shots/*.png` ← 本地截图（按文件名排序循环）
 ##   ② `res://assets/cg/opening.ogv`    ← 整段 CG（没有 PV 图时用）
 ##   ③ `res://assets/cg/opening/*.png`  ← 帧序列（当 PV 图一样逐张平移）
 ##   ④ 都没有                            ← 渐变深蓝底 + 标题（缺素材也不耽误启动）
@@ -41,10 +41,7 @@ extends Node
 
 const UiSkin := preload("res://scripts/ui_skin.gd")
 
-const PV_DIR := "res://assets/cg/pv"
-## AI 超分后的同一套图（同一文件名）。存在就优先用 —— 实机截图本身很软，
-## 4× Real-ESRGAN 再降采样到高 1440 显示起来明显清楚（见 `_tools/upscale_pv_images.ps1`）。
-const PV_HD_DIR := "res://assets/cg/pv_hd"
+const PV_DIR := "res://_arisu_captures/_shots"
 const CG_VIDEO := "res://assets/cg/opening.ogv"
 const CG_FRAMES_DIR := "res://assets/cg/opening"
 const PV_MUSIC := "res://assets/music/pv_theme.mp3"
@@ -302,20 +299,12 @@ func _pick_kind() -> String:
 	return "fallback"
 
 
-## PV 实际要放的那组文件：`assets/cg/pv/` 里的每一张**优先换同名 HD 版**
-## （`assets/cg/pv_hd/`，AI 超分产物）。HD 缺哪张就退回原图 —— 使用者换图后
-## 只要重新跑一次 `_tools/upscale_pv_images.ps1`，没重跑时也不会少图。
+## 直接播放截图目录中的 PNG；元数据、其他格式和旧 PV/HD 图片不参与。
 func _pv_slides() -> Array[String]:
-	var base := _list_images(PV_DIR)
-	if base.is_empty():
-		return _list_images(PV_HD_DIR)
-	var hd := {}
-	for p in _list_images(PV_HD_DIR):
-		hd[p.get_file()] = p
 	var out: Array[String] = []
-	for p in base:
-		var f := p.get_file()
-		out.append(String(hd[f]) if hd.has(f) else p)
+	for p in _list_images(PV_DIR):
+		if p.get_extension().to_lower() == "png":
+			out.append(p)
 	return out
 
 
