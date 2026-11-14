@@ -27,7 +27,11 @@ var camera_push_constants : PackedByteArray
 var tile_dims = Vector2i.ZERO
 var texture_size : Vector2i :
 	set(value):
-		texture_size = (value * render_scale[0]).max(Vector2i.ONE)
+		var next_size: Vector2i = (value * render_scale[0]).max(Vector2i.ONE)
+		if next_size == texture_size:
+			return
+		texture_size = next_size
+		_rendered_once = false
 		tile_dims = (texture_size + Vector2i.ONE*(TILE_SIZE - 1)) / TILE_SIZE
 		if not descriptors.has('render_texture') or not context: return
 		# Rebuild gsplat_boundaries and gsplat_render pielines (since those depend on texture size)
@@ -93,12 +97,23 @@ var basis_override = Basis.IDENTITY
 ## 不跑，把上一帧的纹理继续交给 `main_sky.gdshader` 合成。判据精确等价，不是近似。
 ##
 ## `campus_ggs.gd` 每帧的顺序是 `update_camera_matrices()` → `rasterize()`，
-## 前者把「相机到底动了没有」记在 `_camera_changed` 里给后者用。
+## 缓存键保存实际提交的相机与渲染参数，避免主线程多次更新覆盖尚未渲染的变化。
 ## 关掉对照：`-- --ggs-idle-skip=off`
 var idle_skip := true
 var _camera_changed := true
 var _rendered_once := false
 var _last_size := Vector2i.ZERO
+## Cache inputs from the frame actually dispatched, rather than the most
+## recent update_camera_matrices() call. Main/render ticks can run at different
+## rates; a second unchanged camera tick must not hide a pending camera move.
+var _last_frame_key: Array = []
+## Timestamp queries are useful while profiling, but neither rendering nor the
+## campus overlay consumes them during normal play.
+var profile_timestamps := false
+## Projection writes atomic maxima into these indirect dispatch dimensions.
+## Reset every rendered frame so a previous dense view cannot keep dispatching
+## its peak workgroup count after the camera turns toward an empty area.
+var _empty_dispatch := PackedInt32Array([1, 1, 1, 1, 1, 1]).to_byte_array()
 ## 入场动画结束的**引擎时刻**（毫秒）。`gsplat_projection.glsl` 算的是
 ## `splat_time = time - splat.time`，`ease_out_cubic(clamp(...,0,1))` 在 1 s 后恒为 1、
 ## `time_factor_late` 还多减 0.35 ⇒ **max(splat.time) + 1.35 s 之后时间不再影响画面**。
@@ -116,6 +131,7 @@ func _init(point_cloud, output_texture_size : Vector2i, render_texture : Texture
 	self.camera = camera
 
 func init_gpu() -> void:
+	_rendered_once = false
 	var _t_alloc := Time.get_ticks_usec()
 	assert(render_texture, 'An output Texture2DRD must be set!')
 	# --- DEVICE/SHADER CREATION ---
@@ -240,8 +256,9 @@ func _begin_bin_load(count : int) -> void:
 	_bin_total = count * 240
 	_bin_uploaded = 0
 	_bin_loading = true
+	_rendered_once = false
 	num_splats_loaded[0] = 0
-	_upload_chunk = 1 * 1024 * 1024
+	_upload_chunk = 128 * 1024
 	_upload_worst_ms = 0.0
 	_upload_frames = 0
 	_upload_started_ms = Time.get_ticks_msec()
@@ -263,13 +280,16 @@ func pump_load() -> void:
 ## 每帧只花大约 `upload_budget_ms` 毫秒上传，传不完下一帧接着传。
 ## 细层没传完时画面由粗层顶着（`init_gpu` 里已把新纹理清成透明），
 ## 所以「慢一点传完」远好过「一帧卡死」。
-var upload_budget_ms := 4.0
+## Two campus layers share the frame with gameplay and other GPU processes.
+## Bound the total upload work per layer/tick, leaving most of a 165 Hz frame
+## for rendering. Driver calls are indivisible, so this is a soft time budget.
+var upload_budget_ms := 1.0
 ## 起始块**故意取小**：实测「每帧的第一块」总是偏慢（驱动首次分配/预热，
 ## 4 MB 的第一块要 25~29 ms，而稳态吞吐是 1~2 MB/ms）。先给一小块量出真实吞吐，
 ## 控制器再按 `upload_budget_ms` 往上涨。
-var _upload_chunk := 1 * 1024 * 1024
-const UPLOAD_CHUNK_MIN := 256 * 1024
-const UPLOAD_CHUNK_MAX := 64 * 1024 * 1024
+var _upload_chunk := 128 * 1024
+const UPLOAD_CHUNK_MIN := 64 * 1024
+const UPLOAD_CHUNK_MAX := 4 * 1024 * 1024
 ## 实测统计：每次加载完打一行（判断预算还值不值得再调）
 var _upload_worst_ms := 0.0
 var _upload_frames := 0
@@ -279,6 +299,8 @@ func _pump_bin(device, buffer) -> bool:
 	if not _bin_loading or _bin_file == null:
 		return false
 	_upload_frames += 1
+	var frame_start := Time.get_ticks_usec()
+	var budget_ms := maxf(upload_budget_ms, 0.1)
 	while _bin_uploaded < _bin_total:
 		var n := mini(_upload_chunk, _bin_total - _bin_uploaded)
 		var data := _bin_file.get_buffer(n)
@@ -294,7 +316,8 @@ func _pump_bin(device, buffer) -> bool:
 		#    `int()` 撑溢出，打出来是 `-9223372036854776 s`）。那些点在着色器里
 		#    clamp 到 0，恒不可见、也永远不随时间变，不该把门卡到几百年后。
 		var now_s := Time.get_ticks_msec() * 1e-3
-		var off := 12
+		# Reads need not end on a 240-byte record boundary.
+		var off := posmod(12 - _bin_uploaded, 240)
 		while off + 4 <= data.size():
 			var t := data.decode_float(off)
 			if is_finite(t) and t <= now_s and t > _splat_time_max:
@@ -305,9 +328,17 @@ func _pump_bin(device, buffer) -> bool:
 		# 自适应：按这一块的实测吞吐，把块大小收到「一块 ≈ 一帧预算」附近。
 		# 头几块会有点抖（第一次的驱动分配总是偏慢），很快就稳下来。
 		var per_ms := float(data.size()) / maxf(dt_ms, 0.05)
-		_upload_chunk = clampi(int(per_ms * upload_budget_ms), UPLOAD_CHUNK_MIN, UPLOAD_CHUNK_MAX)
-		if _bin_uploaded < _bin_total and dt_ms >= upload_budget_ms:
+		_upload_chunk = clampi(int(per_ms * budget_ms), UPLOAD_CHUNK_MIN, UPLOAD_CHUNK_MAX)
+		# Count disk reads, sampling and every upload in this tick. Testing only
+		# dt_ms allowed many individually fast chunks to consume a whole frame.
+		var spent_ms := float(Time.get_ticks_usec() - frame_start) / 1000.0
+		if _bin_uploaded < _bin_total and spent_ms >= budget_ms:
 			return true
+		if _bin_uploaded < _bin_total:
+			var remaining_bytes := int(per_ms * (budget_ms - spent_ms))
+			if remaining_bytes < UPLOAD_CHUNK_MIN:
+				return true
+			_upload_chunk = mini(_upload_chunk, remaining_bytes)
 	if _bin_uploaded >= _bin_total:
 		_bin_file.close()
 		_bin_file = null
@@ -369,6 +400,7 @@ func cleanup_gpu():
 ## **必须在渲染线程调**。把 `splats` 换成 1 个元素的空缓冲并立刻还掉原来那块，
 ## 其余（culled / sort / 纹理）由 `release_all_now()` 在同一帧一并还掉。
 func release_splats() -> void:
+	_rendered_once = false
 	if context == null or not descriptors.has('splats'):
 		return
 	var device = context.device
@@ -419,25 +451,31 @@ func rasterize() -> void:
 			return
 		# 刚上传完这一帧必须真算一次：数据变了
 		_camera_changed = true
-	if _can_reuse_last_frame():
+		_rendered_once = false
+	var frame_key := _frame_cache_key()
+	if _can_reuse_last_frame(frame_key):
 		return
 	
-	var camera_pos = basis_override * camera.global_position
-	context.device.buffer_update(descriptors['uniforms'].rid, 0, 12*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, model_scale[0], texture_size.x, texture_size.y, Time.get_ticks_msec()*1e-3, cov_scale[0], cov_limit[0], cov_limit[1], 0.0, 0.0]))
+	var camera_pos: Vector3 = frame_key[2]
+	var frame_size: Vector2i = frame_key[1]
+	context.device.buffer_update(descriptors['uniforms'].rid, 0, 12*4, RenderContextScript.create_push_constant([-camera_pos.x, -camera_pos.y, camera_pos.z, frame_key[3], frame_size.x, frame_size.y, Time.get_ticks_msec()*1e-3, frame_key[4], frame_key[5], frame_key[6], 0.0, 0.0]))
 	context.device.buffer_clear(descriptors['histogram'].rid, 0, 4 + 4*RADIX*4) # Clear the sort buffer size and reset global histogram
 	context.device.buffer_clear(descriptors['tile_bounds'].rid, 0, tile_dims.x*tile_dims.y * 2*4) # Clear gsplat_boundaries buffer
-	#context.device.buffer_update(descriptors['grid_dimensions'].rid, 0, 3*4*2, default_block_dims)
-	# 每帧清成透明：合成器用 alpha 区分「没有 splat」的区域。
-	context.device.texture_clear(descriptors['render_texture'].rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
+	context.device.buffer_update(descriptors['grid_dimensions'].rid, 0, 24, _empty_dispatch)
+	# The render pass imageStores every pixel, including transparent pixels in
+	# empty tiles. Clearing the whole RGBA32F target here only duplicates those
+	# writes. The initial clear in init_gpu() still covers the loading period.
 	is_loaded = not load_thread.is_alive()
 	
 	# Run the projection pipeline. This will return how many duplicated points
 	# we will actually need to sort after culling.
-	context.device.capture_timestamp('Start')
+	if profile_timestamps:
+		context.device.capture_timestamp('Start')
 	var compute_list = context.compute_list_begin()
-	pipelines['gsplat_projection'].call(context, compute_list, camera_push_constants)
+	pipelines['gsplat_projection'].call(context, compute_list, frame_key[0])
 	context.compute_list_end()
-	context.device.capture_timestamp('Projection')
+	if profile_timestamps:
+		context.device.capture_timestamp('Projection')
 	
 	# Then, run the sort and gsplat_rasterize pipelines with block sizes based on the
 	# amount of points to sort determined in the projection pipeline.
@@ -454,31 +492,41 @@ func rasterize() -> void:
 		pipelines['radix_sort_spine'].call(context, compute_list, pc_spine)
 		pipelines['radix_sort_downsweep'].call(context, compute_list, pc_down, [], descriptors['grid_dimensions'].rid, 0)
 	context.compute_list_end()
-	context.device.capture_timestamp('Sort')
+	if profile_timestamps:
+		context.device.capture_timestamp('Sort')
 	
 	compute_list = context.compute_list_begin()
 	pipelines['gsplat_boundaries'].call(context, compute_list, [], [], descriptors['grid_dimensions'].rid, 3*4)
 	context.compute_list_end()
-	context.device.capture_timestamp('Boundaries')
+	if profile_timestamps:
+		context.device.capture_timestamp('Boundaries')
 	
 	compute_list = context.compute_list_begin()
-	pipelines['gsplat_render'].call(context, compute_list, RenderContextScript.create_push_constant([float(should_enable_heatmap[0]), -1]))
+	pipelines['gsplat_render'].call(context, compute_list, RenderContextScript.create_push_constant([float(frame_key[7]), -1]))
 	context.compute_list_end()
-	context.device.capture_timestamp('Render')
+	if profile_timestamps:
+		context.device.capture_timestamp('Render')
 
 	_rendered_once = true
-	_last_size = texture_size
+	_last_size = frame_size
+	_last_frame_key = frame_key
 
 
 ## 这一帧的输入和「上一次真正算过的那一帧」完全一样 ⇒ 输出逐像素相同 ⇒ 直接复用。
-func _can_reuse_last_frame() -> bool:
-	if not idle_skip or not _rendered_once or _camera_changed:
+func _can_reuse_last_frame(frame_key: Array = []) -> bool:
+	if not idle_skip or not _rendered_once:
 		return false
 	if Time.get_ticks_msec() < intro_end_ms:
 		return false
-	if _last_size != texture_size:
-		return false
-	return true
+	if frame_key.is_empty():
+		frame_key = _frame_cache_key()
+	return frame_key == _last_frame_key
+
+
+func _frame_cache_key() -> Array:
+	return [camera_push_constants, texture_size,
+		basis_override * camera.global_position, model_scale[0], cov_scale[0],
+		cov_limit[0], cov_limit[1], should_enable_heatmap[0]]
 
 func get_splat_position(screen_position : Vector2i) -> Vector3:
 	var tile : Vector2i = screen_position * render_scale[0] / TILE_SIZE
