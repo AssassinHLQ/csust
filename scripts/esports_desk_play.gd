@@ -54,13 +54,15 @@ const SEAT_Z: Array[float] = [10.68, 12.17, 13.69, 15.16, 16.66]
 ## 爱丽丝坐中间那把（门口进来正对的那台），触发点也在它前面
 const ALICE_SEAT := 2
 
-## 显示器面板：x 54.36~54.40 的薄板（厚 0.05 m）、y 1.66~2.06、z 宽 0.60。
+## 显示器屏面：x 54.36~54.40 的薄板（厚 0.05 m）、y 1.66~2.06、z 宽 0.60。
+## 实测：模型里那块“屏面”零件是 0.60×0.40，但真正亮着的显示区比它宽一圈（实拍左边留了 ~1.5 cm 亮边），
+##       所以贴片取 **0.645×0.425** 刚好盖满；再大就会溢到银色边框上。
 ## 面板**朝 −X**（对着椅子那侧），所以亮标的 QuadMesh 贴在 x=54.28、绕 Y 转 −90°。
 ## ⚠️ 贴片离面板前脸（x=54.36）留 **0.08 m** —— 只留 0.02 m 时远处几台会和面板
 ##    在深度缓冲里打平，实拍只有最近那台看得到标，其余还露着原来的白屏。
 const SCREEN_X := 54.28
 const SCREEN_Y := 1.86
-const SCREEN_SIZE := Vector2(0.60, 0.40)
+const SCREEN_SIZE := Vector2(0.645, 0.425)
 const SCREEN_Z: Array[float] = [10.59, 12.08, 13.57, 15.07, 16.56]
 
 ## 按 F 的位置：爱丽丝座位正前方的走道（椅子前沿 x≈52.96，人站 52.30 不会挤进椅子）
@@ -120,6 +122,8 @@ var _t := 0.0
 var _actors: Array = []
 var _screens: Array[MeshInstance3D] = []
 var _screen_mats: Array[StandardMaterial3D] = []
+## 当前亮度 0~1（对外接口用它，别去读材质颜色）
+var _screen_level := 0.0
 var _glow_light: OmniLight3D
 ## 过场相机 + 玩家原来的相机（收尾要还回去）
 var _cutscene_cam: Camera3D
@@ -174,25 +178,27 @@ func _build_screens() -> void:
 	if logo == null:
 		push_warning("[开黑] 载不到 %s，显示器只能亮纯色" % LOGO_PATH)
 
+	# 一块和屏面**等大**的贴片（0.60×0.40 = 模型屏面尺寸），贴在屏面前 0.08 m。
+	# ⚠️ 尺寸必须等于屏面：大了会溢到显示器银色边框上（第一版 0.86×0.48 就是这样），
+	#    小了会在屏上留一圈原来的亮屏（看着就像「没贴合」）。
 	var quad := QuadMesh.new()
 	quad.size = SCREEN_SIZE
 
 	for i in SEAT_Z.size():
 		var mat := StandardMaterial3D.new()
-		# 屏幕自己是发光体，不吃房间灯
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.albedo_texture = logo
 		mat.emission_enabled = true
 		mat.emission_texture = logo
-		mat.emission_energy_multiplier = 1.8
+		mat.emission_energy_multiplier = 1.35
 		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-		mat.albedo_color = Color(1, 1, 1)
+		mat.albedo_color = Color(0, 0, 0)
 
 		var mi := MeshInstance3D.new()
 		mi.name = "DeskScreen%d" % i
 		mi.mesh = quad
 		mi.material_override = mat
-		# 面板朝 −X（椅子在 −X 侧）：QuadMesh 法线是 +Z，绕 Y 转 −90° 就朝 −X
+		# 屏面朝 −X（椅子在 −X 侧）：QuadMesh 法线是 +Z，绕 Y 转 −90° 就朝 −X
 		mi.rotation_degrees = Vector3(0.0, -90.0, 0.0)
 		mi.position = Vector3(SCREEN_X, SCREEN_Y, SCREEN_Z[i])
 		mi.visible = false
@@ -200,7 +206,7 @@ func _build_screens() -> void:
 		_screens.append(mi)
 		_screen_mats.append(mat)
 
-	# 五块屏幕一起亮，给房间补一点冷光
+	# 五块屏一起亮时给房间补一点冷光
 	_glow_light = OmniLight3D.new()
 	_glow_light.name = "DeskGlow"
 	_glow_light.position = Vector3(SCREEN_X + 0.9, SCREEN_Y + 0.35, SEAT_Z[ALICE_SEAT])
@@ -256,16 +262,17 @@ func _release_camera() -> void:
 	_player_cam = null
 
 
-## 屏幕亮度 0→1（用 albedo/emission 乘系数，不用 visible 硬切，才有「亮起来」的过程）
+## 屏幕亮度 0→1（用 albedo/emission 乘系数，不用硬切，才有「亮起来」的过程）
 func _set_screen_level(k: float) -> void:
+	_screen_level = clampf(k, 0.0, 1.0)
 	for i in _screens.size():
 		var mi := _screens[i]
-		mi.visible = k > 0.001
+		mi.visible = _screen_level > 0.001
 		var mat := _screen_mats[i]
-		var c := clampf(k, 0.0, 1.0)
-		mat.albedo_color = Color(c, c, c)
-		mat.emission_energy_multiplier = 1.8 * c
-	_glow_light.light_energy = 1.35 * clampf(k, 0.0, 1.0)
+		mat.albedo_color = Color(_screen_level, _screen_level, _screen_level)
+		mat.emission_energy_multiplier = 1.35 * _screen_level
+	if _glow_light != null:
+		_glow_light.light_energy = 1.25 * _screen_level
 
 
 # ══════════════ 界面 ══════════════
@@ -688,10 +695,7 @@ func screens() -> Array[MeshInstance3D]:
 
 
 func screen_level() -> float:
-	if _screen_mats.is_empty():
-		return 0.0
-	var c := _screen_mats[0].albedo_color
-	return c.r
+	return _screen_level
 
 
 func actors() -> Array:

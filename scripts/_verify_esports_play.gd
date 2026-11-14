@@ -72,6 +72,21 @@ func _init() -> void:
 	_player.name = "FakePlayer"
 	_player.add_to_group("player")
 	get_root().add_child(_player)
+
+	# 假电竞房：只放一块「形状像五连屏材质桶」的盒子（x 极薄 / y 0.40 / z 6.69）
+	var fake_room := Node3D.new()
+	fake_room.name = "EsportsRoom"
+	var low := Node3D.new()
+	low.name = "Room"
+	fake_room.add_child(low)
+	var bucket := MeshInstance3D.new()
+	bucket.name = "FakeScreenBucket"
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.045, 0.40, 6.69)
+	bucket.mesh = bm
+	low.add_child(bucket)
+	get_root().add_child(fake_room)
+
 	_host = script.new() as Node3D
 	_host.name = "FakeDeskPlay"
 	get_root().add_child(_host)
@@ -148,7 +163,7 @@ func _process(_delta: float) -> bool:
 
 func _check_ready() -> void:
 	var screens: Array = _host.call("screens")
-	_check(screens.size() == 5, "建出 5 块显示器（实际 %d 块）" % screens.size())
+	_check(screens.size() == 5, "建出 5 块屏幕贴片（实际 %d 块）" % screens.size())
 	if screens.size() == 5:
 		var all_off := true
 		for s in screens:
@@ -156,8 +171,12 @@ func _check_ready() -> void:
 				all_off = false
 		_check(all_off, "一开始五块屏幕都是灭的")
 		var mat := (screens[0] as MeshInstance3D).material_override as StandardMaterial3D
-		_check(mat != null and mat.albedo_texture != null, "屏幕材质贴了游戏开发部标")
-		_check(mat != null and mat.emission_enabled, "屏幕是自发光（会真的亮起来）")
+		_check(mat != null and mat.albedo_texture != null, "贴片材质挂着游戏开发部标")
+		_check(mat != null and mat.emission_enabled, "贴片自发光（会真的亮起来）")
+		# 贴片必须和屏面等大：大了溢到显示器边框、小了留一圈亮屏
+		var q := (screens[0] as MeshInstance3D).mesh as QuadMesh
+		_check(q != null and is_equal_approx(q.size.x, 0.645) and is_equal_approx(q.size.y, 0.425),
+			"贴片尺寸 = 屏面 0.645×0.425（实际 %s）" % (str(q.size) if q else "无"))
 	_check(is_equal_approx(_host.call("screen_level"), 0.0), "屏幕亮度初值 0")
 
 
@@ -165,7 +184,12 @@ func _check_play() -> void:
 	_check(true, "过场推进到「窗口已是小游戏」")
 	_check(bool(_host.call("is_playing")), "is_playing() = true")
 	_check(float(_host.call("screen_level")) > 0.9,
-		"五块屏幕已全亮（亮度 %.2f）" % float(_host.call("screen_level")))
+		"五块屏已全亮（亮度 %.2f）" % float(_host.call("screen_level")))
+	var lit: Array = _host.call("screens")
+	if lit.size() >= 1:
+		var lmat := (lit[0] as MeshInstance3D).material_override as StandardMaterial3D
+		_check(lmat != null and lmat.albedo_texture != null, "亮屏时材质贴的是游戏开发部标")
+		_check(lmat != null and lmat.emission_enabled, "亮屏材质自发光（会真的亮起来）")
 	var tank: Node = _host.get("tank")
 	_check(tank != null and is_instance_valid(tank), "坦克动荡已实例化进画布")
 	var actors: Array = _host.call("actors")
