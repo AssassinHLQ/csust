@@ -220,6 +220,7 @@ func _run() -> void:
 	await _test_beam()
 	await _test_summon()
 	await _test_rapid()
+	await _test_pigs()
 	_test_all_skills()
 	await _test_revive()
 	await _test_phase2_buffs()
@@ -592,16 +593,44 @@ func _test_rapid() -> void:
 		"命中 %d 次，%.0f → %.0f" % [_hits("rapid"), hp0, hp1])
 
 
+## 召唤：3 只会飞的飞猪优香，而且它们真的会飞、会打人
+func _test_pigs() -> void:
+	_boss.call("debug_reset")
+	_set_hp(9999.0)          # 飞猪会来打探针玩家，别让它被打死
+	_teleport(safe_spot())
+	await _wait(0.2)
+	_boss.call("debug_cast", "pigs")
+	await _until(func() -> bool: return int(_boss.call("status")["pigs"]) >= 3, 30.0)
+	var st: Dictionary = _boss.call("status")
+	_check("召唤：3 只飞猪优香出场", int(st["pigs"]) == 3,
+		"在场 %d 只" % int(st["pigs"]))
+	await _wait(2.5)
+	var st2: Dictionary = _boss.call("status")
+	await _shot("17_pigs", safe_spot() + Vector3(-20, 26, -26),
+		safe_spot() + Vector3(0, 12, 0))
+	_check("飞猪真的在飞（最低一只离地 ≥ 4 m）", float(st2["pig_min_alt"]) >= 4.0,
+		"最低一只离地 %.1f m" % float(st2["pig_min_alt"]))
+	await _until(func() -> bool: return int(_boss.call("status")["pig_hits"]) >= 1, 40.0)
+	var st3: Dictionary = _boss.call("status")
+	_check("飞猪也能打人（俯冲/飞弹/轰炸轮着放）", int(st3["pig_hits"]) >= 1,
+		"合计命中 %d 次" % int(st3["pig_hits"]))
+	# 收掉，别干扰后面的二阶段/复活判定
+	for pg in _boss.get("_pigs"):
+		if is_instance_valid(pg) and pg.has_method("expire"):
+			pg.call("expire")
+	await _wait(0.8)
+
+
 func _test_all_skills() -> void:
 	var st: Dictionary = _boss.call("status")
 	var counts: Dictionary = st["counts"]
 	var missing: Array[String] = []
 	for n in ["shock", "slam", "barrage", "sweep", "meteor", "spikes",
 			"nova", "phantom", "homing", "gravity",
-			"shield", "kneel", "leapslam", "beam", "summon", "rapid"]:
+			"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs"]:
 		if int(counts.get(n, 0)) <= 0:
 			missing.append(n)
-	_check("十六个技能都放出来过", missing.is_empty(),
+	_check("十七个技能都放出来过", missing.is_empty(),
 		"缺：%s" % (str(missing) if not missing.is_empty() else "（无）"))
 
 

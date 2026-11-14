@@ -187,6 +187,10 @@ const RAPID_SPEED := 36.0
 const RAPID_SPREAD := 0.7
 const RAPID_SIZE := 0.42
 
+## 召唤：3 只会飞的飞猪优香（用户 2026-11-13「召唤 3 飞猪优香，这次真的是飞的」）
+const PIG_SCRIPT := preload("res://scripts/flying_pig_yuuka.gd")
+const PIG_COUNT := 3
+
 ## 出招节奏（秒）。二阶段 ÷ P2_SPEED。
 const INTERVAL_1 := 5.5
 const INTRO_GRACE := 2.5
@@ -205,7 +209,7 @@ const REVIVE_TO := 0.5         # 回到一半血
 ## （`Exs_Cutin` / `Kneel_Attack_*` / `Move_Jump` / `Normal_Reload` / `Normal_Callsign`）
 const SKILL_NAMES := ["shock", "slam", "barrage", "sweep", "meteor",
 	"spikes", "nova", "phantom", "homing", "gravity",
-	"shield", "kneel", "leapslam", "beam", "summon", "rapid"]
+	"shield", "kneel", "leapslam", "beam", "summon", "rapid", "pigs"]
 
 var _ap: AnimationPlayer
 var _skin_mats: Array[ShaderMaterial] = []
@@ -247,6 +251,8 @@ var _shield_hp := 0.0
 var _shield_left := 0.0
 var _shield_cd := 0.0
 var _shield_fx: Array[Node3D] = []
+## 召唤出来的飞猪（挂在 ArenaLock 下，不是 BOSS 的子节点 —— 否则会跟着转身绕圈）
+var _pigs: Array[Node3D] = []
 ## 探针用：>=0 时强制这个闪避率（默认 -1 = 用护盾自带的值）
 var _evasion_fixed := -1.0
 
@@ -575,6 +581,8 @@ func _cast_skill() -> void:
 			await _skill_summon(pc)
 		"rapid":
 			await _skill_rapid(pc)
+		"pigs":
+			await _skill_pigs()
 		_:
 			await _skill_shockwave()
 	_busy = false
@@ -1449,6 +1457,58 @@ func _skill_rapid(pc: Vector3) -> void:
 	await get_tree().create_timer(0.25).timeout
 
 
+# ── 17 召唤飞猪优香 ──
+##
+## 用户 2026-11-13：「还要加召唤类技能，召唤 3 飞猪优香，这次真的是飞的，
+## 而且飞猪优香也有更多技能了」。
+## 召唤物见 `scripts/flying_pig_yuuka.gd`：悬停绕圈 + 俯冲撞击 / 三连飞弹 / 俯冲轰炸。
+## 最多同场 3 只；已经 3 只时这一招只做"呼号"动作，不叠加。
+
+func _skill_pigs() -> void:
+	_play_once("Normal_Callsign", 0.15)
+	Sfx.play("ui_open", -3.0)
+	await get_tree().create_timer(0.5).timeout
+	if _dead or not is_instance_valid(self):
+		return
+	# 先清掉已经死了的引用
+	var alive: Array[Node3D] = []
+	for pg in _pigs:
+		if is_instance_valid(pg) and not bool(pg.get("_dead")):
+			alive.append(pg)
+	_pigs = alive
+	var need := PIG_COUNT - _pigs.size()
+	if need <= 0:
+		print("[YuukaHorror] 场上已有 %d 只飞猪，这次不再召唤" % _pigs.size())
+		return
+	var host := get_parent() if get_parent() != null else get_tree().root
+	var who := _find_player()
+	for i in need:
+		if _dead or not is_instance_valid(self):
+			return
+		var ang := TAU * float(i) / float(maxi(need, 1)) + randf_range(-0.2, 0.2)
+		var at := global_position + Vector3(cos(ang), 0.0, sin(ang)) * 10.0 \
+			+ Vector3.UP * height * 0.7
+		var pig := PIG_SCRIPT.new() as Node3D
+		if pig == null:
+			continue
+		host.add_child(pig)
+		pig.global_position = at
+		if pig.has_method("setup"):
+			pig.call("setup", who)
+		_pigs.append(pig)
+		Sfx.play("ui_toggle", -8.0)
+		await get_tree().create_timer(0.15).timeout
+	print("[YuukaHorror] 召唤飞猪优香 %d 只（在场 %d）" % [need, _pigs.size()])
+
+
+## 飞猪离场（BOSS 真死时把召唤物一起收掉）
+func _expire_pigs() -> void:
+	for pg in _pigs:
+		if is_instance_valid(pg) and pg.has_method("expire"):
+			pg.call("expire")
+	_pigs.clear()
+
+
 # ────────────────────────── 光球 ──────────────────────────
 
 ## `kind` 只用于统计（barrage / homing / kneel）；`side` 给追踪弹一点出生偏移；
@@ -1775,6 +1835,7 @@ func _real_death(by_damage: float) -> void:
 		if is_instance_valid(n5):
 			n5.queue_free()
 	_phantoms.clear()
+	_expire_pigs()
 	_death_fx()
 
 
@@ -1833,10 +1894,42 @@ func status() -> Dictionary:
 		"phantoms": _phantoms.size(),
 		"slam_marks": _slam_marks.size(),
 		"busy": _busy,
+		"pigs": _alive_pigs(),
+		"pig_min_alt": _pig_min_alt(),
+		"pig_hits": _pig_hits(),
 	}
 
 
 ## 探针用：清掉场上所有特效残骸、把计数归零（招式之间互不干扰）
+## 场上还活着的飞猪数量
+func _alive_pigs() -> int:
+	var n := 0
+	for pg in _pigs:
+		if is_instance_valid(pg) and not bool(pg.get("_dead")):
+			n += 1
+	return n
+
+
+## 飞猪里最低的那只离地多高（验证"真的在飞"）
+func _pig_min_alt() -> float:
+	var best := INF
+	for pg in _pigs:
+		if not is_instance_valid(pg) or bool(pg.get("_dead")):
+			continue
+		var st: Dictionary = pg.call("status")
+		best = minf(best, float(st.get("altitude", 0.0)))
+	return 0.0 if best == INF else best
+
+
+## 三只飞猪加起来打中了多少次
+func _pig_hits() -> int:
+	var n := 0
+	for pg in _pigs:
+		if is_instance_valid(pg) and pg.has_method("total_hits"):
+			n += int(pg.call("total_hits"))
+	return n
+
+
 ## 探针用：把闪避率固定成 v（0 = 必中，方便测护盾吸收）
 func debug_set_evasion(v: float) -> void:
 	_evasion_fixed = v
@@ -1917,6 +2010,8 @@ func _debug_cast_inner(kind: String, p: Node3D) -> void:
 			await _skill_summon(pc)
 		"rapid":
 			await _skill_rapid(pc)
+		"pigs":
+			await _skill_pigs()
 		_:
 			await _skill_shockwave()
 
