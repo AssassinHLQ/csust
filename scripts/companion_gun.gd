@@ -276,6 +276,7 @@ func _fire(target: Node3D) -> void:
 	if victim != null and victim.has_method("take_damage"):
 		victim.take_damage(attack_damage, impact, (from - impact).normalized())
 	_spawn_tracer(from, impact)
+	_play_attack()
 	_shots += 1
 	fired.emit(target)
 
@@ -342,9 +343,22 @@ func _cast_skill(target: Node3D) -> void:
 			_skill_rail(from, target)
 		_:
 			return
+	_play_attack()
 	_skills_cast += 1
 	_last_skill = kind
 	skill_cast.emit(kind)
+
+
+## 开火 / 放技能时让同伴**真的抬枪打**（用户：「怎么没有播放攻击动画」）。
+## 走 `AnimDriver.request_fire()`：它是 `Normal_Attack_Ing` 叠上半身的那一套，
+## 而且「一次性动作播到一半不打断」—— 0.3 s 一发的连射不会把动作反复重启，
+## 表现约为每秒一次完整的开火收招，正好配连发。
+func _play_attack() -> void:
+	if _companion == null:
+		return
+	var a: Variant = _companion.anim
+	if a != null and is_instance_valid(a) and (a as Node).has_method("request_fire"):
+		a.call("request_fire")
 
 
 ## 小桃：往目标脚下抛三颗榴弹，落地小范围爆炸

@@ -72,6 +72,11 @@ func _run() -> void:
 	# 校园泼溅要不要等（`--splat=off` 跳过，跑得快，但背景是空的）
 	var want_splat := not OS.get_cmdline_user_args().has("--splat=off")
 	var campus := _lvl.get_node_or_null("Campus")
+	if campus != null:
+		# 探针会把玩家钉住 / 到处传，掉进广场的洞就会低于校园内容盒 → 触发
+		# 「离开范围释放泼溅」→ 后面的图全是黑地面（实测 run9 就是这样）。
+		# 出图验收时让泼溅常驻，别让这条省显存的逻辑搅局。
+		campus.set("unload_outside_room", false)
 	if campus != null and want_splat:
 		campus.set("start_delay", 0.0)
 		campus.set("low_priority", false)
@@ -257,15 +262,22 @@ func _run() -> void:
 	_boss.call("debug_set_evasion", 0.0)   # 别让闪避把这条测成偶然
 	var skill_rows: Array[String] = []
 	var skill_ok := party_guns.size() == 4
+	var anim_ok := party_guns.size() == 4
 	for g in party_guns:
 		var hp0 := _hp_boss()
 		var kind := String(g.call("debug_force_skill", _boss))
+		# 放技能 / 开火要真的播攻击动作（用户：「怎么没有播放攻击动画」）
+		await process_frame
+		var a: Variant = g.get_parent().get("anim")
+		if a == null or String(a.call("current_state_name")) != "Fire":
+			anim_ok = false
 		await _wait(1.5)
 		var dealt := hp0 - _hp_boss()
 		skill_rows.append("%s −%.0f" % [kind, dealt])
 		if kind == "" or dealt < 1.0:
 			skill_ok = false
 	_check("四个队友技能都能打到 BOSS 并扣血", skill_ok, ", ".join(skill_rows))
+	_check("队友开火 / 放技能时播攻击动作", anim_ok, "四人都在 Fire 状态" if anim_ok else "有人没进 Fire")
 
 	# 出图：小桃的榴弹在空中 + 凯伊的轨道炮同时放，留一张「技能」的证据图
 	party_guns[0].call("debug_force_skill", _boss)
