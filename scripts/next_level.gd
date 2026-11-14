@@ -711,21 +711,38 @@ func _spawn_party() -> void:
 ## 世界包围盒 **573.17 × 53.68 × 483.39**（x ±287、z −558 ~ −75）。
 ## 所以从**形状顶点**量；量不出来再退到 `CampusFloor` 那块大板的 x/z。
 func _arena_bounds() -> AABB:
+	var plate := _plate_aabb()
 	var cc := get_node_or_null("CampusCollision")
 	if cc != null:
 		var b := _collision_aabb(cc)
 		if b.size.x > 10.0 and b.size.z > 10.0:
-			print("[ConstructivistLevel] 校园范围（碰撞网格）%s" % str(b.size.snappedf(0.01)))
+			# ⚠️ 2026-11-14：碰撞换成 GDGS 分块网格后，每块都比 96 m 格子外扩几米
+			#    （点云 3σ + outdoor 填充 + 网格对齐），量出来会变成 624×552，
+			#    把封锁墙推到校园扫描范围外 20~45 m。这里**夹到 CampusFloor 平板的
+			#    footprint**（= 校园真正可走的内容范围），保持原来的场地大小。
+			if plate.size.x > 10.0 and plate.size.z > 10.0:
+				var clamped := b.intersection(plate)
+				if clamped.size.x > 10.0 and clamped.size.z > 10.0:
+					b = clamped
+			print("[ConstructivistLevel] 校园范围（碰撞网格，已夹到平板 footprint）%s"
+				% str(b.size.snappedf(0.01)))
 			return b
+	if plate.size.x > 10.0 and plate.size.z > 10.0:
+		print("[ConstructivistLevel] 校园范围（地面板兜底）%s" % str(plate.size.snappedf(0.01)))
+		return plate
+	push_warning("[ConstructivistLevel] 量不出校园范围，用写死的兜底值")
+	return AABB(Vector3(-287.8, -1.0, -558.4), Vector3(575.6, 60.0, 483.4))
+
+
+## CampusFloor 碰撞板的 x/z footprint（顶面 -0.02）
+func _plate_aabb() -> AABB:
 	var fl := get_node_or_null("CampusFloor/Collision") as CollisionShape3D
 	if fl != null and fl.shape is BoxShape3D:
 		var s := (fl.shape as BoxShape3D).size
 		var c := fl.global_position
-		print("[ConstructivistLevel] 校园范围（地面板兜底）%s" % str(s.snappedf(0.01)))
 		return AABB(Vector3(c.x - s.x * 0.5, -1.0, c.z - s.z * 0.5),
 			Vector3(s.x, 60.0, s.z))
-	push_warning("[ConstructivistLevel] 量不出校园范围，用写死的兜底值")
-	return AABB(Vector3(-287.8, -1.0, -558.4), Vector3(575.6, 60.0, 483.4))
+	return AABB()
 
 
 ## 把一个节点（含子孙）里所有碰撞形状的顶点并成世界 AABB。
