@@ -220,8 +220,8 @@ func _setup_legs() -> void:
 		var amp: float = float(e[2]) * (leg_swing_deg if e[2] > 0.0 else leg_knee_deg)
 		_leg_bones.append({
 			"bone": bi, "axis": axis, "phase": phase, "amp": amp,
-			# 静置姿态：每帧从**这里**起算，不在上一帧结果上叠（见 `_tick_legs()`）
-			"rest": rest.basis.get_rotation_quaternion(),
+			# set_bone_pose_rotation 接收相对父骨的姿态；全局 rest 只用于换算摆腿轴。
+			"rest": _leg_skel.get_bone_rest(bi).basis.get_rotation_quaternion(),
 		})
 	print("[Trex %s] 跑动就位：%d 根腿骨（%.0f m/s，拴绳 %.0f m）" % [
 		display_name, _leg_bones.size(), chase_speed, chase_leash])
@@ -313,7 +313,9 @@ func _tick_legs(delta: float) -> void:
 	if _leg_skel == null or _leg_bones.is_empty() or _dead:
 		return
 	if not _walking or _anim == null or _anim.current_animation != "idle":
-		# 站住 / 正在放技能 → 让动画自己管腿，身体的起伏也归位
+		# 腿部动画轨道已移除，停步或放技能时必须主动恢复，不能遗留半空中的迈步姿态。
+		for e in _leg_bones:
+			_leg_skel.set_bone_pose_rotation(int(e["bone"]), e["rest"] as Quaternion)
 		if model is Node3D and not _dead:
 			(model as Node3D).position.y = _model_y0
 		return

@@ -7,7 +7,6 @@ extends SceneTree
 ##
 ##   bash _tools/run_probe.sh res://scripts/_verify_trex_chase.gd -- --no-capture --splat=off
 
-const LEVEL := "res://scenes/next_level.tscn"
 const BOSS := "TrexBossA"
 ## 追击是 12 m/s，跑 1 s 就该挪 12 m
 const RUN_FRAMES := 90
@@ -30,12 +29,40 @@ func _check(ok: bool, what: String) -> void:
 
 
 func _run() -> void:
+	root.size = Vector2i(1600, 900)
+	# dummy 渲染后端先完成字体纹理初始化，再加载带贴图的骨架。
+	var font = preload("res://scripts/ui_skin.gd").ui_font()
+	font.get_string_size("COST 0123456789", HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
+	await process_frame
+	await process_frame
 	var GameSettingsScript := load("res://scripts/game_settings.gd")
 	# 关掉 Boss 攻击：这段测的是走位，不是伤害（而且 `_busy` 期间会停止移动，会干扰）
 	GameSettingsScript.call("set_value", "boss_attack", false)
 
-	var level := (load(LEVEL) as PackedScene).instantiate()
+	# 走位回归使用连续平地。真实校园扫描的断面会让 _snap_to_ground 正确拒绝前进，
+	# 不能把「没有地面所以停下」误判成追击或腿动画失败。
+	var level := Node3D.new()
+	var floor_body := StaticBody3D.new()
+	var floor_shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(400, 1, 400)
+	floor_shape.shape = box
+	floor_shape.position.y = -0.5
+	floor_body.add_child(floor_shape)
+	level.add_child(floor_body)
+	var fixture_boss := (load("res://scenes/trex_yuuka_boss.tscn") as PackedScene).instantiate()
+	fixture_boss.name = BOSS
+	fixture_boss.boot_distance = 0.0
+	fixture_boss.boot_max_wait = 0.0
+	level.add_child(fixture_boss)
 	root.add_child(level)
+	await process_frame
+	await process_frame
+	var fixture_player := (load("res://scenes/player.tscn") as PackedScene).instantiate()
+	fixture_player.position = Vector3(0, 0.05, 30)
+	level.add_child(fixture_player)
+	# 测量目标点固定，避免角色重力、Boss 实体挤压和存档重生改变参照点。
+	fixture_player.set_physics_process(false)
 	for i in 4:
 		await process_frame
 	var boss := level.get_node_or_null(BOSS)
@@ -53,6 +80,8 @@ func _run() -> void:
 		print("!! 场景里没有玩家")
 		quit(1)
 		return
+	# 以下帧数按 60 fps 计时；用户保存的 144/240 fps 设置不能缩短测量区间。
+	Engine.max_fps = 60
 
 	print("")
 	print("========== 1. 会朝玩家跑过来 ==========")
@@ -167,6 +196,9 @@ func _run() -> void:
 	else:
 		print("%d 项通过，%d 项失败" % [_pass, _fail])
 	GameSettingsScript.call("set_value", "boss_attack", true)
+	level.queue_free()
+	await process_frame
+	await process_frame
 	quit(0 if _fail == 0 else 1)
 
 
