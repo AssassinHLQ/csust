@@ -610,12 +610,14 @@ func _test_pigs() -> void:
 	var st: Dictionary = _boss.call("status")
 	_check("召唤：3 只飞猪优香出场", int(st["pigs"]) == 3,
 		"在场 %d 只" % int(st["pigs"]))
-	await _wait(2.5)
+	# ⚠️ 高度要在**刚出场、还没开始俯冲**时量（俯冲会贴着玩家走，量出来只有 2 m）
+	await _wait(0.5)
 	var st2: Dictionary = _boss.call("status")
-	await _shot("17_pigs", safe_spot() + Vector3(-20, 26, -26),
-		safe_spot() + Vector3(0, 12, 0))
 	_check("飞猪真的在飞（最低一只离地 ≥ 4 m）", float(st2["pig_min_alt"]) >= 4.0,
 		"最低一只离地 %.1f m" % float(st2["pig_min_alt"]))
+	await _wait(2.0)
+	await _shot("17_pigs", safe_spot() + Vector3(-20, 26, -26),
+		safe_spot() + Vector3(0, 12, 0))
 	await _until(func() -> bool: return int(_boss.call("status")["pig_hits"]) >= 1, 40.0)
 	var st3: Dictionary = _boss.call("status")
 	_check("飞猪也能打人（俯冲/飞弹/轰炸轮着放）", int(st3["pig_hits"]) >= 1,

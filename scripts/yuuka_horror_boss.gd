@@ -696,6 +696,9 @@ func _tick_waves(delta: float) -> void:
 					w["hit"] = true
 					_hits["shock"] += 1
 					p.call("take_damage", _dmg(SHOCK_DAMAGE), global_position, 10.0)
+					Vfx.impact(self, p.global_position + Vector3.UP, Color(1.0, 0.30, 0.18),
+						1.2, 0.0)
+					Vfx.shake(0.9, 0.4)
 					print("[YuukaHorror] 冲击波命中（水平 %.1f m，高 %.1f m）" % [flat, dy])
 		if r >= SHOCK_MAX_R:
 			node.queue_free()
@@ -838,6 +841,9 @@ func _tick_sweeps(delta: float) -> void:
 					s["hit"] = true
 					_hits["sweep"] += 1
 					p.call("take_damage", _dmg(SWEEP_DAMAGE), global_position, 14.0)
+					Vfx.impact(self, p.global_position + Vector3.UP, Color(1.0, 0.55, 0.35),
+						1.3, 0.0)
+					Vfx.shake(1.0, 0.45)
 					print("[YuukaHorror] 激光扫中（距离 %.1f m）" % dist)
 		if t > 0.0:
 			keep.append(s)
@@ -1043,8 +1049,10 @@ func _skill_nova() -> void:
 	tw2.tween_property(ring, "scale", Vector3(NOVA_RADIUS, 2.0, NOVA_RADIUS), 0.45)
 	tw2.tween_callback(ring.queue_free)
 	# 球心放在身体中段：脚下 0 m 的球罩不到天上，抬到 6 m 才能"对空"
-	_hit_area(global_position + Vector3.UP * 6.0, NOVA_RADIUS,
-		_dmg(NOVA_DAMAGE), NOVA_KNOCK, "nova")
+	var nova_at := global_position + Vector3.UP * 6.0
+	Vfx.big_burst(self, nova_at, Color(1.0, 0.35, 0.18), 2.2)
+	Vfx.flash(Color(1.0, 0.35, 0.2), 0.35, 0.35)
+	_hit_area(nova_at, NOVA_RADIUS, _dmg(NOVA_DAMAGE), NOVA_KNOCK, "nova")
 	Sfx.play("ex_fire", -1.0)
 
 
@@ -1121,6 +1129,8 @@ func _tick_phantoms(delta: float) -> void:
 				done = true
 				n.global_position = closest
 		if done:
+			Vfx.burst(self, n.global_position + Vector3.UP * 2.0,
+				Color(1.0, 0.25, 0.45), 34, 1.6, 16.0, 0.5, -3.0)
 			_hit_area(n.global_position, GHOST_BLAST_R, _dmg(GHOST_DAMAGE), 14.0,
 				String(e.get("kind", "phantom")))
 			_blast_fx(n.global_position)
@@ -1204,6 +1214,7 @@ func _tick_wells(delta: float) -> void:
 			print("[YuukaHorror] 引力井爆炸（玩家距井心 %.1f m，高差 %.1f m）" % [
 				(pp.global_position - center).length() if pp != null else -1.0,
 				(pp.global_position.y - center.y) if pp != null else -1.0])
+			Vfx.big_burst(self, center + Vector3.UP * 1.0, Color(1.0, 0.18, 0.30), 1.5)
 			_hit_area(center, WELL_RADIUS, _dmg(WELL_DAMAGE), 14.0, "gravity")
 			_flash_mark(node, 1.25, 0.3)
 			continue
@@ -1228,6 +1239,9 @@ func _raise_shield() -> void:
 	_shield_left = SHIELD_TIME
 	_shield_cd = SHIELD_COOLDOWN
 	_build_shield_fx()
+	Vfx.ring(self, global_position + Vector3.UP * height * 0.42,
+		Color(1.0, 0.3, 0.2, 0.9), 13.0, 0.5, false)
+	Vfx.flash(Color(1.0, 0.5, 0.4), 0.18, 0.25)
 	Sfx.play("ui_open", -3.0)
 	print("[YuukaHorror] EX 护盾：%.0f 点，闪避 %.0f%%，%.0f s" % [
 		_shield_hp, _evasion() * 100.0, SHIELD_TIME])
@@ -1305,6 +1319,9 @@ func _break_shield(explode := true, why := "?") -> void:
 	_clear_shield_fx()
 	if explode:
 		_blast_fx(global_position + Vector3.UP * height * 0.42)
+		Vfx.big_burst(self, global_position + Vector3.UP * height * 0.42,
+			Color(1.0, 0.35, 0.3), 1.4)
+		Vfx.shake(1.2, 0.4)
 		Sfx.play("ui_close", -3.0)
 
 
@@ -1377,6 +1394,8 @@ func _skill_leapslam(pc: Vector3) -> void:
 	if _dead or not is_instance_valid(self):
 		_free_marks()
 		return
+	Vfx.big_burst(self, center, Color(1.0, 0.42, 0.22), 1.6)
+	Vfx.shake(1.6, 0.55)
 	_hit_area(center, LEAP_RADIUS, _dmg(LEAP_DAMAGE), LEAP_KNOCK, "leapslam")
 	Sfx.play("ui_close", -1.0)
 	_flash_mark(disc, 1.3, 0.3)
@@ -1425,6 +1444,8 @@ func _skill_beam(pc: Vector3) -> void:
 	tw2.tween_property(mat, "albedo_color:a", 0.60, 0.07)
 	await get_tree().create_timer(0.3).timeout
 	_beam_hit(dir)
+	Vfx.flash(Color(1.0, 0.5, 0.35), 0.30, 0.28)
+	Vfx.shake(1.3, 0.4)
 	Sfx.play("ex_fire", -3.0)
 	await get_tree().create_timer(0.25).timeout
 	if is_instance_valid(pivot):
@@ -1445,6 +1466,8 @@ func _beam_hit(dir: Vector3) -> void:
 	if closest.distance_to(chest) <= BEAM_HALF_WIDTH and dy >= -2.0 and dy <= BEAM_TOP:
 		_hits["beam"] += 1
 		p.call("take_damage", _dmg(BEAM_DAMAGE), from, 18.0)
+		Vfx.impact(self, chest, Color(1.0, 0.55, 0.35), 1.6, 0.0)
+		Vfx.shake(1.4, 0.5)
 		print("[YuukaHorror] beam 命中（偏离 %.1f m）" % closest.distance_to(chest))
 
 
@@ -1535,6 +1558,9 @@ func _skill_pigs() -> void:
 		if pig.has_method("setup"):
 			pig.call("setup", who)
 		_pigs.append(pig)
+		Vfx.ring(self, Vector3(at.x, at.y - height * 0.7 + 0.1, at.z),
+			Color(0.85, 0.35, 1.0, 0.9), 8.0, 0.6)
+		Vfx.burst(self, at, Color(0.85, 0.3, 1.0), 30, 1.6, 14.0, 0.5, -2.0)
 		Sfx.play("ui_toggle", -8.0)
 		await get_tree().create_timer(0.15).timeout
 	print("[YuukaHorror] 召唤飞猪优香 %d 只（在场 %d）" % [need, _pigs.size()])
@@ -1629,6 +1655,8 @@ func _tick_orbs(delta: float) -> void:
 				var kind := String(o["kind"])
 				_hits[kind] = int(_hits.get(kind, 0)) + 1
 				p.call("take_damage", _dmg(float(o.get("dmg", ORB_DAMAGE))), closest, 6.0)
+				Vfx.burst(self, closest, Color(1.0, 0.32, 0.22), 16, 0.9, 10.0, 0.35, -2.0)
+				Vfx.shake(0.35, 0.18)
 				print("[YuukaHorror] %s 命中" % kind)
 				node.queue_free()
 				continue
@@ -1655,6 +1683,7 @@ func _hit_area(center: Vector3, radius: float, dmg: float, knock: float,
 		if kind != "":
 			_hits[kind] = int(_hits.get(kind, 0)) + 1
 		p.call("take_damage", dmg, center, knock)
+		Vfx.impact(self, center, Color(1.0, 0.30, 0.20), 1.1, d)
 		print("[YuukaHorror] %s 命中（%.1f m / %.1f m）" % [kind, d, radius])
 
 
@@ -1692,8 +1721,11 @@ func _make_disc(center: Vector3, radius: float, col: Color) -> MeshInstance3D:
 	return mi
 
 
-func _flash_mark(mark: Node3D, grow: float, time: float) -> void:
-	if not is_instance_valid(mark):
+## ⚠️ 参数**不要**写 `mark: Node3D`：技能是异步的，`debug_reset()` / `_free_marks()`
+##    可能已经把圈清了，后面再传一个已释放的对象进来会在**类型检查**阶段就报错
+##    （`The Object-derived class of argument 1 (previously freed)…`）。
+func _flash_mark(mark, grow: float, time: float) -> void:
+	if mark == null or not is_instance_valid(mark):
 		return
 	var tw := create_tween()
 	tw.set_parallel(true)
@@ -1797,6 +1829,10 @@ func _begin_revive() -> void:
 	health_changed.emit(health, max_health)
 	_t_skill = REVIVE_TIME + 0.5
 	Sfx.play("ex_fire", -1.0)
+	Vfx.big_burst(self, global_position + Vector3.UP * height * 0.45,
+		Color(1.0, 0.12, 0.10), 2.6)
+	Vfx.flash(Color(1.0, 0.1, 0.08), 0.45, 0.5)
+	Vfx.shake(2.4, 0.9)
 	_play_once("Vital_Dying_Ing")
 	revive_started.emit()
 	print("[YuukaHorror] 血量打空 → 复活演出（%.0f s 无敌，回血到 %.0f）" % [
@@ -1824,6 +1860,10 @@ func _start_phase2() -> void:
 	_t_skill = 0.8          # 回血一结束就出招，不留空档
 	_skill_i = 0
 	phase_changed.emit(2)
+	Vfx.big_burst(self, global_position + Vector3.UP * height * 0.45,
+		Color(1.0, 0.25, 0.15), 2.4)
+	Vfx.flash(Color(1.0, 0.25, 0.15), 0.40, 0.55)
+	Vfx.shake(2.0, 0.8)
 	Sfx.play("ui_open", -2.0)
 	_play_once("Victory_End")
 	# 护盾角色：进二阶段先给自己上盾（玩家在这 17 s 里打不动她，但能看清盾在掉）
@@ -1876,6 +1916,10 @@ func _real_death(by_damage: float) -> void:
 	_phantoms.clear()
 	_expire_pigs()
 	_expire_clones()
+	Vfx.big_burst(self, global_position + Vector3.UP * height * 0.45,
+		Color(1.0, 0.15, 0.10), 3.0)
+	Vfx.flash(Color(1.0, 0.25, 0.2), 0.55, 0.8)
+	Vfx.shake(2.6, 1.0)
 	_death_fx()
 
 
@@ -2045,8 +2089,15 @@ func _do_blink(p: Node3D) -> void:
 		gy = p.global_position.y - 0.9
 	var at := Vector3(behind.x, gy + 0.05, behind.z)
 	_blast_fx(global_position + Vector3.UP * height * 0.45)
+	Vfx.burst(self, global_position + Vector3.UP * height * 0.45,
+		Color(1.0, 0.2, 0.3), 40, 2.0, 20.0, 0.5, 0.0)
 	global_position = at
 	_blast_fx(at + Vector3.UP * height * 0.45)
+	Vfx.burst(self, at + Vector3.UP * height * 0.45, Color(1.0, 0.2, 0.3), 55, 2.2,
+		24.0, 0.55, 0.0)
+	Vfx.ring(self, at + Vector3.UP * 0.4, Color(1.0, 0.25, 0.3, 0.9), 16.0, 0.5)
+	Vfx.flash(Color(0.65, 0.05, 0.10), 0.30, 0.30)
+	Vfx.shake(1.5, 0.45)
 	rotation.y = atan2(p.global_position.x - at.x, p.global_position.z - at.z)
 	Sfx.play("ui_toggle", -3.0)
 	# 落地就接一招，别让闪现只当位移
@@ -2086,6 +2137,9 @@ func _skill_clones() -> void:
 		if clone.has_method("setup"):
 			clone.call("setup", p)
 		_clones.append(clone)
+		Vfx.ring(self, Vector3(x, gy + 0.1, z), Color(1.0, 0.2, 0.3, 0.9), 7.0, 0.55)
+		Vfx.burst(self, Vector3(x, gy + 1.5, z), Color(1.0, 0.18, 0.25), 26, 1.4,
+			12.0, 0.5, -3.0)
 	print("[YuukaHorror] 分身 ×%d 围住玩家（只有本体放技能）" % CLONE_COUNT)
 
 
