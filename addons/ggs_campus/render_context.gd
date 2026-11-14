@@ -61,6 +61,26 @@ var deletion_queue := DeletionQueue.new()
 var shader_cache : Dictionary
 var needs_sync := false
 
+## CPU-only SPIR-V survives individual fine-window contexts. A cold projection
+## compile alone took about 100 ms on the test PC; rebuilds avoid that compiler.
+## Each context still owns its own GPU shader RID and deletion queue.
+## Keep one revision per device/path; source edits replace that entry.
+static var _compiled_shader_sources: Dictionary = {}
+
+
+static func _compile_shader_once(device_, path: String, source: String) -> RDShaderSPIRV:
+	var key := "%d:%s" % [device_.get_instance_id(), path]
+	var cached: Dictionary = _compiled_shader_sources.get(key, {})
+	if cached.get("source") == source:
+		return cached["spirv"]
+	var shader_source := RDShaderSource.new()
+	shader_source.source_compute = source
+	shader_source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
+	var spirv: RDShaderSPIRV = device_.shader_compile_spirv_from_source(shader_source)
+	if spirv.compile_error_compute.is_empty():
+		_compiled_shader_sources[key] = {"source": source, "spirv": spirv}
+	return spirv
+
 static func create(device : RenderingDevice=null):
 	var context = load("res://addons/ggs_campus/render_context.gd").new()
 	context.device = RenderingServer.create_local_rendering_device() if not device else device
@@ -94,7 +114,6 @@ func compute_list_end() -> void: device.compute_list_end()
 # --- HELPER FUNCTIONS ---
 func load_shader(path : String) -> RID:
 	if not shader_cache.has(path):
-		var src := RDShaderSource.new()
 		var text := FileAccess.get_file_as_string(path)
 		if text.begins_with("#[compute]"):
 			text = text.substr(text.find("
@@ -102,9 +121,7 @@ func load_shader(path : String) -> RID:
 		elif text.begins_with("[compute]"):
 			text = text.substr(text.find("
 ") + 1)
-		src.source_compute = text
-		src.language = RenderingDevice.SHADER_LANGUAGE_GLSL
-		var shader_spirv := device.shader_compile_spirv_from_source(src)
+		var shader_spirv := _compile_shader_once(device, path, text)
 		if shader_spirv.compile_error_compute != "":
 			push_error("[ggs] shader %s: %s" % [path, shader_spirv.compile_error_compute])
 		shader_cache[path] = deletion_queue.push(device.shader_create_from_spirv(shader_spirv))

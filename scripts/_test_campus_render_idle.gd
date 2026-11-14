@@ -5,6 +5,21 @@ extends SceneTree
 ## godot --headless --path . --script scripts/_test_campus_render_idle.gd -- --no-capture
 
 const Rasterizer := preload("res://addons/ggs_campus/gaussian_splatting_rasterizer.gd")
+const RenderContext := preload("res://addons/ggs_campus/render_context.gd")
+
+class ShaderCompilerSpy:
+	extends RefCounted
+	var calls := 0
+	var fail_compile := false
+	var last_source := ""
+
+	func shader_compile_spirv_from_source(source: RDShaderSource) -> RDShaderSPIRV:
+		calls += 1
+		last_source = source.source_compute
+		var spirv := RDShaderSPIRV.new()
+		if fail_compile:
+			spirv.compile_error_compute = "synthetic compiler failure"
+		return spirv
 
 class DeviceSpy:
 	extends RefCounted
@@ -116,6 +131,7 @@ func _run() -> void:
 	raster.intro_end_ms = Time.get_ticks_msec() + 1000
 	_check(not raster._can_reuse_last_frame(), "intro guard prevents premature reuse")
 	_test_upload_budget(raster, context.device)
+	_test_shader_cache()
 	raster.context = null
 	camera.free()
 	print("campus_render_idle: %d passed, %d failed" % [_pass, _fail])
@@ -162,6 +178,30 @@ func _test_upload_budget(raster, device: DeviceSpy) -> void:
 	_check(intact and uploaded == bytes.size(), "every uploaded byte is contiguous and matches the input")
 	_check(raster._splat_time_max == 0.125, "time sampling stays aligned across partial records")
 	DirAccess.remove_absolute(path)
+
+
+func _test_shader_cache() -> void:
+	var device := ShaderCompilerSpy.new()
+	var other_device := ShaderCompilerSpy.new()
+	var first := RenderContext._compile_shader_once(device, "projection", "source A")
+	var cached := RenderContext._compile_shader_once(device, "projection", "source A")
+	_check(first == cached and device.calls == 1,
+		"rebuilding a context reuses compiled shader bytes on the same device")
+	var edited := RenderContext._compile_shader_once(device, "projection", "source B")
+	_check(edited != first and device.calls == 2 and device.last_source == "source B",
+		"source edits invalidate the compiled shader")
+	RenderContext._compile_shader_once(other_device, "projection", "source B")
+	_check(other_device.calls == 1, "different rendering devices compile independently")
+	RenderContext._compile_shader_once(device, "render", "source B")
+	_check(device.calls == 3, "different shader paths maintain independent revisions")
+	device.fail_compile = true
+	for attempt in 2:
+		RenderContext._compile_shader_once(device, "projection", "broken")
+	_check(device.calls == 5, "failed compilation is retried rather than cached as success")
+	device.fail_compile = false
+	var recovered := RenderContext._compile_shader_once(device, "projection", "source B")
+	_check(recovered == edited and device.calls == 5,
+		"a failed source edit preserves the last successfully compiled revision")
 
 
 func _dispatch_reset_count(updates: Array) -> int:
