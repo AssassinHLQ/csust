@@ -214,6 +214,9 @@ func _run() -> void:
 		await process_frame
 	_check(game.has_method("_intro_state"), "game.gd 有 `_intro_state()`")
 	if game.has_method("_intro_state"):
+		_check(await _wait_until(func() -> bool:
+			return bool(game.call("_intro_state").get("ready", false)), 15.0),
+			"开始就绪也等待角色模型和场景 LOD 初始化")
 		var st: Dictionary = game.call("_intro_state")
 		print("  `_intro_state()` = %s" % str(st))
 		_check(bool(st.get("ready", false)), "`--splat=off` 下 `ready` 为真（不会把玩家卡在开场）")

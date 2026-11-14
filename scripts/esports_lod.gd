@@ -62,7 +62,12 @@ var _current := -1
 var _pending := {}
 
 
+func is_startup_ready() -> bool:
+	return _built and _pending.is_empty()
+
+
 func _ready() -> void:
+	add_to_group("startup_loading")
 	# 等一帧：确保 GLB 实例（`Room` 节点）已经挂好
 	await get_tree().process_frame
 	_build_lod()

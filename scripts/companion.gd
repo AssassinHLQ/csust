@@ -89,9 +89,15 @@ var _hold_yaw := 0.0
 const BOOT_FIRST_DELAY := 0.30
 const BOOT_STEP_DELAY := 0.10
 static var _boot_slot := 0
+var _startup_complete := false
+
+
+func is_startup_ready() -> bool:
+	return _startup_complete
 
 
 func _ready() -> void:
+	add_to_group("startup_loading")
 	collision_layer = LAYER
 	collision_mask = 1
 	_player = get_node_or_null(player_path) as Player
@@ -108,6 +114,8 @@ func _ready() -> void:
 
 
 func _build_model() -> void:
+	# 同步构建返回前不会再轮询；失败也结束本次加载，避免开始菜单永久等待。
+	_startup_complete = true
 	if model_path.is_empty() or not ResourceLoader.exists(model_path):
 		push_error("[Companion %s] 找不到模型：%s" % [display_name, model_path])
 		return

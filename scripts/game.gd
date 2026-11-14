@@ -1039,7 +1039,16 @@ func _intro_state() -> Dictionary:
 			var nm := String(s.display_name)
 			if not nm.is_empty():
 				names.append(nm)
-	return {"ratio": ratio, "ready": _splats_ready(), "names": names}
+	# 模型定时构建和 LOD 实例化也会占用主线程，不能只等泼溅就开始播放首图。
+	var startup_ready := true
+	for loader in get_tree().get_nodes_in_group("startup_loading"):
+		if is_ancestor_of(loader) and not bool(loader.call("is_startup_ready")):
+			startup_ready = false
+			if names.is_empty():
+				names.append("角色与场景")
+	if not startup_ready:
+		ratio = minf(ratio, 0.95)
+	return {"ratio": ratio, "ready": _splats_ready() and startup_ready, "names": names}
 
 
 func _process(delta: float) -> void:
