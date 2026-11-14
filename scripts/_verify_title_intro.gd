@@ -50,6 +50,12 @@ func _wait_until(pred: Callable, timeout := 6.0) -> bool:
 
 
 func _run() -> void:
+	root.size = Vector2i(1600, 900)
+	# 无窗口后端先初始化 HUD 共用字体，避免首次建 COST 行时争用纹理。
+	var font = preload("res://scripts/ui_skin.gd").ui_font()
+	font.get_string_size("COST 0123456789", HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
+	await process_frame
+	await process_frame
 	print("========== 开场 PV ==========")
 
 	# ── ① 素材 ────────────────────────────────────────────────────────
