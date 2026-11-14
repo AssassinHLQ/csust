@@ -128,6 +128,8 @@ var _rd: RenderDistance
 ## 场上所有 Boss「木桩」（现在是霸王龙优香 + 飞猪优香两位）
 var _bosses: Array[Boss] = []
 var _companions: Array[Companion] = []
+## 电竞房走道里的街机柜（坦克动荡小游戏，见 `scripts/esports_arcade.gd`）
+var _esports_arcade: Node3D
 var _spawn := Vector3.ZERO
 ## 本场景是从别的场景走门进来的（`scene_gate.gd` → `scene_flow.gd`）
 var _entered_via_gate := false
@@ -648,6 +650,8 @@ func _ready() -> void:
 	_build_summon_pad()
 	# 小屋桌子上的电脑（假 Arch Linux 终端，按 F 进出，见 scripts/hut_computer.gd）
 	_build_computer()
+	# 电竞房走道里的街机柜（坦克动荡小游戏，按 F 开，见 scripts/esports_arcade.gd）
+	_build_esports_arcade()
 	# 609 画室桌上的十颗 Ryzen 9 9950X3D（隐藏福利，2026-11 用户要求）
 	_spawn_room609_cpus()
 	# 商店与蒙德里安大楼**已经烘焙进场景**（`scenes/shop_baked.tscn` /
@@ -1361,6 +1365,46 @@ func _build_computer() -> void:
 	var pc := HutComputer.new()
 	pc.name = "HutComputer"
 	hut.add_child(pc)
+
+
+## 电竞房走道里的**街机柜**（坦克动荡小游戏，用户 2026-11-14）。
+##
+## ⚠️ 必须挂成 `game` 的**直接子节点**（世界坐标），**不能**挂进 `EsportsRoom`：
+## 那个节点挂着 `Transform3D(1.35375,0,0, 0,-1.5,0, 0,0,-1.35375, …)`，Y 轴是 −1.5 的
+## 镜像（整间屋是上下翻过来的），挂进去柜子会倒立、屏幕朝地。
+##
+## 代价是显隐要自己跟房间同步：电竞房成交前 `visible = false`（见 `EAST_ROOMS`），
+## 柜子要是自己亮着就等于提前剧透 —— 所以接 `visibility_changed` 一比一照抄。
+##
+## ⚠️ 用 `preload(...).new()` 而不是 `EsportsArcade.new()`：那个脚本没有 `class_name`，
+## 理由是 `--headless --script` 跑自检时 Godot 不会重扫全局类名表。
+const ARCADE_SCRIPT := preload("res://scripts/esports_arcade.gd")
+
+
+func _build_esports_arcade() -> void:
+	if get_node_or_null("EsportsArcade") != null:
+		return
+	var room := get_node_or_null("EsportsRoom") as Node3D
+	if room == null:
+		push_warning("[Game] 找不到 EsportsRoom，街机柜不建")
+		return
+	var arcade := ARCADE_SCRIPT.new() as Node3D
+	arcade.name = "EsportsArcade"
+	add_child(arcade)
+	# 一开始就跟房间同显隐（没成交 = 两边都不出现）
+	arcade.visible = room.visible
+	if not room.visibility_changed.is_connected(_sync_arcade_visibility):
+		room.visibility_changed.connect(_sync_arcade_visibility)
+	_esports_arcade = arcade
+
+
+## 电竞房显隐一变，街机柜跟着变（成交那一刻房间被打开 → 柜子一起亮出来）。
+func _sync_arcade_visibility() -> void:
+	var room := get_node_or_null("EsportsRoom") as Node3D
+	var arcade := get_node_or_null("EsportsArcade") as Node3D
+	if room == null or arcade == null:
+		return
+	arcade.visible = room.visible
 
 
 ## 609 画室桌上的十颗 Ryzen 9 9950X3D（2026-11 用户：「在 609 上面放十颗，

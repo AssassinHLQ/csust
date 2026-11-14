@@ -6,7 +6,7 @@ extends Node2D
 ## 里带 `[input]` 动作 + 自带歌单）。嵌进《爱丽丝梦游长理》当电竞房小游戏后，
 ## 下面几件事必须改掉，改在哪一条都写在对应常量/函数上方：
 ##   ① **输入**：不再读 `p1_*` / `p2_*` 动作（主工程 InputMap 里根本没有），
-##      改成自己维护键位表 + `is_down()` 轮询，由宿主 `hut_computer` 把事件喂进来。
+##      改成自己维护键位表 + `is_down()` 轮询，由宿主 `esports_arcade`（电竞房街机柜）把事件喂进来。
 ##   ② **歌单**：42 首 ogg 全部不搬（省 37.9 MB），音乐统一由电竞房 BGM 负责，
 ##      本脚本 `_ready()` 里把自己那个 `AudioStreamPlayer` 停掉；设置页的
 ##      「音乐」滑条和「背景曲目」入口整块删掉。
@@ -205,7 +205,7 @@ var pause_settings_open := false
 var dark_mode := false
 ## ── 音量 ──
 ## `music_volume` 不再控制任何东西（歌单不搬了），只是 `apply_audio_levels()`
-## 的入参还留着；宿主 `hut_computer` 负责压电竞房 BGM。
+## 的入参还留着；宿主 `esports_arcade` 负责压电竞房 BGM。
 var master_volume := 0.8
 var sfx_volume := 0.85
 var music_volume := 0.35
@@ -234,7 +234,7 @@ func _ready() -> void:
 	sound_click = make_sound(420.0, 0.080, 0.14, false)
 	# ⚠️ 不建 `music_player`：用户 2026-11-14「全程同步电竞房音乐」，
 	#    小游戏自己一首都不放。BGM 由电竞房的 `esports_collision.gd::MusicZone`
-	#    负责，宿主 `hut_computer` 在小游戏开着时把它压低（见那边的 `_open_tank()`）。
+	#    负责，宿主 `esports_arcade` 在小游戏开着时把它压低（见那边的 `_open()`）。
 	static_map_layer = StaticMapLayer.new()
 	static_map_layer.z_index = -1
 	static_map_layer.visible = false
@@ -745,7 +745,7 @@ func _process(delta: float) -> void:
 ##   · 而且小游戏是在 `SubViewport` 里跑的，窗口焦点在主工程那边，得由宿主**喂事件**。
 ##
 ## 所以这里改成：自维护一张键位表 + `is_down()` 轮询。
-## 宿主（`hut_computer`）在 `_using` 分支里把键盘事件转给本节点的 `feed()`。
+## 宿主（`esports_arcade`）在 `_using` 分支里把键盘事件转给本节点的 `feed()`。
 ## ⚠️ 用 `physical_keycode` 而不是 `keycode`：中文输入法开着时 `keycode` 会变成 `0`，
 ##    原版的 `project.godot` 里也全是 `physical_keycode`。
 const P1_KEYS := {

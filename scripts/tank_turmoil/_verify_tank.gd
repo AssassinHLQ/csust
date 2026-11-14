@@ -11,6 +11,8 @@ extends SceneTree
 ##   ④ 大地图：默认 19 × 9，CELL 合理，墙网格生成得出来
 ##   ⑤ 没有音乐播放器、没有 `p1_*` 输入动作依赖
 ##   ⑥ 输入：喂 WASD 事件 → 主角真的动 / 真的转向
+##   ⑦ 宿主接线：`scripts/esports_arcade.gd`（电竞房街机柜）挂得住，
+##      且小屋电脑那侧的入口**确实撤掉了**（用户 2026-11-14「搬到电竞房」）
 
 const SCENE := "res://scripts/tank_turmoil/tank_main_scene.tscn"
 const ROUND_FRAMES := 240
@@ -159,8 +161,13 @@ func _process(_delta: float) -> bool:
 		if _frames == 60:
 			var tanks: Array = _tank.get("tanks")
 			var facing := Vector2.from_angle(float(tanks[0]["angle"]))
-			# 直控模式下 `angle` 每帧朝「输入方向」（这里就是正左）lerp，60 帧足够掉头。
-			_check(facing.x < -0.5, "按住 A 60 帧后朝左了（朝向 %s）" % str(facing))
+			# ⚠️ 这里**不能**断言「朝向左」（facing.x 接近 −1）：
+			#    地图每局随机生成，主角出生点旁边可能就是墙，而
+			#    `move_tank_direct()` 有一条「转过去会撞墙就退回原角度」的保护
+			#    （`tank_main.gd`），于是它会卡在某个斜角转不过去 —— 实测出现过
+			#    (−0.46, 0.89) 这种「转了 117° 就被墙挡住」的正常情况。
+			#    所以断言改成「确实朝左转了一大截」：x 分量明显变负即可。
+			_check(facing.x < -0.3, "按住 A 60 帧后明显朝左转（朝向 %s）" % str(facing))
 			var left := InputEventKey.new()
 			left.physical_keycode = KEY_A
 			left.pressed = false
@@ -173,40 +180,72 @@ func _process(_delta: float) -> bool:
 
 
 func _check_host() -> void:
-	print("  … 开始检查宿主接线")
-	var host_script := load("res://scripts/hut_computer.gd") as Script
-	_check(host_script != null, "宿主脚本 hut_computer.gd 能加载")
-	if host_script == null:
+	# ⚠️ 这一整段**只能同步跑**：本函数在 `_process()` 的调用栈里被调，里面一 `await`
+	#    整个主循环就挂起（实测日志每次都断在半路）。宿主 `_ready()` 里要紧的东西
+	#    （viewport / 屏幕材质 / UI）都是同步建好的，不等也行。
+	print("  … 开始检查宿主接线（电竞房街机柜）")
+
+	# ── ① 小屋电脑**不该**再有坦克入口（用户 2026-11-14：「搬到电竞房」）──
+	var hut := load("res://scripts/hut_computer.gd") as Script
+	_check(hut != null, "小屋电脑脚本能加载")
+	if hut != null:
+		var hut_methods := []
+		for m in hut.get_script_method_list():
+			hut_methods.append(str(m["name"]))
+		_check(not hut_methods.has("is_tank_open"), "小屋电脑的坦克入口已撤掉（只留 Arch 终端）")
+		_check(not hut_methods.has("open_tank_for_test"), "小屋电脑不再暴露小游戏开关")
+
+	# ── ② `game.gd` 里接得上 ──
+	var gs := load("res://scripts/game.gd") as Script
+	_check(gs != null, "game.gd 能加载")
+	if gs != null:
+		var gm := []
+		for m in gs.get_script_method_list():
+			gm.append(str(m["name"]))
+		_check(gm.has("_build_esports_arcade"), "game.gd 有 _build_esports_arcade()")
+		_check(gm.has("_sync_arcade_visibility"), "game.gd 有显隐同步 _sync_arcade_visibility()")
+
+	# ── ③ 街机柜本体 ──
+	var script := load("res://scripts/esports_arcade.gd") as Script
+	_check(script != null, "街机柜脚本 esports_arcade.gd 能加载")
+	if script == null:
 		_finish()
 		return
-	var scripted := host_script.new() as Node3D
-	_check(scripted != null, "宿主脚本能 new 出节点")
-	if scripted == null:
+	var host := script.new() as Node3D
+	_check(host != null, "街机柜脚本能 new 出节点")
+	if host == null:
 		_finish()
 		return
-	var host := scripted
 	get_root().add_child(host)
-	print("  … 已 add_child，is_tank_open=%s" % str(host.has_method("is_tank_open")))
-	# ⚠️ 这里**只能同步跑**，不能 await 任何东西：
-	#    本函数是在 `_process()` 的调用栈里被 await 的（`_process` 里的 await 会挂起
-	#    整个主循环），一 await 就再也回不来 —— 实测日志每次都在「已 add_child」断掉。
-	#    `hut_computer._ready()` 里要紧的东西（`_build()` → `tank_viewport`）都是同步建的，
-	#    `_ready` 里那一句 `await process_frame` 只是建完灯之后的事，不等也行。
-	print("  … 节点已在树里，检查方法")
-	_check(host.has_method("is_tank_open") and host.has_method("open_tank_for_test"),
-		"宿主暴露了小游戏开关（is_tank_open / open_tank_for_test）")
+
+	# 落点/朝向是**实测**出来的，写成常量；这里只是钉住，免得以后被悄悄改掉。
+	var consts: Dictionary = script.get_script_constant_map()
+	var want_pos: Vector3 = consts.get("ARCADE_POS", Vector3.ZERO)
+	_check(want_pos.distance_to(Vector3(50.55, 0.51, 11.60)) < 0.001,
+		"柜子落在电竞房走道实测点 %s" % str(want_pos))
+	_check(is_equal_approx(float(consts.get("YAW_DEG", 0.0)), 90.0),
+		"柜子正面朝 +X（对着走道），YAW = %.0f°" % float(consts.get("YAW_DEG", 0.0)))
+	_check(host.has_method("is_open") and host.has_method("open_for_test"),
+		"街机柜暴露了开关（is_open / open_for_test）")
+
 	var vp := host.get("tank_viewport") as SubViewport
 	_check(vp != null and vp.size == Vector2i(1000, 800),
 		"小游戏画布是 1000×800（实际 %s）" % (str(vp.size) if vp != null else "无"))
-	# ⚠️ 这一整段的 `yield` 都不能省：`open_tank_for_test()` → `_ensure_tank()`
-	#    里要 `load()` 场景和 6 张立绘，`add_child` 之后 `_ready()` 也要等一帧。
-	print("  … 调 open_tank_for_test()")
-	host.call("open_tank_for_test")
-	_check(bool(host.call("is_tank_open")), "按 G 能打开小游戏")
+	var scr := host.call("screen_mesh") as MeshInstance3D
+	_check(scr != null, "柜体上有屏幕网格")
+	if scr != null and vp != null:
+		var smat := scr.material_override as StandardMaterial3D
+		_check(smat != null and smat.albedo_texture == vp.get_texture(),
+			"柜体屏幕上贴的就是小游戏那张画布（同一份内容）")
+
+	host.call("open_for_test")
+	_check(bool(host.call("is_open")), "按 F 能打开小游戏")
 	var node: Node = host.get("tank")
 	_check(node != null and is_instance_valid(node), "坦克动荡节点已实例化并挂进画布")
-	host.call("close_tank_for_test")
-	_check(not bool(host.call("is_tank_open")), "关得掉（G 键 / 设置菜单 / 探针三条路）")
+	var att: Node = host.get("_attract") as Node
+	_check(att != null and not att.visible, "开局后待机画面藏起来（`_AttractScreen`）")
+	host.call("close_for_test")
+	_check(not bool(host.call("is_open")), "关得掉（G 键 / 设置菜单 / 探针三条路）")
 	host.queue_free()
 
 
