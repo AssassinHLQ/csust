@@ -102,6 +102,10 @@ func _check(ok: bool, label: String, detail: Variant = "") -> void:
 
 func _run() -> void:
 	AudioServer.set_bus_mute(0, true)
+	root.size = Vector2i(1600, 900)
+	preload("res://scripts/ui_skin.gd").ui_font().get_string_size("COST 0123456789", HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
+	await process_frame
+	await process_frame
 	var start := Time.get_ticks_usec()
 	if _integration:
 		_world = (load("res://scenes/next_level.tscn") as PackedScene).instantiate()

@@ -37,10 +37,14 @@ func _run() -> void:
 	player.set_process_input(false)
 	player.call("set_respawn_point", Vector3(100, 100, 100))
 	var carrier := player.get_node("Arisu/CarrierForm")
+	preload("res://scripts/mech_state.gd").set_carrier_for_test(true)
 	Engine.time_scale = 4.0
 	for airborne in [false, true]:
 		player.global_position = Vector3(3, 12 if airborne else .02, -4)
 		player.velocity = Vector3.ZERO
+		if airborne:
+			carrier.call("set_form", true)
+			_check(carrier.call("is_on"), "airborne revival uses the actual unlocked mech form")
 		player.call("set_flight_lock", airborne)
 		var at := player.global_transform
 		player.call("take_damage", 10000.0)
@@ -57,6 +61,8 @@ func _run() -> void:
 		var form_before: bool = carrier.call("is_on")
 		carrier.call("_input", key)
 		_check(carrier.call("is_on") == form_before, "carrier toggle is blocked while downed")
+		carrier.call("_tick_flight", 1.0 / 60.0)
+		_check(player.velocity == Vector3.ZERO, "carrier flight cannot move a downed player")
 		await create_timer(4.7, false).timeout
 		_check(player.call("is_downed") and player.get("health") == 0.0, "cannot revive before five seconds")
 		_check(player.global_transform.is_equal_approx(at), "held movement leaves downed transform unchanged")

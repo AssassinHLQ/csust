@@ -1,8 +1,13 @@
 {
 	"access": {
-		"boundary_triangles": 118588.0,
-		"bridge_length_m": 135.577845235548,
+		"boundary_triangles": 117928.0,
+		"bridge_length_m": 143.577870235509,
 		"bridge_points": [
+			[
+				10.0,
+				-0.02,
+				-62.0
+			],
 			[
 				10.0,
 				0.0,
@@ -134,13 +139,15 @@
 				-152.0
 			]
 		],
-		"bridge_triangles": 156.0,
+		"bridge_triangles": 162.0,
 		"bridge_width_m": 2.6,
 		"grid_m": 0.5,
 		"grid_origin_xz": [
 			-288.0,
 			-564.0
 		],
+		"guard_above_surface_m": 1.1,
+		"guard_below_surface_m": 0.5,
 		"guard_test_edges": [
 			{
 				"a": [
@@ -9922,21 +9929,22 @@
 		{
 			"name": "ScanBoundary",
 			"role": "outline guard",
-			"triangles": 118588
+			"triangles": 117928
 		},
 		{
 			"name": "CampusBridgeExtension",
 			"role": "access bridge",
-			"triangles": 156
+			"triangles": 162
 		}
 	],
 	"tool": "@playcanvas/splat-transform 3.11.2",
-	"triangles": 2522900.0,
+	"triangles": 2522246.0,
 	"voxel_m": 0.25,
 	"walking_surface": {
 		"gaussian_sigma_cells": 2.0,
 		"grid_m": 0.5,
 		"median_cells": 7.0,
+		"native_shell_clearance_m": 2.6,
 		"obstacles": "closed 0.5m structural column bases; hollow native shells omitted below 2.6m; native upper geometry retained",
 		"sample_height_difference_m": {
 			"100": 18.6568984985352,
@@ -9946,9 +9954,8 @@
 			"99": 6.41110134124756
 		},
 		"simplification_error_m": 0.05,
-		"support": "measured cells only, no missing-region fill",
-		"structural_grid_m": 0.5,
 		"structural_contour_spacing_m": 0.2,
-		"native_shell_clearance_m": 2.6
+		"structural_grid_m": 0.5,
+		"support": "measured cells only, no missing-region fill"
 	}
 }

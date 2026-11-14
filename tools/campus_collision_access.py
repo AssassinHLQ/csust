@@ -172,12 +172,17 @@ def guards(top, points, width):
                 samples = a[None] + np.linspace(0, 1, 11)[:, None] * (b - a)[None]
                 pieces = [(samples[k], samples[k + 1]) for k in range(10)]
             for p, q in pieces:
-                lo, hi = -40., min(100., y + 2.5)
+                # A guard protects this particular walking ledge. Extending
+                # every sampled edge down to -40 creates invisible walls below
+                # elevated terrain and traps aircraft between unrelated layers.
+                lo, hi = y - .5, y + 1.1
                 midpoint = (p + q) * .5
                 ranges = [(lo, hi)]
                 if corridor_distance(midpoint[None])[0] <= width * .5 + .04:
                     deck_y = bridge_height(midpoint)
-                    ranges = [(lo, min(hi, deck_y - .16)), (max(lo, deck_y + 2.3), hi)]
+                    # Keep the bridge corridor open upwards as well: flying
+                    # through its footprint must not meet an invisible ceiling.
+                    ranges = [(lo, min(hi, deck_y - .16))]
                 for bottom, upper in ranges:
                     if upper <= bottom:
                         continue
@@ -201,6 +206,10 @@ def main():
         raise FileExistsError(args.out)
     top = np.fromfile(args.top, dtype='<f4').reshape(979, 1153)
     points = bridge_path(top, args.target, args.width)
+    # Begin along the original hall bridge before turning west. Without this
+    # lead-in, the first sideways rail cuts across the old bridge centreline at
+    # z=-68.7 and blocks players approaching normally from the hall.
+    points = np.vstack((np.array([10., -.02, -62.]), points))
     # Blend the elevated deck back into the measured street, so the return
     # trip does not face a vertical ledge at the original bridge endpoint.
     landing = points[-1] + np.array([0., 0., -4.])
@@ -226,6 +235,7 @@ def main():
         triangles.tofile(args.out / (name + '.faces.f32'))
     report = {'grid_m': .5, 'grid_origin_xz': [-288, -564],
               'boundary_triangles': len(boundary), 'bridge_triangles': len(bridge),
+              'guard_below_surface_m': .5, 'guard_above_surface_m': 1.1,
               'bridge_width_m': args.width, 'bridge_points': points.tolist(),
               'bridge_length_m': float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
               'edges': edges,
