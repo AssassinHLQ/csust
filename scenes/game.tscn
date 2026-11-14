@@ -366,6 +366,7 @@ slot = Vector3(3, 0, -3.2)
 [node name="Gun" parent="CompanionMomoi" index="2"]
 skill = 1
 tracer_color = Color(1, 0.62, 0.78, 1)
+tracer_width = 0.014
 
 [node name="CompanionMidori" parent="." unique_id=1416495891 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.4, 0.05, 1.4)
@@ -376,6 +377,7 @@ slot = Vector3(2.4, 0, -4.6)
 [node name="Gun" parent="CompanionMidori" index="2"]
 skill = 2
 tracer_color = Color(0.45, 1, 0.78, 1)
+tracer_width = 0.016
 
 [node name="CompanionYuzu" parent="." unique_id=601492507 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2.4, 0.05, 1.4)
@@ -386,6 +388,7 @@ slot = Vector3(-2.4, 0, -4.6)
 [node name="Gun" parent="CompanionYuzu" index="2"]
 skill = 3
 tracer_color = Color(1, 0.82, 0.45, 1)
+tracer_width = 0.012
 
 [node name="CompanionKei" parent="." unique_id=2054857283 instance=ExtResource("7_companion")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -5.2, 0.05, 4.6)
@@ -396,6 +399,7 @@ slot = Vector3(-5.2, 0, -1.4)
 [node name="Gun" parent="CompanionKei" index="2"]
 skill = 4
 tracer_color = Color(0.72, 0.4, 1, 1)
+tracer_width = 0.03
 
 [node name="Sensei" type="Node3D" parent="." unique_id=1822426952]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 0, 2.6)

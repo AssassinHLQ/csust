@@ -43,6 +43,8 @@ const SHRED_SPREAD_DEG := 9.0
 const RAIL_DAMAGE := 220.0
 const RAIL_RANGE := 80.0
 const RAIL_WIDTH := 1.5
+## 轨道炮蓄力时长（秒）：聚能球长大 → 再打出光柱
+const RAIL_CHARGE := 0.28
 ## 目标缓存多久重扫一次（秒）：BOSS 会中途召分身/飞猪，只扫一次就看不见新目标
 const TARGET_REFRESH := 2.0
 
@@ -276,6 +278,9 @@ func _fire(target: Node3D) -> void:
 	if victim != null and victim.has_method("take_damage"):
 		victim.take_damage(attack_damage, impact, (from - impact).normalized())
 	_spawn_tracer(from, impact)
+	# 枪口焰 + 命中火花：不加的话只有一条细线，连射看着像「空气在掉血」
+	_muzzle_flash(tracer_color, 0.22 + tracer_width * 6.0)
+	_impact_spark(impact, tracer_color, 0.16)
 	_play_attack()
 	_shots += 1
 	fired.emit(target)
@@ -364,7 +369,9 @@ func _play_attack() -> void:
 ## 小桃：往目标脚下抛三颗榴弹，落地小范围爆炸
 func _skill_grenade(from: Vector3, target: Node3D) -> void:
 	var base := target.global_position + Vector3.UP * 0.4
-	Vfx.flash_light(_fx_root, from, Color(1.0, 0.7, 0.35), 3.0, 0.18, 8.0)
+	var col := Color(1.0, 0.7, 0.35)
+	_muzzle_flash(col, 0.32)
+	Vfx.flash_light(_fx_root, from, col, 3.0, 0.18, 8.0)
 	for i in GRENADE_COUNT:
 		# 散布压到 0.6 倍半径：再大就有落点到了爆炸圈边缘、三颗里有一颗白扔
 		var r := GRENADE_RADIUS * 0.6
@@ -383,6 +390,8 @@ func _throw_grenade(from: Vector3, land: Vector3, flight: float) -> void:
 	_fx_root.add_child(mi)
 	mi.top_level = true
 	mi.global_position = from
+	# 拖尾：不给榴弹加尾迹的话，远看就是三个不动的橙点
+	_attach_trail(mi, Color(1.0, 0.6, 0.25))
 	var arc := maxf(2.0, from.distance_to(land) * 0.22)
 	var tw := mi.create_tween()
 	tw.tween_method(func(k: float) -> void:
@@ -428,9 +437,12 @@ func _skill_snipe(from: Vector3, target: Node3D) -> void:
 	var at := aim
 	if not hit.is_empty():
 		at = hit.get("position", aim)
-	_beam(from, at, 0.055, Color(0.45, 1.0, 0.78), 0.22, 3.4)
-	Vfx.flash_light(_fx_root, at, Color(0.45, 1.0, 0.78), 5.0, 0.25, 12.0)
-	Vfx.burst(_fx_root, at, Color(0.45, 1.0, 0.78), 18, 1.0, 10.0, 0.4, -4.0)
+	var col := Color(0.45, 1.0, 0.78)
+	_muzzle_flash(col, 0.3)
+	_beam(from, at, 0.055, col, 0.22, 3.4)
+	Vfx.flash_light(_fx_root, at, col, 5.0, 0.25, 12.0)
+	Vfx.burst(_fx_root, at, col, 18, 1.0, 10.0, 0.4, -4.0)
+	Vfx.ring(_fx_root, at, Color(col.r, col.g, col.b, 0.85), 3.2, 0.28, false)
 	if not hit.is_empty() and _is_same_target(hit.get("collider"), target):
 		_damage(target, SNIPE_DAMAGE, at)
 	Vfx.shake(0.3, 0.16)
@@ -440,6 +452,7 @@ func _skill_snipe(from: Vector3, target: Node3D) -> void:
 func _skill_shred(from: Vector3, target: Node3D) -> void:
 	var base := (_aim_point(target) - from).normalized()
 	var total := 0.0
+	_muzzle_flash(Color(1.0, 0.82, 0.45), 0.3)
 	for i in SHRED_PELLETS:
 		var dir := _spread_dir(base, SHRED_SPREAD_DEG)
 		var to := from + dir * SHRED_RANGE
@@ -461,9 +474,45 @@ func _skill_shred(from: Vector3, target: Node3D) -> void:
 	Vfx.shake(0.4, 0.2)
 
 
-## 凯伊：轨道炮，一条线扫过去（线附近的所有目标都吃伤害）
+## 凯伊：轨道炮。先蓄力 0.28 s（聚能球 + 收束环 + 淡紫瞄准线），再打一条三层光柱。
+## 用户 2026-11-14：「加队友特效，特别是凯伊」—— 她这条是队里唯一的「重炮」，
+## 做成有蓄力、有电弧、有全屏微闪才配得上。
 func _skill_rail(from: Vector3, target: Node3D) -> void:
-	var dir := (_aim_point(target) - from).normalized()
+	var aim := _aim_point(target)
+	var col := Color(0.72, 0.4, 1.0)
+	var orb := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.16
+	sm.height = 0.32
+	orb.mesh = sm
+	var mat := _glow_mat(col)
+	orb.material_override = mat
+	orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_fx_root.add_child(orb)
+	orb.top_level = true
+	orb.global_position = from
+	orb.scale = Vector3.ONE * 0.2
+	var tw := orb.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(orb, "scale", Vector3.ONE * 1.7, RAIL_CHARGE) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(mat, "emission_energy_multiplier", 7.0, RAIL_CHARGE)
+	tw.chain().tween_callback(func() -> void:
+		if is_instance_valid(orb):
+			orb.queue_free()
+		_rail_fire(from, aim))
+	# 蓄力期的瞄准线（打出去之前先让玩家看见她要打哪）
+	var dir := (aim - from).normalized()
+	_beam(from, aim + dir * 12.0, 0.012, Color(0.7, 0.5, 1.0, 0.55), RAIL_CHARGE, 1.2)
+	Vfx.ring(_fx_root, from, Color(0.72, 0.4, 1.0, 0.9), 1.2, RAIL_CHARGE, false)
+	Vfx.flash_light(_fx_root, from, col, 3.0, RAIL_CHARGE, 8.0)
+
+
+## 轨道炮本体：三层光柱 + 沿束电弧 + 枪口冲击环 + 终点爆点 + 全屏微紫闪
+func _rail_fire(from: Vector3, aim: Vector3) -> void:
+	if _fx_root == null or not is_instance_valid(_fx_root):
+		return
+	var dir := (aim - from).normalized()
 	var end := from + dir * RAIL_RANGE
 	# 光束先撞墙就截断在墙面上
 	var wh := _ray(from, end)
@@ -483,12 +532,29 @@ func _skill_rail(from: Vector3, target: Node3D) -> void:
 	var col := Color(0.72, 0.4, 1.0)
 	for t in victims:
 		_damage(t, RAIL_DAMAGE, _aim_point(t))
-	_beam(from, end, 0.16, col, 0.35, 4.2)
-	_beam(from, end, 0.05, Color(1.0, 0.92, 1.0), 0.18, 6.0)
-	Vfx.flash_light(_fx_root, from, col, 6.0, 0.3, 20.0)
-	if not victims.is_empty():
-		Vfx.burst(_fx_root, _aim_point(victims[0]), col, 26, 1.4, 14.0, 0.5, -4.0)
-	Vfx.shake(0.55, 0.3)
+	# 外辉 → 主束 → 白芯
+	_beam(from, end, 0.42, Color(0.5, 0.18, 1.0, 0.5), 0.5, 2.2)
+	_beam(from, end, 0.15, col, 0.38, 4.4)
+	_beam(from, end, 0.045, Color(1.0, 0.95, 1.0), 0.22, 7.0)
+	# 沿光束随机几簇小电弧
+	for i in 7:
+		var t := randf_range(0.08, 0.96)
+		var p := from.lerp(end, t)
+		var j := Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1))
+		if j.length() < 0.01:
+			j = Vector3.UP
+		j = j.normalized() * randf_range(0.7, 1.8)
+		_beam(p, p + j, 0.028, Color(0.85, 0.7, 1.0), 0.14, 4.0)
+	# 枪口 / 终点
+	Vfx.ring(_fx_root, from, Color(0.72, 0.4, 1.0, 0.95), 3.0, 0.32, false)
+	Vfx.burst(_fx_root, from, col, 20, 1.2, 12.0, 0.4, -3.0)
+	Vfx.flash_light(_fx_root, from, col, 8.0, 0.35, 24.0)
+	var hit_at: Vector3 = aim if victims.is_empty() else _aim_point(victims[0])
+	Vfx.burst(_fx_root, hit_at, col, 34, 1.6, 16.0, 0.55, -4.0)
+	Vfx.ring(_fx_root, hit_at, Color(0.8, 0.6, 1.0, 0.9), 7.0, 0.4, false)
+	Vfx.flash_light(_fx_root, hit_at, col, 10.0, 0.35, 30.0)
+	Vfx.flash(Color(0.72, 0.5, 1.0), 0.12, 0.25)
+	Vfx.shake(0.7, 0.32)
 
 
 func _spread_dir(base: Vector3, deg: float) -> Vector3:
@@ -576,6 +642,86 @@ func _glow_mat(col: Color) -> StandardMaterial3D:
 	mat.emission = col
 	mat.emission_energy_multiplier = 1.8
 	return mat
+
+
+## 一张朝向相机的加色光斑（枪口焰 / 命中火花共用）。
+## 用四边形 + 软点贴图而不是 GPUParticles3D：连射时每秒要出十几个，
+## 建粒子系统太贵，一个 quad + 0.1 s 缩放淡出就够显眼。
+func _glow_quad(pos: Vector3, col: Color, size: float, life: float, grow := 1.9) -> void:
+	if _fx_root == null or not is_instance_valid(_fx_root):
+		return
+	var mi := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.0, 1.0)
+	mi.mesh = quad
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.albedo_texture = Vfx.soft_dot()
+	mat.albedo_color = col
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_fx_root.add_child(mi)
+	mi.top_level = true
+	mi.global_position = pos
+	mi.scale = Vector3.ONE * maxf(size, 0.02)
+	var tw := mi.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mi, "scale", Vector3.ONE * size * grow, life)
+	tw.tween_property(mat, "albedo_color:a", 0.0, life)
+	tw.chain().tween_callback(mi.queue_free)
+
+
+func _muzzle_flash(col: Color, size: float) -> void:
+	_glow_quad(muzzle_position(), col, size, 0.07)
+
+
+func _impact_spark(at: Vector3, col: Color, size: float) -> void:
+	_glow_quad(at, col, size, 0.1, 2.2)
+
+
+## 榴弹拖尾：一小束留在身后的加色软点（`local_coords = false` → 点停在原地）
+func _attach_trail(host: Node3D, col: Color) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.amount = 14
+	p.lifetime = 0.3
+	p.local_coords = false
+	p.emitting = true
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.visibility_aabb = AABB(Vector3(-6, -6, -6), Vector3(12, 12, 12))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.05
+	pm.direction = Vector3.UP
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.5
+	pm.gravity = Vector3.ZERO
+	pm.scale_min = 0.09
+	pm.scale_max = 0.2
+	pm.color = col
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 1.0, 1.0, 0.9))
+	ramp.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = ramp
+	pm.color_ramp = gt
+	p.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.0, 1.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = Vfx.soft_dot()
+	quad.material = mat
+	p.draw_pass_1 = quad
+	host.add_child(p)
+	return p
 
 
 ## 开过几枪 —— 自检用

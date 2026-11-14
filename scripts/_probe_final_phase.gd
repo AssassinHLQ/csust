@@ -282,7 +282,8 @@ func _run() -> void:
 	# 出图：小桃的榴弹在空中 + 凯伊的轨道炮同时放，留一张「技能」的证据图
 	party_guns[0].call("debug_force_skill", _boss)
 	party_guns[3].call("debug_force_skill", _boss)
-	await _wait(0.2)
+	# 凯伊的轨道炮要蓄力 0.28 s 才出光柱，截图等它打出去（光柱本身停 0.5 s）
+	await _wait(0.42)
 	await _shot("20_party_skills", stand + Vector3(7.0, 13.0, 19.0),
 		stand + Vector3(9.0, 5.0, 0.0))
 

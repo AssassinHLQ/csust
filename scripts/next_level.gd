@@ -652,16 +652,16 @@ func _on_final_cleared() -> void:
 const PARTY := [
 	{"name": "小桃", "model": "res://models/companions/Momoi.glb",
 		"slot": Vector3(-2.6, 0.0, 1.6), "skill": CompanionGun.Skill.GRENADE,
-		"color": Color(1.0, 0.62, 0.78)},
+		"color": Color(1.0, 0.62, 0.78), "width": 0.014},
 	{"name": "小绿", "model": "res://models/companions/Midori.glb",
 		"slot": Vector3(2.6, 0.0, 1.6), "skill": CompanionGun.Skill.SNIPE,
-		"color": Color(0.45, 1.0, 0.78)},
+		"color": Color(0.45, 1.0, 0.78), "width": 0.016},
 	{"name": "柚子", "model": "res://models/companions/Yuzu.glb",
 		"slot": Vector3(-3.6, 0.0, -1.8), "skill": CompanionGun.Skill.SHRED,
-		"color": Color(1.0, 0.82, 0.45)},
+		"color": Color(1.0, 0.82, 0.45), "width": 0.012},
 	{"name": "凯伊", "model": "res://models/companions/Kei_ext.glb",
 		"slot": Vector3(3.6, 0.0, -1.8), "skill": CompanionGun.Skill.RAIL,
-		"color": Color(0.72, 0.4, 1.0)},
+		"color": Color(0.72, 0.4, 1.0), "width": 0.03},
 ]
 
 var _party: Array[Node3D] = []
@@ -688,6 +688,7 @@ func _spawn_party() -> void:
 		if gun != null:
 			gun.set("skill", int(spec["skill"]))
 			gun.set("tracer_color", spec["color"])
+			gun.set("tracer_width", float(spec["width"]))
 		add_child(c)
 		var off: Vector3 = spec["slot"]
 		var at := _player.global_position + off
