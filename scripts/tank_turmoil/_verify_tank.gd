@@ -125,6 +125,10 @@ func _run() -> void:
 	_check(not bool(_tank.get("round_over")), "爱丽丝出局后继续观战")
 	_check(int(_tank.call("homing_target", 1, tanks[2]["pos"])) == 2, "AI 能追踪其他存活角色")
 	for i in [1, 2, 3]: _tank.call("tank_was_hit", i)
+	var momoi_volume := INF
+	for child in _tank.get_children():
+		if child is AudioStreamPlayer and child.stream == defeat: momoi_volume = child.volume_db
+	_check(is_equal_approx(momoi_volume, linear_to_db(maxf(0.0001, float(_tank.get("master_volume")) * float(_tank.get("sfx_volume")))) - 3.0), "桃井败北语音遵循音效音量，不再额外放大")
 	_check(bool(_tank.get("round_over")) and str(_tank.get("round_message")).contains("凯伊"), "最后存活的凯伊获胜")
 	_check(int(_tank.get("scores")[4]) == 1, "胜场记在获胜角色名下")
 	var before_win_voice := 0

@@ -1632,7 +1632,7 @@ func spawn_armor_hit(pos: Vector2, color: Color) -> void:
 			"color": color if i % 2 else Color("ffffff")})
 
 func spawn_explosion(pos: Vector2, color: Color, defeat_sound: AudioStream = null) -> void:
-	if defeat_sound != null: play_sound(defeat_sound, 1.0, 3.0)
+	if defeat_sound != null: play_sound(defeat_sound)
 	else: play_sound(sound_explode, rng.randf_range(0.88, 1.05))
 	for i in 26:
 		var a := rng.randf_range(0.0, TAU)
