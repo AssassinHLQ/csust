@@ -935,7 +935,7 @@ func _hide_message() -> void:
 var campus_ggs_mode := false
 
 
-## 校园泼溅总开关。现在默认**开**（走 GDGS）。
+## 校园泼溅总开关。默认开启，由 Campus 的流式适配器选择渲染器。
 var campus_splat_enabled := true
 
 
@@ -970,7 +970,10 @@ func _maybe_enable_campus_ggs() -> void:
 		return
 	# 走 GGS 才挂 `CampusGGS`，并把 GDGS 那份藏起来/放掉（`campus_ggs.gd` 自己会处理）
 	if not _wants_campus_ggs():
-		print("[NextLevel] 校园泼溅：GDGS（Compute）全量 615 万点，不切窗口、不用粗层 LOD")
+		var renderer := "gdgs_direct"
+		if is_instance_valid(_campus) and _campus.has_method("debug_state"):
+			renderer = str(_campus.call("debug_state").get("renderer", renderer))
+		print("[NextLevel] 校园泼溅：", renderer)
 		return
 	for a in OS.get_cmdline_user_args():
 		if a == "--ggs-campus=off" or a == "--no-ggs-campus":

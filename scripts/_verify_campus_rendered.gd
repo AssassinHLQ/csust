@@ -1,7 +1,8 @@
 extends SceneTree
 ## Real-time, rendered production-campus acceptance. Launch only on a private desktop.
 const OffWin := preload("res://scripts/offscreen_window.gd")
-const OUT := "res://_tools/_tmp/rendered_collision/gameplay"
+var _out := "res://_tools/_tmp/rendered_collision/gameplay"
+var _renderer_samples: Dictionary = {}
 var _world: Node3D
 var _player: CharacterBody3D
 var _campus: Node3D
@@ -109,7 +110,13 @@ func _shot(label: String) -> void:
 	var picture := root.get_texture().get_image()
 	_check(picture != null and not picture.is_empty(), label + " captures rendered GPU output")
 	if picture != null and not picture.is_empty():
-		picture.save_png(OUT + "/" + label + ".png")
+		picture.save_png(_out + "/" + label + ".png")
+	if _campus.has_method("debug_state"):
+		_renderer_samples[label] = _campus.call("debug_state")
+		_renderer_samples[label]["camera_transform"] = str(root.get_camera_3d().global_transform)
+		if is_instance_valid(_campus.get("splat_node")):
+			_renderer_samples[label]["splat_transform"] = str(_campus.get("splat_node").global_transform)
+		print("[rendered] RENDERER ", label, " ", JSON.stringify(_renderer_samples[label]))
 
 func _test_revive(airborne: bool) -> void:
 	_release()
@@ -153,7 +160,10 @@ func _on_health(current: float, maximum: float) -> void:
 func _run() -> void:
 	_started_us = Time.get_ticks_usec()
 	AudioServer.set_bus_mute(0, true)
-	DirAccess.make_dir_recursive_absolute(OUT)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--rendered-out="):
+			_out = arg.trim_prefix("--rendered-out=")
+	DirAccess.make_dir_recursive_absolute(_out)
 	preload("res://scripts/render_env.gd").capture_override = true
 	# Only window placement differs from production defaults; this settings
 	# write is confined to the launcher's isolated APPDATA test profile.
@@ -204,9 +214,15 @@ func _run() -> void:
 		await create_timer(1.0).timeout
 		print("[rendered] loading campus seconds=", (Time.get_ticks_usec() - wait_us) / 1000000.0)
 	_load_seconds = float(Time.get_ticks_usec() - loaded_us) / 1000000.0
-	_check(_campus.call("is_ready"), "production GDGS campus finishes loading", _load_seconds)
+	_check(_campus.call("is_ready"), "production campus finishes loading", _load_seconds)
 	await create_timer(2.0).timeout
 	await _shot("campus_arrival")
+	if _renderer_samples.has("campus_arrival") and _renderer_samples["campus_arrival"].get("renderer") == "godot-gsplat-stream":
+		var stream: Dictionary = _renderer_samples["campus_arrival"]
+		_check(stream.get("world_transform_identity", false), "stream pack keeps original world coordinates")
+		_check(int(stream.get("resident_splats", 0)) > 0, "stream renderer has resident splats", stream)
+		_check(int(stream.get("io_failures", -1)) == 0, "stream pack reads without IO failures")
+		_check(int(stream.get("capacity_slots", 0)) <= int(stream["budget_nodes"]) + 16, "stream allocation respects node budget")
 	await _test_revive(false)
 	await _test_revive(true)
 	_set_phase("mech_descent")
@@ -244,12 +260,46 @@ func _run() -> void:
 			sum_ms += float(value)
 		performance[label] = {"frames": frames.size(), "average_fps": frames.size() * 1000.0 / sum_ms, "p50_ms": frames[int((frames.size()-1)*.5)], "p95_ms": frames[int((frames.size()-1)*.95)], "p99_ms": frames[int((frames.size()-1)*.99)], "max_ms": frames[-1]}
 	var report := {"checks": _checks, "passed": _checks.size()-failed.size(), "failed": failed.size(), "resolution": str(root.size), "window_size": str(DisplayServer.window_get_size()), "gpu": RenderingServer.get_video_adapter_name(), "fps_cap": Engine.max_fps, "load_seconds": _load_seconds, "performance": performance, "seconds": (Time.get_ticks_usec()-_started_us)/1000000.0, "limitations": "Isolated desktop, real-time default graphics, combat frozen, other applications may share GPU; not a packaged-build or boss-battle benchmark."}
-	var file := FileAccess.open(OUT + "/report.json", FileAccess.WRITE)
+	report["renderer_samples"] = _renderer_samples
+	var file := FileAccess.open(_out + "/report.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(report, "\t"))
 	file.close()
 	print("[rendered] PERFORMANCE ", JSON.stringify(performance))
 	print("[rendered] RESULT %d passed / %d failed" % [report["passed"], report["failed"]])
 	_world.queue_free()
 	await process_frame
+	var selector := preload("res://addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd")
+	selector.release_gpu()
+	await process_frame
+	var manager: Variant = GaussianRenderManager.get_instance()
+	_check(manager == null or not manager._gpu_state_cache.has_render_states(), "scene change releases stream render states")
+	if OS.get_cmdline_user_args().has("--stream-reentry"):
+		var again := (load("res://scenes/campus_venue.tscn") as PackedScene).instantiate() as Node3D
+		again.set("hide_inside_aabb", AABB())
+		root.add_child(again)
+		var camera := Camera3D.new()
+		camera.position = Vector3(-62, 8, -151)
+		root.add_child(camera)
+		camera.current = true
+		var reentry_start := Time.get_ticks_usec()
+		while not again.call("is_ready") and Time.get_ticks_usec() - reentry_start < 10000000:
+			await process_frame
+		await create_timer(1.5).timeout
+		_check(again.call("is_ready"), "same stream pack loads again after GPU purge")
+		manager = GaussianRenderManager.get_instance()
+		_check(manager != null and manager._gpu_state_cache.has_render_states(), "same stream pack rebuilds GPU states after purge")
+		again.queue_free()
+		camera.queue_free()
+		await process_frame
+		selector.release_gpu()
+	# Cleanup and reentry assertions are also part of the saved report.
+	failed = _checks.filter(func(c: Dictionary) -> bool: return not c["ok"])
+	report["checks"] = _checks
+	report["passed"] = _checks.size() - failed.size()
+	report["failed"] = failed.size()
+	file = FileAccess.open(_out + "/report.json", FileAccess.WRITE)
+	file.store_string(JSON.stringify(report, "\t"))
+	file.close()
+	print("[rendered] FINAL RESULT %d passed / %d failed" % [report["passed"], report["failed"]])
 	await create_timer(.5).timeout
 	quit(0 if failed.is_empty() else 1)

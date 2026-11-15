@@ -331,6 +331,9 @@ __pycache__/
 !/splatdata/campus_sog/frame.json
 !/splatdata/campus_sog/chunks_full.json
 
+# Derived local stream payload; export inclusion is controlled independently.
+/splatdata/campus_stream/*.nodes.bin
+
 # ---- 泼溅运行时缓存（2026-11-14）----
 # `_cache/splat/*.gdgsrt` 是 GDGS 解码后的运行时缓冲（校园 1.55 GB + 画室 0.7 GB），
 # 可随时从 sogdata 重新生成，**绝不能入库**（2026-11-14 实测工作区里有 2.1 GB）。

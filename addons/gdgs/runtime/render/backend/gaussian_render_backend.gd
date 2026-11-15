@@ -36,6 +36,16 @@ func attach_node(_node: Node) -> void:
 func detach_node(_node: Node) -> void:
 	pass
 
+## gsplat-stream: a node backed by a disk-resident LOD pack entered the tree.
+## Separate from attach_node because the payload never merges into the scene's
+## splat buffer; the backend only needs a residency provider, not records.
+func attach_stream_node(_node: Node) -> void:
+	pass
+
+## gsplat-stream: the streaming node is leaving the tree.
+func detach_stream_node(_node: Node) -> void:
+	pass
+
 ## The node's assigned GaussianResource changed (or its contents changed).
 func notify_resource_changed(_node: Node) -> void:
 	pass
@@ -56,12 +66,6 @@ func notify_lighting_changed(_node: Node) -> void:
 func shutdown() -> void:
 	pass
 
-## Release backend-wide GPU buffers **now**, without tearing the backend down.
-##
-## Scene changes call this between freeing the old scene and loading the new one:
-## a backend may keep buffers in a node parented to the scene root (the Compute
-## manager does), and those outlive the scene. Default is a no-op; backends that
-## own such buffers override it. Must be safe to call at any time and when
-## nothing was ever attached.
+## Persistent-buffer cleanup between freeing and loading scenes.
 func release_gpu() -> void:
 	pass

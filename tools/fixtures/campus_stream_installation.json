@@ -1,0 +1,184 @@
+{
+  "source_head": "448e0f6a57bbffb6ca19b6bde3005c7eeb5178a3",
+  "local_lod_changes_included": true,
+  "copied": [
+    {
+      "path": "addons/gdgs/importers/builders/gaussian_packed_builder.gd",
+      "sha256": "2736ee7a9b24f4a2e1be7b8fd8062e2b8ee128353407e4fba3bf4c985a2c6598"
+    },
+    {
+      "path": "addons/gdgs/importers/decoders/gltf_decoder.gd",
+      "sha256": "d6ed5e8e9b4bcc2b9921e946bd5e4582661a88ac65c20b7aa21e860b17c8b4b4"
+    },
+    {
+      "path": "addons/gdgs/importers/decoders/nurec_decoder.gd",
+      "sha256": "afdb82c6478eb0ce443ec5d1e61d00e4fc4b259d16ca992e969d7a79b3313b0e"
+    },
+    {
+      "path": "addons/gdgs/importers/gaussian_import_plugin.gd",
+      "sha256": "d9b74fea2cb8fb1da80248c46a784425956773032d2c126421d85dde6624b452"
+    },
+    {
+      "path": "addons/gdgs/importers/parsers/msgpack_reader.gd",
+      "sha256": "c3cc742b2196a4a8a6a8eb3687a1a8265d228ef56ac0fcdd058e02d084731f64"
+    },
+    {
+      "path": "addons/gdgs/NOTICE.md",
+      "sha256": "dff2006254cb67e48a2f983ecf5a6409dd8acaef5c3fa07ef5b3684a6d307ecf"
+    },
+    {
+      "path": "addons/gdgs/plugin.cfg",
+      "sha256": "dc92a42446e70d43e761cfaeb0ed32b38a1baa98b3cef2156ce231fe328bc900"
+    },
+    {
+      "path": "addons/gdgs/runtime/lighting/gaussian_light_rig.gd",
+      "sha256": "9cac0e04b6b67d52bc49400eee30aa6bf572c7aab93aaa997b39beb64ac46b5f"
+    },
+    {
+      "path": "addons/gdgs/runtime/nodes/gaussian_splat_node.gd",
+      "sha256": "c5db0d039740c2e050ed19b9f0c744d595a34135664ec75ba54ffc8382897288"
+    },
+    {
+      "path": "addons/gdgs/runtime/nodes/gaussian_stream_instance_group.gd",
+      "sha256": "19eb386e18f8db20605fa1872039e50d46ef684bc09ffac97d4924836259646b"
+    },
+    {
+      "path": "addons/gdgs/runtime/nodes/gaussian_stream_node.gd",
+      "sha256": "8c310a950c1886d257c1eee25d61c59e6176ba7b522b5a39f67331d9e13cf9cc"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd",
+      "sha256": "5fbda19f98d9ca84968f8a2d138c052f97823110ec0b6465f67f94dffb04cd1c"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/backend/gaussian_render_backend.gd",
+      "sha256": "8208ebaed9c15357e27b121fdc4582cd4600c59df491b464b1e8bb6bd930e52a"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_compute_backend.gd",
+      "sha256": "116e65f6fe4fc0638cc39b876fedd052ee800e2f3b491e91a57e960dc78cc8ca"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_gpu_state_cache.gd",
+      "sha256": "2118967299c2b507562eceda23218a08fef8f6d7e780ce78d7e447cf1157bf5f"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_memory_plan.gd",
+      "sha256": "9f67555853a09e26046785e771232fcdde7af3b470115b010b65b92b3c726dc6"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_render_manager.gd",
+      "sha256": "5a52eac53871028ebc81b9a8e01bfcb353845bbfff1da2f2a2295f77f2929ebe"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_renderer.gd",
+      "sha256": "30662c1e4618f4370e93fc07f90cac74274551ccbe979936875fff8e3b62f20a"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_rendering_device_context.gd",
+      "sha256": "807c81d6661077ac9b88de8fd939da2267a291abaf1262022bab64687f35784e"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_scene_registry.gd",
+      "sha256": "f611b69a5743e3cfb9c41262455ff13611621226653a1f494122a4a6d3affab3"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_shared_workspace.gd",
+      "sha256": "ca7bf848d9e029815272cdacb3dd56561d4d26561c7936c8d5db3caa444380e7"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_sort_budget.gd",
+      "sha256": "4ce35b33f192869190fd55bafbf9941b817911dca6e54079e45a9c650ea350e8"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/gaussian_visible_budget.gd",
+      "sha256": "200799328dffe57f911139264715bc6cb264f8a235d1b15933466b3d8eedc49b"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/shaders/gsplat_dispatch.glsl",
+      "sha256": "02c0f354d763d8e7dcc0885f1d6f525380f4ddb230349f0c4b703481be8ab659"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/shaders/gsplat_projection.glsl",
+      "sha256": "0c1a3229e829df47c1f055d6be4ac7d5e346b82fd1a2231a96cc1e1574f35002"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/shaders/gsplat_render.glsl",
+      "sha256": "34098eccae9e22441676ad40ccbdd57b86ed3d6d2842392480db232ea0ec21f7"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/compute/shaders/gsplat_render_t8.glsl",
+      "sha256": "e9915cd952ec02e4fe4cf2f24ad7c741622252d423432a97ea6fd83919b26c89"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/raster/materials/gaussian_raster.gdshader",
+      "sha256": "8e6c626d2ac1150b648c0935901760aca85de4e1471fbd0da3268ab3fb60b5a9"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/raster/raster_render_backend.gd",
+      "sha256": "f11709f665907119febd1982543874802389335b1bcf220b2d32166c1f197813"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/raster/raster_sort_job.gd",
+      "sha256": "b76c28947215e883df80994a4098f2c7ac59d5205ba29e1b1a98318ff90687c0"
+    },
+    {
+      "path": "addons/gdgs/runtime/render/raster/raster_sorter.gd",
+      "sha256": "c110af9b42a17b93873c549bf604e66e2798ce89a5c208d3980560374293593b"
+    },
+    {
+      "path": "addons/gdgs/runtime/resources/gaussian_resource.gd",
+      "sha256": "c65da9278405bee3c93ebb01e22216bca8a004f4934fbfb0481b15f1747fbe7d"
+    },
+    {
+      "path": "addons/gdgs/runtime/resources/gaussian_sh_quantizer.gd",
+      "sha256": "7fa3898f167aa0ad9548cb95bb559dde3dc234daae021f6a5dbfb3909f4ac714"
+    },
+    {
+      "path": "addons/gdgs/runtime/stream/gaussian_stream_instance_runtime.gd",
+      "sha256": "ea6fc60c652a491e4828c05802156380ccbd7112fa5b9b75b6f52d0e98304bc6"
+    },
+    {
+      "path": "addons/gdgs/runtime/stream/gaussian_stream_lod.gd",
+      "sha256": "eb75206a3db111ffed2c6fc22bb9915184ede3cdb458fadb9934cb346e05d23d"
+    },
+    {
+      "path": "addons/gdgs/runtime/stream/gaussian_stream_pack.gd",
+      "sha256": "bfeb8884af869779f9f15022f43c8ae89447ef15cc5d20049ac2f3b730b0293e"
+    },
+    {
+      "path": "addons/gdgs/runtime/stream/gaussian_stream_runtime.gd",
+      "sha256": "8418a39f5193be175cbc54c0e75fcb2a9c606b97e649736b66a5f341320a8169"
+    },
+    {
+      "path": "addons/gdgs/third_party/GodotGaussianSplatting.LICENSE",
+      "sha256": "b201c376a2da0cd55c29a18db507744eee447723fe1d495f50af2d180b24384a"
+    },
+    {
+      "path": "addons/gdgs/third_party/splat-transform.LICENSE",
+      "sha256": "42fa51ddd556be151a29f381fb97ee975825dcc454e805ea3ea9c079cca04d34"
+    },
+    {
+      "path": "addons/gdgs/third_party/vulkan_radix_sort.LICENSE",
+      "sha256": "32f91cf10528c086854c5b7235ae1915304bb7fdc1379c6b61f4f243a4ca89c8"
+    }
+  ],
+  "game_local_patches": [
+    "Stream runtime publishes eviction moves before assigning completed IO",
+    "GPU consumer acknowledges only its last consumed revision",
+    "Remove trailing whitespace in copied glTF decoder, tile8 shader and new import metadata",
+    "Preserve SceneFlow GPU release API and clear both canonical/streaming registry and shared workspace between scenes"
+  ],
+  "campus_payload_sha256": "8f4852c3062e4360e6b52a6211cb54d53245da915b477b3d564f3cd61f18f6d0",
+  "hashes_describe": "Source snapshot before game-local fixes and whitespace cleanup",
+  "preserved_game_extensions": [
+    "runtime/lighting/gaussian_light_rig.gd",
+    "runtime/nodes/gaussian_splat_node.gd",
+    "runtime/render/backend/gaussian_backend_selector.gd",
+    "runtime/render/raster/materials/gaussian_raster.gdshader",
+    "runtime/render/raster/raster_render_backend.gd",
+    "runtime/render/raster/raster_sort_job.gd",
+    "runtime/render/raster/raster_sorter.gd",
+    "runtime/render/compute/gaussian_rendering_device_context.gd"
+  ]
+}

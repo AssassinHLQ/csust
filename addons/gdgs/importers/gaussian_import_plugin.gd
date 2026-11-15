@@ -7,6 +7,8 @@ const StandardPlyDecoder = preload("res://addons/gdgs/importers/decoders/standar
 const CompressedPlyDecoder = preload("res://addons/gdgs/importers/decoders/compressed_ply_decoder.gd")
 const SplatDecoder = preload("res://addons/gdgs/importers/decoders/splat_decoder.gd")
 const SogDecoder = preload("res://addons/gdgs/importers/decoders/sog_decoder.gd")
+const GltfDecoder = preload("res://addons/gdgs/importers/decoders/gltf_decoder.gd")
+const NurecDecoder = preload("res://addons/gdgs/importers/decoders/nurec_decoder.gd")
 
 func _get_priority() -> float:
 	return 2.0
@@ -21,10 +23,10 @@ func _get_format_version() -> int:
 	return 5
 
 func _get_visible_name() -> String:
-	return "Gaussian Splat (.ply/.compressed.ply/.splat/.sog)"
+	return "Gaussian Splat (.ply/.compressed.ply/.splat/.sog/.gltf/.glb/.usdz)"
 
 func _get_recognized_extensions() -> PackedStringArray:
-	return ["ply", "splat", "sog"]
+	return ["ply", "splat", "sog", "gltf", "glb", "usdz"]
 
 func _get_save_extension() -> String:
 	return "res"
@@ -65,10 +67,14 @@ func _import(source_file, save_path, options, platform_variants, gen_files) -> E
 
 func _decode_source(source_file: String) -> Dictionary:
 	var lower_source := source_file.to_lower()
+	if lower_source.ends_with(".gltf") or lower_source.ends_with(".glb"):
+		return GltfDecoder.decode(source_file)
 	if lower_source.ends_with(".splat"):
 		return SplatDecoder.decode(source_file)
 	if lower_source.ends_with(".sog"):
 		return SogDecoder.decode(source_file)
+	if lower_source.ends_with(".usdz"):
+		return NurecDecoder.decode(source_file)
 	if lower_source.ends_with(".ply"):
 		var header := BinaryPlyReader.read(source_file, false)
 		if not header.get("ok", false):

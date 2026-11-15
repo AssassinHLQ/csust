@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cpf1wfo8wyrm2"
+path="res://.godot/imported/gsplat_dispatch.glsl-9b81d695fbbf4f1d7e93cdba8fed02ae.res"
+
+[deps]
+
+source_file="res://addons/gdgs/runtime/render/compute/shaders/gsplat_dispatch.glsl"
+dest_files=["res://.godot/imported/gsplat_dispatch.glsl-9b81d695fbbf4f1d7e93cdba8fed02ae.res"]
+
+[params]
