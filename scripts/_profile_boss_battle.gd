@@ -7,6 +7,8 @@ var _boss: Node3D
 var _camera: Camera3D
 var _battle_results: Dictionary = {}
 var _battle_seconds := 6.0
+var _battle_fps := 60
+var _disable_vsync := false
 var _shots := false
 var _look_away := false
 var _walking := false
@@ -17,6 +19,8 @@ func _initialize() -> void:
 	_out = "res://_tools/_tmp/boss_performance/baseline"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--battle-seconds="): _battle_seconds = float(arg.trim_prefix("--battle-seconds="))
+		if arg.begins_with("--battle-fps="): _battle_fps = clampi(int(arg.trim_prefix("--battle-fps=")), 0, 240)
+		if arg == "--battle-no-vsync": _disable_vsync = true
 		if arg == "--battle-shots": _shots = true
 	super._initialize()
 	ProjectSettings.set_setting("gsplat/rendering/static_frame_cache", true)
@@ -27,6 +31,8 @@ func _run() -> void:
 	preload("res://scripts/render_env.gd").capture_override = true
 	preload("res://scripts/game_settings.gd").set_value("window_mode", "windowed")
 	preload("res://scripts/game_settings.gd").set_value("boss_attack", true)
+	preload("res://scripts/game_settings.gd").set_value("fps_limit", float(_battle_fps))
+	if _disable_vsync: preload("res://scripts/game_settings.gd").set_value("vsync", false)
 	await OffWin.apply(self, Vector2i(1600, 900))
 	_world = (load("res://scenes/next_level.tscn") as PackedScene).instantiate()
 	root.add_child(_world)
@@ -52,12 +58,16 @@ func _run() -> void:
 	await create_timer(2.0).timeout
 	await OffWin.apply(self, Vector2i(1600, 900))
 	_check(_player.is_on_floor() and _player.position.y > -5.0, "player starts on verified scanned street")
+	_check(Engine.max_fps == _battle_fps, "requested frame cap applies exactly")
+	_check(is_equal_approx(root.scaling_3d_scale, 1.0), "native 3D rendering scale")
+	if _disable_vsync:
+		_check(DisplayServer.window_get_vsync_mode() == DisplayServer.VSYNC_DISABLED, "VSync disabled for capacity measurement")
 	# Real players defeat loaded dinosaurs. Killing unbooted targets schedules
 	# their delayed model creation in the middle of the final boss sample.
 	for node in get_nodes_in_group("bosses"):
 		if _world.is_ancestor_of(node): node.call("_boot")
 	await create_timer(1.0).timeout
-	# Keep the production 60 FPS cap for end-to-end frame pacing.
+	# Retain the requested frame cap throughout production combat.
 	for node in get_nodes_in_group("bosses"):
 		if _world.is_ancestor_of(node): node.call("take_damage", 1.0e9)
 	var spawn_start := Time.get_ticks_msec()
@@ -130,8 +140,9 @@ func _run() -> void:
 	var failed := _checks.filter(func(c: Dictionary) -> bool: return not c.ok)
 	var report := {"passed": _checks.size() - failed.size(), "failed": failed.size(), "checks": _checks,
 		"resolution": str(root.size), "fps_cap": Engine.max_fps, "gpu": RenderingServer.get_video_adapter_name(),
+		"vsync_mode": DisplayServer.window_get_vsync_mode(), "render_scale": root.scaling_3d_scale,
 		"campus": state, "samples": _battle_results,
-		"scope": "Production finale, four active companions, live attacks and collision; scripted casts and camera, raised test health, 60 FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots occur outside samples. Not manual gameplay or packaged executable."}
+		"scope": "Production finale, four active companions, live attacks and collision; scripted casts and camera, raised test health, %d FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots occur outside samples. Measures rendering capacity, not physical display refresh or packaged executable." % Engine.max_fps}
 	FileAccess.open(_out + "/report.json", FileAccess.WRITE).store_string(JSON.stringify(report, "\t"))
 	print("[boss-profile] RESULT ", report.passed, " passed / ", report.failed, " failed")
 	quit(0 if failed.is_empty() else 1)
@@ -196,6 +207,12 @@ func _sample_battle(label: String, seconds: float) -> void:
 	result["pipelines_before"] = pipelines_before
 	result["pipelines_after"] = _pipeline_counts()
 	result["spikes_over_40ms"] = spikes
+	if _battle_fps > 0:
+		var budget_ms := 1000.0 / _battle_fps
+		result["frame_budget_ms"] = budget_ms
+		result["frames_over_budget"] = frames.filter(func(ms: float) -> bool: return ms > budget_ms).size()
+		# A 5% tolerance separates scheduling jitter around the cap from material misses.
+		result["frames_over_budget_5pct"] = frames.filter(func(ms: float) -> bool: return ms > budget_ms * 1.05).size()
 	_battle_results[label] = result
 	print("[boss-profile] SAMPLE ", label, " ", JSON.stringify(result))
 	if _shots:
@@ -204,7 +221,11 @@ func _sample_battle(label: String, seconds: float) -> void:
 
 func _statistics(values: Array) -> Dictionary:
 	var result := super._statistics(values)
-	if not values.is_empty(): result["max"] = values.max()
+	if not values.is_empty():
+		result["max"] = values.max()
+		var sorted := values.duplicate()
+		sorted.sort()
+		result["p99"] = sorted[int((sorted.size() - 1) * .99)]
 	return result
 
 func _pipeline_counts() -> Dictionary:
