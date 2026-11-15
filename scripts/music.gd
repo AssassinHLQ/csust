@@ -101,7 +101,8 @@ const TRACKS := {
 	# 素材：「碧蓝档案OST Vol.1（320K）」P158「Encroached Sky（主线最终篇～主题BGM）」。
 	# ⚠️ 源是 320K mp3，用 ffmpeg 转 ogg（libvorbis q5，44.1 kHz 立体声）：
 	#    2026-11-15 按用户要求裁掉末尾 2.85177 s 的低音量尾段/静音：
-	#    119.11837 → 116.26660 s（1:56.27），保留前奏与正文，不增加淡化。
+	#    119.11837 → 116.26660 → 112.500 s，再次移除明显变轻的衰减尾段。
+	#    保留前奏与正文，不增加淡化。tools/trim_boss_music.py 可复现并刷新导入缓存。
 	#    循环点仍由 `.import` 的 `loop=true` 控制（从头接）。
 	#    所以这里和 `art609` / `esports` 那两首「前奏播一次 + 跳回某点」不同，
 	#    `loop_offset` 是 0。
@@ -122,6 +123,23 @@ static var _cache := {}
 static var _missing := {}
 ## 开场 PV 期间**压住所有 BGM**（见 `hold()`）。
 static var _held := false
+static var _exclusive_owner: WeakRef
+static var _exclusive_track := ""
+
+## A battle owns its music until completion or scene removal.
+static func reserve(track: String, owner: Node) -> void:
+	_exclusive_owner = weakref(owner)
+	_exclusive_track = track
+	play(track)
+
+static func release(owner: Node) -> void:
+	if _exclusive_owner != null and _exclusive_owner.get_ref() == owner:
+		_exclusive_owner = null
+		_exclusive_track = ""
+
+static func _reserved() -> bool:
+	var owner := _exclusive_owner.get_ref() as Node if _exclusive_owner != null else null
+	return is_instance_valid(owner) and owner.is_inside_tree() and not owner.is_queued_for_deletion()
 
 
 ## 压住 / 放开所有 BGM。
@@ -149,6 +167,8 @@ static func is_held() -> bool:
 ##
 ## `fade` 默认 0（用户 2026-11-11：「不要淡入淡出了，所有的」）—— 直接出声。
 static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
+	if _reserved() and track != _exclusive_track:
+		return false
 	if not TRACKS.has(track):
 		push_warning("[Music] 没有这首：%s" % track)
 		return false
@@ -184,6 +204,8 @@ static func play(track: String, fade: float = FADE_DEFAULT) -> bool:
 
 ## 停。`fade` 秒内降到静音再真的 `stop()`；默认 0 = 立刻停。
 static func stop(fade: float = FADE_DEFAULT) -> void:
+	if _reserved():
+		return
 	# ⚠️ 这里必须用 `is_instance_valid`，不能写 `== null`：被 `queue_free()` 的节点
 	#    **引用还在、但不是 null**，读 `.playing` 会抛 "previously freed instance"。
 	#    退出游戏时 `GameDevRoom::_exit_tree()` 可能赶在 `MusicHost` 已经释放之后

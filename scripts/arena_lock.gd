@@ -121,7 +121,7 @@ func start(env: WorldEnvironment, sun: DirectionalLight3D,
 	_bind_ceiling_player(who)
 	_confine_below_ceiling(who)
 	_apply_doom_sky(env, sun)
-	Music.play(TRACK)
+	Music.reserve(TRACK, self)
 	_rise()
 	await get_tree().create_timer(RISE_SEC + RISE_STAGGER * 4.0 + 0.25).timeout
 	_spawn_boss(who, bounds)
@@ -264,6 +264,9 @@ func _restore_ceiling_player() -> void:
 
 
 func _exit_tree() -> void:
+	Music.release(self)
+	if Music.current() == TRACK:
+		Music.stop()
 	_restore_ceiling_player()
 
 
@@ -518,6 +521,7 @@ func _on_boss_died(_by: float) -> void:
 	if _released:
 		return
 	_released = true
+	Music.release(self)
 	print("[ArenaLock] 优香-恐怖倒下 → 解除封锁")
 	_lower_walls()
 	_restore_sky()
