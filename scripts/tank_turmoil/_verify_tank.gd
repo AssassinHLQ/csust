@@ -7,6 +7,13 @@ class AimProbe:
 		return not all_unsafe and shot_angle > 0.005
 	func play_sound(_stream: AudioStream, _pitch := 1.0, _gain_multiplier := 1.0) -> void:
 		pass
+
+class CornerProbe:
+	extends "res://scripts/tank_turmoil/tank_main.gd"
+	func clear_line(_a: Vector2, _b: Vector2) -> bool:
+		return false
+	func play_sound(_stream: AudioStream, _pitch := 1.0, _gain_multiplier := 1.0) -> void:
+		pass
 ## 坦克动荡 · 无窗口自检（2026-11-14）
 ##
 ## 用法：
@@ -235,6 +242,14 @@ func _run() -> void:
 		_tank.get("bullets").append({"pos": Vector2(800, 100 + i * 30), "vel": Vector2(0, -200), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
 	_tank.get("bullets").append({"pos": Vector2(470, 400), "vel": Vector2(-200, 0), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
 	_check((_tank.call("find_ai_evasion", battle[2].pos, battle[2].angle, 2) as Vector2).length_squared() > 0.0, "柚子优先预测靠近的危险子弹")
+	_check(bool(_tank.call("_yuzu_immediate_threat", 2)), "柚子立即识别近身来弹")
+	_tank.get("bullets").clear()
+	battle[2].danger_velocity = Vector2.UP
+	battle[2].danger_timer = 1.0
+	battle[2].cooldown = 0.0
+	battle[0].pos = Vector2(500, 400)
+	_tank.call("update_ai", 2, 1.0 / 60.0)
+	_check(not (_tank.get("bullets") as Array).is_empty(), "柚子躲避时仍能向可见敌人开火")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
@@ -272,6 +287,42 @@ func _run() -> void:
 	battle[4].danger_velocity = Vector2.UP
 	_tank.call("update_ai", 4, 0.05)
 	_check(not (_tank.get("bullets") as Array).is_empty(), "无限火力期间凯伊躲避时也会向可见敌人开火")
+	_tank.get("walls").clear()
+	_tank.get("walls").append(Rect2(450, 300, 5, 200))
+	battle[4].pos = Vector2(400, 400)
+	battle[4].angle = 0.0
+	_tank.call("move_tank_direct", 4, Vector2.RIGHT, 0.5, 300.0)
+	_check(float(battle[4].pos.x) < 450.0 and not bool(_tank.call("tank_hits_wall", battle[4].pos, battle[4].angle)), "强化凯伊大步移动不会穿过墙壁")
+	var corner := CornerProbe.new()
+	_tank.get_parent().add_child(corner)
+	corner.set_process(false)
+	corner.start_game(1)
+	corner.walls.clear()
+	corner.maze_links.clear()
+	var a := Vector2i(4, 3)
+	var b := Vector2i(4, 4)
+	var c := Vector2i(5, 4)
+	var d := Vector2i(6, 4)
+	for edge in [[a, b], [b, c], [c, d]]:
+		corner.maze_links[corner.edge_key(edge[0], edge[1])] = true
+	var center: Vector2 = corner.cell_center(b)
+	var cell_size: float = corner.CELL
+	corner.walls.append(Rect2(center.x + cell_size * 0.5 - 3.0, center.y - 1.5 * cell_size, 6.0, cell_size + 3.0))
+	corner.walls.append(Rect2(center.x - 0.5 * cell_size, center.y + 0.5 * cell_size - 3.0, 3.0 * cell_size, 6.0))
+	corner.build_prediction_mask()
+	for i in [0, 2, 3]: corner.tanks[i].alive = false
+	corner.tanks[1].pos = corner.cell_center(d)
+	corner.tanks[4].pos = corner.cell_center(a) + Vector2(8, 0)
+	corner.tanks[4].kei_rage = true
+	corner.tanks[4].ai_timer = 0.0
+	corner.tanks[4].danger_timer = 100.0
+	var corner_collision := false
+	for frame in 240:
+		corner.update_ai(4, 1.0 / 60.0)
+		corner_collision = corner_collision or corner.tank_hits_wall(corner.tanks[4].pos, corner.tanks[4].angle)
+	var corner_passed: bool = corner.tanks[4].pos.x > corner.cell_center(c).x + 5.0
+	_check(corner_passed and not corner_collision, "强化凯伊通过 L 型转角且不穿墙")
+	corner.free()
 	_tank.call("new_round")
 	_check(not bool(_tank.get("tanks")[4].kei_rage), "新一局重置无限火力")
 	var probe := AimProbe.new()

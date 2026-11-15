@@ -894,10 +894,13 @@ func move_tank_direct(index: int, stick: Vector2, delta: float, max_speed := 120
 	if tank_hits_wall(t.pos, float(t.angle)) or tank_hits_other_tank(index, t.pos, float(t.angle)): t.angle = old_angle
 	var motion := direction * strength * max_speed * delta
 	var p: Vector2 = t.pos
-	var candidate_x := Vector2(p.x + motion.x, p.y)
-	if not tank_hits_wall(candidate_x, float(t.angle)) and not tank_hits_other_tank(index, candidate_x, float(t.angle)): p.x += motion.x
-	var candidate_y := Vector2(p.x, p.y + motion.y)
-	if not tank_hits_wall(candidate_y, float(t.angle)) and not tank_hits_other_tank(index, candidate_y, float(t.angle)): p.y += motion.y
+	var steps := maxi(1, ceili(motion.length() / 4.0))
+	var step := motion / float(steps)
+	for i in steps:
+		var candidate_x := Vector2(p.x + step.x, p.y)
+		if not tank_hits_wall(candidate_x, float(t.angle)) and not tank_hits_other_tank(index, candidate_x, float(t.angle)): p.x += step.x
+		var candidate_y := Vector2(p.x, p.y + step.y)
+		if not tank_hits_wall(candidate_y, float(t.angle)) and not tank_hits_other_tank(index, candidate_y, float(t.angle)): p.y += step.y
 	t.pos = p
 	tanks[index] = t
 
@@ -936,14 +939,16 @@ func update_ai(index: int, delta: float) -> void:
 	var opponent: Dictionary = tanks[target_index]
 	ai.cooldown = maxf(0.0, ai.cooldown - delta)
 	ai.danger_timer -= delta
+	if is_yuzu and _yuzu_immediate_threat(index):
+		ai.danger_timer = minf(float(ai.danger_timer), 0.0)
 	# 预测错峰运行，每帧共享一次完整预算；低难度角色的反应间隔更长。
 	var my_squad := int(ai.get("squad", 0))
 	if ai.danger_timer <= 0.0 and ai_danger_budget > 0 and (is_yuzu or my_squad == frame_squad):
-		ai.danger_timer = (0.055 if is_yuzu else ai_danger_interval) / (skill * skill)
+		ai.danger_timer = (0.035 if is_yuzu else ai_danger_interval) / (skill * skill)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	# Fire at a visible opponent before moving or evading.
-	if (is_midori or kei_rage) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
+	if (is_midori or kei_rage or is_yuzu) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
 		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
@@ -965,7 +970,7 @@ func update_ai(index: int, delta: float) -> void:
 	var evade_direction: Vector2 = ai.danger_velocity
 	if evade_direction.length_squared() > 0.0:
 		tanks[index] = ai
-		move_tank_direct(index, evade_direction, delta, ai_speed_evade * movement_scale)
+		move_tank_direct(index, evade_direction, delta, ai_speed_evade * movement_scale * (1.25 if is_yuzu else 1.0))
 		return
 	if float(ai.reposition_timer) > 0.0:
 		ai.reposition_timer = maxf(0.0, float(ai.reposition_timer) - delta)
@@ -1000,7 +1005,7 @@ func update_ai(index: int, delta: float) -> void:
 	if not wants_laser and has_sight and (kei_rage or (ai.pos as Vector2).distance_to(opponent.pos) < 320.0):
 		wants_pickup = false
 	var objective_cell := point_cell(pickup_target) if wants_pickup else tactical_cell(index)
-	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index or ai.get("path_goal", Vector2i(-1, -1)) != objective_cell:
+	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index or ai.get("path_goal", Vector2i(-1, -1)) != objective_cell or (not ai.ai_path.is_empty() and ai.ai_path[0] != point_cell(ai.pos)):
 		ai.ai_timer = 0.4 / skill
 		ai.target_index = target_index
 		ai.aim_bias = rng.randf_range(-0.22, 0.22) * (1.0 - skill)
@@ -1009,9 +1014,13 @@ func update_ai(index: int, delta: float) -> void:
 		ai.attack_angle = NAN
 	var target: Vector2 = pickup_target if wants_pickup else (opponent.pos if has_sight else cell_center(tactical_cell(index)))
 	if ai.ai_path.size() > 1:
-		if wants_pickup or not has_sight: target = cell_center(ai.ai_path[1])
-		if ai.pos.distance_to(target) < 13.0 and ai.ai_path.size() > 2:
-			target = cell_center(ai.ai_path[2])
+		if wants_pickup or not has_sight:
+			var center := cell_center(ai.ai_path[0])
+			var next := cell_center(ai.ai_path[1])
+			var travel := (next - center).normalized()
+			var offset: Vector2 = ai.pos - center
+			var cross_track := absf(offset.cross(travel))
+			target = center if cross_track > 4.0 else next
 	var desired: float = (ai.pos as Vector2).angle_to_point(target) + float(ai.get("aim_bias", 0.0))
 	if not wants_pickup and not has_sight and not is_nan(float(ai.attack_angle)): desired = float(ai.attack_angle)
 	var diff: float = wrapf(desired - float(ai.angle), -PI, PI)
@@ -1057,7 +1066,17 @@ func update_ai(index: int, delta: float) -> void:
 					_reposition_after_unsafe_shot(index, float(ai.angle))
 			else:
 				fire(index)
-		ai.cooldown = maxf(float(ai.cooldown), 0.12 if kei_rage else 0.45 / skill)
+		ai.cooldown = maxf(float(ai.cooldown), 0.12 if kei_rage else (0.28 if is_yuzu else 0.45 / skill))
+
+func _yuzu_immediate_threat(index: int) -> bool:
+	var ai: Dictionary = tanks[index]
+	for bullet in bullets:
+		if int(bullet.owner) == index and float(bullet.grace) > 0.0: continue
+		var start: Vector2 = bullet.pos
+		var end: Vector2 = start + Vector2(bullet.vel) * 0.35
+		if segment_hits_tank_rect(start, end, ai.pos, float(ai.angle), BULLET_R + 5.0):
+			return true
+	return false
 
 func tactical_cell(index: int) -> Vector2i:
 	var target_index := homing_target(index, tanks[index].pos)
