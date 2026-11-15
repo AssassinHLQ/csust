@@ -72,12 +72,16 @@ func register_splat_node(node: Node) -> void:
 
 func unregister_splat_node(node: Node) -> void:
 	_apply_registry_result(_scene_registry.unregister_splat_node(node))
+	# Retire every cached resolution now, including viewports no longer rendered.
+	# Keep the registry: a campus stream may still be registered after a room exits.
+	RenderingServer.call_on_render_thread(_cleanup_on_render_thread)
 
 func register_stream_node(node: Node) -> void:
 	_apply_registry_result(_scene_registry.register_stream_node(node))
 
 func unregister_stream_node(node: Node) -> void:
 	_apply_registry_result(_scene_registry.unregister_stream_node(node))
+	RenderingServer.call_on_render_thread(_cleanup_on_render_thread)
 
 func mark_resource_dirty(node: Node) -> void:
 	_apply_registry_result(_scene_registry.mark_resource_dirty(node))
@@ -123,6 +127,8 @@ func _apply_registry_result(result: Dictionary) -> void:
 		return
 	if result.get("request_cleanup", false):
 		_gpu_state_cache.request_cleanup()
+		# A hidden/compositor-free viewport never calls flush_pending_cleanup().
+		RenderingServer.call_on_render_thread(_cleanup_on_render_thread)
 	if result.has("require_gpu_rebuild") and bool(result["require_gpu_rebuild"]):
 		_gpu_state_cache.mark_all_render_states_needs_gpu_rebuild()
 	if result.has("require_splat_upload") and bool(result["require_splat_upload"]):
