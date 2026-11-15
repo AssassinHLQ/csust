@@ -1207,15 +1207,17 @@ func _tick_phantoms(delta: float) -> void:
 	_phantoms = keep
 
 
-func _blast_fx(at: Vector3) -> void:
+func _blast_fx(at: Vector3, play_sound := true) -> void:
 	var ring := MeshInstance3D.new()
-	var tm := TorusMesh.new()
-	tm.inner_radius = 0.9
-	tm.outer_radius = 1.0
-	tm.rings = 64
-	tm.ring_segments = 5
-	ring.mesh = tm
-	var mat := _additive(Color(1.0, 0.24, 0.12, 0.9))
+	ring.mesh = Vfx.shared_mesh(&"horror/blast", func() -> Mesh:
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.9
+		tm.outer_radius = 1.0
+		tm.rings = 64
+		tm.ring_segments = 5
+		return tm)
+	var mat := Vfx.shared_material(&"horror/blast", func() -> StandardMaterial3D:
+		return _additive(Color(1.0, 0.24, 0.12, 0.9)))
 	ring.material_override = mat
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ring.top_level = true
@@ -1225,9 +1227,9 @@ func _blast_fx(at: Vector3) -> void:
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(ring, "scale", Vector3(GHOST_BLAST_R, 2.0, GHOST_BLAST_R), 0.4)
-	tw.tween_property(mat, "albedo_color:a", 0.0, 0.5)
+	Vfx.fade(tw, ring, 0.5)
 	tw.chain().tween_callback(ring.queue_free)
-	Sfx.play("ui_close", -5.0)
+	if play_sound: Sfx.play("ui_close", -5.0)
 
 
 # ── 9 追踪光箭 ──
@@ -1649,19 +1651,24 @@ func _spawn_orb(target: Vector3, kind: String, side := Vector3.ZERO,
 		dmg_now := ORB_DAMAGE, speed_now := ORB_SPEED, size_scale := 1.0) -> void:
 	var orb := MeshInstance3D.new()
 	orb.name = "HorrorOrb"
-	var sm := SphereMesh.new()
-	sm.radius = 1.1 * size_scale
-	sm.height = 2.2 * size_scale
-	sm.radial_segments = 16
-	sm.rings = 8
-	orb.mesh = sm
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.22, 0.12, 0.95)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.16, 0.08)
-	mat.emission_energy_multiplier = 2.4
-	orb.material_override = mat
+	orb.mesh = Vfx.shared_mesh(&"horror/orb", func() -> Mesh:
+		var sm := SphereMesh.new()
+		sm.radius = 1.1
+		sm.height = 2.2
+		sm.radial_segments = 16
+		sm.rings = 8
+		return sm)
+
+	orb.scale = Vector3.ONE * size_scale
+	orb.material_override = Vfx.shared_material(&"horror/orb", func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(1.0, 0.22, 0.12, 0.95)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.16, 0.08)
+		mat.emission_energy_multiplier = 2.4
+		return mat)
+
 	orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# 从胸口高度甩出去（⚠️ 先进树再设 global_position，理由同 `_make_disc()`）
 	var from := global_position + Vector3(0.0, height * 0.62, 0.0) \

@@ -84,6 +84,9 @@ func _run() -> void:
 	_boss.set("max_health", 1.0e9)
 	_boss.set("health", 1.0e9)
 	_boss.set("_t_skill", 10000.0)
+	# Keep real movement steering toward the verified street throughout combat.
+	# Standing still lets accumulated knockback push the test into unscanned gaps.
+	_walking = true
 	await _sample_battle("phase1_firing", _battle_seconds)
 	for kind in ["rapid", "shock", "meteor", "beam"]:
 		_boss.call("debug_cast", kind)
@@ -128,9 +131,11 @@ func _run() -> void:
 	for label in _battle_results:
 		_check(int(_battle_results[label].min_resident_splats) == int(state.source_splats), label + " keeps all source points resident")
 		_check(float(_battle_results[label].min_player_y) > -5.0, label + " player never falls out of scanned terrain")
+		_check(float(_battle_results[label].max_route_offset) < 14.0, label + " stays on the verified campus street")
 	_check(bool(OffWin.is_safe()[0]), "offscreen window and uncaptured mouse")
 	var warmup := root.get_node_or_null("BattleAssetWarmup")
 	_check(warmup != null and int(warmup.call("status").held) == 6, "summoned resources remain warm for repeated casts")
+	_check(warmup != null and bool(warmup.call("status").effects_ready), "effect pipelines finish arena warmup")
 	_world.queue_free()
 	_camera.queue_free()
 	await process_frame
@@ -142,7 +147,7 @@ func _run() -> void:
 		"resolution": str(root.size), "fps_cap": Engine.max_fps, "gpu": RenderingServer.get_video_adapter_name(),
 		"vsync_mode": DisplayServer.window_get_vsync_mode(), "render_scale": root.scaling_3d_scale,
 		"campus": state, "samples": _battle_results,
-		"scope": "Production finale, four active companions, live attacks and collision; scripted casts and camera, raised test health, %d FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots occur outside samples. Measures rendering capacity, not physical display refresh or packaged executable." % Engine.max_fps}
+		"scope": "Production finale, four active companions, live attacks and collision; real input walking throughout combat on a verified street, scripted casts and camera, raised test health, %d FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots occur outside samples. Measures rendering capacity, not physical display refresh or packaged executable." % Engine.max_fps}
 	FileAccess.open(_out + "/report.json", FileAccess.WRITE).store_string(JSON.stringify(report, "\t"))
 	print("[boss-profile] RESULT ", report.passed, " passed / ", report.failed, " failed")
 	quit(0 if failed.is_empty() else 1)
@@ -175,6 +180,7 @@ func _sample_battle(label: String, seconds: float) -> void:
 	var peak_clone_count := 0
 	var min_resident_splats := 9223372036854775807
 	var min_player_y := INF
+	var max_route_offset := 0.0
 	var spikes: Array = []
 	var pipelines_before := _pipeline_counts()
 	var weapon := _player.get_node("Weapon")
@@ -192,6 +198,8 @@ func _sample_battle(label: String, seconds: float) -> void:
 		peak_clone_count = maxi(peak_clone_count, (_boss.get("_clones") as Array).size())
 		min_resident_splats = mini(min_resident_splats, int(_campus.call("debug_state").resident_splats))
 		min_player_y = minf(min_player_y, _player.global_position.y)
+		var closest := Geometry3D.get_closest_point_to_segment(_player.global_position, _walk_points[0], _walk_points[1])
+		max_route_offset = maxf(max_route_offset, _player.global_position.distance_to(closest))
 		cpu.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
 		physics.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
 		calls.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
@@ -204,6 +212,7 @@ func _sample_battle(label: String, seconds: float) -> void:
 		"boss": _boss.call("status"), "peak_clone_count": peak_clone_count, "damage_received": player_health - float(_player.get("health")),
 		"min_resident_splats": min_resident_splats, "player_position": str(_player.global_position), "camera_position": str(_camera.global_position)}
 	result["min_player_y"] = min_player_y
+	result["max_route_offset"] = max_route_offset
 	result["pipelines_before"] = pipelines_before
 	result["pipelines_after"] = _pipeline_counts()
 	result["spikes_over_40ms"] = spikes

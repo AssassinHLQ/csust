@@ -17,6 +17,39 @@ static var _host: _Ticker
 static var _layer: CanvasLayer
 static var _flash: ColorRect
 static var _dot: ImageTexture
+## Fixed effect shapes keep their surfaces and compiled pipelines across bursts.
+## Keys are call-site constants, never shot positions, colors or random values.
+static var _meshes: Dictionary[StringName, Mesh] = {}
+static var _materials: Dictionary = {}
+static var _particle_materials: Dictionary = {}
+
+static func shared_mesh(key: StringName, build: Callable) -> Mesh:
+	if not _meshes.has(key): _meshes[key] = build.call()
+	return _meshes[key]
+
+## Immutable materials keep the exact compiled variant alive between effects.
+## Finite call-site keys; dynamic tints are bounded to avoid retaining arbitrary colors.
+static func shared_material(key: Variant, build: Callable) -> StandardMaterial3D:
+	if _materials.has(key): return _materials[key]
+	var material: StandardMaterial3D = build.call()
+	if _materials.size() < 128: _materials[key] = material
+	return material
+
+static func shared_particle_material(key: Variant, build: Callable) -> ParticleProcessMaterial:
+	if _particle_materials.has(key): return _particle_materials[key]
+	var material: ParticleProcessMaterial = build.call()
+	if _particle_materials.size() < 64: _particle_materials[key] = material
+	return material
+
+## Forward+ has per-instance opacity, so simultaneous fades never edit a shared
+## material. Other renderers receive a private material for the same fade.
+static func fade(tween: Tween, instance: MeshInstance3D, duration: float) -> void:
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		tween.tween_property(instance, "transparency", 1.0, duration)
+	else:
+		var material := instance.material_override.duplicate() as StandardMaterial3D
+		instance.material_override = material
+		tween.tween_property(material, "albedo_color:a", 0.0, duration)
 
 
 ## 宿主：只干两件事 —— 每帧把抖动写进相机、衰减抖动。
@@ -131,41 +164,44 @@ static func burst(parent: Node, pos: Vector3, col: Color, count := 40,
 	p.emitting = true
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.visibility_aabb = AABB(Vector3(-40, -40, -40), Vector3(80, 80, 80))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = maxf(size, 0.2)
-	pm.direction = Vector3.UP
-	pm.spread = 180.0
-	pm.initial_velocity_min = speed * 0.35
-	pm.initial_velocity_max = speed
-	pm.gravity = Vector3(0.0, gravity, 0.0)
-	pm.damping_min = 1.0
-	pm.damping_max = 4.0
-	pm.scale_min = size * 0.45
-	pm.scale_max = size * 1.4
-	pm.color = col
-	pm.angle_min = -180.0
-	pm.angle_max = 180.0
-	# 颜色随寿命淡出
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1, 1, 1, 1))
-	ramp.set_color(1, Color(1, 1, 1, 0))
-	var gt := GradientTexture1D.new()
-	gt.gradient = ramp
-	pm.color_ramp = gt
-	p.process_material = pm
-	var quad := QuadMesh.new()
-	quad.size = Vector2(1.0, 1.0)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_texture = soft_dot()
-	mat.albedo_color = Color(1, 1, 1, 1)
-	quad.material = mat
-	p.draw_pass_1 = quad
+	p.process_material = shared_particle_material([&"vfx/burst", col, size, speed, gravity], func() -> ParticleProcessMaterial:
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		pm.emission_sphere_radius = maxf(size, 0.2)
+		pm.direction = Vector3.UP
+		pm.spread = 180.0
+		pm.initial_velocity_min = speed * 0.35
+		pm.initial_velocity_max = speed
+		pm.gravity = Vector3(0.0, gravity, 0.0)
+		pm.damping_min = 1.0
+		pm.damping_max = 4.0
+		pm.scale_min = size * 0.45
+		pm.scale_max = size * 1.4
+		pm.color = col
+		pm.angle_min = -180.0
+		pm.angle_max = 180.0
+		# 颜色随寿命淡出
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1, 1, 1, 1))
+		ramp.set_color(1, Color(1, 1, 1, 0))
+		var gt := GradientTexture1D.new()
+		gt.gradient = ramp
+		pm.color_ramp = gt
+		return pm)
+
+	p.draw_pass_1 = shared_mesh(&"vfx/particle", func() -> Mesh:
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.0, 1.0)
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		mat.vertex_color_use_as_albedo = true
+		mat.albedo_texture = soft_dot()
+		mat.albedo_color = Color(1, 1, 1, 1)
+		quad.material = mat
+		return quad)
 	parent.add_child(p)
 	p.top_level = true
 	p.global_position = pos
@@ -188,18 +224,21 @@ static func ring(parent: Node, pos: Vector3, col: Color, radius := 8.0,
 	if parent == null or not is_instance_valid(parent) or not parent.is_inside_tree():
 		return
 	var mi := MeshInstance3D.new()
-	var tm := TorusMesh.new()
-	tm.inner_radius = 0.94
-	tm.outer_radius = 1.0
-	tm.rings = 64
-	tm.ring_segments = 5
-	mi.mesh = tm
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = col
+	mi.mesh = shared_mesh(&"vfx/ring", func() -> Mesh:
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.94
+		tm.outer_radius = 1.0
+		tm.rings = 64
+		tm.ring_segments = 5
+		return tm)
+	var mat := shared_material([&"vfx/ring", col], func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.albedo_color = col
+		return mat)
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
@@ -210,7 +249,7 @@ static func ring(parent: Node, pos: Vector3, col: Color, radius := 8.0,
 	tw.set_parallel(true)
 	tw.tween_property(mi, "scale", Vector3(radius, 2.0 if flat else 1.0, radius), dur) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(mat, "albedo_color:a", 0.0, dur * 1.15)
+	fade(tw, mi, dur * 1.15)
 	tw.chain().tween_callback(mi.queue_free)
 
 

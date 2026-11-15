@@ -629,11 +629,14 @@ func _beam(from: Vector3, to: Vector3, width: float, col: Color, life: float,
 	if total < 0.05 or _fx_root == null:
 		return
 	var mi := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(width, width, 1.0)
-	mi.mesh = box
-	var mat := _glow_mat(col)
-	mat.emission_energy_multiplier = energy
+	mi.mesh = Vfx.shared_mesh(&"companion/beam", func() -> Mesh:
+		var box := BoxMesh.new()
+		box.size = Vector3.ONE
+		return box)
+	var mat := Vfx.shared_material([&"companion/beam", col, energy], func() -> StandardMaterial3D:
+		var material := _glow_mat(col)
+		material.emission_energy_multiplier = energy
+		return material)
 	mi.material_override = mat
 	_fx_root.add_child(mi)
 	mi.top_level = true
@@ -647,11 +650,11 @@ func _beam(from: Vector3, to: Vector3, width: float, col: Color, life: float,
 	x = x.normalized()
 	var y := dir.cross(x).normalized()
 	mi.basis = Basis(x, y, dir)
-	mi.scale = Vector3(1.0, 1.0, total)
+	mi.scale = Vector3(width, width, total)
 	mi.global_position = from + dir * (total * 0.5)
 
 	var tw := mi.create_tween()
-	tw.tween_property(mat, "albedo_color:a", 0.0, life)
+	Vfx.fade(tw, mi, life)
 	tw.tween_callback(mi.queue_free)
 
 
@@ -675,16 +678,19 @@ func _glow_quad(pos: Vector3, col: Color, size: float, life: float, grow := 1.9)
 	if _fx_root == null or not is_instance_valid(_fx_root):
 		return
 	var mi := MeshInstance3D.new()
-	var quad := QuadMesh.new()
-	quad.size = Vector2(1.0, 1.0)
-	mi.mesh = quad
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	mat.albedo_texture = Vfx.soft_dot()
-	mat.albedo_color = col
+	mi.mesh = Vfx.shared_mesh(&"companion/quad", func() -> Mesh:
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.0, 1.0)
+		return quad)
+	var mat := Vfx.shared_material([&"companion/quad", col], func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		mat.albedo_texture = Vfx.soft_dot()
+		mat.albedo_color = col
+		return mat)
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_fx_root.add_child(mi)
@@ -694,7 +700,7 @@ func _glow_quad(pos: Vector3, col: Color, size: float, life: float, grow := 1.9)
 	var tw := mi.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(mi, "scale", Vector3.ONE * size * grow, life)
-	tw.tween_property(mat, "albedo_color:a", 0.0, life)
+	Vfx.fade(tw, mi, life)
 	tw.chain().tween_callback(mi.queue_free)
 
 
@@ -715,35 +721,38 @@ func _attach_trail(host: Node3D, col: Color) -> GPUParticles3D:
 	p.emitting = true
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.visibility_aabb = AABB(Vector3(-6, -6, -6), Vector3(12, 12, 12))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.05
-	pm.direction = Vector3.UP
-	pm.spread = 180.0
-	pm.initial_velocity_min = 0.0
-	pm.initial_velocity_max = 0.5
-	pm.gravity = Vector3.ZERO
-	pm.scale_min = 0.09
-	pm.scale_max = 0.2
-	pm.color = col
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1.0, 1.0, 1.0, 0.9))
-	ramp.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
-	var gt := GradientTexture1D.new()
-	gt.gradient = ramp
-	pm.color_ramp = gt
-	p.process_material = pm
-	var quad := QuadMesh.new()
-	quad.size = Vector2(1.0, 1.0)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_texture = Vfx.soft_dot()
-	quad.material = mat
-	p.draw_pass_1 = quad
+	p.process_material = Vfx.shared_particle_material([&"companion/trail", col], func() -> ParticleProcessMaterial:
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		pm.emission_sphere_radius = 0.05
+		pm.direction = Vector3.UP
+		pm.spread = 180.0
+		pm.initial_velocity_min = 0.0
+		pm.initial_velocity_max = 0.5
+		pm.gravity = Vector3.ZERO
+		pm.scale_min = 0.09
+		pm.scale_max = 0.2
+		pm.color = col
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1.0, 1.0, 1.0, 0.9))
+		ramp.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+		var gt := GradientTexture1D.new()
+		gt.gradient = ramp
+		pm.color_ramp = gt
+		return pm)
+
+	p.draw_pass_1 = Vfx.shared_mesh(&"companion/particle", func() -> Mesh:
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.0, 1.0)
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		mat.vertex_color_use_as_albedo = true
+		mat.albedo_texture = Vfx.soft_dot()
+		quad.material = mat
+		return quad)
 	host.add_child(p)
 	return p
 

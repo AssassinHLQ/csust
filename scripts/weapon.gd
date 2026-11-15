@@ -1,5 +1,6 @@
 class_name Weapon
 extends Node3D
+const Vfx := preload("res://scripts/vfx.gd")
 ## 武器系统：命中判定走射线，视觉走枪口火光 + 可见弹丸 + 命中火花。
 ##
 ## 枪是 Arisu.glb 自带的轨道枪（蒙在 Bip001_Weapon 骨上，跟着动作走）。
@@ -816,21 +817,24 @@ func _muzzle_flash_beam(at: Vector3) -> void:
 	light.global_position = at
 
 	var flash := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.09
-	sm.height = 0.18
-	sm.radial_segments = 10
-	sm.rings = 6
-	flash.mesh = sm
+	flash.mesh = Vfx.shared_mesh(&"weapon/beam_muzzle", func() -> Mesh:
+		var sm := SphereMesh.new()
+		sm.radius = 0.09
+		sm.height = 0.18
+		sm.radial_segments = 10
+		sm.rings = 6
+		return sm)
 	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.albedo_color = Color(0.8, 0.95, 1.0, 0.95)
-	mat.emission_enabled = true
-	mat.emission = Color(0.55, 0.85, 1.0)
-	mat.emission_energy_multiplier = 4.0
+	var mat := Vfx.shared_material(&"weapon/beam_muzzle", func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.albedo_color = Color(0.8, 0.95, 1.0, 0.95)
+		mat.emission_enabled = true
+		mat.emission = Color(0.55, 0.85, 1.0)
+		mat.emission_energy_multiplier = 4.0
+		return mat)
 	flash.material_override = mat
 	_fx_root.add_child(flash)
 	flash.global_position = at
@@ -838,7 +842,7 @@ func _muzzle_flash_beam(at: Vector3) -> void:
 	var tw := flash.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(light, "light_energy", 0.0, 0.09)
-	tw.tween_property(mat, "albedo_color:a", 0.0, 0.09)
+	Vfx.fade(tw, flash, 0.09)
 	tw.chain().tween_callback(flash.queue_free)
 	tw.chain().tween_callback(light.queue_free)
 
@@ -854,21 +858,24 @@ func _spawn_beam_impact(at: Vector3, _normal: Vector3) -> void:
 	light.global_position = at
 
 	var burst := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.18
-	sm.height = 0.36
-	sm.radial_segments = 10
-	sm.rings = 6
-	burst.mesh = sm
+	burst.mesh = Vfx.shared_mesh(&"weapon/beam_impact", func() -> Mesh:
+		var sm := SphereMesh.new()
+		sm.radius = 0.18
+		sm.height = 0.36
+		sm.radial_segments = 10
+		sm.rings = 6
+		return sm)
 	burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.albedo_color = Color(0.7, 0.92, 1.0, 0.8)
-	mat.emission_enabled = true
-	mat.emission = Color(0.5, 0.82, 1.0)
-	mat.emission_energy_multiplier = 3.0
+	var mat := Vfx.shared_material(&"weapon/beam_impact", func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.albedo_color = Color(0.7, 0.92, 1.0, 0.8)
+		mat.emission_enabled = true
+		mat.emission = Color(0.5, 0.82, 1.0)
+		mat.emission_energy_multiplier = 3.0
+		return mat)
 	burst.material_override = mat
 	_fx_root.add_child(burst)
 	burst.global_position = at
@@ -876,7 +883,7 @@ func _spawn_beam_impact(at: Vector3, _normal: Vector3) -> void:
 	var tw := burst.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(burst, "scale", Vector3.ONE * 2.4, 0.16)
-	tw.tween_property(mat, "albedo_color:a", 0.0, 0.16)
+	Vfx.fade(tw, burst, 0.16)
 	tw.tween_property(light, "light_energy", 0.0, 0.16)
 	tw.chain().tween_callback(burst.queue_free)
 	tw.chain().tween_callback(light.queue_free)
@@ -1013,19 +1020,22 @@ func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	light.global_position = at
 
 	var flash := MeshInstance3D.new()
-	var flash_mesh := SphereMesh.new()
-	flash_mesh.radius = 0.065
-	flash_mesh.height = 0.13
-	flash_mesh.radial_segments = 8
-	flash_mesh.rings = 4
-	flash.mesh = flash_mesh
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(1.0, 0.9, 0.6, 0.95)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.8, 0.4)
-	mat.emission_energy_multiplier = 1.6
+	flash.mesh = Vfx.shared_mesh(&"weapon/muzzle", func() -> Mesh:
+		var flash_mesh := SphereMesh.new()
+		flash_mesh.radius = 0.065
+		flash_mesh.height = 0.13
+		flash_mesh.radial_segments = 8
+		flash_mesh.rings = 4
+		return flash_mesh)
+	var mat := Vfx.shared_material(&"weapon/muzzle", func() -> StandardMaterial3D:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(1.0, 0.9, 0.6, 0.95)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.8, 0.4)
+		mat.emission_energy_multiplier = 1.6
+		return mat)
 	flash.material_override = mat
 	_fx_root.add_child(flash)
 	flash.global_position = at
@@ -1033,8 +1043,9 @@ func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	var tw := flash.create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(light, "light_energy", 0.0, 0.05)
-	tw.tween_property(mat, "albedo_color:a", 0.0, 0.05)
-	tw.chain().tween_callback(flash.queue_free)
+	Vfx.fade(tw, flash, 0.05)
+	tw.chain().tween_callback(light.queue_free)
+	tw.tween_callback(flash.queue_free)
 
 	# ── 枪口扩散环 + 光晕（用户 2026-11-11 照参考图要「图 1/2」那种）──
 	# ⚠️ 机甲形态**不要这个环** —— 用户 2026-11-11：「机甲状态这个普通攻击不要圆环」。
@@ -1055,43 +1066,49 @@ func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	var realup := d.cross(right).normalized()
 
 	var ring := MeshInstance3D.new()
-	var rm := TorusMesh.new()
-	rm.inner_radius = 0.86
-	rm.outer_radius = 1.0
-	rm.rings = 28
-	rm.ring_segments = 4
-	ring.mesh = rm
+	ring.mesh = Vfx.shared_mesh(&"weapon/muzzle_ring", func() -> Mesh:
+		var rm := TorusMesh.new()
+		rm.inner_radius = 0.86
+		rm.outer_radius = 1.0
+		rm.rings = 28
+		rm.ring_segments = 4
+		return rm)
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var rmat := StandardMaterial3D.new()
-	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	rmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	rmat.albedo_color = Color(0.80, 0.95, 1.00, 0.85)
-	rmat.emission_enabled = true
-	rmat.emission = Color(0.55, 0.85, 1.00)
-	rmat.emission_energy_multiplier = 5.0
+	var rmat := Vfx.shared_material(&"weapon/muzzle_ring", func() -> StandardMaterial3D:
+		var rmat := StandardMaterial3D.new()
+		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		rmat.albedo_color = Color(0.80, 0.95, 1.00, 0.85)
+		rmat.emission_enabled = true
+		rmat.emission = Color(0.55, 0.85, 1.00)
+		rmat.emission_energy_multiplier = 5.0
+		return rmat)
 	ring.material_override = rmat
 	_fx_root.add_child(ring)
 	ring.global_position = at + d * 0.10
 	ring.global_basis = Basis(right, d, realup).scaled(Vector3.ONE * 0.12)
 
 	var halo := MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2(0.85, 0.85)
-	halo.mesh = q
+	halo.mesh = Vfx.shared_mesh(&"weapon/muzzle_halo", func() -> Mesh:
+		var q := QuadMesh.new()
+		q.size = Vector2(0.85, 0.85)
+		return q)
 	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var hmat := StandardMaterial3D.new()
-	hmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	hmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	hmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	hmat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	hmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	hmat.albedo_texture = _halo_tex()
-	hmat.albedo_color = Color(1.0, 0.95, 0.80, 0.75)
-	hmat.emission_enabled = true
-	hmat.emission = Color(1.0, 0.90, 0.65)
-	hmat.emission_energy_multiplier = 6.0
+	var hmat := Vfx.shared_material(&"weapon/muzzle_halo", func() -> StandardMaterial3D:
+		var hmat := StandardMaterial3D.new()
+		hmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		hmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		hmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		hmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		hmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		hmat.albedo_texture = _halo_tex()
+		hmat.albedo_color = Color(1.0, 0.95, 0.80, 0.75)
+		hmat.emission_enabled = true
+		hmat.emission = Color(1.0, 0.90, 0.65)
+		hmat.emission_energy_multiplier = 6.0
+		return hmat)
 	halo.material_override = hmat
 	_fx_root.add_child(halo)
 	halo.global_position = at + d * 0.06
@@ -1100,12 +1117,12 @@ func _muzzle_flash(at: Vector3, dir := Vector3.ZERO) -> void:
 	tw2.set_parallel(true)
 	tw2.tween_property(ring, "scale", Vector3.ONE * 0.95, 0.20) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw2.tween_property(rmat, "albedo_color:a", 0.0, 0.20)
+	Vfx.fade(tw2, ring, 0.20)
 	tw2.chain().tween_callback(ring.queue_free)
 	var tw3 := halo.create_tween()
 	tw3.set_parallel(true)
 	tw3.tween_property(halo, "scale", Vector3.ONE * 1.6, 0.09)
-	tw3.tween_property(hmat, "albedo_color:a", 0.0, 0.09)
+	Vfx.fade(tw3, halo, 0.09)
 	tw3.chain().tween_callback(halo.queue_free)
 
 
@@ -1138,26 +1155,29 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 
 	for i in 6:
 		var spark := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.018
-		sm.height = 0.036
-		sm.radial_segments = 4
-		sm.rings = 2
-		spark.mesh = sm
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = Color(1.0, 0.85, 0.5)
-		mat.emission_enabled = true
-		mat.emission = Color(1.0, 0.7, 0.3)
-		mat.emission_energy_multiplier = 2.0
-		sm.material = mat
+		spark.mesh = Vfx.shared_mesh(&"weapon/impact", func() -> Mesh:
+			var sm := SphereMesh.new()
+			sm.radius = 0.018
+			sm.height = 0.036
+			sm.radial_segments = 4
+			sm.rings = 2
+			return sm)
+		var mat := Vfx.shared_material(&"weapon/impact", func() -> StandardMaterial3D:
+			var mat := StandardMaterial3D.new()
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.albedo_color = Color(1.0, 0.85, 0.5)
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.7, 0.3)
+			mat.emission_energy_multiplier = 2.0
+			return mat)
+		spark.material_override = mat
 		holder.add_child(spark)
 		spark.global_position = pos
 		var dir := (normal + Vector3(randfn(0.0, 1.0), randfn(0.0, 1.0), randfn(0.0, 1.0)) * 0.8).normalized()
 		var tw := spark.create_tween()
 		tw.set_parallel(true)
 		tw.tween_property(spark, "global_position", pos + dir * randf_range(0.12, 0.4), 0.18)
-		tw.tween_property(mat, "albedo_color:a", 0.0, 0.18)
+		Vfx.fade(tw, spark, 0.18)
 		tw.chain().tween_callback(holder.queue_free)
 
 
