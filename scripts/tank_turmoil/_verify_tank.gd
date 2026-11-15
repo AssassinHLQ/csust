@@ -121,7 +121,7 @@ func _run() -> void:
 	var battle: Array = _tank.get("tanks")
 	battle[0].alive = false
 	battle[1].pos = Vector2(400, 400)
-	battle[1].angle = 0.0
+	battle[1].angle = PI / 2.0
 	battle[1].cooldown = 0.0
 	battle[2].pos = Vector2(500, 400)
 	battle[3].pos = Vector2(900, 600)
@@ -130,7 +130,7 @@ func _run() -> void:
 	_tank.set("ai_danger_budget", 0)
 	_tank.call("update_ai", 1, 1.0 / 60.0)
 	_check(int(battle[1].get("target_index", -1)) == 2, "观战期间 AI 转向其他 AI")
-	_check(int(battle[1].burst_remaining) == 5, "小绿使用五连发封路")
+	_check(int(battle[1].burst_remaining) == 5, "小绿面对侧方敌人立即使用五连发")
 	_tank.call("update_weapon_bursts", 1.0 / 60.0)
 	_check(not (_tank.get("bullets") as Array).is_empty(), "爱丽丝出局后 AI 仍然开火")
 	_tank.call("new_round")
@@ -173,6 +173,44 @@ func _run() -> void:
 		_tank.get("bullets").append({"pos": Vector2(800, 100 + i * 30), "vel": Vector2(0, -200), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
 	_tank.get("bullets").append({"pos": Vector2(470, 400), "vel": Vector2(-200, 0), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
 	_check((_tank.call("find_ai_evasion", battle[2].pos, battle[2].angle, 2) as Vector2).length_squared() > 0.0, "柚子优先预测靠近的危险子弹")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.set("ai_danger_budget", 0)
+	battle[4].pos = Vector2(400, 400)
+	battle[4].angle = 0.0
+	battle[4].role = 0
+	battle[4].cooldown = 10.0
+	battle[1].pos = Vector2(700, 400)
+	battle[0].pos = Vector2(900, 600)
+	for i in [2, 3]: battle[i].alive = false
+	_tank.call("update_ai", 4, 0.05)
+	var normal_distance := float(battle[4].pos.x) - 400.0
+	for i in 5:
+		_tank.get("bullets").append({"owner": 4, "weapon": "normal"})
+	battle[4].cooldown = 0.0
+	_tank.call("fire", 4)
+	_check((_tank.get("bullets") as Array).size() == 5, "爱丽丝存活时凯伊仍受 5 发限制")
+	_tank.call("tank_was_hit", 0)
+	_check(bool(battle[4].kei_rage), "爱丽丝被击败后凯伊进入无限火力")
+	for i in 19: _tank.get("bullets").append({"owner": 1, "weapon": "normal"})
+	battle[4].cooldown = 0.0
+	_tank.call("fire", 4)
+	_check((_tank.get("bullets") as Array).size() == 25, "无限火力突破个人和全场子弹上限")
+	_check(is_equal_approx(float(battle[4].cooldown), 0.12), "无限火力开火间隔 0.12 秒")
+	_check(is_equal_approx(float((_tank.get("bullets") as Array)[24].life), 2.4), "强化子弹限时消失以控制负载")
+	_tank.get("bullets").clear()
+	battle[4].pos = Vector2(400, 400)
+	battle[4].angle = 0.0
+	battle[4].cooldown = 10.0
+	_tank.call("update_ai", 4, 0.05)
+	_check(absf((float(battle[4].pos.x) - 400.0) - normal_distance * 2.0) < 0.01, "无限火力期间凯伊移动速度翻倍")
+	battle[4].cooldown = 0.0
+	battle[4].danger_velocity = Vector2.UP
+	_tank.call("update_ai", 4, 0.05)
+	_check(not (_tank.get("bullets") as Array).is_empty(), "无限火力期间凯伊躲避时也会向可见敌人开火")
+	_tank.call("new_round")
+	_check(not bool(_tank.get("tanks")[4].kei_rage), "新一局重置无限火力")
 	_tank.call("new_round")
 	var old_cell := float(_tank.get("CELL"))
 	var viewport := _tank.get_viewport() as SubViewport

@@ -454,6 +454,7 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 		"danger_timer": 0.0, "danger_velocity": Vector2.ZERO,
 		"attack_angle": NAN, "role": 0, "weapon": "normal", "ammo": 0,
 		"burst_remaining": 0, "burst_timer": 0.0,
+		"kei_rage": false,
 		"portrait": portrait, "boss": false, "boss_unit": false, "hp": 1, "max_hp": 1,
 		"squad": 0}
 
@@ -925,6 +926,8 @@ func update_ai(index: int, delta: float) -> void:
 	var ai := tanks[index]
 	var is_yuzu := str(ai.name) == "柚子"
 	var is_midori := str(ai.name) == "才羽绿"
+	var kei_rage := bool(ai.get("kei_rage", false))
+	var movement_scale := 2.0 if kei_rage else 1.0
 	var skill := ai_skill(index)
 	var target_index := homing_target(index, ai.pos)
 	if target_index < 0: return
@@ -937,10 +940,26 @@ func update_ai(index: int, delta: float) -> void:
 		ai.danger_timer = (0.055 if is_yuzu else ai_danger_interval) / (skill * skill)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
+	# Fire at a visible opponent before moving or evading.
+	if (is_midori or kei_rage) and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
+		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
+		var muzzle := Vector2(ai.pos) + Vector2.from_angle(shot_angle) * MUZZLE_OFFSET
+		if not tank_hits_wall(ai.pos, shot_angle) and not tank_hits_other_tank(index, ai.pos, shot_angle) and not circle_hits_wall(muzzle, BULLET_R):
+			ai.angle = shot_angle
+			if is_midori and str(ai.weapon) == "normal":
+				ai.burst_remaining = 5
+				ai.burst_timer = 0.0
+				ai.cooldown = 0.48
+				tanks[index] = ai
+			else:
+				tanks[index] = ai
+				fire(index)
+				ai = tanks[index]
+				if not bool(opponent.alive) or round_over: return
 	var evade_direction: Vector2 = ai.danger_velocity
 	if evade_direction.length_squared() > 0.0:
 		tanks[index] = ai
-		move_tank_direct(index, evade_direction, delta, ai_speed_evade)
+		move_tank_direct(index, evade_direction, delta, ai_speed_evade * movement_scale)
 		return
 	ai.ai_timer -= delta
 	var has_sight: bool = clear_line(ai.pos, opponent.pos)
@@ -956,7 +975,7 @@ func update_ai(index: int, delta: float) -> void:
 				pickup_target = pickup_position
 				wants_pickup = true
 	# A visible nearby opponent takes precedence over a distant pickup.
-	if has_sight and (ai.pos as Vector2).distance_to(opponent.pos) < 320.0:
+	if has_sight and (kei_rage or (ai.pos as Vector2).distance_to(opponent.pos) < 320.0):
 		wants_pickup = false
 	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index:
 		ai.ai_timer = 0.4 / skill
@@ -987,22 +1006,15 @@ func update_ai(index: int, delta: float) -> void:
 			drive = -0.8 if distance_to_player < preferred - 45.0 else (0.65 if distance_to_player > preferred + 45.0 else 0.0)
 		elif is_midori:
 			drive = 1.0 if distance_to_player > 135.0 else 0.0
-	if is_midori and str(ai.weapon) == "laser" and has_sight and float(ai.cooldown) <= 0.0:
-		var snap_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
-		if not tank_hits_wall(ai.pos, snap_angle):
-			ai.angle = snap_angle
-			tanks[index] = ai
-			fire(index)
-			return
 	tanks[index] = ai
 	if (wants_pickup or not has_sight) and is_nan(float(ai.attack_angle)):
 		# Omnidirectional path following prevents rectangular tanks wedging at corners.
-		move_tank_direct(index, (target - ai.pos).normalized(), delta, ai_speed_path * lerpf(0.65, 1.0, skill))
+		move_tank_direct(index, (target - ai.pos).normalized(), delta, ai_speed_path * lerpf(0.65, 1.0, skill) * movement_scale)
 	else:
 		# 巡航速度取 chase / evade 的中间值（优香 120 / 142 ⇒ 136；原版普通 AI 是 120）
 		# move_tank reverses steering while backing up; compensate when aiming.
 		var steering := -turn if drive < -0.05 else turn
-		move_tank(index, drive, steering * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill))
+		move_tank(index, drive, steering * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill) * movement_scale)
 	ai = tanks[index]
 	var player_angle: float = (ai.pos as Vector2).angle_to_point(opponent.pos as Vector2) + float(ai.get("aim_bias", 0.0))
 	var firing_angle: float = player_angle if has_sight else float(ai.attack_angle)
@@ -1017,7 +1029,7 @@ func update_ai(index: int, delta: float) -> void:
 				tanks[index] = ai
 			else:
 				fire(index)
-		ai.cooldown = maxf(float(ai.cooldown), 0.45 / skill)
+		ai.cooldown = maxf(float(ai.cooldown), 0.12 if kei_rage else 0.45 / skill)
 
 func tactical_cell(index: int) -> Vector2i:
 	var target_index := homing_target(index, tanks[index].pos)
@@ -1299,15 +1311,16 @@ func ricochet_shot_available(origin: Vector2, angle: float, target: Vector2) -> 
 
 func fire(index: int) -> void:
 	if mode == 0 or round_over or paused or not tanks[index].alive: return
-	if bullets.size() >= MAX_ACTIVE_BULLETS: return
 	var t := tanks[index]
+	var kei_rage := bool(t.get("kei_rage", false))
+	if not kei_rage and regular_bullet_count() >= MAX_ACTIVE_BULLETS: return
 	var weapon: String = t.weapon
 	var owned := 0
 	for b in bullets:
 		# 散弹与机关枪弹幕不占普通子弹上限。
 		if b.owner == index and str(b.weapon) != "shotgun" and str(b.weapon) != "minigun": owned += 1
 	var projectile_limit := 8 if bool(t.boss_unit) else 5
-	if t.cooldown > 0.0 or (owned >= projectile_limit and weapon != "laser" and weapon != "shotgun" and weapon != "minigun"): return
+	if t.cooldown > 0.0 or (not kei_rage and owned >= projectile_limit and weapon != "laser" and weapon != "shotgun" and weapon != "minigun"): return
 	if weapon == "laser":
 		fire_laser(index)
 		play_sound(sound_shoot, 1.35)
@@ -1328,30 +1341,38 @@ func fire(index: int) -> void:
 	var shots := [0.0]
 	var speed := 200.0
 	var life := 60.0
+	if kei_rage: life = 2.4
 	var homing := false
 	if weapon == "shotgun": shots = [-0.24, -0.12, 0.0, 0.12, 0.24]; speed = 185.0; life = 3.2
 	elif weapon == "minigun": speed = 250.0; life = 2.4
 	elif weapon == "homing": speed = 165.0; life = 9.0; homing = true
+	if kei_rage: life = minf(life, 2.4)
 	for spread in shots:
 		var a: float = t.angle + float(spread)
 		bullets.append({"pos": t.pos + Vector2.from_angle(a) * MUZZLE_OFFSET,
 			"vel": Vector2.from_angle(a) * speed, "owner": index, "life": life, "grace": 0.24,
-			"homing": homing, "weapon": weapon, "bounces": 0})
+			"homing": homing, "weapon": weapon, "bounces": 0, "kei_rage": kei_rage})
 	play_sound(sound_shoot, rng.randf_range(0.92, 1.08))
 	if bool(t.boss_unit):
 		t.cooldown = ai_minigun_cooldown if weapon == "minigun" else 0.20
 	else:
-		t.cooldown = 0.10 if weapon == "minigun" else 0.34
+		t.cooldown = 0.12 if kei_rage else (0.10 if weapon == "minigun" else 0.34)
 	if weapon != "normal":
 		t.ammo -= 1
 		if t.ammo <= 0: t.weapon = "normal"
 	tanks[index] = t
 
+func regular_bullet_count() -> int:
+	var count := 0
+	for bullet in bullets:
+		if not bool(bullet.get("kei_rage", false)): count += 1
+	return count
+
 func update_weapon_bursts(delta: float) -> void:
 	for index in tanks.size():
 		if not tanks[index].alive or int(tanks[index].burst_remaining) <= 0: continue
 		var t := tanks[index]
-		if bullets.size() >= MAX_ACTIVE_BULLETS:
+		if not bool(t.get("kei_rage", false)) and regular_bullet_count() >= MAX_ACTIVE_BULLETS:
 			t.burst_remaining = 0
 			tanks[index] = t
 			continue
@@ -1361,9 +1382,10 @@ func update_weapon_bursts(delta: float) -> void:
 			var angle: float = float(t.angle) + spread
 			bullets.append({"pos": t.pos + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 				"vel": Vector2.from_angle(angle) * 250.0, "owner": index, "life": 2.4,
-				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0})
+				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0,
+				"kei_rage": bool(t.get("kei_rage", false))})
 			t.burst_remaining -= 1
-			t.burst_timer = 0.085
+			t.burst_timer = 0.05 if str(t.name) == "才羽绿" else 0.085
 			# 每隔一发播放音效，避免同时创建过多音频节点。
 			if int(t.burst_remaining) % 2 == 0: play_sound(sound_shoot, rng.randf_range(1.15, 1.28))
 		tanks[index] = t
@@ -1470,6 +1492,11 @@ func tank_was_hit(index: int) -> void:
 		spawn_armor_hit(tanks[index].pos, tanks[index].color)
 		return
 	tanks[index].alive = false
+	if mode == 1 and str(tanks[index].name) == "爱丽丝":
+		for fighter in tanks:
+			if str(fighter.name) == "凯伊" and bool(fighter.alive):
+				fighter.kei_rage = true
+				fighter.cooldown = 0.0
 	var defeat_sound: AudioStream = SOUND_MOMOI_DEFEAT if str(tanks[index].name) == "才羽桃井" else null
 	spawn_explosion(tanks[index].pos, tanks[index].color, defeat_sound)
 	var survivors: Array[int] = []
