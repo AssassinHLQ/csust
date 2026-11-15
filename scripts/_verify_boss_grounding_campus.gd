@@ -96,10 +96,15 @@ func _run() -> void:
 	boss.global_position = Vector3(-42, 4.09, -140)
 	player.global_position = Vector3(-82, 4.69, -140)
 	boss.call("debug_set_chase", true)
+	# This historical fixture starts inside Tile_2_4. Verify escape and
+	# re-engagement using normal blink behavior, never forced wall penetration.
+	boss.call("debug_set_blink_cd", 20.0)
 	var distance := boss.position.distance_to(player.position)
 	await create_timer(3.5).timeout
 	_check(boss.position.distance_to(player.position) < distance - 1.5,
-		"scan fragments cannot pin normal ground pursuit", boss.position)
+		"blocked scanned buildings cannot pin pursuit with safe blink enabled", boss.position)
+	_check(preload("res://scripts/boss_terrain_guard.gd").is_clear(boss, boss.position),
+		"re-engagement leaves boss volume clear of scanned buildings", boss.position)
 	boss.call("debug_set_chase", false)
 	boss.global_position = Vector3(-42, 4.09, -140)
 	player.global_position = Vector3(-76, 4.69, -140)

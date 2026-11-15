@@ -176,18 +176,24 @@ func _run() -> void:
 		"跑动时没有飞起来也没扎进地里（y 偏差 < 3 m）")
 
 	print("")
-	print("========== 6. 拴绳：跑太远会回家 ==========")
-	# 把玩家丢到很远处（超出 notice_range），Boss 应当**不再跟着走**
+	print("========== 6. 校园持续追击：不受旧发现距离和拴绳限制 ==========")
 	var far_pos: Vector3 = home + Vector3(0, 0, 200)
 	player.global_position = far_pos
+	var far_distance := _flat_dist(boss, player)
 	for i in 30:
 		await process_frame
 	var stay := _flat_len(boss.global_position, home)
 	print("        玩家被丢到 200 m 外，%d 帧后本体离出生点 %.1f m（拴绳 %.1f m）" % [
 		30, stay, float(boss.get("chase_leash"))])
-	_check(stay <= float(boss.get("chase_leash")) + 12.0,
-		"不会追出拴绳范围（%.1f m ≤ %.1f m）" % [
-			stay, float(boss.get("chase_leash")) + 12.0])
+	_check(bool(boss.get("persistent_chase")) and _flat_dist(boss, player) < far_distance - 2.0,
+		"玩家超过 60 m 仍被追击，不返回出生点")
+	# The optional legacy leash remains available for non-campus encounters.
+	boss.set("persistent_chase", false)
+	boss.global_position = home + Vector3(0, 0, 70)
+	boss.rotation.y = PI
+	for i in 90:
+		await process_frame
+	_check(_flat_len(boss.global_position, home) < 60.0, "显式关闭持续追击后仍可使用旧拴绳")
 
 	print("")
 	print("========== 结果 ==========")

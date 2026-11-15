@@ -71,6 +71,11 @@ func _run() -> void:
 	for companion in party:
 		var status: Dictionary = companion.call("combat_status")
 		_check(status.ready and companion.is_on_floor(), "production companion finds stable scanned firing position", companion.position)
+		_check(companion.is_visible_in_tree() and companion.get("model") != null,
+			"production companion and loaded model remain visible", companion.name)
+		for other in positions:
+			_check(companion.position.distance_to(other) >= 1.2,
+				"production party does not stack into the same firing position")
 		positions.append(companion.position)
 		shots_before += int(companion.get_node("Gun").get("_shots"))
 	_check(shots_before > 0, "party fires from independent grounded positions", shots_before)
@@ -90,7 +95,7 @@ func _run() -> void:
 		shots_after += int(companion.get_node("Gun").get("_shots"))
 	_check(shots_after > shots_before, "party continues shooting while player flies", [shots_before, shots_after])
 	var stream := preload("res://scripts/music.gd")._load_stream("finalboss") as AudioStreamOggVorbis
-	_check(stream != null and absf(stream.get_length() - 116.2666) < 0.03 and stream.loop and stream.loop_offset == 0.0,
+	_check(stream != null and absf(stream.get_length() - 112.5) < 0.03 and stream.loop and stream.loop_offset == 0.0,
 		"production boss music uses trimmed duration and loops from start", stream.get_length() if stream else 0)
 	_check(OffWin.is_safe()[0], "offscreen window and uncaptured mouse")
 	_world.queue_free()

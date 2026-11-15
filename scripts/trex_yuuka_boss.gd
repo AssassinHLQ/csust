@@ -62,6 +62,8 @@ var _telegraph_mat: StandardMaterial3D
 @export var chase_stop_distance := 7.0
 ## 多远开始追（比拴绳小的话就是「进了校园才追」）
 @export var chase_notice_range := 60.0
+## 校园加载后持续追击，不受发现距离及出生点拴绳限制。
+@export var persistent_chase := true
 ## 拴绳：离出生点超过这个距离就往回走
 @export var chase_leash := 45.0
 ## 大腿摆动的最大角度（度）
@@ -252,11 +254,11 @@ func _tick_chase(delta: float) -> void:
 		global_position.z - _home.z)
 
 	var target := Vector3.ZERO
-	if home_flat.length() > chase_leash:
+	if not persistent_chase and home_flat.length() > chase_leash:
 		# 拴绳优先：已经跑出太远，先回家（哪怕玩家就在眼前）
 		target = _home - global_position
 		target.y = 0.0
-	elif dist > chase_stop_distance and dist <= chase_notice_range:
+	elif dist > chase_stop_distance and (persistent_chase or dist <= chase_notice_range):
 		target = to_player
 
 	if target.length() > 0.01:
@@ -266,9 +268,18 @@ func _tick_chase(delta: float) -> void:
 		var previous := global_position
 		global_position += facing() * chase_speed * delta
 		_walking = true
-		if not _snap_to_ground():
+		if not _snap_to_ground() or not preload("res://scripts/boss_terrain_guard.gd").can_move(self, previous, global_position):
 			global_position = previous
 			_walking = false
+			# Seek a supported route around walls instead of pushing into them.
+			for angle in [35.0, -35.0, 70.0, -70.0, 110.0, -110.0]:
+				var direction := facing().rotated(Vector3.UP, deg_to_rad(float(angle)))
+				global_position = previous + direction * chase_speed * delta
+				if _snap_to_ground() and preload("res://scripts/boss_terrain_guard.gd").can_move(self, previous, global_position):
+					_face_towards(direction, delta)
+					_walking = true
+					break
+				global_position = previous
 	else:
 		_walking = false
 		# 站住的时候也慢慢转向玩家（对峙感）

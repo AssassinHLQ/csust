@@ -296,6 +296,12 @@ var _chase_on := true
 var _ground_fall_speed := 0.0
 var _has_grounded_position := false
 var _last_grounded_position := Vector3.ZERO
+var _clearance_check := 0.0
+var _detour_direction := Vector3.ZERO
+var _detour_time := 0.0
+var _pursuit_anchor := Vector3.ZERO
+var _pursuit_stalled := 0.0
+var _pursuit_tracking := false
 ## 探针用：>=0 时强制这个闪避率（默认 -1 = 用护盾自带的值）
 var _evasion_fixed := -1.0
 
@@ -2096,20 +2102,38 @@ func _chase(delta: float) -> void:
 	var d := p.global_position - global_position
 	var flat := Vector2(d.x, d.z)
 	if flat.length() <= CHASE_FAR:
+		_pursuit_tracking = false
 		return
+	if not _pursuit_tracking or global_position.distance_to(_pursuit_anchor) > 2.5:
+		_pursuit_anchor = global_position
+		_pursuit_stalled = 0.0
+		_pursuit_tracking = true
+	else:
+		_pursuit_stalled += delta
+		if _pursuit_stalled >= 1.5:
+			# Reuse the visible, volume-checked blink rather than forcing a path
+			# through a building. A debug cooldown above BLINK_CD still disables it.
+			if _blink_cd <= BLINK_CD:
+				_blink_cd = 0.0
+			_pursuit_stalled = 0.0
 	var dir := Vector3(flat.normalized().x, 0.0, flat.normalized().y)
+	# Commit briefly to a detour so left/right probes cannot oscillate at corners.
+	_detour_time = maxf(_detour_time - delta, 0.0)
+	if _detour_time > 0.0:
+		if _walk_step(_detour_direction, delta):
+			return
+		_detour_time = 0.0
 	# 直线被挡就左右偏一点绕（校园里树和楼的碰撞到处都是；
 	# 真寻路要 NavMesh，这里只要"别站着不动"）
-	for ang in [0.0, 25.0, -25.0, 50.0, -50.0, 80.0, -80.0]:
+	for ang in [0.0, 25.0, -25.0, 50.0, -50.0, 80.0, -80.0, 110.0, -110.0, 145.0, -145.0, 180.0]:
 		var d2 := dir.rotated(Vector3.UP, deg_to_rad(float(ang)))
 		if _walk_step(d2, delta):
+			if ang != 0.0:
+				_detour_direction = d2
+				_detour_time = 0.8
 			return
-	# 七个方向全被挡时允许擦墙，但不能横移到无支撑的扫描空白。
+	# 所有方向受阻时停下，不能绕过墙体检测强行走进建筑。
 	_chase_blocked += 1
-	var next := global_position + dir * CHASE_SPEED * delta
-	var gy := _sample_ground(next.x, next.z)
-	if not is_nan(gy) and absf(gy - global_position.y) <= CHASE_STEP_MAX:
-		global_position = Vector3(next.x, gy + 0.05, next.z)
 
 
 ## 试走一步：前方 4.5 m 没墙、下一格地面高差 ≤ CHASE_STEP_MAX 才走
@@ -2132,7 +2156,10 @@ func _walk_step(dir: Vector3, delta: float) -> bool:
 		return false
 	if absf(gy - global_position.y) > CHASE_STEP_MAX:
 		return false
-	global_position = Vector3(nx, gy + 0.05, nz)
+	var destination := Vector3(nx, gy + 0.05, nz)
+	if not preload("res://scripts/boss_terrain_guard.gd").can_move(self, global_position, destination):
+		return false
+	global_position = destination
 	return true
 
 
@@ -2184,8 +2211,34 @@ func _settle_on_ground(delta: float) -> void:
 			return
 	global_position.y = floor_y
 	_ground_fall_speed = 0.0
-	_last_grounded_position = global_position
-	_has_grounded_position = true
+	_clearance_check -= delta
+	if _clearance_check <= 0.0:
+		_clearance_check = 0.5
+		var guard := preload("res://scripts/boss_terrain_guard.gd")
+		if not guard.is_clear(self, global_position):
+			if _has_grounded_position and global_position.distance_to(_last_grounded_position) < 10.0 and guard.is_clear(self, _last_grounded_position):
+				global_position = _last_grounded_position
+				return
+			var player := _find_player()
+			var heading := 0.0
+			if player != null:
+				var toward := player.global_position - global_position
+				heading = atan2(toward.z, toward.x)
+			for radius in [4.0, 8.0, 12.0, 18.0, 26.0, 36.0]:
+				for index in 12:
+					var angle := heading + float(index) * TAU / 12.0
+					var point := global_position + Vector3(cos(angle), 0, sin(angle)) * float(radius)
+					var ground := _sample_ground(point.x, point.z)
+					if is_nan(ground): continue
+					point.y = ground + 0.05
+					if guard.is_clear(self, point):
+						global_position = point
+						_last_grounded_position = point
+						_has_grounded_position = true
+						return
+			return
+		_last_grounded_position = global_position
+		_has_grounded_position = true
 
 
 func _blink_landing_for(center: Vector3, facing: Vector3) -> Vector3:
@@ -2204,14 +2257,14 @@ func _blink_landing_for(center: Vector3, facing: Vector3) -> Vector3:
 				if is_nan(edge_y) or absf(edge_y - gy) > 1.0:
 					supported = false
 					break
-			if supported:
+			if supported and preload("res://scripts/boss_terrain_guard.gd").is_clear(self, Vector3(point.x, gy + 0.05, point.z)):
 				return Vector3(point.x, gy + 0.05, point.z)
 	return Vector3(NAN, NAN, NAN)
 
 
 func _clone_landing_for(center: Vector3, angle: float) -> Vector3:
-	for radius in [CLONE_RING, 8.0, 12.0, 6.0, 14.0]:
-		for turn in [0.0, 0.16, -0.16, 0.32, -0.32]:
+	for radius in [CLONE_RING, 8.0, 12.0, 6.0, 14.0, 18.0, 23.0, 28.0]:
+		for turn in [0.0, 0.16, -0.16, 0.32, -0.32, 0.65, -0.65, 1.0, -1.0, 1.5, -1.5, PI]:
 			var at := center + Vector3(cos(angle + float(turn)), 0,
 				sin(angle + float(turn))) * float(radius)
 			var gy := _sample_ground(at.x, at.z)
@@ -2223,7 +2276,7 @@ func _clone_landing_for(center: Vector3, angle: float) -> Vector3:
 						clone.global_position.z - at.z).length() < 2.0:
 					occupied = true
 					break
-			if not occupied:
+			if not occupied and preload("res://scripts/boss_terrain_guard.gd").is_clear(self, Vector3(at.x, gy + 0.05, at.z), 10.0):
 				return Vector3(at.x, gy + 0.05, at.z)
 	return Vector3(NAN, NAN, NAN)
 
