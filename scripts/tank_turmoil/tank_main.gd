@@ -459,7 +459,7 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 		"burst_remaining": 0, "burst_timer": 0.0, "burst_is_skill": false,
 		"laser_solver_timer": 0.0, "laser_search_target": -1,
 		"laser_search_target_pos": Vector2.ZERO, "laser_search_origin": Vector2.ZERO,
-		"laser_search_next_degree": 0,
+		"laser_search_next_degree": 0, "laser_searching": false,
 		"kei_rage": false, "motion_sample_pos": pos, "measured_velocity": Vector2.ZERO,
 		"portrait": portrait, "boss": false, "boss_unit": false, "hp": 1, "max_hp": 1,
 		"squad": 0}
@@ -956,6 +956,9 @@ func update_ai(index: int, delta: float) -> void:
 	ai.danger_timer -= delta
 	if is_yuzu and _yuzu_immediate_threat(index):
 		ai.danger_timer = minf(float(ai.danger_timer), 0.0)
+	if is_midori and _yuzu_immediate_threat(index):
+		ai.danger_timer = minf(float(ai.danger_timer), 0.0)
+		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 	# 预测错峰运行，每帧共享一次完整预算；低难度角色的反应间隔更长。
 	var my_squad := int(ai.get("squad", 0))
 	if ai.danger_timer <= 0.0 and ai_danger_budget > 0 and (is_yuzu or my_squad == frame_squad):
@@ -963,6 +966,7 @@ func update_ai(index: int, delta: float) -> void:
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	var midori_laser_fired := false
+	var midori_laser_searching := false
 	ai.laser_solver_timer = maxf(0.0, float(ai.get("laser_solver_timer", 0.0)) - delta)
 	var laser_target_moved := int(ai.get("laser_search_target", -1)) != target_index or Vector2(ai.get("laser_search_target_pos", Vector2.ZERO)).distance_to(opponent.pos) > 64.0 or Vector2(ai.get("laser_search_origin", Vector2.ZERO)).distance_to(ai.pos) > 12.0
 	if has_midori_laser and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and (float(ai.laser_solver_timer) <= 0.0 or laser_target_moved):
@@ -976,11 +980,11 @@ func update_ai(index: int, delta: float) -> void:
 			ai = tanks[index]
 			midori_laser_fired = true
 		elif int(ai.get("laser_search_next_degree", 0)) > 0:
-			tanks[index] = ai
-			return
+			midori_laser_searching = true
+		ai.laser_searching = midori_laser_searching
 	# Fire at a visible opponent before moving or evading. Yuzu only uses the
 	# instant normal-shot path; laser shots turn and fire at her imperfect aim.
-	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
+	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and (not is_midori or Vector2(ai.danger_velocity).is_zero_approx()) and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
 		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
@@ -1005,6 +1009,9 @@ func update_ai(index: int, delta: float) -> void:
 	if evade_direction.length_squared() > 0.0:
 		tanks[index] = ai
 		move_tank_direct(index, evade_direction, delta, ai_speed_evade * movement_scale * (1.25 if is_yuzu else 1.0))
+		return
+	if midori_laser_searching:
+		tanks[index] = ai
 		return
 	if float(ai.reposition_timer) > 0.0:
 		ai.reposition_timer = maxf(0.0, float(ai.reposition_timer) - delta)
@@ -1820,6 +1827,16 @@ func tank_was_hit(index: int) -> void:
 			play_sound(SOUND_ALICE_VICTORY)
 	next_round_timer = 0.45
 
+func eliminated_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for fighter in tanks:
+		if not bool(fighter.alive): names.append(str(fighter.name))
+	return names
+
+func spectator_status() -> String:
+	var eliminated := eliminated_names()
+	return "%s已出局 · 正在观战" % "、".join(eliminated) if not eliminated.is_empty() else "五人个人战 · 最后存活者获胜"
+
 func spawn_armor_hit(pos: Vector2, color: Color) -> void:
 	play_sound(sound_bounce, 0.65)
 	for i in 14:
@@ -2201,9 +2218,7 @@ func _draw() -> void:
 	for i in tanks.size():
 		score_parts.append("%s %d" % [tanks[i].name, scores[i]])
 	draw_string(ThemeDB.fallback_font, Vector2(325, 30), " · ".join(score_parts), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, ui_text())
-	var mode_text := "五人个人战 · 最后存活者获胜" if mode == 1 else ("单人调试" if mode == 2 else "BOSS 调试")
-	if mode == 1 and not tanks[0].alive and not round_over:
-		mode_text = "爱丽丝已出局 · 正在观战"
+	var mode_text := spectator_status() if mode == 1 else ("单人调试" if mode == 2 else "BOSS 调试")
 	draw_string(ThemeDB.fallback_font, Vector2(325, 55), mode_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ui_muted())
 	if mode == 3 and tanks.size() > 1 and tanks[1].alive:
 		draw_string(ThemeDB.fallback_font, Vector2(790, 68), "BOSS 耐久", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("6f2ca8"))

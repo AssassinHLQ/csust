@@ -143,6 +143,15 @@ func _run() -> void:
 		if child is AudioStreamPlayer and child.stream == victory: before_win_voice += 1
 	_check(before_win_voice == 0, "其他角色获胜不会播放爱丽丝语音")
 	_tank.call("new_round")
+	var status_tanks: Array = _tank.get("tanks")
+	status_tanks[0].alive = false
+	status_tanks[2].alive = false
+	var spectator_text: String = _tank.call("spectator_status")
+	var eliminated: PackedStringArray = _tank.call("eliminated_names")
+	var lists_all_eliminated := eliminated.size() == 2 and spectator_text.ends_with("已出局 · 正在观战")
+	for eliminated_name in eliminated: lists_all_eliminated = lists_all_eliminated and spectator_text.contains(eliminated_name)
+	_check(lists_all_eliminated, "观战状态列出所有已淘汰角色")
+	_tank.call("new_round")
 	for i in [1, 2, 3, 4]: _tank.call("tank_was_hit", i)
 	var win_voice_count := 0
 	for child in _tank.get_children():
@@ -225,6 +234,25 @@ func _run() -> void:
 	battle[1].laser_solver_timer = 0.2
 	_tank.call("update_ai", 1, 0.05)
 	_check(is_equal_approx(float(battle[1].laser_solver_timer), 0.15), "小绿折射搜索受冷却节流，不会每帧重复")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	for i in [2, 3, 4]: battle[i].alive = false
+	battle[1].pos = Vector2(400, 400)
+	battle[1].angle = 0.0
+	battle[1].weapon = "laser"
+	battle[1].cooldown = 0.0
+	battle[1].laser_search_target = 0
+	battle[1].laser_search_target_pos = Vector2(600, 400)
+	battle[1].laser_search_origin = battle[1].pos
+	battle[1].laser_search_next_degree = 8
+	battle[0].pos = Vector2(600, 400)
+	_tank.get("bullets").append({"pos": Vector2(450, 400), "vel": Vector2(-200, 0), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
+	_tank.set("ai_danger_budget", 0)
+	var midori_before_evade: Vector2 = battle[1].pos
+	_tank.call("update_ai", 1, 1.0 / 60.0)
+	_check(battle[1].pos.distance_to(midori_before_evade) > 0.1 and Vector2(battle[1].danger_velocity).length_squared() > 0.0, "小绿分帧瞄准期间优先躲避即将命中的子弹")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
