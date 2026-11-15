@@ -13,7 +13,7 @@ dest_files=["res://.godot/imported/esports_theme.ogg-c7cfd6e2035ab1006c1b6fb45a4
 [params]
 
 loop=true
-loop_offset=22.25
+loop_offset=22.28
 bpm=0
 beat_count=0
 bar_beats=4

@@ -333,22 +333,11 @@ func _notification(what: int) -> void:
 			pause_settings_open = true
 			queue_redraw()
 		return
-	# Recheck after the player returns from Windows Settings. Avoid polling and
-	# process spawning during a match.
-	if what == NOTIFICATION_APPLICATION_FOCUS_IN and is_node_ready():
-		refresh_power_profile()
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		release_all()
 
 func refresh_power_profile() -> void:
-	var saver := false
-	if OS.get_name() == "Windows":
-		var output: Array = []
-		var script := "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class PowerStatus { [StructLayout(LayoutKind.Sequential)] public struct Status { public byte AC; public byte BatteryFlag; public byte BatteryPercent; public byte Saver; public uint Life; public uint Full; } [DllImport(\"kernel32.dll\")] public static extern bool GetSystemPowerStatus(out Status s); }'; $s=New-Object PowerStatus+Status; [PowerStatus]::GetSystemPowerStatus([ref]$s)|Out-Null; Write-Output $s.Saver"
-		var exit_code := OS.execute("powershell.exe", PackedStringArray(["-NoProfile", "-NonInteractive", "-Command", script]), output, true, false)
-		if exit_code == 0 and not output.is_empty(): saver = str(output[0]).strip_edges().begins_with("1")
-	else:
-		# Mobile builds always use the efficient profile; Godot 4.7 does not expose
-		# a portable battery-saver flag for every phone platform.
-		saver = OS.has_feature("mobile")
+	var saver := OS.has_feature("mobile")
 	energy_saver_enabled = saver
 	# ⚠️ 这里**只记「省不省电」**，不再直接改 AI 档位。
 	#    原来的 `ai_danger_interval = 0.15 if saver else 0.12` 会把四台 AI 都压到
@@ -734,7 +723,11 @@ func _process(delta: float) -> void:
 			ai_danger_budget = 1
 			ai_bank_budget = 0
 			frame_squad = (frame_squad + 1) % maxi(1, ai_squads)
-			for ai_index in range(1, tanks.size()): update_ai(ai_index, delta)
+			# Yuzu receives the first available danger prediction each frame.
+			for ai_index in range(1, tanks.size()):
+				if str(tanks[ai_index].name) == "柚子": update_ai(ai_index, delta)
+			for ai_index in range(1, tanks.size()):
+				if str(tanks[ai_index].name) != "柚子": update_ai(ai_index, delta)
 		else:
 			update_human(1, delta)
 		update_weapon_bursts(delta)
@@ -923,13 +916,15 @@ func move_tank(index: int, drive: float, turn: float, delta: float, max_speed :=
 
 func ai_skill(index: int) -> float:
 	match str(tanks[index].name):
-		"才羽桃井": return 0.55
+		"才羽桃井": return 0.45
 		"凯伊": return 0.70
 	return 1.0
 
 func update_ai(index: int, delta: float) -> void:
 	if not tanks[index].alive: return
 	var ai := tanks[index]
+	var is_yuzu := str(ai.name) == "柚子"
+	var is_midori := str(ai.name) == "才羽绿"
 	var skill := ai_skill(index)
 	var target_index := homing_target(index, ai.pos)
 	if target_index < 0: return
@@ -938,8 +933,8 @@ func update_ai(index: int, delta: float) -> void:
 	ai.danger_timer -= delta
 	# 预测错峰运行，每帧共享一次完整预算；低难度角色的反应间隔更长。
 	var my_squad := int(ai.get("squad", 0))
-	if ai.danger_timer <= 0.0 and ai_danger_budget > 0 and my_squad == frame_squad:
-		ai.danger_timer = ai_danger_interval / (skill * skill)
+	if ai.danger_timer <= 0.0 and ai_danger_budget > 0 and (is_yuzu or my_squad == frame_squad):
+		ai.danger_timer = (0.055 if is_yuzu else ai_danger_interval) / (skill * skill)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	var evade_direction: Vector2 = ai.danger_velocity
@@ -984,6 +979,18 @@ func update_ai(index: int, delta: float) -> void:
 		if int(ai.role) == 3: drive = 0.0
 		elif int(ai.role) == 4 and distance_to_player < 230.0: drive = -0.75
 		elif distance_to_player < 115.0: drive = 0.0
+		if is_yuzu:
+			var preferred := 180.0 if str(ai.weapon) == "shotgun" else 260.0
+			drive = -0.8 if distance_to_player < preferred - 45.0 else (0.65 if distance_to_player > preferred + 45.0 else 0.0)
+		elif is_midori:
+			drive = 1.0 if distance_to_player > 135.0 else 0.0
+	if is_midori and str(ai.weapon) == "laser" and has_sight and float(ai.cooldown) <= 0.0:
+		var snap_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
+		if not tank_hits_wall(ai.pos, snap_angle):
+			ai.angle = snap_angle
+			tanks[index] = ai
+			fire(index)
+			return
 	tanks[index] = ai
 	if (wants_pickup or not has_sight) and is_nan(float(ai.attack_angle)):
 		# Omnidirectional path following prevents rectangular tanks wedging at corners.
@@ -996,9 +1003,15 @@ func update_ai(index: int, delta: float) -> void:
 	var firing_angle: float = player_angle if has_sight else float(ai.attack_angle)
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
 	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, skill)
-	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0:
+	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0:
 		if rng.randf() <= skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
-			fire(index)
+			if is_midori and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
+				ai.burst_remaining = 5
+				ai.burst_timer = 0.0
+				ai.cooldown = 0.9
+				tanks[index] = ai
+			else:
+				fire(index)
 		ai.cooldown = maxf(float(ai.cooldown), 0.45 / skill)
 
 func tactical_cell(index: int) -> Vector2i:
@@ -1362,6 +1375,7 @@ func fire_laser(owner: int) -> void:
 		position += velocity
 		for tank_index in tanks.size():
 			if not tanks[tank_index].alive: continue
+			if _kei_protects_alice(owner, tank_index): continue
 			if tank_index == owner and step_index < 12: continue
 			if bullet_hits_tank_at(position, tanks[tank_index].pos, float(tanks[tank_index].angle), 1.25):
 				points.append(position)
@@ -1399,6 +1413,7 @@ func update_bullets(delta: float) -> void:
 			b.pos += b.vel * sub_delta
 			for ti in tanks.size():
 				if not tanks[ti].alive: continue
+				if _kei_protects_alice(int(b.owner), ti): continue
 				if ti == b.owner and b.grace > 0.0: continue
 				# Full friendly fire: department projectiles can hit any teammate.
 				if bullet_hits_tank_at(b.pos, tanks[ti].pos, float(tanks[ti].angle), BULLET_R):
@@ -1411,9 +1426,12 @@ func homing_target(owner: int, bullet_pos: Vector2) -> int:
 	var result := -1
 	var closest := INF
 	for i in tanks.size():
-		if i != owner and tanks[i].alive and bullet_pos.distance_squared_to(tanks[i].pos) < closest:
+		if i != owner and tanks[i].alive and not _kei_protects_alice(owner, i) and bullet_pos.distance_squared_to(tanks[i].pos) < closest:
 			closest = bullet_pos.distance_squared_to(tanks[i].pos); result = i
 	return result
+
+func _kei_protects_alice(owner: int, target: int) -> bool:
+	return owner >= 0 and owner < tanks.size() and target >= 0 and target < tanks.size() and str(tanks[owner].name) == "凯伊" and str(tanks[target].name) == "爱丽丝"
 
 func update_pickups(delta: float) -> void:
 	pickup_timer -= delta

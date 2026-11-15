@@ -116,8 +116,6 @@ const CUTSCENE_LOOK := Vector3(54.10, 1.55, 14.10)
 const TANK_SIZE := Vector2i(1000, 800)
 const TANK_SCENE := "res://scripts/tank_turmoil/tank_main_scene.tscn"
 const LOGO_PATH := "res://assets/story/gamedev_logo.png"
-## 小游戏开着时电竞房 BGM 压到原来的多少倍
-const BGM_GAIN := 0.45
 
 enum Phase { IDLE, SIT, GLOW, PLAY, STAND }
 
@@ -148,8 +146,6 @@ var _foot: Label
 var _mouse_before_play := Input.MOUSE_MODE_VISIBLE
 var _viewport_3d_was_disabled := false
 
-var _bgm_saved := false
-var _bgm_db := 0.0
 
 
 func _ready() -> void:
@@ -503,7 +499,6 @@ func begin() -> void:
 	# 人都挪走了，先把输入系统让出来（否则人还在原地走）
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_take_camera()
-	_duck_room_music(true)
 	Sfx.play("ui_open", -6.0)
 	print("[开黑] 开始：%d 人依次坐上电竞椅" % _actors.size())
 
@@ -632,8 +627,7 @@ func _begin_play() -> void:
 	_resize_tank_viewport.call_deferred()
 	if tank.has_method("release_all"):
 		tank.call("release_all")
-	print("[小游戏] 窗口切进坦克动荡（五人混战 · 音乐仍由电竞房播放，压到 %d%%）"
-		% int(BGM_GAIN * 100.0))
+	print("[小游戏] 窗口切进坦克动荡（五人混战 · 音乐仍由电竞房播放）")
 
 
 func _ensure_tank() -> bool:
@@ -730,7 +724,6 @@ func _finish_stand() -> void:
 		var menu := _settings_menu()
 		if menu == null or not get_tree().paused:
 			Input.mouse_mode = _mouse_before_play
-	_duck_room_music(false)
 	print("[开黑] 回到常态")
 
 
@@ -741,29 +734,6 @@ func _ease_out(u: float) -> float:
 
 func _lerp_yaw(from: float, to: float, u: float) -> float:
 	return lerp_angle(from, to, u)
-
-
-# ══════════════ BGM 让位 ══════════════
-
-## 只碰 `music.gd` 建在 `root/MusicHost/Bgm` 的那个播放器，进出各改一次，退出原样还原。
-## ⚠️ 不往 `music.gd` 加 API（那个文件常有别的会话在改）；`Music` 是静态类，
-##    `Music.get("_player")` 会直接报错，所以按节点树找。
-func _room_music_player() -> AudioStreamPlayer:
-	return get_tree().root.get_node_or_null("MusicHost/Bgm") as AudioStreamPlayer
-
-
-func _duck_room_music(on: bool) -> void:
-	var player := _room_music_player()
-	if player == null:
-		return
-	if on:
-		if not _bgm_saved:
-			_bgm_db = player.volume_db
-			_bgm_saved = true
-		player.volume_db = _bgm_db + linear_to_db(BGM_GAIN)
-	elif _bgm_saved:
-		player.volume_db = _bgm_db
-		_bgm_saved = false
 
 
 # ══════════════ 探针 / 自检用 ══════════════

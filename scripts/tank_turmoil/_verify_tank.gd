@@ -130,7 +130,26 @@ func _run() -> void:
 	_tank.set("ai_danger_budget", 0)
 	_tank.call("update_ai", 1, 1.0 / 60.0)
 	_check(int(battle[1].get("target_index", -1)) == 2, "观战期间 AI 转向其他 AI")
+	_check(int(battle[1].burst_remaining) == 5, "小绿使用五连发封路")
+	_tank.call("update_weapon_bursts", 1.0 / 60.0)
 	_check(not (_tank.get("bullets") as Array).is_empty(), "爱丽丝出局后 AI 仍然开火")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_check(bool(_tank.call("_kei_protects_alice", 4, 0)), "凯伊保护爱丽丝")
+	_check(not bool(_tank.call("_kei_protects_alice", 0, 4)), "爱丽丝仍可攻击凯伊")
+	_check(int(_tank.call("homing_target", 4, battle[0].pos)) != 0, "凯伊不会以爱丽丝为目标")
+	_check(float(_tank.call("ai_skill", 3)) < float(_tank.call("ai_skill", 4)), "桃井反应弱于凯伊")
+	battle[1].pos = Vector2(400, 400)
+	battle[1].angle = PI / 2.0
+	battle[1].weapon = "laser"
+	battle[1].ammo = 1
+	battle[1].cooldown = 0.0
+	battle[0].pos = Vector2(500, 400)
+	for i in [2, 3, 4]: battle[i].pos = Vector2(900, 600)
+	_tank.get("walls").clear()
+	_tank.set("ai_danger_budget", 0)
+	_tank.call("update_ai", 1, 1.0 / 60.0)
+	_check(not bool(battle[0].alive), "小绿持激光快速瞄准并命中")
 	_tank.call("new_round")
 	var old_cell := float(_tank.get("CELL"))
 	var viewport := _tank.get_viewport() as SubViewport
