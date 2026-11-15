@@ -38,6 +38,7 @@ func _init() -> void:
 	if _tank == null:
 		_finish()
 		return
+	_check(is_equal_approx(float(_tank.get("master_volume")), 1.0) and is_equal_approx(float(_tank.get("sfx_volume")), 1.0), "新游戏默认总音量和音效均为 100%")
 	# ⚠️ 必须有 1000×800 的 SubViewport 包着：逻辑尺寸写死在 `W` / `H`。
 	#    直接挂到 `root`（--headless 下是 1152×648）会走 `_open_own_viewport()` 的警告分支。
 	var sub := SubViewport.new()
@@ -97,9 +98,9 @@ func _run() -> void:
 	var dirs: int = _tank.get("ai_evade_directions")
 	var steps: int = _tank.get("ai_evade_steps")
 	var squads: int = _tank.get("ai_squads")
-	_check(is_equal_approx(interval, 0.075), "危险预测间隔 = 优香的 0.075 s（实际 %.3f）" % interval)
-	_check(dirs == 12, "躲避方向数 = 优香的 12（实际 %d）" % dirs)
-	_check(steps == 30, "远期步数 = 30（优香 36 打八折，实际 %d）" % steps)
+	_check(is_equal_approx(interval, 0.12), "危险预测间隔 0.12 s（实际 %.3f）" % interval)
+	_check(dirs == 8, "躲避方向数 8（实际 %d）" % dirs)
+	_check(steps == 20, "远期步数 20（实际 %d）" % steps)
 	_check(squads == 2, "四台拆成 2 组错峰（实际 %d）" % squads)
 	_check(is_equal_approx(float(_tank.get("ai_fire_tolerance")), 0.022),
 		"开火容差 = 优香的 0.022 弧度")
@@ -107,6 +108,47 @@ func _run() -> void:
 	for i in range(1, tanks.size()):
 		squads_seen[int(tanks[i].get("squad", -1))] = true
 	_check(squads_seen.size() == 2, "四台确实分布在两组（%s）" % str(squads_seen.keys()))
+	_check(float(_tank.call("ai_skill", 3)) < float(_tank.call("ai_skill", 1)), "桃井 AI 难度降低")
+	_check(float(_tank.call("ai_skill", 4)) < float(_tank.call("ai_skill", 1)), "凯伊 AI 难度降低")
+	_tank.call("tank_was_hit", 0)
+	_check(not bool(_tank.get("round_over")), "爱丽丝出局后继续观战")
+	_check(int(_tank.call("homing_target", 1, tanks[2]["pos"])) == 2, "AI 能追踪其他存活角色")
+	for i in [1, 2, 3]: _tank.call("tank_was_hit", i)
+	_check(bool(_tank.get("round_over")) and str(_tank.get("round_message")).contains("凯伊"), "最后存活的凯伊获胜")
+	_check(int(_tank.get("scores")[4]) == 1, "胜场记在获胜角色名下")
+	_tank.call("new_round")
+	var battle: Array = _tank.get("tanks")
+	battle[0].alive = false
+	battle[1].pos = Vector2(400, 400)
+	battle[1].angle = 0.0
+	battle[1].cooldown = 0.0
+	battle[2].pos = Vector2(500, 400)
+	battle[3].pos = Vector2(900, 600)
+	battle[4].pos = Vector2(1000, 200)
+	_tank.get("walls").clear()
+	_tank.set("ai_danger_budget", 0)
+	_tank.call("update_ai", 1, 1.0 / 60.0)
+	_check(int(battle[1].get("target_index", -1)) == 2, "观战期间 AI 转向其他 AI")
+	_check(not (_tank.get("bullets") as Array).is_empty(), "爱丽丝出局后 AI 仍然开火")
+	_tank.call("new_round")
+	var old_cell := float(_tank.get("CELL"))
+	var viewport := _tank.get_viewport() as SubViewport
+	viewport.size = Vector2i(1422, 800)
+	_tank.call("resize_arena")
+	_check(float(_tank.get("CELL")) > old_cell, "宽屏地图格子随画布增大")
+	_check(not bool(_tank.call("tank_hits_wall", _tank.get("tanks")[0]["pos"], float(_tank.get("tanks")[0]["angle"]))), "画布调整后玩家未卡入墙内")
+	_tank.set("countdown", 0.0)
+	var shot := InputEventKey.new()
+	shot.physical_keycode = KEY_J
+	shot.pressed = true
+	_tank.call("feed", shot)
+	_tank.call("_process", 1.0 / 60.0)
+	var player_fired := false
+	for projectile in _tank.get("bullets"):
+		if int(projectile.owner) == 0: player_fired = true
+	_check(player_fired, "键盘单次开火在清除按键边沿前执行")
+	_tank.call("release_all")
+	_tank.call("new_round")
 
 	# ── ⑥ 输入：喂一个 W 事件，主角应该动 ──
 	# 倒计时（2.8 秒）走完之前 `_process()` 不动坦克，所以先把倒计时清零并放一帧。

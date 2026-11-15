@@ -10,8 +10,8 @@ extends Node2D
 ##   ② **歌单**：42 首 ogg 全部不搬（省 37.9 MB），音乐统一由电竞房 BGM 负责，
 ##      本脚本 `_ready()` 里把自己那个 `AudioStreamPlayer` 停掉；设置页的
 ##      「音乐」滑条和「背景曲目」入口整块删掉。
-##   ③ **模式**：只剩「五人同时在场」一种 —— 主角爱丽丝 vs 才羽绿 / 柚子 / 才羽桃井 / 凯伊，
-##      四台 AI 全部用优香那套算法（`_set_ai_tier()`），按人数分摊预算。
+##   ③ **模式**：五人个人战，爱丽丝 / 才羽绿 / 柚子 / 才羽桃井 / 凯伊各自作战，
+##      桃井和凯伊难度较低，四台 AI 按帧共享避弹预算。
 ##   ④ **地图**：默认 19 × 9，菜单可调 13~21 × 7~9。
 ##   ⑤ **开场视频**：不搬 `startup.ogv`（3.2 MB），直接跳过。
 ##   ⑥ **存档**：改到 `user://tank_turmoil.cfg`，不跟主工程进度混在一起。
@@ -68,11 +68,8 @@ var ai_max_predicted_minigun_bullets := 2
 ## ── 地图（2026-11-14 用户：「稍微修改为五人模式大地图版本」）──
 ## 原来 11 × 7 是单人挑战的尺寸；五台坦克塞进去一开局就贴脸。
 ##
-## ⚠️ 竞技场**逻辑尺寸是固定的 1000 × 800**（`W` / `H`，SubViewport 也是这个比例），
-##    所以「大地图」只体现在**格子多、格子小**，不是画布变大 —— 视野永远装得下整张图，
-##    小游戏不做跟随镜头。
-##    `apply_map_size()` 里 `CELL` 取 `70 / available / 纵向` 三者最小值，
-##    19 × 9 在 1000 宽下算出来约 48.9 px，比原来 70 px 小一圈。
+## 逻辑高度固定 800，宽度由宿主按窗口宽高比扩展。菜单以 W/H 为基准居中，
+## 地图使用新增的宽度等比例增大方格，整张地图始终完整可见。
 var CELL := 48.9
 ## 默认 19 × 9：五台坦克有地方散开，小游戏那点面积也塞得下。
 var COLS := 19
@@ -115,6 +112,7 @@ const ROOM_MUSIC_TRACK := "esports"
 const SAVE_PATH := "user://tank_turmoil.cfg"
 
 var walls: Array[Rect2] = []
+var maze_links := {}
 var prediction_mask := PackedByteArray()
 const MASK_SCALE := 3.0
 var mask_width := 334
@@ -125,7 +123,7 @@ var bullets: Array[Dictionary] = []
 var laser_beams: Array[Dictionary] = []
 var pickups: Array[Dictionary] = []
 var pickup_timer := 0.0
-var scores := [0, 0]
+var scores := [0, 0, 0, 0, 0]
 var mode := 0 # 0 菜单 / 1 对战（唯一玩法） / 2 单人调试 / 3 BOSS 调试
 var round_over := false
 var paused := false
@@ -139,7 +137,7 @@ var next_round_timer := 0.0
 var countdown := 0.0
 var particles: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
-## 电脑数量。**不再是菜单可调项**：五人模式固定 4 台（爱丽丝 vs 四队友）。
+## 电脑数量。**不再是菜单可调项**：五人个人战固定 4 台 AI。
 ## 保留这个变量是因为原版一片代码都在读它（`needed` / 结算文案 / 菜单文字），
 ## 留着它 = 少改十几处，而且以后想加「三人 / 六人」只要在 `START_SETUPS` 里加一行。
 var ai_count := 4
@@ -148,7 +146,7 @@ var ai_count := 4
 ## 角色下标对应 `character_data()`：0 才羽绿 / 1 柚子 / 2 才羽桃井 / 3 爱丽丝 / 4 凯伊。
 const START_SETUPS := [
 	{"player": 3, "enemies": [0, 1, 2, 4],
-		"label": "爱丽丝 VS 游戏开发部其余四人"},
+		"label": "五人个人战 · 最后存活者获胜"},
 ]
 var squad_clock := 0.0
 var squad_phase := 0
@@ -206,8 +204,8 @@ var dark_mode := false
 ## ── 音量 ──
 ## `music_volume` 不再控制任何东西（歌单不搬了），只是 `apply_audio_levels()`
 ## 的入参还留着；宿主 `esports_arcade` 负责压电竞房 BGM。
-var master_volume := 0.8
-var sfx_volume := 0.85
+var master_volume := 1.0
+var sfx_volume := 1.0
 var music_volume := 0.35
 var music_index := 0
 ## 曲目名保留成 `MUSIC_NAMES[music_index]` 的兜底，一处都不再绘制（歌单 UI 已删）。
@@ -246,7 +244,8 @@ func _ready() -> void:
 	if get_viewport().size.x < 100.0 or get_viewport().size.y < 100.0:
 		_open_own_viewport()
 		return
-	get_viewport().size_changed.connect(refresh_static_map)
+	get_viewport().size_changed.connect(resize_arena)
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	apply_audio_levels()
 	set_process(true)
 	start_intro()
@@ -297,18 +296,24 @@ func load_progress() -> void:
 	var save := ConfigFile.new()
 	if save.load(SAVE_PATH) == OK:
 		dark_mode = bool(save.get_value("appearance", "dark_mode", false))
-		master_volume = clampf(float(save.get_value("audio", "master", 0.8)), 0.0, 1.0)
-		sfx_volume = clampf(float(save.get_value("audio", "sfx", 0.85)), 0.0, 1.0)
+		master_volume = clampf(float(save.get_value("audio", "master", 1.0)), 0.0, 1.0)
+		sfx_volume = clampf(float(save.get_value("audio", "sfx", 1.0)), 0.0, 1.0)
 		COLS = clampi(int(save.get_value("map", "cols", COLS)), MAP_COLS_MIN, MAP_COLS_MAX)
 		ROWS = clampi(int(save.get_value("map", "rows", ROWS)), MAP_ROWS_MIN, MAP_ROWS_MAX)
 		touch_height_index = clampi(int(save.get_value("touch", "height", 1)), 0, 2)
 		touch_spacing_index = clampi(int(save.get_value("touch", "spacing", 1)), 0, 2)
+		# 迁移旧版写入的 80% / 85% 初始值；其余自定义音量照常保留。
+		if not save.has_section_key("audio", "defaults_version") and is_equal_approx(master_volume, 0.8) and is_equal_approx(sfx_volume, 0.85):
+			master_volume = 1.0
+			sfx_volume = 1.0
+			save_progress()
 
 func save_progress() -> void:
 	var save := ConfigFile.new()
 	save.set_value("appearance", "dark_mode", dark_mode)
 	save.set_value("audio", "master", master_volume)
 	save.set_value("audio", "sfx", sfx_volume)
+	save.set_value("audio", "defaults_version", 2)
 	save.set_value("map", "cols", COLS)
 	save.set_value("map", "rows", ROWS)
 	save.set_value("touch", "height", touch_height_index)
@@ -476,37 +481,21 @@ func selectable_character_count() -> int:
 
 func start_game(new_mode: int) -> void:
 	mode = new_mode
-	scores = [0, 0]
+	scores = [0, 0, 0, 0, 0]
 	apply_map_size()
 	_set_ai_tier()
 	new_round()
 
-## ── AI 档位（2026-11-14 用户：「他们都用优香的算法，强一点」）──
-##
-## 做法：**一律按优香的数值跑**（`BOSS_*` 那组常量），但四台同时满算会撞帧，
-## 所以按「人数」分两刀：
-##
-##   ① **危险预测拆组**（省时间的 70%）。原版五人对战里已经有一句
-##      `evade_directions = mini(..., 8)` / `evade_steps = mini(..., 26)`，
-##      理由是「五台 AI 同时制造尖峰」。这里改成**按 4 台拆成 2 组、每组 2 台**：
-##      `ai_squads = 2` 之后，`_process()` 每帧只让组号为 `frame_squad` 的那一组
-##      真的跑完整预测，另一组这一帧直接跳过（下一帧换它）。每台实际预测频率
-##      仍是 **每 0.075 秒一次**，只是错开，肉眼完全看不出来。
-##      ⇒ `ai_evade_directions` / `ai_evade_steps` **保持优香的 12 / 36**，不砍。
-##   ② **远期采样打八折**：36 步 → 30 步（覆盖 3.0 秒，而实测逃生窗口约 3.6 秒里的
-##      后 0.6 秒已经在「安全」区）。方向数不砍 —— 方向数才是躲反弹的关键。
-##
-## 所以四台的强度**约等于优香本人**：同样的转向速度、同样的瞄准容差（0.022 弧度）、
-## 同样的走位速度（120 ~ 142 m/s × scale）、同样的躲避方向数，只少了 6 步远期。
-## 它们还**不是** BOSS：没有 3 点耐久（`enemy.boss = false`），一炮就死 —— 不然玩家
-## 面对四台满血优香没法玩。想要更狠就调 `FIVE_PLAYER_FUTURE_STEPS`。
+## 五人自由混战：危险预测分两组错峰，每帧最多执行一次完整预测。
+## 五人局使用 8 个方向、20 步；桃井与凯伊另由 ai_skill() 降低反应和命中率。
+## 不在实时更新中穷举反弹射击角度，避免四台 AI 同时搜索造成长帧。
 const FIVE_PLAYER_EVADE_SQUADS := 2
-const FIVE_PLAYER_FUTURE_STEPS := 30
+const FIVE_PLAYER_FUTURE_STEPS := 20
 
 func _set_ai_tier() -> void:
 	var enemies := maxi(1, tanks_enemy_count())
-	ai_danger_interval = BOSS_DANGER_INTERVAL
-	ai_evade_directions = BOSS_EVADE_DIRECTIONS
+	ai_danger_interval = 0.12
+	ai_evade_directions = 8
 	ai_speed_chase = BOSS_SPEED_CHASE
 	ai_speed_evade = BOSS_SPEED_EVADE
 	ai_speed_path = BOSS_SPEED_PATH
@@ -524,8 +513,8 @@ func _set_ai_tier() -> void:
 	if energy_saver_enabled:
 		# 省电模式：原版是把每台都调弱；这里**只减采样**，不动速度 / 瞄准 / 方向数
 		ai_evade_steps = maxi(18, ai_evade_steps - 6)
-		ai_danger_interval = BOSS_DANGER_INTERVAL + 0.03
-	print("[坦克] AI 档位：优香同款 · %d 台 · 预测 %.3fs/次 · %d 方向 × %d 步 · 拆 %d 组%s"
+		ai_danger_interval = 0.18
+	print("[坦克] AI 档位：个人战 · %d 台 · 预测 %.3fs/次 · %d 方向 × %d 步 · 拆 %d 组%s"
 		% [enemies, ai_danger_interval, ai_evade_directions, ai_evade_steps, ai_squads,
 			"（省电模式）" if energy_saver_enabled else ""])
 
@@ -562,14 +551,40 @@ func refresh_static_map() -> void:
 		ui_text()
 	)
 
+## 保留同一局的地形和存活状态，窗口变宽时等比例放大迷宫。
+func resize_arena() -> void:
+	var old_origin := Vector2(OX, OY)
+	var old_cell := CELL
+	apply_map_size()
+	if mode > 0 and old_cell > 0.0:
+		var ratio := CELL / old_cell
+		var origin := Vector2(OX, OY)
+		for i in walls.size():
+			walls[i] = Rect2(origin + (walls[i].position - old_origin) * ratio, walls[i].size * ratio)
+		for collection in [tanks, bullets, pickups, particles]:
+			for item in collection:
+				item.pos = origin + (Vector2(item.pos) - old_origin) * ratio
+		for beam in laser_beams:
+			for i in beam.points.size():
+				beam.points[i] = origin + (Vector2(beam.points[i]) - old_origin) * ratio
+		build_prediction_mask()
+	refresh_static_map()
+	queue_redraw()
+
 func new_round() -> void:
+	apply_map_size()
 	generate_maze()
 	refresh_static_map()
 	var needed: int = ai_count + 1 if mode == 1 else 2
 	var spawn_cells: Array[Vector2i] = []
 	while spawn_cells.size() < needed:
 		var candidate := Vector2i(rng.randi_range(0, COLS - 1), rng.randi_range(0, ROWS - 1))
-		if not spawn_cells.has(candidate): spawn_cells.append(candidate)
+		var separated := true
+		for occupied in spawn_cells:
+			if Vector2(candidate - occupied).length_squared() < 4.0:
+				separated = false
+				break
+		if separated: spawn_cells.append(candidate)
 	# ── 编队 ──
 	# `mode == 1`（对战）固定按 `START_SETUPS[0]`：0 号 = 爱丽丝（玩家），
 	# 1..4 = 才羽绿 / 柚子 / 才羽桃井 / 凯伊（四台 AI）。
@@ -657,6 +672,7 @@ func generate_maze() -> void:
 		var q: Vector2i = p + extra_dirs[rng.randi_range(0, 1)]
 		if q.x < COLS and q.y < ROWS:
 			passages[edge_key(p, q)] = true
+	maze_links = passages
 	walls = [
 		Rect2(OX, OY, COLS * CELL, WALL_T), Rect2(OX, OY + ROWS * CELL - WALL_T, COLS * CELL, WALL_T),
 		Rect2(OX, OY, WALL_T, ROWS * CELL), Rect2(OX + COLS * CELL - WALL_T, OY, WALL_T, ROWS * CELL)
@@ -703,7 +719,6 @@ func point_cell(p: Vector2) -> Vector2i:
 	return Vector2i(clampi(int((p.x - OX) / CELL), 0, COLS - 1), clampi(int((p.y - OY) / CELL), 0, ROWS - 1))
 
 func _process(delta: float) -> void:
-	_clear_frame_presses()
 	if mode > 0 and not paused and not round_over and countdown <= 0.0:
 		if mode == 1 or mode == 3:
 			squad_clock -= delta
@@ -715,11 +730,9 @@ func _process(delta: float) -> void:
 			# GDScript gameplay runs mainly on the main thread. Limiting each kind of
 			# expensive calculation to one AI per frame removes single-core spikes.
 			#
-			# 五人版（2026-11-14）：四台 AI 拆成 `ai_squads` 组轮流跑完整危险预测，
-			# 每帧只让一组跑、预算按组数给 —— 每台的实际预测频率仍是 `ai_danger_interval`，
-			# 只是错开帧。见 `_set_ai_tier()`。
-			ai_danger_budget = maxi(1, ai_squads)
-			ai_bank_budget = maxi(1, ai_squads)
+			# 两组轮换候选资格，共享每帧一次的危险预测预算。
+			ai_danger_budget = 1
+			ai_bank_budget = 0
 			frame_squad = (frame_squad + 1) % maxi(1, ai_squads)
 			for ai_index in range(1, tanks.size()): update_ai(ai_index, delta)
 		else:
@@ -732,6 +745,7 @@ func _process(delta: float) -> void:
 	update_particles(delta)
 	if round_over and next_round_timer > 0.0:
 		next_round_timer -= delta
+	_clear_frame_presses()
 	if mode > 0:
 		queue_redraw()
 
@@ -823,7 +837,7 @@ func just_pressed(action: String, player := 1) -> bool:
 	return false
 
 ## ⚠️ `_keys_pressed` 必须每帧清空，否则「按一下 → 一直开火」。
-##    `_process()` 开头调一次（无论游戏在不在跑，菜单里也要清，免得攒着）。
+##    `_process()` 处理完输入后调一次，菜单里也要清，免得攒着。
 func _clear_frame_presses() -> void:
 	_keys_pressed.clear()
 
@@ -836,6 +850,7 @@ func release_all() -> void:
 	touch_move = Vector2.ZERO
 
 func update_human(index: int, delta: float) -> void:
+	if not tanks[index].alive: return
 	var player := index + 1
 	var drive := (1.0 if is_down("forward", player) else 0.0) - (1.0 if is_down("back", player) else 0.0)
 	var turn := (1.0 if is_down("right", player) else 0.0) - (1.0 if is_down("left", player) else 0.0)
@@ -894,22 +909,25 @@ func move_tank(index: int, drive: float, turn: float, delta: float, max_speed :=
 	t.pos = p
 	tanks[index] = t
 
+func ai_skill(index: int) -> float:
+	match str(tanks[index].name):
+		"才羽桃井": return 0.55
+		"凯伊": return 0.70
+	return 1.0
+
 func update_ai(index: int, delta: float) -> void:
 	if not tanks[index].alive: return
 	var ai := tanks[index]
+	var skill := ai_skill(index)
+	var target_index := homing_target(index, ai.pos)
+	if target_index < 0: return
+	var opponent: Dictionary = tanks[target_index]
 	ai.cooldown = maxf(0.0, ai.cooldown - delta)
 	ai.danger_timer -= delta
-	# ── 危险预测：**所有 AI 一律走优香档**（2026-11-14 用户：「都用优香的算法」）──
-	# 原版这里分两套：`is_boss` 用 0.075 s / 12 方向 / 36 步，普通 AI 用 0.09 s / 16 方向 / 60 步。
-	# 现在统一成优香那套（数值在 `_set_ai_tier()` 里备好），区别只剩：
-	#   · 拆组错峰：只有轮到自己这一组的那一帧才真算（`ai_danger_budget` 按组数给）；
-	#   · 远期 36 步 → 30 步（`FIVE_PLAYER_FUTURE_STEPS`）。
+	# 预测错峰运行，每帧共享一次完整预算；低难度角色的反应间隔更长。
 	var my_squad := int(ai.get("squad", 0))
 	if ai.danger_timer <= 0.0 and ai_danger_budget > 0 and my_squad == frame_squad:
-		# Staggered, cached prediction keeps ten-unit matches responsive.
-		# 原版那句「六台时 +0.05 s、五台时 +0.025 s」的额外延迟**去掉了**：
-		# 那本来就是为了压峰值，而拆组已经把峰值压下来了，再加延迟等于偷偷削弱。
-		ai.danger_timer = ai_danger_interval
+		ai.danger_timer = ai_danger_interval / (skill * skill)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	var evade_direction: Vector2 = ai.danger_velocity
@@ -918,7 +936,7 @@ func update_ai(index: int, delta: float) -> void:
 		move_tank_direct(index, evade_direction, delta, ai_speed_evade)
 		return
 	ai.ai_timer -= delta
-	var has_sight: bool = clear_line(ai.pos, tanks[0].pos)
+	var has_sight: bool = clear_line(ai.pos, opponent.pos)
 	var pickup_target := Vector2.ZERO
 	var wants_pickup := false
 	if str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
@@ -930,26 +948,23 @@ func update_ai(index: int, delta: float) -> void:
 				nearest_pickup_distance = distance
 				pickup_target = pickup_position
 				wants_pickup = true
-	if ai.ai_timer <= 0.0 and (has_sight or ai_bank_budget > 0):
-		ai.ai_timer = (0.24 if energy_saver_enabled else 0.16) if bool(ai.boss_unit) else 0.32
+	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index:
+		ai.ai_timer = 0.4 / skill
+		ai.target_index = target_index
+		ai.aim_bias = rng.randf_range(-0.22, 0.22) * (1.0 - skill)
 		var objective_cell := point_cell(pickup_target) if wants_pickup else tactical_cell(index)
 		ai.ai_path = find_path(point_cell(ai.pos), objective_cell)
-		var uses_bank_shots := true
-		if wants_pickup or has_sight or not uses_bank_shots:
-			ai.attack_angle = NAN
-		else:
-			ai_bank_budget -= 1
-			ai.attack_angle = find_bank_angle(ai.pos, tanks[0].pos)
-	var target: Vector2 = pickup_target if wants_pickup else (tanks[0].pos if has_sight else cell_center(tactical_cell(index)))
+		ai.attack_angle = NAN
+	var target: Vector2 = pickup_target if wants_pickup else (opponent.pos if has_sight else cell_center(tactical_cell(index)))
 	if ai.ai_path.size() > 1:
 		if wants_pickup or not has_sight: target = cell_center(ai.ai_path[1])
 		if ai.pos.distance_to(target) < 13.0 and ai.ai_path.size() > 2:
 			target = cell_center(ai.ai_path[2])
-	var desired: float = (ai.pos as Vector2).angle_to_point(target)
+	var desired: float = (ai.pos as Vector2).angle_to_point(target) + float(ai.get("aim_bias", 0.0))
 	if not wants_pickup and not has_sight and not is_nan(float(ai.attack_angle)): desired = float(ai.attack_angle)
 	var diff: float = wrapf(desired - float(ai.angle), -PI, PI)
 	var turn: float = clampf(diff * 3.2, -1.0, 1.0)
-	var distance_to_player: float = ai.pos.distance_to(tanks[0].pos)
+	var distance_to_player: float = ai.pos.distance_to(opponent.pos)
 	var drive: float = 1.0 if absf(diff) < 0.9 else 0.15
 	if not wants_pickup and not has_sight and not is_nan(float(ai.attack_angle)): drive = 0.0
 	if has_sight and not wants_pickup:
@@ -960,31 +975,23 @@ func update_ai(index: int, delta: float) -> void:
 	tanks[index] = ai
 	if (wants_pickup or not has_sight) and is_nan(float(ai.attack_angle)):
 		# Omnidirectional path following prevents rectangular tanks wedging at corners.
-		move_tank_direct(index, (target - ai.pos).normalized(), delta, ai_speed_path)
+		move_tank_direct(index, (target - ai.pos).normalized(), delta, ai_speed_path * lerpf(0.65, 1.0, skill))
 	else:
 		# 巡航速度取 chase / evade 的中间值（优香 120 / 142 ⇒ 136；原版普通 AI 是 120）
-		move_tank(index, drive, turn, delta, (ai_speed_chase + ai_speed_evade) * 0.5)
+		move_tank(index, drive, turn * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill))
 	ai = tanks[index]
-	var player_angle: float = (ai.pos as Vector2).angle_to_point(tanks[0].pos as Vector2)
+	var player_angle: float = (ai.pos as Vector2).angle_to_point(opponent.pos as Vector2) + float(ai.get("aim_bias", 0.0))
 	var firing_angle: float = player_angle if has_sight else float(ai.attack_angle)
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
-	var fire_tolerance := ai_fire_tolerance
-	var safe_to_fire := false
-	# The full ricochet safety trace is intentionally run only when the barrel is
-	# ready to fire, otherwise it would waste CPU every frame.
-	if aim_error < fire_tolerance:
-		safe_to_fire = ai_shot_safe(ai.pos, ai.angle, tanks[0].pos, float(tanks[0].angle))
-	var firing_lane_clear: bool = not has_sight or not friendly_in_line(index, ai.pos, tanks[0].pos)
-	# Ballistic solutions are narrow: wait until the barrel is within about two degrees.
-	if aim_error < fire_tolerance and safe_to_fire and firing_lane_clear:
-		fire(index)
+	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, skill)
+	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0:
+		if rng.randf() <= skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
+			fire(index)
+		ai.cooldown = maxf(float(ai.cooldown), 0.45 / skill)
 
 func tactical_cell(index: int) -> Vector2i:
-	var player_cell := point_cell(tanks[0].pos)
-	var ring: Array[Vector2i] = [Vector2i(-2, 0), Vector2i(2, 0), Vector2i(0, -2), Vector2i(0, 2), Vector2i(-2, -2), Vector2i(2, 2), Vector2i(2, -2), Vector2i(-2, 2)]
-	var offset: Vector2i = ring[(index - 1 + squad_phase * 2) % ring.size()]
-	if int(tanks[index].role) == 0: offset /= 2
-	return Vector2i(clampi(player_cell.x + offset.x, 0, COLS - 1), clampi(player_cell.y + offset.y, 0, ROWS - 1))
+	var target_index := homing_target(index, tanks[index].pos)
+	return point_cell(tanks[target_index].pos) if target_index >= 0 else point_cell(tanks[index].pos)
 
 func find_bank_angle(origin: Vector2, target: Vector2) -> float:
 	var direct := origin.angle_to_point(target)
@@ -1051,8 +1058,7 @@ func find_ai_evasion(ai_pos: Vector2, ai_angle: float, ai_index: int) -> Vector2
 	# Predict bullet and tank positions at the same moments. This prevents reacting
 	# to harmless near misses and catches ricochets which arrive much later.
 	const PREDICT_DT := 0.10
-	# 方向数 / 步数一律取 `_set_ai_tier()` 算好的**优香档**（12 方向 × 30 步），
-	# 不再按 boss / 普通 / 人数分三套。原版那两段 `mini()` 削峰已经由拆组接管。
+	# 方向数与预测步数由人数档位统一控制，运行资格由每帧预算控制。
 	var evade_directions := ai_evade_directions
 	var evade_step_count := ai_evade_steps
 	var predict_steps := evade_step_count
@@ -1222,13 +1228,26 @@ func find_path(start: Vector2i, goal: Vector2i) -> Array:
 	return path
 
 func cells_connected(a: Vector2i, b: Vector2i) -> bool:
-	var mid := (cell_center(a) + cell_center(b)) * 0.5
-	return not circle_hits_wall(mid, 9.0)
+	# 使用迷宫生成时的通路图，寻路不再为每条边扫描全部墙体。
+	return maze_links.has(edge_key(a, b))
 
 func clear_line(a: Vector2, b: Vector2) -> bool:
-	var dist := a.distance_to(b)
-	for i in range(1, int(dist / 3.0)):
-		if circle_hits_wall(a.lerp(b, float(i) * 3.0 / dist), 5.0): return false
+	var direction := b - a
+	for wall in walls:
+		var expanded := wall.grow(5.0)
+		var enter := 0.0
+		var leave := 1.0
+		for axis in 2:
+			if absf(direction[axis]) < 0.00001:
+				if a[axis] < expanded.position[axis] or a[axis] > expanded.end[axis]:
+					enter = 2.0
+					break
+			else:
+				var first := (expanded.position[axis] - a[axis]) / direction[axis]
+				var second := (expanded.end[axis] - a[axis]) / direction[axis]
+				enter = maxf(enter, minf(first, second))
+				leave = minf(leave, maxf(first, second))
+		if enter <= leave: return false
 	return true
 
 func ricochet_shot_available(origin: Vector2, angle: float, target: Vector2) -> bool:
@@ -1377,11 +1396,10 @@ func update_bullets(delta: float) -> void:
 		else: bullets[i] = b
 
 func homing_target(owner: int, bullet_pos: Vector2) -> int:
-	if owner > 0: return 0 if tanks[0].alive else -1
 	var result := -1
 	var closest := INF
-	for i in range(1, tanks.size()):
-		if tanks[i].alive and bullet_pos.distance_squared_to(tanks[i].pos) < closest:
+	for i in tanks.size():
+		if i != owner and tanks[i].alive and bullet_pos.distance_squared_to(tanks[i].pos) < closest:
 			closest = bullet_pos.distance_squared_to(tanks[i].pos); result = i
 	return result
 
@@ -1405,6 +1423,7 @@ func update_pickups(delta: float) -> void:
 				break
 
 func tank_was_hit(index: int) -> void:
+	if round_over: return
 	if not tanks[index].alive: return
 	if int(tanks[index].hp) > 1:
 		tanks[index].hp -= 1
@@ -1413,28 +1432,18 @@ func tank_was_hit(index: int) -> void:
 	tanks[index].alive = false
 	var defeat_sound: AudioStream = SOUND_MOMOI_DEFEAT if str(tanks[index].name) == "才羽桃井" else null
 	spawn_explosion(tanks[index].pos, tanks[index].color, defeat_sound)
-	if index == 0:
-		scores[1] += 1
-		if mode == 1:
-			# 五人模式：玩家是爱丽丝，输给四队友。
-			round_message = "游戏开发部胜利"
-		else:
-			round_message = "%s获胜！" % tanks[1].name
-		round_over = true
+	var survivors: Array[int] = []
+	for i in tanks.size():
+		if tanks[i].alive: survivors.append(i)
+	if survivors.size() > 1: return
+	round_over = true
+	if survivors.is_empty():
+		round_message = "平局"
 	else:
-		var enemies_alive := false
-		for i in range(1, tanks.size()):
-			if tanks[i].alive: enemies_alive = true; break
-		if not enemies_alive:
-			scores[0] += 1
-			if mode == 1:
-				round_message = "%s获胜！" % tanks[0].name
-			elif mode == 3:
-				round_message = "击败优香！"
-			else:
-				round_message = "%s获胜！" % tanks[0].name
-			round_over = true
-	if round_over: next_round_timer = 0.45
+		var winner := survivors[0]
+		scores[winner] += 1
+		round_message = "%s获胜！" % tanks[winner].name
+	next_round_timer = 0.45
 
 func spawn_armor_hit(pos: Vector2, color: Color) -> void:
 	play_sound(sound_bounce, 0.65)
@@ -1481,7 +1490,10 @@ func bullet_hits_tank_at(bullet_pos: Vector2, tank_pos: Vector2, tank_angle: flo
 func tank_hits_wall(pos: Vector2, angle: float) -> bool:
 	var forward := Vector2.from_angle(angle)
 	var side := forward.rotated(PI / 2.0)
+	var extent := Vector2(absf(forward.x) * TANK_LENGTH + absf(side.x) * TANK_WIDTH, absf(forward.y) * TANK_LENGTH + absf(side.y) * TANK_WIDTH) * 0.5
+	var bounds := Rect2(pos - extent, extent * 2.0).grow(0.001)
 	for wall in walls:
+		if not bounds.intersects(wall, true): continue
 		var wall_center := wall.get_center()
 		var wall_half := wall.size / 2.0
 		var center_delta := wall_center - pos
@@ -1552,7 +1564,7 @@ func _handle_menu_keys(event: InputEvent) -> void:
 		elif event.keycode == KEY_2: start_game(2)
 		elif (event.keycode == KEY_ESCAPE or event.keycode == KEY_P) and mode > 0: paused = not paused
 		elif event.keycode == KEY_M and paused: return_to_menu()
-		elif event.keycode == KEY_R and mode > 0: scores = [0, 0]; new_round()
+		elif event.keycode == KEY_R and mode > 0: scores = [0, 0, 0, 0, 0]; new_round()
 
 func _handle_gameplay_mouse(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -1583,19 +1595,8 @@ func _handle_gameplay_mouse(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and mode > 0:
 			fire(0)
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			var joystick_area := Rect2(p1_move_center() - Vector2.ONE * TOUCH_JOYSTICK_INPUT_RADIUS, Vector2.ONE * TOUCH_JOYSTICK_INPUT_RADIUS * 2.0)
-			var fire_area := Rect2(single_fire_center() - Vector2.ONE * TOUCH_FIRE_INPUT_RADIUS, Vector2.ONE * TOUCH_FIRE_INPUT_RADIUS * 2.0)
 			if event.pressed and paused:
 				handle_pause_press(mouse_pos)
-			elif not event.pressed and mouse_joystick_active:
-				mouse_joystick_active = false
-				touch_move = Vector2.ZERO
-			elif mode > 0 and joystick_area.has_point(mouse_pos):
-				mouse_joystick_active = event.pressed
-				if event.pressed: touch_move = ((mouse_pos - p1_move_center()) / TOUCH_JOYSTICK_RESPONSE_RADIUS).limit_length(1.0)
-				else: touch_move = Vector2.ZERO
-			elif event.pressed and mode > 0 and fire_area.has_point(mouse_pos):
-				fire(0)
 			elif event.pressed:
 				if mode == 0:
 					handle_menu_press(mouse_pos)
@@ -1819,21 +1820,26 @@ func _draw() -> void:
 		var alpha: float = clampf(p.life / p.max_life, 0.0, 1.0)
 		var pc: Color = p.color; pc.a = alpha
 		draw_circle(p.pos, 3.0 + alpha * 3.0, pc)
-	draw_string(ThemeDB.fallback_font, Vector2(455, 43), "%d  :  %d" % scores, HORIZONTAL_ALIGNMENT_LEFT, -1, 27, ui_text())
-	var mode_text := "爱丽丝 VS 游戏开发部" if mode == 1 else ("单人调试" if mode == 2 else "BOSS 调试")
-	draw_string(ThemeDB.fallback_font, Vector2(835, 40), mode_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, ui_muted())
+	var score_parts := PackedStringArray()
+	for i in tanks.size():
+		score_parts.append("%s %d" % [tanks[i].name, scores[i]])
+	draw_string(ThemeDB.fallback_font, Vector2(325, 30), " · ".join(score_parts), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, ui_text())
+	var mode_text := "五人个人战 · 最后存活者获胜" if mode == 1 else ("单人调试" if mode == 2 else "BOSS 调试")
+	if mode == 1 and not tanks[0].alive and not round_over:
+		mode_text = "爱丽丝已出局 · 正在观战"
+	draw_string(ThemeDB.fallback_font, Vector2(325, 55), mode_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ui_muted())
 	if mode == 3 and tanks.size() > 1 and tanks[1].alive:
 		draw_string(ThemeDB.fallback_font, Vector2(790, 68), "BOSS 耐久", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("6f2ca8"))
 		for hp_index in int(tanks[1].max_hp):
 			var hp_color := Color("8e44d6") if hp_index < int(tanks[1].hp) else Color("d8d8d8")
 			draw_rect(Rect2(875 + hp_index * 25, 54, 18, 12), hp_color)
 			draw_rect(Rect2(875 + hp_index * 25, 54, 18, 12), Color("333333"), false, 1.0)
-	draw_touch_controls()
+	if mobile: draw_touch_controls()
 	if not mobile:
 		draw_string(ThemeDB.fallback_font, Vector2(175, H - 12.0), "WASD 移动转向 · 空格 / J 开火 · 鼠标右键也能开火 · P 暂停 · Esc 退出", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("666666"))
 	if paused:
 		if pause_settings_open:
-			draw_rect(Rect2(0, 0, W, H), ui_background())
+			draw_rect(Rect2(-view_offset(), get_viewport_rect().size), ui_background())
 			draw_settings()
 		else:
 			draw_neu_panel(Rect2(300, 190, 400, 330), 26.0)
@@ -1909,10 +1915,10 @@ func draw_menu() -> void:
 	draw_setting_row(155, "地图宽度", str(COLS), 38.0)
 	draw_setting_row(201, "地图高度", str(ROWS), 38.0)
 	# 原来这里有三行按钮（挑战 / BOSS / 本地双人）。五人模式把它们合并成一行：
-	# 编队固定为爱丽丝 VS 才羽绿·柚子·才羽桃井·凯伊，没有别的可挑。
-	draw_string(ThemeDB.fallback_font, Vector2(245, 259), "编队", HORIZONTAL_ALIGNMENT_RIGHT, 110, 17, ui_muted())
+	# 五个角色各自作战，出局后观战，最后存活者独立计分。
+	draw_string(ThemeDB.fallback_font, Vector2(245, 259), "规则", HORIZONTAL_ALIGNMENT_RIGHT, 110, 17, ui_muted())
 	draw_neu_inset(Rect2(370, 243, 260, 38), 19.0)
-	draw_string(ThemeDB.fallback_font, Vector2(374, 268), "爱丽丝 VS 四队友", HORIZONTAL_ALIGNMENT_CENTER, 252, 17, ui_text())
+	draw_string(ThemeDB.fallback_font, Vector2(374, 268), "五人个人战 · 存活到最后", HORIZONTAL_ALIGNMENT_CENTER, 252, 17, ui_text())
 	draw_button(Rect2(270, 315, 460, 54), "开始对战", Color("46a96b"))
 	draw_button(Rect2(270, 381, 460, 54), "设置", Color("537a8a"))
 	draw_string(ThemeDB.fallback_font, Vector2(235, 470), "WASD 移动 · 空格开火 · P 暂停 · M 回主页 · Esc 退出", HORIZONTAL_ALIGNMENT_CENTER, 530, 15, ui_muted())
@@ -2021,7 +2027,7 @@ func draw_tank_portrait(tank_pos: Vector2, portrait: Texture2D) -> void:
 	# changes the physical 28 x 20 collision rectangle.
 	var source_size := portrait.get_size()
 	if source_size.x <= 0.0 or source_size.y <= 0.0: return
-	var max_side := clampf(CELL * 0.50, 24.0, 34.0)
+	var max_side := clampf(CELL * 0.65, 28.0, 44.0)
 	var portrait_scale := minf(max_side / source_size.x, max_side / source_size.y)
 	var display_size := source_size * portrait_scale
 	var portrait_rect := Rect2(tank_pos - display_size / 2.0, display_size)

@@ -36,7 +36,7 @@ extends Node3D
 ##     拖彩虹的波普挞 + 灰猫头 + 「游戏开发部」，8-bit 像素风（本仓库自己画的，
 ##     不引外部版权素材；文字沿用工程里其它像素招牌那套字体）。
 ##     ⚠️ 用户 2026-11-14 纠正过一版：「不像图标，不是彩虹猫吗」—— 别画成手柄徽章。
-##   · 玩家自己那块：一块全屏 5:4 覆盖层放坦克动荡（`SubViewport` 1000×800），
+##   · 玩家自己那块：全屏自适应画布放坦克动荡（逻辑高度 800，宽度随窗口扩展），
 ##     按 Esc 退出 —— 和 `hut_computer.gd` 的 Arch 终端一个用法。
 
 # ══════════════ 实测坐标 ══════════════
@@ -67,11 +67,11 @@ const SEAT_BY_NAME := {
 }
 
 ## 显示器屏面：x 54.36~54.40 的薄板（厚 0.05 m）、y 1.66~2.06、z 宽 0.60。
-## 前脸约在 x=54.357：贴片留 7 mm 避免深度冲突，并减小斜视时的视差。
+## 前脸约在 x=54.357：贴片仅前移约 1 mm，避免深度冲突和斜视视差。
 ## 尺寸取屏面实际大小，让显示器边框保持可见。
-const SCREEN_X := 54.35
+const SCREEN_X := 54.356
 const SCREEN_Y := 1.86
-const SCREEN_SIZE := Vector2(0.568, 0.370)
+const SCREEN_SIZE := Vector2(0.590, 0.394)
 const SCREEN_Z: Array[float] = [10.59, 12.08, 13.57, 15.07, 16.56]
 
 ## 按 F 的位置：爱丽丝座位正前方的走道（椅子前沿 x≈52.96，人站 52.30 不会挤进椅子）
@@ -145,6 +145,8 @@ var _hint: Label
 var _overlay: Control
 var _wide: TextureRect
 var _foot: Label
+var _mouse_before_play := Input.MOUSE_MODE_VISIBLE
+var _viewport_3d_was_disabled := false
 
 var _bgm_saved := false
 var _bgm_db := 0.0
@@ -171,6 +173,14 @@ func _settings_menu() -> Node:
 		if m != null:
 			return m
 	return get_node_or_null("../../SettingsMenu")
+
+
+func _exit_tree() -> void:
+	# 返回标题或切换场景时，根视口不能留在仅绘制小游戏的状态。
+	if _phase == Phase.PLAY:
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.disable_3d = _viewport_3d_was_disabled
 
 
 ## 设置菜单一开就把小游戏合上（层号差得远，宁可多合一次）
@@ -322,18 +332,19 @@ func _build_ui() -> void:
 	tank_viewport.name = "TankViewport"
 	tank_viewport.size = TANK_SIZE
 	tank_viewport.transparent_bg = false
-	tank_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	tank_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	tank_viewport.handle_input_locally = false
 	add_child(tank_viewport)
 
 	_wide = TextureRect.new()
 	_wide.name = "TankTexture"
 	_wide.texture = tank_viewport.get_texture()
-	# 1000×800 是 5:4，窗口 16:9 —— 必须留黑边，拉满会把坦克压扁
-	_wide.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_wide.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_wide.stretch_mode = TextureRect.STRETCH_SCALE
 	_wide.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_wide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(_wide)
+	_wide.resized.connect(_resize_tank_viewport)
 
 	_foot = Label.new()
 	_foot.name = "Footer"
@@ -346,6 +357,7 @@ func _build_ui() -> void:
 	_foot.offset_right = 380
 	_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_foot.visible = false
 	_overlay.add_child(_foot)
 
 
@@ -367,6 +379,9 @@ func _use_point() -> Vector3:
 ## ⚠️ 少了这个分发器，`_tick_sit/_tick_glow/_tick_stand` 全是死代码 ——
 ##    表现就是「按了 F 人不动、屏幕不亮」。第一版真忘了写，自检里才发现。
 func _process(delta: float) -> void:
+	if _phase == Phase.SIT or _phase == Phase.GLOW or _phase == Phase.PLAY:
+		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	match _phase:
 		Phase.SIT:
 			_tick_sit(delta)
@@ -420,19 +435,24 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## 窗口坐标 → 小游戏画布坐标（1000×800，等比缩放 + 居中留黑边）
+func _resize_tank_viewport() -> void:
+	if _wide == null or tank_viewport == null or _wide.size.x < 10.0 or _wide.size.y < 10.0:
+		return
+	var aspect := _wide.size.x / _wide.size.y
+	var logical := Vector2i(maxi(1, roundi(float(TANK_SIZE.y) * aspect)), TANK_SIZE.y)
+	var scale := minf(2.4, maxf(1.0, _wide.size.y / float(TANK_SIZE.y)))
+	tank_viewport.size = Vector2i(roundi(logical.x * scale), roundi(logical.y * scale))
+	tank_viewport.size_2d_override = logical
+	tank_viewport.size_2d_override_stretch = true
+
+## 窗口坐标 → 自适应逻辑画布坐标。
 func _to_canvas(p: Vector2) -> Vector2:
 	if _wide == null:
 		return p
 	var r := _wide.get_global_rect()
 	if r.size.x <= 0.0 or r.size.y <= 0.0:
 		return p
-	var sc := minf(r.size.x / float(TANK_SIZE.x), r.size.y / float(TANK_SIZE.y))
-	if sc <= 0.0:
-		return p
-	var shown := Vector2(TANK_SIZE) * sc
-	var origin := r.position + (r.size - shown) * 0.5
-	return (p - origin) / sc
+	return (p - r.position) * Vector2(tank_viewport.size_2d_override) / r.size
 
 
 ## 事件同时喂两条路：
@@ -473,6 +493,7 @@ func begin() -> void:
 		push_warning("[开黑] 一个角色都没找到，过场取消")
 		return
 	_phase = Phase.SIT
+	_mouse_before_play = Input.mouse_mode
 	_t = 0.0
 	_in_range = false
 	_hint.visible = false
@@ -523,6 +544,10 @@ func _make_actor(node: Node3D, seat: int, is_player: bool) -> Dictionary:
 		"from_pos": node.global_position,
 		"from_yaw": node.rotation.y,
 		"from_model_yaw": 0.0,
+		"was_processing": node.is_processing(),
+		"was_physics_processing": node.is_physics_processing(),
+		"was_input_processing": node.is_processing_input(),
+		"was_unhandled_processing": node.is_processing_unhandled_input(),
 		"seat_pos": Vector3(SEAT_X, SEAT_Y, SEAT_Z[seat]),
 		"seat_yaw": FACE_YAW,
 		# 太远（被落在别处）就别演位移动画，直接落座
@@ -536,6 +561,9 @@ func _make_actor(node: Node3D, seat: int, is_player: bool) -> Dictionary:
 	# 不关掉 `_physics_process` 的话「把人放到座面」下一帧就会被重力拽下去。
 	node.set_physics_process(false)
 	node.set_process(false)
+	if is_player:
+		node.set_process_input(false)
+		node.set_process_unhandled_input(false)
 	if node is CharacterBody3D:
 		(node as CharacterBody3D).velocity = Vector3.ZERO
 	if not is_player and node.has_method("set_standby"):
@@ -589,10 +617,16 @@ func _tick_glow(delta: float) -> void:
 # ══════════════ 小游戏 ══════════════
 
 func _begin_play() -> void:
+	_resize_tank_viewport()
 	if not _ensure_tank():
 		return
+	tank.process_mode = Node.PROCESS_MODE_INHERIT
+	tank_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_viewport_3d_was_disabled = get_viewport().disable_3d
+	get_viewport().disable_3d = true
 	_phase = Phase.PLAY
 	_overlay.visible = true
+	_resize_tank_viewport.call_deferred()
 	if tank.has_method("release_all"):
 		tank.call("release_all")
 	print("[小游戏] 窗口切进坦克动荡（五人混战 · 音乐仍由电竞房播放，压到 %d%%）"
@@ -618,8 +652,11 @@ func _end_play() -> void:
 	if _phase != Phase.PLAY:
 		return
 	_overlay.visible = false
+	get_viewport().disable_3d = _viewport_3d_was_disabled
 	if tank != null and is_instance_valid(tank) and tank.has_method("release_all"):
 		tank.call("release_all")
+		tank.process_mode = Node.PROCESS_MODE_DISABLED
+	tank_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_begin_stand()
 
 
@@ -663,14 +700,20 @@ func _finish_stand() -> void:
 				mr.rotation.y = float(a["from_model_yaw"])
 		if not bool(a["is_player"]) and node.has_method("set_standby"):
 			node.call("set_standby", false)
-		node.set_physics_process(true)
-		node.set_process(true)
+		node.set_physics_process(bool(a["was_physics_processing"]))
+		node.set_process(bool(a["was_processing"]))
+		if bool(a["is_player"]):
+			node.set_process_input(bool(a["was_input_processing"]))
+			node.set_process_unhandled_input(bool(a["was_unhandled_processing"]))
 	_actors.clear()
 	_set_screen_level(0.0)
 	_phase = Phase.IDLE
 	_t = 0.0
 	_release_camera()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not OS.get_cmdline_user_args().has("--no-capture"):
+		var menu := _settings_menu()
+		if menu == null or not get_tree().paused:
+			Input.mouse_mode = _mouse_before_play
 	_duck_room_music(false)
 	print("[开黑] 回到常态")
 

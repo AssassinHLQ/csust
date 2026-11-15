@@ -83,6 +83,9 @@ func _init() -> void:
 	# ── ③ 建场景：等真实帧，因为 `_ready` 是引擎在入树后调的 ──
 	_player = CharacterBody3D.new()
 	_player.name = "FakePlayer"
+	_player.set_process(true)
+	_player.set_physics_process(true)
+	_player.set_process_input(true)
 	_player.add_to_group("player")
 	get_root().add_child(_player)
 
@@ -146,7 +149,7 @@ func _process(_delta: float) -> bool:
 				_stage = 3
 				_frames = 0
 		3:      # 等 SIT → GLOW → PLAY
-			if _host.call("phase_name") == "PLAY":
+			if _host.call("phase_name") == "PLAY" and _frames > 2:
 				_check_play()
 				_stage = 4
 				_frames = 0
@@ -188,8 +191,8 @@ func _check_ready() -> void:
 		_check(mat != null and mat.emission_enabled, "贴片自发光（会真的亮起来）")
 		# 贴片必须和屏面等大：大了溢到显示器边框、小了留一圈亮屏
 		var q := (screens[0] as MeshInstance3D).mesh as QuadMesh
-		_check(q != null and is_equal_approx(q.size.x, 0.568) and is_equal_approx(q.size.y, 0.370),
-			"贴片尺寸 = 可见显示区 0.568×0.370（实际 %s）" % (str(q.size) if q else "无"))
+		_check(q != null and is_equal_approx(q.size.x, 0.590) and is_equal_approx(q.size.y, 0.394),
+			"贴片覆盖显示区 0.590×0.394（实际 %s）" % (str(q.size) if q else "无"))
 	_check(is_equal_approx(_host.call("screen_level"), 0.0), "屏幕亮度初值 0")
 
 
@@ -205,6 +208,16 @@ func _check_play() -> void:
 		_check(lmat != null and lmat.emission_enabled, "亮屏材质自发光（会真的亮起来）")
 	var tank: Node = _host.get("tank")
 	_check(tank != null and is_instance_valid(tank), "坦克动荡已实例化进画布")
+	_check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "小游戏期间鼠标可见")
+	_check(get_root().disable_3d, "小游戏期间停止主画面的 3D 绘制")
+	_check(not _player.is_processing_input(), "小游戏期间主角不接收战斗输入")
+	var canvas: SubViewport = _host.get("tank_viewport")
+	var display: TextureRect = _host.get("_wide")
+	display.size = Vector2(1600, 900)
+	_host.call("_resize_tank_viewport")
+	_check(canvas.size_2d_override == Vector2i(1422, 800), "1600×900 显示区生成等比例宽屏逻辑画布")
+	var mapped: Vector2 = _host.call("_to_canvas", display.get_global_rect().position + display.size * 0.5)
+	_check(mapped.distance_to(Vector2(711, 400)) < 0.01, "宽屏鼠标坐标正确映射到逻辑画布")
 	var actors: Array = _host.call("actors")
 	_check(actors.size() >= 1, "至少把玩家放上了椅子（%d 人）" % actors.size())
 	if actors.size() >= 1:
@@ -218,7 +231,7 @@ func _check_play() -> void:
 		var press := InputEventMouseButton.new()
 		press.button_index = MOUSE_BUTTON_LEFT
 		press.pressed = true
-		press.position = Vector2(500, 342)
+		press.position = Vector2(canvas.size_2d_override.x / 2.0, 342)
 		press.global_position = press.position
 		tank.call("ui_event", press)
 		var release := InputEventMouseButton.new()
@@ -234,6 +247,11 @@ func _check_play() -> void:
 
 
 func _check_idle() -> void:
+	var canvas: SubViewport = _host.get("tank_viewport")
+	_check(canvas.render_target_update_mode == SubViewport.UPDATE_DISABLED, "退出后停止小游戏画布渲染")
+	_check((_host.get("tank") as Node).process_mode == Node.PROCESS_MODE_DISABLED, "退出后暂停小游戏运算")
+	_check(not get_root().disable_3d, "退出后恢复主画面的 3D 绘制")
+	_check(_player.is_processing_input(), "退出后恢复主角输入")
 	_check(is_equal_approx(_host.call("screen_level"), 0.0), "人走了屏幕也灭了")
 	_check(_player.global_position.distance_to(_tp) < 0.06,
 		"玩家被放回原位（%s）" % str(_player.global_position.snappedf(0.01)))
