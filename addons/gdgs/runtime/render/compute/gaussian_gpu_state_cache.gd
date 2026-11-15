@@ -246,7 +246,10 @@ func rebuild_gpu_state(
 		state.render_tile_size = TILE_SIZE_SMALL
 	else:
 		var ample_sort: bool = int(state.sort_budget.elements) > 2
-		state.render_tile_size = TILE_SIZE_SMALL if state.stream_enabled and small_fits and ample_sort else TILE_SIZE
+		# q24 LOD representatives benefit from small tiles. A full f32 source
+		# cloud has millions of original points: 8px tiles multiply sort entries.
+		var quantized_lod: bool = state.stream_enabled and int(stream.get("layout", 0)) == 1
+		state.render_tile_size = TILE_SIZE_SMALL if quantized_lod and small_fits and ample_sort else TILE_SIZE
 	state.stream_capacity_splats = int(stream.get("capacity_splats", 0))
 	state.stream_slot_splats = int(stream.get("slot_splats", 0))
 	state.stream_arena_slots = int(stream.get("arena_slots", 0))

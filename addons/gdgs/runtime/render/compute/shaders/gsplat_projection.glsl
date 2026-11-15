@@ -543,16 +543,13 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	if (is_q24) {
 		splat_position = q24_position(pk_base, arena_centre, arena_half);
 		splat_opacity_raw = q24_opacity(pk_base);
-		q24_covariance(pk_base, splat_cov);
 	} else if (is_packed) {
 		splat_position = pk_position(pk_base);
 		splat_opacity_raw = pk_opacity(pk_base);
-		pk_covariance(pk_base, splat_cov);
 	} else {
 		const Splat canonical = splat_buffer[unique_splat_index];
 		splat_position = canonical.position;
 		splat_opacity_raw = canonical.opacity;
-		splat_cov = canonical.covariance;
 	}
 	mat4 model_matrix = instance_model_matrices[instance_id];
 
@@ -568,9 +565,6 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	// the whole dispatch for one instance) to skip a mat3 inverse + two mat3 muls
 	// per splat. Non-identity instances keep the full transform.
 	bool identity_basis = object_linear == mat3(1.0);
-	mat3 world_covariance = identity_basis
-		? DECODE_COVARIANCE(splat_cov)
-		: object_linear * DECODE_COVARIANCE(splat_cov) * transpose(object_linear);
 	vec4 world_pos = model_matrix * vec4(splat_position, 1.0);
 	vec4 view_pos = view_matrix * world_pos;
 	vec4 clip_pos = projection_matrix * view_pos;
@@ -578,6 +572,14 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	if (any(lessThan(clip_pos.xyz, vec3(-view_bounds, 0.0))) || any(greaterThan(clip_pos.xyz, vec3(view_bounds, clip_pos.w)))) {
 		return false;
 	}
+	// Positions alone reject off-screen points. Delay covariance reads and
+	// transforms until after that rejection, especially for whole-campus packs.
+	if (is_q24) q24_covariance(pk_base, splat_cov);
+	else if (is_packed) pk_covariance(pk_base, splat_cov);
+	else splat_cov = splat_buffer[unique_splat_index].covariance;
+	mat3 world_covariance = identity_basis
+		? DECODE_COVARIANCE(splat_cov)
+		: object_linear * DECODE_COVARIANCE(splat_cov) * transpose(object_linear);
 	
 	// --- GAUSSIAN PROJECTION ---
 	// The packed record has no per-splat reveal timestamp, so packed scenes skip
