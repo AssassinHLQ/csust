@@ -172,11 +172,13 @@ static func burst(parent: Node, pos: Vector3, col: Color, count := 40,
 	# 播完自己回收（`emitting` 设 false 后粒子还会飞完寿命）
 	var host := _ensure_host()
 	if host != null:
+		var particle_ref := weakref(p)
 		var tw := host.create_tween()
 		tw.tween_interval(life + 0.5)
 		tw.tween_callback(func() -> void:
-			if is_instance_valid(p):
-				p.queue_free())
+			var particle := particle_ref.get_ref() as GPUParticles3D
+			if particle != null:
+				particle.queue_free())
 	return p
 
 

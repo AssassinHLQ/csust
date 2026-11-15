@@ -101,6 +101,12 @@ func start(env: WorldEnvironment, sun: DirectionalLight3D,
 	if _started:
 		return
 	_started = true
+	# The wall-rise gives model/texture IO several seconds before the first cast.
+	# Keep the cache alive through this arena, including repeated pig summons.
+	var warmup := preload("res://scripts/battle_asset_warmup.gd").new()
+	warmup.name = "BattleAssetWarmup"
+	get_tree().root.add_child(warmup)
+	warmup.start(self)
 	_env = env
 	_sun = sun
 	_snapshot_env()

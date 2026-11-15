@@ -64,6 +64,7 @@ func start() -> void:
 	_stream.max_sse = stream_sse
 	_stream.max_loads_per_frame = 2
 	_stream.select_interval = 0.08
+	_stream.keep_single_node_resident = not stream_lod_enabled
 	_stream.stream_pack = _pack
 	_stream.top_level = true
 	add_child(_stream)

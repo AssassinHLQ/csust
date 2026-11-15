@@ -6,7 +6,9 @@ class_name GaussianStreamNode
 ## A Gaussian cloud that is too large to keep resident, streamed from a disk LOD
 ## pack built by tools/build_stream_pack.py.
 ##
-## Unlike GaussianSplatNode this never uploads the whole cloud. The octree decides
+## By default the octree selects a bounded frontier rather than the whole cloud.
+## A full-detail single-node pack can opt into persistent residency instead.
+## The octree decides
 ## which nodes are worth their screen-space error, a worker thread reads just those
 ## payloads, and they land in a fixed-size GPU slot arena. VRAM therefore tracks
 ## `budget_nodes * node_cap`, not the size of the world: a 50M-splat pack and a 1M
@@ -48,6 +50,8 @@ const Lod := preload("res://addons/gdgs/runtime/stream/gaussian_stream_lod.gd")
 ## Drive the residency manager from this node's _process. Turn off to tick it
 ## yourself (a benchmark that wants a fixed camera path, for example).
 @export var auto_update: bool = true
+## Full-detail single-node packs can remain loaded across camera turns.
+@export var keep_single_node_resident: bool = false
 ## Instance colour/opacity multiplier; never modifies the source pack.
 @export var color_tint: Color = Color.WHITE
 
@@ -135,6 +139,7 @@ func _reconfigure_runtime() -> void:
 	_runtime.max_sse = max_sse
 	_runtime.max_loads_per_frame = max_loads_per_frame
 	_runtime.select_interval = select_interval
+	_runtime.keep_single_node_resident = keep_single_node_resident
 
 
 func _rebuild_aabb() -> void:
@@ -163,6 +168,7 @@ func _process(delta: float) -> void:
 	_runtime.max_sse = max_sse
 	_runtime.max_loads_per_frame = max_loads_per_frame
 	_runtime.select_interval = select_interval
+	_runtime.keep_single_node_resident = keep_single_node_resident
 	_runtime.update(
 		to_pack * camera.global_position,
 		projection * view * Projection(global_transform),

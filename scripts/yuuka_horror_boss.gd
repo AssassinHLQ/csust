@@ -288,6 +288,7 @@ var _pigs: Array[Node3D] = []
 ## 分身（同上，挂在 ArenaLock 下）
 var _clones: Array[Node3D] = []
 var _clone_cd := 0.0
+var _clone_generation := 0
 var _blink_cd := 9.0
 var _blinks := 0
 var _chase_blocked := 0
@@ -2185,10 +2186,11 @@ func _do_blink(p: Node3D) -> void:
 
 ## 召唤 10 个分身围住玩家；只有本体放技能，分身只会普攻
 func _skill_clones() -> void:
+	var generation := _clone_generation
 	_play_once("Normal_Callsign", 0.15)
 	Sfx.play("ui_open", -3.0)
 	await get_tree().create_timer(0.5).timeout
-	if _dead or not is_instance_valid(self):
+	if _dead or not is_instance_valid(self) or generation != _clone_generation:
 		return
 	_prune_clones()
 	if _clone_cd > 0.0:
@@ -2201,7 +2203,7 @@ func _skill_clones() -> void:
 	var host := get_parent() if get_parent() != null else get_tree().root
 	var center := p.global_position
 	for i in CLONE_COUNT:
-		if _dead or not is_instance_valid(self):
+		if _dead or not is_instance_valid(self) or generation != _clone_generation:
 			return
 		var ang := TAU * float(i) / float(CLONE_COUNT)
 		var x := center.x + cos(ang) * CLONE_RING
@@ -2218,6 +2220,10 @@ func _skill_clones() -> void:
 		Vfx.ring(self, Vector3(x, gy + 0.1, z), Color(1.0, 0.2, 0.3, 0.9), 7.0, 0.55)
 		Vfx.burst(self, Vector3(x, gy + 1.5, z), Color(1.0, 0.18, 0.25), 26, 1.4,
 			12.0, 0.5, -3.0)
+		# Spread ten model/skeleton instantiations across rendered frames.
+		# Physics frames can catch up within a single render frame after a stall.
+		if i + 1 < CLONE_COUNT:
+			await get_tree().process_frame
 	print("[YuukaHorror] 分身 ×%d 围住玩家（只有本体放技能）" % CLONE_COUNT)
 
 
@@ -2230,6 +2236,7 @@ func _prune_clones() -> void:
 
 
 func _expire_clones() -> void:
+	_clone_generation += 1
 	for c in _clones:
 		if is_instance_valid(c) and c.has_method("expire"):
 			c.call("expire")

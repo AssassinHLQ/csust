@@ -79,6 +79,8 @@ var _skill_t := 0.0
 var _refresh_t := 0.0
 var _companion: Companion
 var _targets: Array[Node3D] = []
+var _aim_frame := -1
+var _aim_cache: Dictionary = {}
 var _fx_root: Node3D
 var _shots := 0
 var _skills_cast := 0
@@ -164,6 +166,13 @@ func _pick_target() -> Node3D:
 	for t in _targets:
 		if not is_instance_valid(t) or _is_dead(t):
 			continue
+		# All candidate aim heights have the same x/z. Reject range and facing
+		# before doing up to four campus-trimesh visibility queries per target.
+		var flat_offset := Vector3(t.global_position.x - eye.x, 0.0, t.global_position.z - eye.z)
+		if flat_offset.length_squared() > attack_range * attack_range:
+			continue
+		if flat_offset.length_squared() < 0.0001 or face.dot(flat_offset.normalized()) < limit:
+			continue
 		var to_target := _aim_point(t) - eye
 		var dist := to_target.length()
 		if dist > attack_range or dist < 1.0:
@@ -197,12 +206,24 @@ func _aim_point(t: Node3D) -> Vector3:
 		return t.global_position + Vector3.UP * 0.6
 	var top := clampf(float(h), 1.2, 20.0)
 	var from := muzzle_position()
+	var frame := Engine.get_process_frames()
+	if frame != _aim_frame:
+		_aim_frame = frame
+		_aim_cache.clear()
+	var id := t.get_instance_id()
+	var at := t.global_position
+	var cached: Dictionary = _aim_cache.get(id, {})
+	if not cached.is_empty() and cached.from == from and cached.at == at and cached.top == top:
+		return cached.point
 	for f in AIM_FRACTIONS:
-		var p := t.global_position + Vector3.UP * (top * float(f))
+		var p := at + Vector3.UP * (top * float(f))
 		var hit := _ray(from, p)
 		if not hit.is_empty() and _is_same_target(hit.get("collider"), t):
+			_aim_cache[id] = {"from": from, "at": at, "top": top, "point": p}
 			return p
-	return t.global_position + Vector3.UP * (top * 0.55)
+	var fallback := at + Vector3.UP * (top * 0.55)
+	_aim_cache[id] = {"from": from, "at": at, "top": top, "point": fallback}
+	return fallback
 
 
 ## 同伴的脸朝向。模型本体朝 +Z（见 companion.gd 文件头），所以 +Z 就是脸。
@@ -316,6 +337,9 @@ func _pick_skill_target(max_dist: float) -> Node3D:
 	var eye := muzzle_position()
 	for t in _targets:
 		if not is_instance_valid(t) or _is_dead(t):
+			continue
+		var offset := t.global_position - eye
+		if Vector2(offset.x, offset.z).length_squared() > max_dist * max_dist:
 			continue
 		var dist := eye.distance_to(_aim_point(t))
 		if dist > max_dist or dist < 1.0:

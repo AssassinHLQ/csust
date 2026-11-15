@@ -48,6 +48,9 @@ var max_inflight: int = 4
 ## projection and policy changes select immediately. A converged static view
 ## reuses its selection; zero explicitly requests selection on every tick.
 var select_interval: float = 0.08
+## A full-detail, single-node pack already fits its arena. Keep it resident when
+## looking away so returning to the cloud never reloads the entire payload.
+var keep_single_node_resident: bool = false
 ## GPU instance index this source's splats are drawn with.
 var instance_id: int = 0
 ## First arena slot this source owns. The registry assigns it so several stream
@@ -89,6 +92,7 @@ var _last_view_projection := Projection()
 var _last_focal_pixels := 0.0
 var _last_max_sse := 0.0
 var _last_budget_nodes := 0
+var _last_keep_single_node_resident := false
 var _has_selection := false
 var _residency_changed := false
 var _running := false
@@ -212,7 +216,8 @@ func update(camera_position: Vector3, view_projection: Projection, focal_pixels:
 		or view_projection.y != _last_view_projection.y \
 		or view_projection.z != _last_view_projection.z \
 		or focal_pixels != _last_focal_pixels
-	var policy_changed := max_sse != _last_max_sse or budget_nodes != _last_budget_nodes
+	var policy_changed := max_sse != _last_max_sse or budget_nodes != _last_budget_nodes \
+		or keep_single_node_resident != _last_keep_single_node_resident
 	var camera_changed := camera_position != _last_camera or view_projection != _last_view_projection
 	var due := _select_timer <= 0.0 \
 		and (camera_changed or _residency_changed or select_interval <= 0.0)
@@ -223,6 +228,7 @@ func update(camera_position: Vector3, view_projection: Projection, focal_pixels:
 		_last_focal_pixels = focal_pixels
 		_last_max_sse = max_sse
 		_last_budget_nodes = budget_nodes
+		_last_keep_single_node_resident = keep_single_node_resident
 		_has_selection = true
 		_residency_changed = false
 		_reselect(camera_position, view_projection, focal_pixels)
@@ -283,6 +289,8 @@ func _reselect(camera_position: Vector3, view_projection: Projection, focal_pixe
 
 ## Override the frontier while retaining the bounded IO/residency machinery.
 func _select_wanted(camera_position: Vector3, view_projection: Projection, focal_pixels: float) -> Array[int]:
+	if keep_single_node_resident and pack.node_count == 1 and pack.is_leaf(pack.root):
+		return [pack.root]
 	return Lod.select(pack, camera_position, view_projection, focal_pixels, max_sse, budget_nodes)
 
 

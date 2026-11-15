@@ -95,6 +95,7 @@ func _initialize() -> void:
 	_test_quantized_layout()
 	_test_selection_cache()
 	_test_fallback_retirement()
+	_test_full_detail_residency()
 
 	# Phase G: shutdown drains the workers and drops the CPU mirror.
 	_runtime.shutdown()
@@ -108,6 +109,50 @@ func _initialize() -> void:
 	DirAccess.remove_absolute(_prefix + ".manifest.json")
 	DirAccess.remove_absolute(_prefix + ".nodes.bin")
 	_finish()
+
+
+## A full-detail pack must not reload its whole payload after looking at the sky.
+## Hierarchical packs and the default streaming policy still cull normally.
+func _test_full_detail_residency() -> void:
+	var prefix := "user://stream_runtime_test/full_detail"
+	var manifest := Fixture.build(prefix, 0, NODE_CAP, HALF)
+	var pack: GaussianStreamPack = PackScript.new()
+	if pack.load_from(manifest) != OK:
+		_failures.append("full-detail fixture failed to load")
+		return
+	var runtime := RuntimeScript.new()
+	runtime.configure(pack, 1)
+	var camera := Vector3(0, 0, HALF * 3)
+	_drive_runtime(runtime, camera, Vector3.FORWARD, 200)
+	if runtime.resident_splats() != NODE_CAP:
+		_failures.append("full-detail pack did not become resident")
+	_drive_runtime(runtime, camera, Vector3.BACK, 100)
+	if runtime.active_slots() != 0:
+		_failures.append("default policy did not evict an out-of-view pack")
+	runtime.keep_single_node_resident = true
+	_drive_runtime(runtime, camera, Vector3.BACK, 200)
+	var loads: int = runtime.loads_completed
+	var evictions: int = runtime.evictions
+	for direction in [Vector3.FORWARD, Vector3.BACK, Vector3(0, 1, -.01)]:
+		_drive_runtime(runtime, camera, direction, 100)
+		if runtime.resident_splats() != NODE_CAP or runtime.wanted_count() != 1:
+			_failures.append("pinned full-detail pack evicted during camera turn")
+	if runtime.loads_completed != loads or runtime.evictions != evictions:
+		_failures.append("camera turns reloaded pinned full-detail payload")
+	runtime.keep_single_node_resident = false
+	_drive_runtime(runtime, camera, Vector3.BACK, 100)
+	if runtime.active_slots() != 0:
+		_failures.append("disabling retention did not restore frustum eviction")
+	runtime.configure(_pack, BUDGET)
+	runtime.keep_single_node_resident = true
+	_drive_runtime(runtime, Vector3(0, 0, HALF * 3), Vector3.BACK, 100)
+	if runtime.active_slots() != 0:
+		_failures.append("retention incorrectly pinned a hierarchical LOD pack")
+	runtime.shutdown()
+	if runtime.resident_splats() != 0 or not runtime._cpu_payload.is_empty():
+		_failures.append("retained full-detail payload survived shutdown")
+	DirAccess.remove_absolute(prefix + ".manifest.json")
+	DirAccess.remove_absolute(prefix + ".nodes.bin")
 
 
 ## Tick the manager until the IO queue drains. WorkerThreadPool runs on its own

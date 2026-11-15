@@ -350,6 +350,7 @@ func _run() -> void:
 	await _test_chase()
 	await _test_blink()
 	await _test_clones()
+	await _test_clone_cancel()
 	_test_all_skills()
 	await _test_revive()
 	await _test_phase2_buffs()
@@ -851,6 +852,23 @@ func _test_clones() -> void:
 		if is_instance_valid(c) and c.has_method("expire"):
 			c.call("expire")
 	await _wait(0.6)
+
+
+func _test_clone_cancel() -> void:
+	_boss.call("debug_reset")
+	_boss.set("_clone_cd", 0.0)
+	_boss.call("debug_cast", "clones")
+	await process_frame
+	_boss.call("debug_reset")
+	await _wait(0.5)
+	_check("重置中断召唤前摇，不生成残留分身", int(_boss.call("status")["clones"]) == 0, "")
+	_boss.set("_clone_cd", 0.0)
+	_boss.call("debug_cast", "clones")
+	await _until(func() -> bool: return int(_boss.call("status")["clones"]) > 0, 2.0)
+	var started := int(_boss.call("status")["clones"])
+	_boss.call("debug_reset")
+	await _wait(0.4)
+	_check("重置中断分帧召唤，不生成残留分身", started > 0 and started < 10 and int(_boss.call("status")["clones"]) == 0, "已开始 %d 个" % started)
 
 
 func _test_all_skills() -> void:
