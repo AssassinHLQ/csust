@@ -61,7 +61,7 @@ const TOUCH_JOYSTICK_INPUT_RADIUS := 100.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_RADIUS := 64.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_INPUT_RADIUS := 84.0 * TOUCH_CONTROL_SCALE
 const MAX_OWN_NORMAL_BULLETS := 5
-const LASER_SEARCH_RAYS_PER_FRAME := 8
+const LASER_SEARCH_RAYS_PER_FRAME := 12
 ## AI 预测的子弹上限。原版 3 / 2，五台同时在场时会撞帧，降到 2 / 1（见 `_set_ai_tier()`）。
 var ai_max_predicted_bullets := 3
 var ai_max_predicted_minigun_bullets := 2
@@ -954,9 +954,8 @@ func update_ai(index: int, delta: float) -> void:
 	var opponent: Dictionary = tanks[target_index]
 	ai.cooldown = maxf(0.0, ai.cooldown - delta)
 	ai.danger_timer -= delta
-	if is_yuzu and _yuzu_immediate_threat(index):
-		ai.danger_timer = minf(float(ai.danger_timer), 0.0)
-	if is_midori and _yuzu_immediate_threat(index):
+	var immediate_threat := (is_yuzu or is_midori or kei_rage) and _yuzu_immediate_threat(index)
+	if immediate_threat:
 		ai.danger_timer = minf(float(ai.danger_timer), 0.0)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 	# 预测错峰运行，每帧共享一次完整预算；低难度角色的反应间隔更长。
@@ -968,8 +967,7 @@ func update_ai(index: int, delta: float) -> void:
 	var midori_laser_fired := false
 	var midori_laser_searching := false
 	ai.laser_solver_timer = maxf(0.0, float(ai.get("laser_solver_timer", 0.0)) - delta)
-	var laser_target_moved := int(ai.get("laser_search_target", -1)) != target_index or Vector2(ai.get("laser_search_target_pos", Vector2.ZERO)).distance_to(opponent.pos) > 64.0 or Vector2(ai.get("laser_search_origin", Vector2.ZERO)).distance_to(ai.pos) > 12.0
-	if has_midori_laser and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and (float(ai.laser_solver_timer) <= 0.0 or laser_target_moved):
+	if has_midori_laser and not immediate_threat and Vector2(ai.danger_velocity).is_zero_approx() and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and float(ai.laser_solver_timer) <= 0.0:
 		tanks[index] = ai
 		var laser_angle := find_laser_bank_angle(index, target_index)
 		ai = tanks[index]
@@ -984,7 +982,7 @@ func update_ai(index: int, delta: float) -> void:
 		ai.laser_searching = midori_laser_searching
 	# Fire at a visible opponent before moving or evading. Yuzu only uses the
 	# instant normal-shot path; laser shots turn and fire at her imperfect aim.
-	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and (not is_midori or Vector2(ai.danger_velocity).is_zero_approx()) and clear_line(ai.pos, opponent.pos):
+	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and (not (is_midori or kei_rage) or (not immediate_threat and Vector2(ai.danger_velocity).is_zero_approx())) and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
 		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
@@ -1099,7 +1097,7 @@ func update_ai(index: int, delta: float) -> void:
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
 	var fire_skill := ai_laser_skill(index) if str(ai.weapon) == "laser" else skill
 	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, fire_skill)
-	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0:
+	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0 and (not (is_midori or kei_rage) or (not immediate_threat and Vector2(ai.danger_velocity).is_zero_approx())):
 		if rng.randf() <= fire_skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
 			if is_midori and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
 				var safe_angle := _safe_ai_aim(index, target_index, float(ai.angle), "minigun")
@@ -1180,13 +1178,13 @@ func find_laser_bank_angle(owner: int, target: int) -> float:
 	var shooter: Dictionary = tanks[owner]
 	var origin: Vector2 = shooter.pos
 	var destination: Vector2 = tanks[target].pos
-	if int(shooter.get("laser_search_target", -1)) != target or Vector2(shooter.get("laser_search_target_pos", Vector2.ZERO)).distance_to(destination) > 64.0 or Vector2(shooter.get("laser_search_origin", Vector2.ZERO)).distance_to(origin) > 12.0:
+	if int(shooter.get("laser_search_target", -1)) != target or Vector2(shooter.get("laser_search_origin", Vector2.ZERO)).distance_to(origin) > 12.0:
 		shooter.laser_search_target = target
-		shooter.laser_search_target_pos = destination
 		shooter.laser_search_origin = origin
 		shooter.laser_search_next_degree = 0
 		shooter.laser_solver_timer = 0.0
-		tanks[owner] = shooter
+	shooter.laser_search_target_pos = destination
+	tanks[owner] = shooter
 	var direct := origin.angle_to_point(destination)
 	if _laser_path_hits_target(owner, target, direct):
 		shooter.laser_search_next_degree = 0
@@ -1341,7 +1339,7 @@ func find_ai_evasion(ai_pos: Vector2, ai_angle: float, ai_index: int) -> Vector2
 	var threats := bullets.duplicate()
 	threats.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return (a.pos as Vector2).distance_squared_to(ai_pos) < (b.pos as Vector2).distance_squared_to(ai_pos))
-	var limit := 4 if str(tanks[ai_index].name) == "柚子" else ai_max_predicted_bullets
+	var limit := 6 if str(tanks[ai_index].name) == "凯伊" and bool(tanks[ai_index].get("kei_rage", false)) else (4 if str(tanks[ai_index].name) == "柚子" else ai_max_predicted_bullets)
 	for bullet in threats:
 		if trajectories.size() >= limit:
 			break
@@ -1354,7 +1352,7 @@ func find_ai_evasion(ai_pos: Vector2, ai_angle: float, ai_index: int) -> Vector2
 		var segments_by_step: Array = []
 		var future: Vector2 = bullet.pos
 		var velocity: Vector2 = bullet.vel
-		var remaining_life: float = float(bullet.life)
+		var remaining_life: float = INF if bool(bullet.get("persist_until_bounces", false)) else float(bullet.life)
 		var bounce_count: int = int(bullet.bounces)
 		for step_index in predict_steps:
 			if remaining_life <= 0.0 or bounce_count >= 10: break
@@ -1693,10 +1691,12 @@ func update_weapon_bursts(delta: float) -> void:
 					continue
 				t.angle = adjusted
 				angle = adjusted + spread
+			var persist_until_bounces := str(t.name) == "才羽绿" and not bool(t.get("burst_is_skill", false))
 			bullets.append({"pos": t.pos + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 				"vel": Vector2.from_angle(angle) * 250.0, "owner": index, "life": 2.4,
 				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0,
-				"kei_rage": bool(t.get("kei_rage", false)), "skill": bool(t.get("burst_is_skill", false))})
+				"kei_rage": bool(t.get("kei_rage", false)), "skill": bool(t.get("burst_is_skill", false)),
+				"persist_until_bounces": persist_until_bounces})
 			t.burst_remaining -= 1
 			t.burst_timer = 0.05 if str(t.name) == "才羽绿" else 0.085
 			# 每隔一发播放音效，避免同时创建过多音频节点。
@@ -1764,7 +1764,7 @@ func update_bullets(delta: float) -> void:
 				if bullet_hits_tank_at(b.pos, tanks[ti].pos, float(tanks[ti].angle), BULLET_R):
 					tank_was_hit(ti); hit = true; break
 			if hit: break
-		if hit or b.life <= 0.0 or int(b.bounces) >= 10: bullets.remove_at(i)
+		if hit or (b.life <= 0.0 and not bool(b.get("persist_until_bounces", false))) or int(b.bounces) >= 10: bullets.remove_at(i)
 		else: bullets[i] = b
 
 func homing_target(owner: int, bullet_pos: Vector2) -> int:

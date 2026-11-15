@@ -234,6 +234,13 @@ func _run() -> void:
 	battle[1].laser_solver_timer = 0.2
 	_tank.call("update_ai", 1, 0.05)
 	_check(is_equal_approx(float(battle[1].laser_solver_timer), 0.15), "小绿折射搜索受冷却节流，不会每帧重复")
+	battle[1].laser_search_target = 0
+	battle[1].laser_search_target_pos = target_pos
+	battle[1].laser_search_origin = battle[1].pos
+	battle[1].laser_search_next_degree = 80
+	battle[0].pos = target_pos + Vector2(70, 0)
+	var moved_target_angle: float = _tank.call("find_laser_bank_angle", 1, 0)
+	_check(not is_nan(moved_target_angle) or int(battle[1].laser_search_next_degree) >= 96, "目标移动超过 64 px 时小绿保留折射扫描进度")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
@@ -242,6 +249,7 @@ func _run() -> void:
 	battle[1].pos = Vector2(400, 400)
 	battle[1].angle = 0.0
 	battle[1].weapon = "laser"
+	battle[1].ammo = 1
 	battle[1].cooldown = 0.0
 	battle[1].laser_search_target = 0
 	battle[1].laser_search_target_pos = Vector2(600, 400)
@@ -253,6 +261,7 @@ func _run() -> void:
 	var midori_before_evade: Vector2 = battle[1].pos
 	_tank.call("update_ai", 1, 1.0 / 60.0)
 	_check(battle[1].pos.distance_to(midori_before_evade) > 0.1 and Vector2(battle[1].danger_velocity).length_squared() > 0.0, "小绿分帧瞄准期间优先躲避即将命中的子弹")
+	_check(str(battle[1].weapon) == "laser" and int(battle[1].ammo) == 1, "小绿遇到迫近子弹时暂停激光，不会为瞄准挨打")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
@@ -411,7 +420,21 @@ func _run() -> void:
 	battle[1].burst_timer = 0.0
 	_tank.get("bullets").clear()
 	for i in 5: _tank.call("update_weapon_bursts", 0.1)
-	_check((_tank.get("bullets") as Array).size() == 5 and int(_tank.call("normal_bullet_count", 1)) == 5 and is_equal_approx(float(_tank.get("bullets")[0].life), 2.4), "小绿五连发计入普通子弹上限，子弹寿命 2.4 秒")
+	_check((_tank.get("bullets") as Array).size() == 5 and int(_tank.call("normal_bullet_count", 1)) == 5 and bool(_tank.get("bullets")[0].get("persist_until_bounces", false)), "小绿普通五连发计入上限并持续到反弹次数耗尽")
+	var persistent_bullet: Dictionary = _tank.get("bullets")[0]
+	persistent_bullet.pos = Vector2(500, 700)
+	persistent_bullet.vel = Vector2.ZERO
+	_tank.get("bullets").clear()
+	_tank.get("bullets").append(persistent_bullet)
+	_tank.call("update_bullets", 2.5)
+	_check((_tank.get("bullets") as Array).size() == 1, "小绿普通五连发超过 2.4 秒仍存在")
+	_tank.get("bullets")[0].bounces = 10
+	_tank.call("update_bullets", 0.0)
+	_check((_tank.get("bullets") as Array).is_empty(), "小绿普通五连发达到 10 次反弹后消失")
+	_tank.get("bullets").clear()
+	battle[1].burst_remaining = 5
+	battle[1].burst_timer = 0.0
+	for i in 5: _tank.call("update_weapon_bursts", 0.1)
 	battle[1].burst_remaining = 5
 	_tank.call("update_weapon_bursts", 0.1)
 	_check((_tank.get("bullets") as Array).size() == 5 and int(battle[1].burst_remaining) == 0, "小绿五发仍在场时不能继续普通连发")
@@ -488,7 +511,16 @@ func _run() -> void:
 	battle[4].cooldown = 0.0
 	battle[4].danger_velocity = Vector2.UP
 	_tank.call("update_ai", 4, 0.05)
-	_check(not (_tank.get("bullets") as Array).is_empty(), "无限火力期间凯伊躲避时也会向可见敌人开火")
+	_check((_tank.get("bullets") as Array).is_empty(), "无限火力期间凯伊优先躲避，不在移动中继续开火")
+	_tank.get("bullets").append({"pos": Vector2(450, 400), "vel": Vector2(-200, 0), "owner": 1, "life": 2.0, "grace": 0.0, "weapon": "normal", "bounces": 0})
+	battle[4].pos = Vector2(400, 400)
+	battle[4].angle = 0.0
+	battle[4].danger_velocity = Vector2.ZERO
+	battle[4].danger_timer = 1.0
+	battle[4].cooldown = 0.0
+	var kei_before_dodge: Vector2 = battle[4].pos
+	_tank.call("update_ai", 4, 0.05)
+	_check(battle[4].pos.distance_to(kei_before_dodge) > 0.1 and (_tank.get("bullets") as Array).size() == 1, "无限火力凯伊识别迫近子弹并闪避，暂停本轮射击")
 	_tank.get("walls").clear()
 	_tank.get("walls").append(Rect2(450, 300, 5, 200))
 	battle[4].pos = Vector2(400, 400)
