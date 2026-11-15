@@ -280,10 +280,10 @@ func _run() -> void:
 		_check(Vector2(volley[3].vel).y * Vector2(volley[4].vel).y < 0.0, "另外两发覆盖目标两侧误差")
 	volley.clear()
 	for i in 20: volley.append({"owner": 0, "weapon": "normal"})
-	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 20, "全场剩余弹位不足五发时不会超限")
+	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 25, "其他角色的子弹不阻挡柚子的技能")
 	volley.clear()
-	volley.append({"owner": 2, "weapon": "normal"})
-	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 1, "柚子已有普通子弹时不会超出个人五发上限")
+	for i in 5: volley.append({"owner": 2, "weapon": "normal"})
+	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 10 and int(_tank.call("normal_bullet_count", 2)) == 5, "柚子普通弹满五发时仍可使用技能，技能弹不占普通弹名额")
 	volley.clear()
 	_tank.get("walls").append(Rect2(440, 300, 10, 200))
 	_tank.call("build_prediction_mask")
@@ -310,7 +310,25 @@ func _run() -> void:
 	for i in 24: _tank.get("bullets").append({"owner": 0, "weapon": "normal"})
 	battle[1].burst_remaining = 5
 	_tank.call("update_weapon_bursts", 0.1)
-	_check((_tank.get("bullets") as Array).size() == 24 and int(battle[1].burst_remaining) == 0, "小绿五连发受全场 24 发上限约束")
+	_check((_tank.get("bullets") as Array).size() == 25 and int(battle[1].burst_remaining) == 4, "小绿五连发不受其他角色的子弹数量限制")
+	_tank.get("bullets").clear()
+	battle[0].alive = true
+	battle[0].pos = Vector2(700, 400)
+	battle[0].weapon = "normal"
+	battle[0].cooldown = 0.0
+	for i in 5: _tank.get("bullets").append({"owner": 0, "weapon": "normal"})
+	_tank.call("fire", 0)
+	_check((_tank.get("bullets") as Array).size() == 5, "普通子弹满五发后不能发射第六发")
+	battle[0].weapon = "homing"
+	battle[0].ammo = 1
+	_tank.call("fire", 0)
+	_check((_tank.get("bullets") as Array).size() == 6 and int(_tank.call("normal_bullet_count", 0)) == 5, "普通弹满额时追踪道具仍可发射且不占普通弹名额")
+	_tank.get("bullets").clear()
+	for i in 24: _tank.get("bullets").append({"owner": 1, "weapon": "normal"})
+	battle[0].weapon = "normal"
+	battle[0].cooldown = 0.0
+	_tank.call("fire", 0)
+	_check((_tank.get("bullets") as Array).size() == 25 and int(_tank.call("normal_bullet_count", 0)) == 1, "其他角色的子弹不会占用自己的五发名额")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
@@ -335,7 +353,7 @@ func _run() -> void:
 	for i in 19: _tank.get("bullets").append({"owner": 1, "weapon": "normal"})
 	battle[4].cooldown = 0.0
 	_tank.call("fire", 4)
-	_check((_tank.get("bullets") as Array).size() == 25, "无限火力突破个人和全场子弹上限")
+	_check((_tank.get("bullets") as Array).size() == 25, "无限火力突破个人普通子弹上限")
 	_check(is_equal_approx(float(battle[4].cooldown), 0.12), "无限火力开火间隔 0.12 秒")
 	_check(is_equal_approx(float((_tank.get("bullets") as Array)[24].life), 2.4), "强化子弹限时消失以控制负载")
 	_tank.get("bullets").clear()

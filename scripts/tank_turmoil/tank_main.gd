@@ -60,7 +60,7 @@ const TOUCH_JOYSTICK_RESPONSE_RADIUS := 70.0 * TOUCH_CONTROL_SCALE
 const TOUCH_JOYSTICK_INPUT_RADIUS := 100.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_RADIUS := 64.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_INPUT_RADIUS := 84.0 * TOUCH_CONTROL_SCALE
-const MAX_ACTIVE_BULLETS := 24
+const MAX_OWN_NORMAL_BULLETS := 5
 ## AI 预测的子弹上限。原版 3 / 2，五台同时在场时会撞帧，降到 2 / 1（见 `_set_ai_tier()`）。
 var ai_max_predicted_bullets := 3
 var ai_max_predicted_minigun_bullets := 2
@@ -1089,12 +1089,8 @@ func _yuzu_predictive_volley(index: int, target_index: int) -> bool:
 	var origin: Vector2 = shooter.pos
 	var target_pos: Vector2 = target.pos
 	var distance := origin.distance_to(target_pos)
-	if distance < 200.0 or regular_bullet_count() + 5 > MAX_ACTIVE_BULLETS:
+	if distance < 200.0:
 		return false
-	var owned := 0
-	for bullet in bullets:
-		if int(bullet.owner) == index and str(bullet.weapon) != "shotgun" and str(bullet.weapon) != "minigun": owned += 1
-	if owned > 0: return false
 	var velocity: Vector2 = Vector2(target.get("measured_velocity", Vector2.ZERO)).limit_length(250.0)
 	var forward := Vector2.from_angle(float(target.angle)) * maxf(velocity.length(), 100.0)
 	if velocity.length() > 10.0: forward = velocity
@@ -1109,7 +1105,7 @@ func _yuzu_predictive_volley(index: int, target_index: int) -> bool:
 	for angle in angles:
 		bullets.append({"pos": origin + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 			"vel": Vector2.from_angle(angle) * 200.0, "owner": index, "life": 60.0,
-			"grace": 0.24, "homing": false, "weapon": "normal", "bounces": 0, "kei_rage": false})
+			"grace": 0.24, "homing": false, "weapon": "normal", "bounces": 0, "kei_rage": false, "skill": true})
 	shooter.angle = angles[0]
 	shooter.cooldown = 0.34
 	tanks[index] = shooter
@@ -1477,14 +1473,8 @@ func fire(index: int) -> void:
 	if mode == 0 or round_over or paused or not tanks[index].alive: return
 	var t := tanks[index]
 	var kei_rage := bool(t.get("kei_rage", false))
-	if not kei_rage and regular_bullet_count() >= MAX_ACTIVE_BULLETS: return
 	var weapon: String = t.weapon
-	var owned := 0
-	for b in bullets:
-		# 散弹与机关枪弹幕不占普通子弹上限。
-		if b.owner == index and str(b.weapon) != "shotgun" and str(b.weapon) != "minigun": owned += 1
-	var projectile_limit := 8 if bool(t.boss_unit) else 5
-	if t.cooldown > 0.0 or (not kei_rage and owned >= projectile_limit and weapon != "laser" and weapon != "shotgun" and weapon != "minigun"): return
+	if t.cooldown > 0.0 or (not kei_rage and weapon == "normal" and normal_bullet_count(index) >= MAX_OWN_NORMAL_BULLETS): return
 	if index > 0 and (mode == 1 or mode == 3):
 		var target := homing_target(index, t.pos)
 		var safe_angle := _safe_ai_aim(index, target, float(t.angle), weapon)
@@ -1534,20 +1524,17 @@ func fire(index: int) -> void:
 		if t.ammo <= 0: t.weapon = "normal"
 	tanks[index] = t
 
-func regular_bullet_count() -> int:
+func normal_bullet_count(owner: int) -> int:
 	var count := 0
 	for bullet in bullets:
-		if not bool(bullet.get("kei_rage", false)): count += 1
+		if int(bullet.owner) == owner and str(bullet.weapon) == "normal" and not bool(bullet.get("kei_rage", false)) and not bool(bullet.get("skill", false)):
+			count += 1
 	return count
 
 func update_weapon_bursts(delta: float) -> void:
 	for index in tanks.size():
 		if not tanks[index].alive or int(tanks[index].burst_remaining) <= 0: continue
 		var t := tanks[index]
-		if not bool(t.get("kei_rage", false)) and regular_bullet_count() >= MAX_ACTIVE_BULLETS:
-			t.burst_remaining = 0
-			tanks[index] = t
-			continue
 		t.burst_timer -= delta
 		if float(t.burst_timer) <= 0.0:
 			var spread := rng.randf_range(-0.035, 0.035)
