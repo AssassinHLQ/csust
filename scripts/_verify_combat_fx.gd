@@ -112,13 +112,42 @@ func _run() -> void:
 	_check(bool(OffWin.is_safe()[0]), "offscreen and uncaptured mouse")
 	var bosses_before := get_nodes_in_group("bosses").size()
 	var targets_before := get_nodes_in_group("targets").size()
+	# Construct the real normal-shot resources without processing gameplay.
+	var source_weapon := preload("res://scripts/weapon.gd").new()
+	source_weapon.process_mode = Node.PROCESS_MODE_DISABLED
+	var source_muzzle := Marker3D.new()
+	source_muzzle.name = "Muzzle"
+	source_weapon.add_child(source_muzzle)
+	_world.add_child(source_weapon)
+	_weapon.set("_bolt_mesh", source_weapon.get("_bolt_mesh"))
+	_weapon.set("_bolt_mat", source_weapon.get("_bolt_mat"))
+	_check(_weapon.get("_bolt_mesh") != null and _weapon.get("_bolt_mat") != null,
+		"normal-shot regression uses the production weapon mesh and material")
 	var warmer := preload("res://scripts/combat_fx_warmup.gd").new()
 	_world.add_child(warmer)
-	warmer.start(_world.get_world_3d())
+	root.use_taa = true
+	warmer.start(_world.get_world_3d(), root, source_weapon)
+	var preview := warmer.get_child(0) as SubViewport
+	_check(preview.use_taa == root.use_taa and preview.msaa_3d == root.msaa_3d
+		and preview.screen_space_aa == root.screen_space_aa and preview.use_debanding == root.use_debanding,
+		"private warmup inherits the production antialiasing and motion-vector variants")
 	var deadline := Time.get_ticks_msec() + 15000
 	while not warmer.finished and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_check(warmer.finished, "private effect viewport completes warmup")
+	var warmed_pipelines := _pipelines()
+	# Use the actual party palette here. Arbitrary styles in _effects() have
+	# their own replay/cache test above and are not promised arena prewarm.
+	for col in [Color(1, .62, .78), Color(.45, 1, .78), Color(1, .82, .45), Color(.72, .4, 1)]:
+		_gun.call("_beam", Vector3(-2, 1, 0), Vector3(2, 1, 0), .03, col, .08, 1.8)
+		_gun.call("_glow_quad", Vector3.ZERO, col, .5, .1)
+	_weapon.call("_spawn_laser_bolt", Vector3(-1, 1, 0), Vector3(1, 1, 0))
+	_weapon.call("_muzzle_flash", Vector3.ZERO, Vector3.FORWARD)
+	_weapon.call("_spawn_impact", Vector3.ZERO, Vector3.UP)
+	await RenderingServer.frame_post_draw
+	await create_timer(1.6).timeout
+	_check(_pipelines() == warmed_pipelines, "first TAA gameplay effects reuse the warmed material pipelines")
+	_weapon.call("_advance_tracers", 10.0)
 	_check(get_nodes_in_group("bosses").size() == bosses_before and get_nodes_in_group("targets").size() == targets_before,
 		"warmup registers no combat targets")
 	var warmer_ref := weakref(warmer)

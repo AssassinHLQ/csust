@@ -27,12 +27,19 @@ class VisualClone extends "res://scripts/horror_clone.gd":
 
 var finished := false
 
-func start(source_world: World3D) -> void:
+func start(source_world: World3D, source_viewport: Viewport = null, source_weapon: Node3D = null) -> void:
 	if DisplayServer.get_name() == "headless":
 		finished = true
 		return
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(64, 64)
+	if source_viewport == null: source_viewport = get_viewport()
+	# Forward+ uses different material pipelines when motion vectors or MSAA
+	# are needed. Warm the active game's variant before its first real shot.
+	viewport.use_taa = source_viewport.use_taa
+	viewport.msaa_3d = source_viewport.msaa_3d
+	viewport.screen_space_aa = source_viewport.screen_space_aa
+	viewport.use_debanding = source_viewport.use_debanding
 	viewport.world_3d = World3D.new()
 	viewport.world_3d.environment = source_world.environment
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -49,17 +56,27 @@ func start(source_world: World3D) -> void:
 	weapon.add_child(muzzle)
 	world.add_child(weapon)
 	weapon.set("_fx_root", world)
+	# The normal shot owns a gradient texture and material built by Weapon._ready.
+	# Reuse those exact resources without running its trigger, rays or audio.
+	if source_weapon != null:
+		weapon.set("_bolt_mesh", source_weapon.get("_bolt_mesh"))
+		weapon.set("_bolt_mat", source_weapon.get("_bolt_mat"))
+		if weapon.get("_bolt_mesh") != null and weapon.get("_bolt_mat") != null:
+			weapon.call("_spawn_laser_bolt", Vector3(-1, 1, 0), Vector3(1, 1, 0))
 	weapon.call("_muzzle_flash", Vector3.ZERO, Vector3.FORWARD)
 	weapon.call("_spawn_impact", Vector3.ZERO, Vector3.UP)
 	await RenderingServer.frame_post_draw
+	weapon.call("_advance_tracers", 10.0)
 	weapon.call("_muzzle_flash_beam", Vector3.ZERO)
 	weapon.call("_spawn_beam_impact", Vector3.ZERO, Vector3.UP)
 	var gun := VisualGun.new()
 	world.add_child(gun)
 	gun.set("_fx_root", world)
 	for col in [Color(1, .62, .78), Color(.45, 1, .78), Color(1, .82, .45), Color(.72, .4, 1)]:
-		gun.call("_beam", Vector3(-2, 1, 0), Vector3(2, 1, 0), .03, col, .1, 1.8)
-		gun.call("_glow_quad", Vector3.ZERO, col, .5, .1)
+		# A first compilation frame can outlast the gameplay effect's 70-100 ms
+		# lifetime. Leave preview instances alive until they have been rendered.
+		gun.call("_beam", Vector3(-2, 1, 0), Vector3(2, 1, 0), .03, col, 1.0, 1.8)
+		gun.call("_glow_quad", Vector3.ZERO, col, .5, 1.0)
 	await RenderingServer.frame_post_draw
 	var boss := VisualBoss.new()
 	world.add_child(boss)

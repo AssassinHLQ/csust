@@ -10,6 +10,9 @@ var _battle_seconds := 6.0
 var _battle_fps := 60
 var _disable_vsync := false
 var _shots := false
+var _battle_size := Vector2i(1600, 900)
+var _player_camera := false
+var _runtime_config: Dictionary = {}
 var _look_away := false
 var _walking := false
 var _walk_target := 1
@@ -22,6 +25,11 @@ func _initialize() -> void:
 		if arg.begins_with("--battle-fps="): _battle_fps = clampi(int(arg.trim_prefix("--battle-fps=")), 0, 240)
 		if arg == "--battle-no-vsync": _disable_vsync = true
 		if arg == "--battle-shots": _shots = true
+		if arg == "--battle-player-camera": _player_camera = true
+		if arg.begins_with("--battle-resolution="):
+			var dimensions := arg.trim_prefix("--battle-resolution=").split("x")
+			if dimensions.size() == 2:
+				_battle_size = Vector2i(clampi(int(dimensions[0]), 320, 7680), clampi(int(dimensions[1]), 240, 4320))
 	super._initialize()
 	ProjectSettings.set_setting("gsplat/rendering/static_frame_cache", true)
 
@@ -33,11 +41,12 @@ func _run() -> void:
 	preload("res://scripts/game_settings.gd").set_value("boss_attack", true)
 	preload("res://scripts/game_settings.gd").set_value("fps_limit", float(_battle_fps))
 	if _disable_vsync: preload("res://scripts/game_settings.gd").set_value("vsync", false)
-	await OffWin.apply(self, Vector2i(1600, 900))
+	await OffWin.apply(self, _battle_size)
 	_world = (load("res://scenes/next_level.tscn") as PackedScene).instantiate()
 	root.add_child(_world)
 	current_scene = _world
 	_player = _world.get_node("Player")
+	physics_frame.connect(_steer_battle)
 	_campus = _world.get_node("Campus")
 	_campus.set("hide_inside_aabb", AABB())
 	_player.global_position = _walk_points[0] + Vector3.UP * .3
@@ -45,10 +54,13 @@ func _run() -> void:
 	_player.set("max_health", 1.0e9)
 	_player.set("health", 1.0e9)
 	_campus.call("force_start")
-	_camera = Camera3D.new()
-	_camera.fov = 62
-	_camera.far = 3000
-	root.add_child(_camera)
+	if _player_camera:
+		_camera = _player.get_node("CameraRig/SpringArm3D/Camera3D") as Camera3D
+	else:
+		_camera = Camera3D.new()
+		_camera.fov = 62
+		_camera.far = 3000
+		root.add_child(_camera)
 	_camera.current = true
 	var deadline := Time.get_ticks_msec() + 60000
 	while not _campus.call("is_ready") and Time.get_ticks_msec() < deadline:
@@ -56,7 +68,14 @@ func _run() -> void:
 		await process_frame
 	_check(bool(_campus.call("is_ready")), "full campus loads")
 	await create_timer(2.0).timeout
-	await OffWin.apply(self, Vector2i(1600, 900))
+	await OffWin.apply(self, _battle_size)
+	_check(root.size == _battle_size, "requested physical render dimensions apply")
+	_runtime_config = {"player_camera": _player_camera, "fov": _camera.fov, "near": _camera.near, "far": _camera.far,
+		"taa": root.use_taa, "msaa_3d": root.msaa_3d, "screen_space_aa": root.screen_space_aa,
+		"static_frame_cache": ProjectSettings.get_setting("gsplat/rendering/static_frame_cache", true),
+		"settings": {}}
+	for key in ["fov", "resolution_scale", "aa_mode", "shadow_quality", "ssao", "glow", "ssr", "fog", "render_distance", "lod_threshold_px"]:
+		_runtime_config.settings[key] = preload("res://scripts/game_settings.gd").value(key)
 	_check(_player.is_on_floor() and _player.position.y > -5.0, "player starts on verified scanned street")
 	_check(Engine.max_fps == _battle_fps, "requested frame cap applies exactly")
 	_check(is_equal_approx(root.scaling_3d_scale, 1.0), "native 3D rendering scale")
@@ -130,24 +149,31 @@ func _run() -> void:
 	_check(int(state.loads_completed) == int(before_turn.loads_completed) and int(state.evictions) == 0, "sky turn never reloads the full campus payload")
 	for label in _battle_results:
 		_check(int(_battle_results[label].min_resident_splats) == int(state.source_splats), label + " keeps all source points resident")
-		_check(float(_battle_results[label].min_player_y) > -5.0, label + " player never falls out of scanned terrain")
+		_check(float(_battle_results[label].min_player_y) > 2.5, label + " player stays on the verified scanned street height")
 		_check(float(_battle_results[label].max_route_offset) < 14.0, label + " stays on the verified campus street")
 	_check(bool(OffWin.is_safe()[0]), "offscreen window and uncaptured mouse")
 	var warmup := root.get_node_or_null("BattleAssetWarmup")
 	_check(warmup != null and int(warmup.call("status").held) == 6, "summoned resources remain warm for repeated casts")
 	_check(warmup != null and bool(warmup.call("status").effects_ready), "effect pipelines finish arena warmup")
 	_world.queue_free()
-	_camera.queue_free()
+	if not _player_camera: _camera.queue_free()
 	await process_frame
 	preload("res://addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd").release_gpu()
 	await create_timer(1.5).timeout
 	_check(root.get_node_or_null("BattleAssetWarmup") == null, "leaving arena releases warmup resources")
 	var failed := _checks.filter(func(c: Dictionary) -> bool: return not c.ok)
+	var source_sha256 := {}
+	for path in ["scripts/_profile_boss_battle.gd", "scripts/combat_fx_warmup.gd", "scripts/companion.gd",
+		"scripts/companion_combat_position.gd", "addons/gdgs/runtime/render/compute/gaussian_gpu_state_cache.gd",
+		"addons/gdgs/runtime/render/compute/shaders/gsplat_projection.glsl"]:
+		if FileAccess.file_exists("res://" + path): source_sha256[path] = FileAccess.get_sha256("res://" + path)
 	var report := {"passed": _checks.size() - failed.size(), "failed": failed.size(), "checks": _checks,
 		"resolution": str(root.size), "fps_cap": Engine.max_fps, "gpu": RenderingServer.get_video_adapter_name(),
 		"vsync_mode": DisplayServer.window_get_vsync_mode(), "render_scale": root.scaling_3d_scale,
+		"configuration": _runtime_config,
+		"source_sha256": source_sha256,
 		"campus": state, "samples": _battle_results,
-		"scope": "Production finale, four active companions, live attacks and collision; real input walking throughout combat on a verified street, scripted casts and camera, raised test health, %d FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots occur outside samples. Measures rendering capacity, not physical display refresh or packaged executable." % Engine.max_fps}
+		"scope": "Production finale, four active companions, live attacks and collision; real input steering at physics cadence throughout combat on a verified street, sprint in player-camera mode, scripted casts and camera, raised test health, %d FPS cap, private desktop. Shader timestamps enabled. TIME_PROCESS monitors are periodic and may include preceding loading/readbacks, not contemporaneous per-frame CPU timing. Optional screenshots and GPU capacity/memory readbacks occur outside samples. Capacity counters describe only each phase end. Measures rendering capacity, not physical display refresh or packaged executable." % Engine.max_fps}
 	FileAccess.open(_out + "/report.json", FileAccess.WRITE).store_string(JSON.stringify(report, "\t"))
 	print("[boss-profile] RESULT ", report.passed, " passed / ", report.failed, " failed")
 	quit(0 if failed.is_empty() else 1)
@@ -155,14 +181,15 @@ func _run() -> void:
 func _aim() -> void:
 	if _camera == null: return
 	var at := _player.global_position
-	_camera.position = at + Vector3(0, 7, 13)
+	if not _player_camera: _camera.position = at + Vector3(0, 7, 13)
 	var target := at + Vector3(0, 7, -25)
 	if is_instance_valid(_boss): target = _boss.global_position + Vector3.UP * 7
 	if _look_away: target = _camera.position + Vector3(0, 1, -.1)
-	_camera.look_at(target)
+	if not _player_camera: _camera.look_at(target)
 	var direction := target - at
 	_player.set("_yaw", atan2(-direction.x, -direction.z))
-	_player.set("_pitch", -.12)
+	var aim := target - _camera.global_position
+	_player.set("_pitch", clampf(atan2(aim.y, Vector2(aim.x, aim.z).length()), -.8, .8) if _player_camera else -.12)
 
 func _sample_battle(label: String, seconds: float) -> void:
 	print("[boss-profile] PHASE ", label)
@@ -186,8 +213,6 @@ func _sample_battle(label: String, seconds: float) -> void:
 	var weapon := _player.get_node("Weapon")
 	weapon.call("trigger_down")
 	while Time.get_ticks_usec() - start < int(seconds * 1.0e6):
-		if _walking: _walk()
-		_aim()
 		await process_frame
 		var now := Time.get_ticks_usec()
 		frames.append((now - previous) / 1000.0)
@@ -207,11 +232,18 @@ func _sample_battle(label: String, seconds: float) -> void:
 		_read_timestamps()
 	weapon.call("trigger_up")
 	await process_frame
+	await _read_counts()
+	for count in _counts:
+		_check(int(count.sort) < int(count.sort_capacity), label + " final sort sample has no capacity clipping")
+		_check(int(count.culled) < int(count.culled_capacity), label + " final visible sample has no capacity clipping")
 	var result := {"frames": _statistics(frames), "cpu_ms": _statistics(cpu), "physics_ms": _statistics(physics),
 		"draw_calls": _statistics(calls), "primitives": _statistics(primitives), "gpu_ms": _stage_statistics(),
 		"boss": _boss.call("status"), "peak_clone_count": peak_clone_count, "damage_received": player_health - float(_player.get("health")),
 		"min_resident_splats": min_resident_splats, "player_position": str(_player.global_position), "camera_position": str(_camera.global_position)}
 	result["min_player_y"] = min_player_y
+	result["gpu_counts_at_end"] = _counts.duplicate(true)
+	result["gdgs_memory"] = await _read_battle_memory()
+	result["frames_over_60fps_budget"] = frames.filter(func(ms: float) -> bool: return ms > 1000.0 / 60.0).size()
 	result["max_route_offset"] = max_route_offset
 	result["pipelines_before"] = pipelines_before
 	result["pipelines_after"] = _pipeline_counts()
@@ -243,6 +275,18 @@ func _pipeline_counts() -> Dictionary:
 		"draw": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW),
 		"specialization": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION)}
 
+func _read_battle_memory() -> Dictionary:
+	var snapshots: Array[Dictionary] = []
+	RenderingServer.call_on_render_thread(func():
+		var cache = Manager.get_instance()._gpu_state_cache
+		var snapshot: Dictionary = cache.get_memory_stats()
+		snapshot["move_staging_states"] = 0
+		for state in cache._render_states.values():
+			if state.descriptors.has("stream_move_staging"): snapshot.move_staging_states += 1
+		snapshots.append(snapshot))
+	while snapshots.is_empty(): await process_frame
+	return snapshots[0]
+
 func _walk() -> void:
 	var offset := _walk_points[_walk_target] - _player.global_position
 	offset.y = 0.0
@@ -253,10 +297,18 @@ func _walk() -> void:
 	var rig: Node3D = _player.get_node("CameraRig")
 	var local := rig.global_basis.inverse() * offset.normalized()
 	_release_movement()
+	if _player_camera: Input.action_press("sprint")
 	if local.x > .01: Input.action_press("move_right", local.x)
 	if local.x < -.01: Input.action_press("move_left", -local.x)
 	if local.z > .01: Input.action_press("move_back", local.z)
 	if local.z < -.01: Input.action_press("move_forward", -local.z)
 
+func _steer_battle() -> void:
+	# Input feedback must run at the physics cadence. Per-render steering can
+	# overshoot the scanned street badly during the very stalls being measured.
+	if not is_instance_valid(_player): return
+	if _walking: _walk()
+	_aim()
+
 func _release_movement() -> void:
-	for action in ["move_left", "move_right", "move_forward", "move_back"]: Input.action_release(action)
+	for action in ["move_left", "move_right", "move_forward", "move_back", "sprint"]: Input.action_release(action)

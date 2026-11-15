@@ -44,7 +44,9 @@ func _warm_effects() -> void:
 	if _abandoned or owner_node == null: return
 	_effects = preload("res://scripts/combat_fx_warmup.gd").new()
 	add_child(_effects)
-	_effects.call("start", owner_node.get_world_3d())
+	var player := get_tree().get_first_node_in_group("player")
+	var weapon := player.get_node_or_null("Weapon") as Node3D if player != null else null
+	_effects.call("start", owner_node.get_world_3d(), owner_node.get_viewport(), weapon)
 
 func _on_owner_exiting() -> void:
 	_abandoned = true

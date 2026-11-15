@@ -31,6 +31,10 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
+// Select equivalent pipeline variants from the actual merged record layout.
+layout(constant_id = 0) const bool PACKED_SH0 = false;
+layout(constant_id = 1) const bool SINGLE_F32_STREAM = false;
+
 struct Splat {
 	vec3 position;
 	float time;
@@ -508,7 +512,7 @@ bool prepare_splat(out ProjectedSplat prepared) {
 		if (aid >= slot_offsets[stream_arena_slots]) return false;
 		uint lo = 0u;
 		uint hi = uint(stream_arena_slots);
-		while (lo < hi) {
+		while (!SINGLE_F32_STREAM && lo < hi) {
 			uint mid = (lo + hi) >> 1u;
 			if (slot_offsets[mid + 1u] <= aid) lo = mid + 1u; else hi = mid;
 		}
@@ -528,8 +532,8 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	}
 
 	// --- gsplat-stream: pick the record decoder ------------------------------
-	const bool is_packed = packed_enabled != 0;
-	const bool is_q24 = from_arena && stream_layout == 1;
+	const bool is_packed = PACKED_SH0 || packed_enabled != 0;
+	const bool is_q24 = !SINGLE_F32_STREAM && from_arena && stream_layout == 1;
 	// Arena records are addressed from the canonical payload's end with the
 	// arena's own stride; the canonical/packed path keeps the merged stride.
 	const uint pk_base = is_q24
@@ -572,8 +576,8 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	if (any(lessThan(clip_pos.xyz, vec3(-view_bounds, 0.0))) || any(greaterThan(clip_pos.xyz, vec3(view_bounds, clip_pos.w)))) {
 		return false;
 	}
-	// Positions alone reject off-screen points. Delay covariance reads and
-	// transforms until after that rejection, especially for whole-campus packs.
+	// Off-screen points need only a position. Decode and transform covariance
+	// after the frustum rejection instead of doing it for the entire source scan.
 	if (is_q24) q24_covariance(pk_base, splat_cov);
 	else if (is_packed) pk_covariance(pk_base, splat_cov);
 	else splat_cov = splat_buffer[unique_splat_index].covariance;
@@ -586,7 +590,9 @@ bool prepare_splat(out ProjectedSplat prepared) {
 	// the intro animation entirely (time_factor == 1).
 	float splat_time = is_packed ? 1.0 : (time - splat_buffer[unique_splat_index].time);
 	float time_factor = ease_out_cubic(clamp(splat_time, 0, 1));
-	float time_factor_late = ease_out_cubic(clamp(splat_time - 0.35, 0, 1));
+	// A synthetic time of 1 still leaves the delayed curve at 0.957125:
+	// packed/streamed splats would remain enlarged and partly transparent.
+	float time_factor_late = is_packed ? 1.0 : ease_out_cubic(clamp(splat_time - 0.35, 0, 1));
 
 	float splat_opacity = splat_opacity_raw * time_factor_late*time_factor_late;
 	float splat_scale = mix(2.0, 1.0, time_factor_late);
@@ -711,13 +717,17 @@ void main() {
 	// SH coefficients live in the splat's object space, so the view direction
 	// must be brought into that space (issue #29). inverse(), not transpose():
 	// object_linear may carry non-uniform scale.
-	vec3 view_dir = identity_basis
-		? normalize(world_pos.xyz - camera_pos)
-		: normalize(inverse(object_linear) * (world_pos.xyz - camera_pos));
-
-	vec3 base_color = is_packed
-		? get_color_packed(pk_base, sh_start, view_dir)
-		: get_color(view_dir, splat_buffer[unique_splat_index].sh_coefficients);
+	vec3 base_color;
+	if (PACKED_SH0) {
+		base_color = max(vec3(0.0), vec3(0.5) + pk_sh3(pk_base, sh_start, 0u) * SH_C0);
+	} else {
+		vec3 view_dir = identity_basis
+			? normalize(world_pos.xyz - camera_pos)
+			: normalize(inverse(object_linear) * (world_pos.xyz - camera_pos));
+		base_color = is_packed
+			? get_color_packed(pk_base, sh_start, view_dir)
+			: get_color(view_dir, splat_buffer[unique_splat_index].sh_coefficients);
+	}
 	vec4 relight = instance_relight[instance_id * 2u];
 	if (relight.w > 0.5) {
 		if (relight.z > 0.5) {

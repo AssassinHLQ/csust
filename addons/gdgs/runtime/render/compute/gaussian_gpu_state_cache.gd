@@ -342,11 +342,9 @@ func rebuild_gpu_state(
 	state.descriptors["slot_offsets"] = state.context.create_storage_buffer((maxi(1, state.stream_arena_slots) + 1) * 4)
 	# gsplat-stream: an eviction swaps the last slot into the freed one. Godot's
 	# command graph rejects a buffer_copy whose source and destination are the
-	# same buffer ("Command can't have itself as a dependency"), so the swap goes
-	# through a one-slot staging buffer instead.
-	if state.stream_enabled:
-		state.descriptors["stream_move_staging"] = state.context.create_storage_buffer(
-			maxi(1, int(state.stream_slot_splats) * state.stream_bytes_per_splat))
+	# same buffer ("Command can't have itself as a dependency"), so swaps need a
+	# one-slot staging buffer. Allocate it at the first move, not at rebuild:
+	# a persistent one-slot stream cannot compact and may have a huge slot.
 	# gsplat-stream: residency changes the dispatch width every frame, so the
 	# projection pass is dispatched indirectly from this buffer instead of being
 	# sized for the worst case (which would walk the whole arena).
@@ -438,8 +436,21 @@ func rebuild_gpu_state(
 		state.descriptors["depth_texture"]
 	], state.shaders["render_t8"], 0)
 
+	# Specialize from the merged layout, never from a dataset name or point count.
+	# A driver can eliminate unused SH/decoder paths before allocating registers.
+	var projection_constants: Array[RDPipelineSpecializationConstant] = []
+	if bool(ProjectSettings.get_setting("gsplat/rendering/specialize_projection", true)):
+		var packed_sh0 := RDPipelineSpecializationConstant.new()
+		packed_sh0.constant_id = 0
+		packed_sh0.value = packed_enabled and sh_degree == 0
+		projection_constants.append(packed_sh0)
+		var single_f32 := RDPipelineSpecializationConstant.new()
+		single_f32.constant_id = 1
+		single_f32.value = packed_enabled and state.stream_enabled and point_count == 0 \
+			and state.stream_arena_slots == 1 and state.stream_layout == 0
+		projection_constants.append(single_f32)
 	state.pipelines["gsplat_projection"] = state.context.create_pipeline(
-		[ceili(sizing_count / 256.0), 1, 1], [projection_set], state.shaders["projection"])
+		[ceili(sizing_count / 256.0), 1, 1], [projection_set], state.shaders["projection"], projection_constants)
 	state.pipelines["radix_sort_upsweep"] = state.context.create_pipeline([], [radix_upsweep_set], state.shaders["radix_upsweep"])
 	state.pipelines["radix_sort_spine"] = state.context.create_pipeline([RADIX, 1, 1], [radix_spine_set], state.shaders["radix_spine"])
 	state.pipelines["radix_sort_downsweep"] = state.context.create_pipeline([], [radix_downsweep_set], state.shaders["radix_downsweep"])
@@ -469,8 +480,6 @@ func rebuild_gpu_state(
 	declared += maxi(1, point_count) * 4 * 2  # splat_instance_ids
 	declared += maxi(1, instance_count) * 16 * BYTES_PER_FLOAT  # instance_transforms
 	declared += maxi(1, state.stream_arena_slots) * SLOT_INFO_WORDS * 4  # slot_info
-	declared += maxi(1, int(state.stream_slot_splats) * state.stream_bytes_per_splat) \
-		if state.stream_enabled else 0  # stream_move_staging
 	declared += (maxi(1, state.stream_arena_slots) + 1) * 4  # slot_offsets
 	declared += 3 * 4  # projection_dims
 	declared += 24 * 4  # uniforms
@@ -551,6 +560,10 @@ func _apply_stream_snapshot(state, device: RenderingDevice, splats_rid: RID, slo
 		var src: int = int(state.stream_base_bytes) + (slot_base + int(move["src"])) * slot_stride
 		var dst: int = int(state.stream_base_bytes) + (slot_base + int(move["dst"])) * slot_stride
 		var bytes: int = int(move["bytes"])
+		if not state.descriptors.has("stream_move_staging"):
+			var staging_bytes := maxi(1, slot_stride)
+			state.descriptors["stream_move_staging"] = state.context.create_storage_buffer(staging_bytes)
+			state.declared_bytes += staging_bytes
 		var staging: RID = state.descriptors["stream_move_staging"].rid
 		device.buffer_copy(splats_rid, staging, src, 0, bytes)
 		device.buffer_copy(staging, splats_rid, 0, dst, bytes)

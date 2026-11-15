@@ -145,8 +145,9 @@ func create_descriptor_set(descriptors: Array, shader: RID, descriptor_set_index
 		uniforms.push_back(uniform)
 	return deletion_queue.push(device.uniform_set_create(uniforms, shader, descriptor_set_index))
 
-func create_pipeline(block_dimensions: Array, descriptor_sets: Array, shader: RID) -> Callable:
-	var pipeline := deletion_queue.push(device.compute_pipeline_create(shader))
+func create_pipeline(block_dimensions: Array, descriptor_sets: Array, shader: RID,
+		specialization_constants: Array[RDPipelineSpecializationConstant] = []) -> Callable:
+	var pipeline := deletion_queue.push(device.compute_pipeline_create(shader, specialization_constants))
 	return func(
 		context: GdgsRenderingDeviceContext,
 		compute_list: int,
