@@ -104,6 +104,8 @@ def main():
                         'payload_sha256': sha256(output_bin)}
     output_manifest.write_text(json.dumps(result, separators=(',', ':')), encoding='utf-8')
     print(json.dumps(result['source'], indent=2), flush=True)
+    from build_campus_full_detail import build
+    build(output_manifest, args.out.with_name(args.out.name + '_full'))
 
 
 if __name__ == '__main__':

@@ -1,8 +1,9 @@
 # 校园 gsplat-stream 接入与实测
 
-2026-11-15，校园默认改用本项目修改版 `godot-gsplat-stream` 的
-`GaussianStreamNode`。`scripts/campus_stream.gd` 保持原有加载接口，
-在固定区块预算内按相机进行 LOD 选择和后台读取。
+2026-11-15，校园使用本项目修改版 `godot-gsplat-stream` 的
+`GaussianStreamNode`。`scripts/campus_stream.gd` 保持原有加载接口。
+当前默认关闭 LOD，加载全部 6,144,827 点；可显式开启流式 LOD。
+下文 96 / 192 节点性能数据指开启 LOD 的早期对照，不是当前默认画质。
 
 插件取自相邻 `godot-gsplat-stream` 工作区，基础版本为
 `448e0f6a57bbffb6ca19b6bde3005c7eeb5178a3`，同时包含该工作区当时未提交的
@@ -25,11 +26,45 @@ LOD 重试缓存优化。文件清单与原始 SHA256 见
 - `campus.nodes.bin` SHA256：
   `8f4852c3062e4360e6b52a6211cb54d53245da915b477b3d564f3cd61f18f6d0`。
 
-默认预算 96 节点、请求 SSE 1 px、每帧最多启动两次区块读取。
+开启 LOD 时预算 96 节点、请求 SSE 1 px、每帧最多启动两次区块读取。
 节点预算不足时选择器会提高实际 SSE：入口实测为 8.3521 px。
 这不是与完整 SH 高阶数据等画质的替换；远景会简化，方向相关颜色只保留 DC。
 已查看入口、机甲落地和返回大厅的实际 GPU 截图；原航拍扫描贴地观察仍有拉伸和模糊。
-增大到 192 节点后入口实际 SSE 为 4.913 px，但部分路线帧率下降，因此保留 96 默认值。
+增大到 192 节点后入口实际 SSE 为 4.913 px，但部分路线帧率下降，因此 LOD 模式保留 96 预算。
+
+## 关闭 LOD（当前默认）
+
+此插件没有“一千万点以下不触发 LOD”的运行时判断。`GaussianStreamLod.select()`
+始终按 SSE 和节点预算选择代表点；离线 `ply_to_packed.py --target=10000000`
+是目标数据量参数，与运行时是否简化无关。
+
+用户要求关闭 LOD 后，默认 `stream_lod_enabled = false`。加载
+`campus_full.manifest.json` / `campus_full.nodes.bin`：完整读取原包 1,666 个叶节点的
+6,144,827 点，排除全部父节点代表点，按 q24 投影着色器的公式解码成 52 B f32
+记录并合并成单个叶节点。没有抽样、协方差加粗或重定位，节点预算不能再使其降级。
+这保持既有叶节点的量化精度与 SH0，不会恢复转换前已省略的高阶 SH。
+
+完整点包为 319,531,004 字节，SHA256：
+`ae93c52376fad9e69b42506ed8ca4d0afc8f4818244ea853965e3f1cd12768b8`。
+它与 LOD 包都位于现有导出包含目录，派生二进制仍不入 Git。
+`tools/build_campus_stream.py` 重建时同时生成这份包；已有 LOD 包时可单独运行
+`python tools/build_campus_full_detail.py`。
+
+最终关闭 LOD 的相同实景路线：入口平均 45.52 FPS、返回大厅 60.01 FPS、
+接缝 42.14 / 56.58 / 45.15 / 44.42 FPS、机甲下降 42.04 FPS。
+全部 6,144,827 点驻留；GPU 缓冲申报 1,442.9 MiB
+（约 1.409 GiB，不是整个游戏的物理显存占用）。40 项通过，无 ERROR / SCRIPT ERROR。
+该对照还改变了存储布局与上传粒度，不能把所有性能差异只归因于 LOD 算法本身。
+在同一关卡回大厅时仍保留完整缓冲；切换场景清理与再进入重建均通过。
+
+完整点模式的最终报告和截图在 `_tools/_tmp/gsplat_stream/full_detail_final/`。
+另通过完整点包 PCK 包含/挂载/字节一致性 14 项、转换测试 2 项、
+原有四组插件测试；主场景在独立后台桌面完成 12 项冒烟，无引擎错误。
+早先 headless 主场景的 12 项断言也通过，但 dummy 渲染器报告 HUD 材质 RID
+错误，因此以真实渲染冒烟为准。所有图形测试均未切换用户桌面，前台句柄保持一致。
+
+命令行 `--campus-lod=on` 显式恢复原流式简化，`--campus-lod=off` 强制完整点数。
+原始直接渲染路径仍可用 `--campus-renderer=gdgs` 选择。
 
 ## 修复流式数据搬移
 
@@ -79,7 +114,8 @@ python tools/build_campus_stream.py
 
 $gd = 'D:/SOFTWARE/Godot-4.7.1-dotnet/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64.exe'
 python tools/run_godot_private_desktop.py --godot $gd --project . --script res://scripts/_verify_campus_rendered.gd --out _tools/_tmp/gsplat_stream/check --timeout 360 -- --rendered-out=res://_tools/_tmp/gsplat_stream/check --stream-reentry
-# 末尾追加 --campus-stream-budget=192 可对比更高预算。
+# 末尾追加 --campus-lod=on 可对比流式简化。
+# --campus-lod=on --campus-stream-budget=192 可对比更高预算。
 # 末尾追加 --campus-renderer=gdgs 可回退原直接渲染路径。
 ```
 

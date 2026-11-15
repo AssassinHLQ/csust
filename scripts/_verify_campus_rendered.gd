@@ -223,6 +223,9 @@ func _run() -> void:
 		_check(int(stream.get("resident_splats", 0)) > 0, "stream renderer has resident splats", stream)
 		_check(int(stream.get("io_failures", -1)) == 0, "stream pack reads without IO failures")
 		_check(int(stream.get("capacity_slots", 0)) <= int(stream["budget_nodes"]) + 16, "stream allocation respects node budget")
+		if not bool(stream.get("lod_enabled", true)):
+			_check(int(stream["resident_splats"]) == int(stream["source_splats"]), "LOD off retains every source point", stream["resident_splats"])
+			_check(int(stream["capacity_slots"]) == 1 and int(stream["wanted_nodes"]) == 1, "LOD off has no representative frontier")
 	await _test_revive(false)
 	await _test_revive(true)
 	_set_phase("mech_descent")
