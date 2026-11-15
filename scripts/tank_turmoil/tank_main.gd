@@ -95,6 +95,7 @@ const PORTRAIT_ALICE: Texture2D = preload("res://assets/tank_turmoil/characters/
 const PORTRAIT_KEI: Texture2D = preload("res://assets/tank_turmoil/characters/kei.png")
 const PORTRAIT_YUUKA: Texture2D = preload("res://assets/tank_turmoil/characters/yuuka.png")
 const SOUND_MOMOI_DEFEAT: AudioStream = preload("res://assets/tank_turmoil/sfx/momoi_defeat.ogg")
+const SOUND_ALICE_VICTORY: AudioStream = preload("res://assets/tank_turmoil/sfx/alice_victory.ogg")
 
 ## ── 音乐：不搬 ──
 ## 用户 2026-11-14：「为了减少体积，不并入音乐，全程同步电竞房音乐」。
@@ -1618,6 +1619,8 @@ func tank_was_hit(index: int) -> void:
 		var winner := survivors[0]
 		scores[winner] += 1
 		round_message = "%s获胜！" % tanks[winner].name
+		if str(tanks[winner].name) == "爱丽丝":
+			play_sound(SOUND_ALICE_VICTORY)
 	next_round_timer = 0.45
 
 func spawn_armor_hit(pos: Vector2, color: Color) -> void:

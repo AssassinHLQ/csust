@@ -71,6 +71,8 @@ func _run() -> void:
 			tex.get_height() if tex else 0])
 	var defeat: AudioStream = _tank.get("SOUND_MOMOI_DEFEAT")
 	_check(defeat != null, "桃井败北音效已加载")
+	var victory: AudioStream = _tank.get("SOUND_ALICE_VICTORY")
+	_check(victory != null and absf(victory.get_length() - 1.55) < 0.05, "爱丽丝获胜语音已加载，时长约 1.55 秒")
 
 	# ── ② 没有音乐播放器、没有歌单 ──
 	_check(_tank.get("music_player") == null, "没有自己的 AudioStreamPlayer（音乐交给电竞房）")
@@ -125,6 +127,16 @@ func _run() -> void:
 	for i in [1, 2, 3]: _tank.call("tank_was_hit", i)
 	_check(bool(_tank.get("round_over")) and str(_tank.get("round_message")).contains("凯伊"), "最后存活的凯伊获胜")
 	_check(int(_tank.get("scores")[4]) == 1, "胜场记在获胜角色名下")
+	var before_win_voice := 0
+	for child in _tank.get_children():
+		if child is AudioStreamPlayer and child.stream == victory: before_win_voice += 1
+	_check(before_win_voice == 0, "其他角色获胜不会播放爱丽丝语音")
+	_tank.call("new_round")
+	for i in [1, 2, 3, 4]: _tank.call("tank_was_hit", i)
+	var win_voice_count := 0
+	for child in _tank.get_children():
+		if child is AudioStreamPlayer and child.stream == victory: win_voice_count += 1
+	_check(win_voice_count == 1, "爱丽丝获胜时播放一次专属语音")
 	_tank.call("new_round")
 	var battle: Array = _tank.get("tanks")
 	battle[0].alive = false
