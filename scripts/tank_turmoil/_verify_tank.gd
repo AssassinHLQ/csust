@@ -1,4 +1,12 @@
 extends SceneTree
+
+class AimProbe:
+	extends "res://scripts/tank_turmoil/tank_main.gd"
+	var all_unsafe := false
+	func _ai_shot_safe(_owner: int, shot_angle: float, _weapon: String) -> bool:
+		return not all_unsafe and shot_angle > 0.005
+	func play_sound(_stream: AudioStream, _pitch := 1.0, _gain_multiplier := 1.0) -> void:
+		pass
 ## 坦克动荡 · 无窗口自检（2026-11-14）
 ##
 ## 用法：
@@ -178,11 +186,12 @@ func _run() -> void:
 	battle[1].weapon = "laser"
 	battle[1].ammo = 1
 	for i in [0, 2, 3, 4]: battle[i].pos = Vector2(900, 600)
+	battle[0].pos = Vector2(900, 400)
 	_tank.get("walls").clear()
 	_tank.get("walls").append(Rect2(480, 300, 8, 200))
 	_tank.call("build_prediction_mask")
-	_check(not bool(_tank.call("_midori_shot_safe", 1, 0.0, "laser")), "预测激光反弹自伤")
-	_check(not bool(_tank.call("_midori_shot_safe", 1, 0.0, "minigun")), "预测子弹反弹自伤")
+	_check(not bool(_tank.call("_ai_shot_safe", 1, 0.0, "laser")), "预测激光反弹自伤")
+	_check(not bool(_tank.call("_ai_shot_safe", 1, 0.0, "minigun")), "预测子弹反弹自伤")
 	_tank.call("fire", 1)
 	_check(bool(battle[1].alive) and str(battle[1].weapon) == "laser", "危险激光不会发射或消耗")
 	_tank.call("fire_laser", 1)
@@ -214,6 +223,7 @@ func _run() -> void:
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
 	_tank.set("ai_danger_budget", 0)
+	_tank.call("build_prediction_mask")
 	battle[4].pos = Vector2(400, 400)
 	battle[4].angle = 0.0
 	battle[4].role = 0
@@ -248,6 +258,25 @@ func _run() -> void:
 	_check(not (_tank.get("bullets") as Array).is_empty(), "无限火力期间凯伊躲避时也会向可见敌人开火")
 	_tank.call("new_round")
 	_check(not bool(_tank.get("tanks")[4].kei_rage), "新一局重置无限火力")
+	var probe := AimProbe.new()
+	probe.tanks = [probe.tank(Vector2(600, 400), 0.0, Color.WHITE, "爱丽丝"), probe.tank(Vector2(400, 400), 0.0, Color.WHITE, "柚子")]
+	var alternate: float = probe._safe_ai_aim(1, 0, 0.0, "normal")
+	_check(not is_nan(alternate) and alternate > 0.005, "正前方不安全时选择仍能命中目标的偏转角度")
+	probe.mode = 1
+	probe.tanks[0].name = "对手"
+	for character in ["柚子", "才羽绿", "凯伊", "才羽桃井"]:
+		probe.tanks[1].name = character
+		probe.tanks[1].angle = 0.0
+		probe.tanks[1].cooldown = 0.0
+		probe.bullets.clear()
+		probe.fire(1)
+		_check(probe.bullets.size() == 1 and float(probe.tanks[1].angle) > 0.005, "%s 选择安全方向后开火" % character)
+	probe.all_unsafe = true
+	probe.bullets.clear()
+	probe.tanks[1].cooldown = 0.0
+	probe.fire(1)
+	_check(probe.bullets.is_empty() and float(probe.tanks[1].reposition_timer) > 0.0, "无安全角度时不发射并尝试侧移")
+	probe.free()
 	_tank.call("new_round")
 	var old_cell := float(_tank.get("CELL"))
 	var viewport := _tank.get_viewport() as SubViewport

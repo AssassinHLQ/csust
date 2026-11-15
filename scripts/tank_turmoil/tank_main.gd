@@ -452,6 +452,7 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 	return {"pos": pos, "angle": angle, "color": color, "name": name,
 		"alive": true, "cooldown": 0.0, "ai_path": [], "ai_timer": 0.0,
 		"danger_timer": 0.0, "danger_velocity": Vector2.ZERO,
+		"reposition_timer": 0.0, "reposition_direction": Vector2.ZERO,
 		"attack_angle": NAN, "role": 0, "weapon": "normal", "ammo": 0,
 		"burst_remaining": 0, "burst_timer": 0.0,
 		"kei_rage": false,
@@ -941,13 +942,15 @@ func update_ai(index: int, delta: float) -> void:
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	# Fire at a visible opponent before moving or evading.
-	if (is_midori or kei_rage) and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
+	if (is_midori or kei_rage) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
-		var muzzle := Vector2(ai.pos) + Vector2.from_angle(shot_angle) * MUZZLE_OFFSET
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
-		var safe_shot := not is_midori or _midori_shot_safe(index, shot_angle, predicted_weapon)
-		if safe_shot and not tank_hits_wall(ai.pos, shot_angle) and not tank_hits_other_tank(index, ai.pos, shot_angle) and not circle_hits_wall(muzzle, BULLET_R):
-			ai.angle = shot_angle
+		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
+		if is_nan(safe_angle):
+			_reposition_after_unsafe_shot(index, shot_angle)
+			ai = tanks[index]
+		else:
+			ai.angle = safe_angle
 			if is_midori and str(ai.weapon) == "normal":
 				ai.burst_remaining = 5
 				ai.burst_timer = 0.0
@@ -962,6 +965,11 @@ func update_ai(index: int, delta: float) -> void:
 	if evade_direction.length_squared() > 0.0:
 		tanks[index] = ai
 		move_tank_direct(index, evade_direction, delta, ai_speed_evade * movement_scale)
+		return
+	if float(ai.reposition_timer) > 0.0:
+		ai.reposition_timer = maxf(0.0, float(ai.reposition_timer) - delta)
+		tanks[index] = ai
+		move_tank_direct(index, ai.reposition_direction, delta, ai_speed_path * movement_scale)
 		return
 	ai.ai_timer -= delta
 	var has_sight: bool = clear_line(ai.pos, opponent.pos)
@@ -1035,12 +1043,17 @@ func update_ai(index: int, delta: float) -> void:
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
 	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, skill)
 	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0:
-		if rng.randf() <= skill and (not is_midori or _midori_shot_safe(index, float(ai.angle), "minigun" if str(ai.weapon) == "normal" else str(ai.weapon))) and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
+		if rng.randf() <= skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
 			if is_midori and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
-				ai.burst_remaining = 5
-				ai.burst_timer = 0.0
-				ai.cooldown = 0.9
-				tanks[index] = ai
+				var safe_angle := _safe_ai_aim(index, target_index, float(ai.angle), "minigun")
+				if not is_nan(safe_angle):
+					ai.angle = safe_angle
+					ai.burst_remaining = 5
+					ai.burst_timer = 0.0
+					ai.cooldown = 0.9
+					tanks[index] = ai
+				else:
+					_reposition_after_unsafe_shot(index, float(ai.angle))
 			else:
 				fire(index)
 		ai.cooldown = maxf(float(ai.cooldown), 0.12 if kei_rage else 0.45 / skill)
@@ -1269,7 +1282,7 @@ func ai_shot_safe(origin: Vector2, angle: float, target_pos: Vector2, target_ang
 		if step_index > 18 and bullet_hits_tank_at(p, origin, angle, BULLET_R): return false
 	return false
 
-func _midori_shot_safe(owner: int, shot_angle: float, weapon: String) -> bool:
+func _ai_shot_safe(owner: int, shot_angle: float, weapon: String) -> bool:
 	# Predict a stationary shooter and current tank positions. The wall mask is
 	# conservative; moving tanks and homing course changes remain unpredictable.
 	var shooter: Dictionary = tanks[owner]
@@ -1281,7 +1294,7 @@ func _midori_shot_safe(owner: int, shot_angle: float, weapon: String) -> bool:
 	var velocity := Vector2.from_angle(shot_angle) * speed
 	var bounces := 0
 	var steps := 2600 if laser else 200
-	var grace_steps := 12 if laser else 20
+	var grace_steps := 12 if laser else (20 if weapon == "minigun" else 13)
 	for step in steps:
 		var bounced := false
 		if fast_wall(Vector2(position.x + velocity.x, position.y)):
@@ -1296,9 +1309,41 @@ func _midori_shot_safe(owner: int, shot_angle: float, weapon: String) -> bool:
 		position += velocity
 		for i in tanks.size():
 			if not tanks[i].alive or (i == owner and step < grace_steps): continue
+			if _kei_protects_alice(owner, i): continue
 			if bullet_hits_tank_at(position, tanks[i].pos, float(tanks[i].angle), 1.25 if laser else BULLET_R):
 				return i != owner
 	return true
+
+func _safe_ai_aim(owner: int, target: int, desired: float, weapon: String) -> float:
+	if target < 0 or target >= tanks.size() or not tanks[target].alive: return NAN
+	var shooter: Dictionary = tanks[owner]
+	var target_tank: Dictionary = tanks[target]
+	var distance: float = (shooter.pos as Vector2).distance_to(target_tank.pos)
+	var max_offset := minf(0.32, atan2(TANK_WIDTH * 0.35, maxf(distance, 1.0)))
+	var target_angle := (shooter.pos as Vector2).angle_to_point(target_tank.pos)
+	for angle in [desired, target_angle, target_angle - max_offset * 0.5, target_angle + max_offset * 0.5, target_angle - max_offset, target_angle + max_offset]:
+		if tank_hits_wall(shooter.pos, angle) or tank_hits_other_tank(owner, shooter.pos, angle): continue
+		var muzzle := Vector2(shooter.pos) + Vector2.from_angle(angle) * MUZZLE_OFFSET
+		if circle_hits_wall(muzzle, BULLET_R): continue
+		var end: Vector2 = shooter.pos + Vector2.from_angle(angle) * (distance + TANK_LENGTH)
+		if not segment_hits_tank_rect(shooter.pos, end, target_tank.pos, float(target_tank.angle), BULLET_R): continue
+		var safe := true
+		var offsets := [-0.24, -0.12, 0.0, 0.12, 0.24] if weapon == "shotgun" else [0.0]
+		for offset in offsets:
+			if not _ai_shot_safe(owner, angle + float(offset), weapon):
+				safe = false
+				break
+		if safe: return angle
+	return NAN
+
+func _reposition_after_unsafe_shot(index: int, angle: float) -> void:
+	var ai := tanks[index]
+	var side := Vector2.from_angle(angle + PI / 2.0)
+	if tank_hits_wall(Vector2(ai.pos) + side * 20.0, float(ai.angle)):
+		side = -side
+	ai.reposition_direction = side
+	ai.reposition_timer = 0.3
+	tanks[index] = ai
 
 func find_path(start: Vector2i, goal: Vector2i) -> Array:
 	var queue: Array[Vector2i] = [start]
@@ -1360,16 +1405,20 @@ func fire(index: int) -> void:
 	var kei_rage := bool(t.get("kei_rage", false))
 	if not kei_rage and regular_bullet_count() >= MAX_ACTIVE_BULLETS: return
 	var weapon: String = t.weapon
-	if str(t.name) == "才羽绿":
-		var offsets := [-0.24, -0.12, 0.0, 0.12, 0.24] if weapon == "shotgun" else [0.0]
-		for offset in offsets:
-			if not _midori_shot_safe(index, float(t.angle) + float(offset), weapon): return
 	var owned := 0
 	for b in bullets:
 		# 散弹与机关枪弹幕不占普通子弹上限。
 		if b.owner == index and str(b.weapon) != "shotgun" and str(b.weapon) != "minigun": owned += 1
 	var projectile_limit := 8 if bool(t.boss_unit) else 5
 	if t.cooldown > 0.0 or (not kei_rage and owned >= projectile_limit and weapon != "laser" and weapon != "shotgun" and weapon != "minigun"): return
+	if index > 0 and (mode == 1 or mode == 3):
+		var target := homing_target(index, t.pos)
+		var safe_angle := _safe_ai_aim(index, target, float(t.angle), weapon)
+		if is_nan(safe_angle):
+			_reposition_after_unsafe_shot(index, float(t.angle))
+			return
+		t.angle = safe_angle
+		tanks[index] = t
 	if weapon == "laser":
 		fire_laser(index)
 		play_sound(sound_shoot, 1.35)
@@ -1429,11 +1478,16 @@ func update_weapon_bursts(delta: float) -> void:
 		if float(t.burst_timer) <= 0.0:
 			var spread := rng.randf_range(-0.035, 0.035)
 			var angle: float = float(t.angle) + spread
-			if str(t.name) == "才羽绿" and not _midori_shot_safe(index, angle, "minigun"):
-				t.burst_remaining -= 1
-				t.burst_timer = 0.05
-				tanks[index] = t
-				continue
+			if index > 0 and (mode == 1 or mode == 3) and not _ai_shot_safe(index, angle, "minigun"):
+				var target := homing_target(index, t.pos)
+				var adjusted := _safe_ai_aim(index, target, float(t.angle), "minigun")
+				if is_nan(adjusted) or not _ai_shot_safe(index, adjusted + spread, "minigun"):
+					t.burst_remaining = 0
+					tanks[index] = t
+					_reposition_after_unsafe_shot(index, float(t.angle))
+					continue
+				t.angle = adjusted
+				angle = adjusted + spread
 			bullets.append({"pos": t.pos + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 				"vel": Vector2.from_angle(angle) * 250.0, "owner": index, "life": 2.4,
 				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0,
