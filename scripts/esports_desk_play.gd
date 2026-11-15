@@ -53,6 +53,18 @@ const SEAT_Y := 1.00
 const SEAT_Z: Array[float] = [10.68, 12.17, 13.69, 15.16, 16.66]
 ## 爱丽丝坐中间那把（门口进来正对的那台），触发点也在它前面
 const ALICE_SEAT := 2
+## 同伴 → 椅子序号。
+##
+## ⚠️ **凯伊必须紧挨爱丽丝**（用户 2026-11-15：「凯伊为什么不和爱丽丝坐一起」）。
+##    第一版按场景顺序依次填空，凯伊被排到 4 号（z=16.66，隔了三台机器）。
+##    现在按名字固定，顺序变了也不会挪位：
+##      爱丽丝 2（中间）｜凯伊 1（紧邻左）｜桃井 3（紧邻右）｜小绿 0｜柚子 4
+const SEAT_BY_NAME := {
+	"CompanionKei": 1,
+	"CompanionMomoi": 3,
+	"CompanionMidori": 0,
+	"CompanionYuzu": 4,
+}
 
 ## 显示器屏面：x 54.36~54.40 的薄板（厚 0.05 m）、y 1.66~2.06、z 宽 0.60。
 ## 实测：模型里那块“屏面”零件是 0.60×0.40，但真正亮着的显示区比它宽一圈（实拍左边留了 ~1.5 cm 亮边），
@@ -484,17 +496,29 @@ func _collect_actors() -> void:
 	if p == null:
 		return
 	_actors.append(_make_actor(p, ALICE_SEAT, true))
-	# 四位队友是 game 的直接子节点（`CompanionMomoi` / `Midori` / `Yuzu` / `Kei`），
-	# 按场景里的顺序取，依次安排在爱丽丝左右两侧的椅子上。
-	var seats := [1, 0, 3, 4]
-	var k := 0
+	# 四位队友是 game 的直接子节点（`CompanionMomoi` / `Midori` / `Yuzu` / `Kei`）。
+	#
+	# ⚠️ 座位**按名字固定**，不要按「场景里的先后顺序」依次填空 ——
+	#    第一版就是按顺序填的，结果凯伊被排在 4 号（z=16.66，隔了三台机器），
+	#    用户 2026-11-15 直接问「凯伊为什么不和爱丽丝坐一起」。
+	#    现在：爱丽丝在中间(2)，**凯伊 1（紧邻）**、桃井 3（紧邻），再往外小绿 0、柚子 4。
 	var parent := get_parent()
 	if parent != null:
+		var taken := {ALICE_SEAT: true}
 		for c in parent.get_children():
-			if not (c is Companion) or k >= seats.size():
+			if not (c is Companion):
 				continue
-			_actors.append(_make_actor(c as Node3D, int(seats[k]), false))
-			k += 1
+			var want: int = int(SEAT_BY_NAME.get(String(c.name), -1))
+			# 名字对不上（以后加了新同伴）：找一个还空着的座位
+			if want < 0 or taken.has(want):
+				for i in SEAT_Z.size():
+					if not taken.has(i):
+						want = i
+						break
+			if want < 0 or taken.has(want):
+				continue
+			taken[want] = true
+			_actors.append(_make_actor(c as Node3D, want, false))
 
 
 func _make_actor(node: Node3D, seat: int, is_player: bool) -> Dictionary:

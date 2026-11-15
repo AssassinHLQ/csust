@@ -49,6 +49,19 @@ func _init() -> void:
 	_check(scr_z.size() == 5, "五台显示器（实际 %d 台）" % scr_z.size())
 	var alice := int(c.get("ALICE_SEAT", -1))
 	_check(alice == 2, "爱丽丝坐中间那把（实际第 %d 把）" % alice)
+	# 凯伊必须紧挨爱丽丝（用户 2026-11-15 提过：「凯伊为什么不和爱丽丝坐一起」）
+	var plan: Dictionary = c.get("SEAT_BY_NAME", {})
+	var kei := int(plan.get("CompanionKei", -1))
+	_check(kei >= 0 and absi(kei - alice) == 1,
+		"凯伊紧挨爱丽丝（凯伊 %d 号，爱丽丝 %d 号）" % [kei, alice])
+	var momoi := int(plan.get("CompanionMomoi", -1))
+	_check(momoi >= 0 and absi(momoi - alice) == 1,
+		"桃井也挨着爱丽丝（桃井 %d 号）" % momoi)
+	var seats_used := {}
+	for k in plan.keys():
+		seats_used[int(plan[k])] = true
+	seats_used[alice] = true
+	_check(seats_used.size() == 5, "五个人五个不同座位（实际 %d 个）" % seats_used.size())
 	_tp = c.get("TRIGGER_POS", Vector3.ZERO)
 	if seat_z.size() == 5 and alice >= 0:
 		_check(absf(_tp.z - float(seat_z[alice])) < 0.02,
