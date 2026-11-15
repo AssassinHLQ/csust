@@ -90,6 +90,58 @@ Python 和 Godot 步骤应分开执行：不要让 Godot 的自定义 `APPDATA` 
 - 片尾测试按真实时间执行，126 项通过。加速固定帧率会让音频停止后的等待
   过短并产生退出资源告警，因此该测试不使用 `--fixed-fps`。
 
+## 带渲染实测（2026-11-15）
+
+`scripts/_verify_campus_rendered.gd` 在真实 `next_level.tscn` 中使用玩家原有输入、
+物理更新和机甲逻辑，不手动调用玩家物理帧。校园显示使用默认 GDGS Compute，
+实际加载 6,144,827 个高斯点；碰撞使用当前正式扫描场景，兜底平板仍关闭。
+
+- 最终运行 31 项通过 / 0 项失败，进程正常退出 0；最终日志无 ERROR / SCRIPT ERROR。
+  有三条既有警告：两张光环 PNG 的直接读取不适合导出，以及 13 盏灯仅最强 8 盏
+  参与 GDGS relighting。本轮未验证打包后的图片读取。
+- 大厅至街面、街面至大厅两条完整路线均走完 30 个路径点，冲刺分别耗时
+  26.23 秒、23.57 秒；两处实际分块接缝各双向冲刺一次全部通过。
+  本轮未复现卡死或掉落，不能据这些路线保证全校园任意位置都不卡。
+- 地面与真实飞行机甲被击倒后，持续按前进、跳跃仍保持倒下位置；4.7 秒时
+  均未恢复，分别在 5.000726 秒、4.952305 秒原地满血恢复。SceneTreeTimer 按
+  渲染帧推进，验收容许 50 ms 的提前量；测试使用单调时钟测量，不用测试自身
+  的游戏计时器充当墙钟。截图回读后先稳定数帧，避免回读长帧污染计时起点。
+- 机甲恢复后通过实际下降输入降落到扫描街面，脚下高度约 5.109 m。
+- 已逐张检查实际 GPU 截图：`campus_arrival.png`、`mech_landed.png`、
+  `hall_return.png`，均来自最终 1600×900 视口。
+
+本机 NVIDIA RTX 4060 Laptop GPU / Vulkan Forward+，1600×900，3D 缩放 1.0，
+默认画质、60 FPS 上限，真实时间运行约 85.52 秒。各阶段数值如下：
+
+| 阶段 | 采样帧数 | 平均 FPS | 帧耗时 p95 | 最大单帧 |
+| --- | ---: | ---: | ---: | ---: |
+| 首次大厅进入校园，包含加载 | 1,157 | 44.2 | 34.17 ms | 2,564.78 ms |
+| 校园返回大厅 | 1,192 | 50.6 | 24.63 ms | 86.60 ms |
+| 接缝 0，正向 / 反向 | 39 / 55 | 31.4 / 43.2 | 36.16 / 27.21 ms | 41.60 / 29.69 ms |
+| 接缝 1，正向 / 反向 | 52 / 37 | 40.3 / 29.4 | 27.19 / 46.18 ms | 28.42 / 47.68 ms |
+| 机甲下降落地 | 26 | 29.6 | 39.38 ms | 42.11 ms |
+
+首次进入仍有约 2.565 秒长帧；同轮校园泼溅加载日志为 13.9 秒、缓存命中。
+报告中的 `load_seconds=39.26` 是从关卡实例化到完整入口路线走完后检查 ready 的
+观察时刻，不是解码耗时。性能尚未达到稳定 60 FPS，需要进一步剖析加载和渲染。
+本轮冻结了敌人攻击和自动关卡流程，其他程序仍可能共享 GPU；接缝和下降阶段
+样本较短，不能当作完整战斗压力测试，也没有与旧碰撞进行相同条件 A/B。
+
+运行器 `tools/run_godot_private_desktop.py` 在独立 Windows desktop 上创建 Godot，
+从不调用 SwitchDesktop，且使用 OffWin 移出屏幕、`--no-capture` 和 Dummy 音频。
+APPDATA / LOCALAPPDATA 指向输出目录内的测试配置，不改玩家存档。安全预检和
+最终运行均通过；最终运行前后前台句柄一致。渲染覆盖与窗口位置由探针固定，
+不通过修改项目默认窗口设置实现。
+
+```powershell
+# 必须使用实际 GUI Godot exe；不要传会转发到子进程的 *_console.exe。
+$gd_gui = 'D:/SOFTWARE/Godot-4.7.1-dotnet/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64.exe'
+python tools/run_godot_private_desktop.py --godot $gd_gui --project . --script res://scripts/_verify_campus_rendered.gd --out _tools/_tmp/rendered_collision/gameplay --timeout 360
+```
+
+最终报告、引擎日志、启动器记录与截图在
+`_tools/_tmp/rendered_collision/gameplay/`，均为忽略的测试产物，不提交入库。
+
 ## 历史验收（2026-11-14，修复前）
 
 ```powershell
