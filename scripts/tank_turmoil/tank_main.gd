@@ -944,7 +944,9 @@ func update_ai(index: int, delta: float) -> void:
 	if (is_midori or kei_rage) and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
 		var muzzle := Vector2(ai.pos) + Vector2.from_angle(shot_angle) * MUZZLE_OFFSET
-		if not tank_hits_wall(ai.pos, shot_angle) and not tank_hits_other_tank(index, ai.pos, shot_angle) and not circle_hits_wall(muzzle, BULLET_R):
+		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
+		var safe_shot := not is_midori or _midori_shot_safe(index, shot_angle, predicted_weapon)
+		if safe_shot and not tank_hits_wall(ai.pos, shot_angle) and not tank_hits_other_tank(index, ai.pos, shot_angle) and not circle_hits_wall(muzzle, BULLET_R):
 			ai.angle = shot_angle
 			if is_midori and str(ai.weapon) == "normal":
 				ai.burst_remaining = 5
@@ -965,7 +967,18 @@ func update_ai(index: int, delta: float) -> void:
 	var has_sight: bool = clear_line(ai.pos, opponent.pos)
 	var pickup_target := Vector2.ZERO
 	var wants_pickup := false
-	if str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
+	var wants_laser := false
+	if is_midori and str(ai.weapon) != "laser":
+		var nearest_laser_distance := INF
+		for pickup in pickups:
+			if str(pickup.kind) != "laser": continue
+			var distance: float = (ai.pos as Vector2).distance_squared_to(pickup.pos)
+			if distance < nearest_laser_distance:
+				nearest_laser_distance = distance
+				pickup_target = pickup.pos
+				wants_pickup = true
+				wants_laser = true
+	if not wants_laser and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
 		var nearest_pickup_distance := INF
 		for pickup in pickups:
 			var pickup_position: Vector2 = pickup.pos
@@ -975,13 +988,14 @@ func update_ai(index: int, delta: float) -> void:
 				pickup_target = pickup_position
 				wants_pickup = true
 	# A visible nearby opponent takes precedence over a distant pickup.
-	if has_sight and (kei_rage or (ai.pos as Vector2).distance_to(opponent.pos) < 320.0):
+	if not wants_laser and has_sight and (kei_rage or (ai.pos as Vector2).distance_to(opponent.pos) < 320.0):
 		wants_pickup = false
-	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index:
+	var objective_cell := point_cell(pickup_target) if wants_pickup else tactical_cell(index)
+	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index or ai.get("path_goal", Vector2i(-1, -1)) != objective_cell:
 		ai.ai_timer = 0.4 / skill
 		ai.target_index = target_index
 		ai.aim_bias = rng.randf_range(-0.22, 0.22) * (1.0 - skill)
-		var objective_cell := point_cell(pickup_target) if wants_pickup else tactical_cell(index)
+		ai.path_goal = objective_cell
 		ai.ai_path = find_path(point_cell(ai.pos), objective_cell)
 		ai.attack_angle = NAN
 	var target: Vector2 = pickup_target if wants_pickup else (opponent.pos if has_sight else cell_center(tactical_cell(index)))
@@ -1021,7 +1035,7 @@ func update_ai(index: int, delta: float) -> void:
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
 	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, skill)
 	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0:
-		if rng.randf() <= skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
+		if rng.randf() <= skill and (not is_midori or _midori_shot_safe(index, float(ai.angle), "minigun" if str(ai.weapon) == "normal" else str(ai.weapon))) and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
 			if is_midori and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
 				ai.burst_remaining = 5
 				ai.burst_timer = 0.0
@@ -1114,11 +1128,11 @@ func find_ai_evasion(ai_pos: Vector2, ai_angle: float, ai_index: int) -> Vector2
 	for bullet in threats:
 		if trajectories.size() >= limit:
 			break
+		var owner := int(bullet.owner)
 		if str(bullet.weapon) == "minigun":
 			if predicted_minigun_bullets >= (2 if limit > ai_max_predicted_bullets else ai_max_predicted_minigun_bullets):
 				continue
 			predicted_minigun_bullets += 1
-		var owner := int(bullet.owner)
 		# Friendly fire is enabled, so every projectile can be dangerous.
 		var segments_by_step: Array = []
 		var future: Vector2 = bullet.pos
@@ -1255,6 +1269,37 @@ func ai_shot_safe(origin: Vector2, angle: float, target_pos: Vector2, target_ang
 		if step_index > 18 and bullet_hits_tank_at(p, origin, angle, BULLET_R): return false
 	return false
 
+func _midori_shot_safe(owner: int, shot_angle: float, weapon: String) -> bool:
+	# Predict a stationary shooter and current tank positions. The wall mask is
+	# conservative; moving tanks and homing course changes remain unpredictable.
+	var shooter: Dictionary = tanks[owner]
+	var origin: Vector2 = shooter.pos
+	var laser := weapon == "laser"
+	var speed := 2.0 if laser else MASK_SCALE
+	var muzzle := TANK_LENGTH / 2.0 + 2.0 if laser else MUZZLE_OFFSET
+	var position := origin + Vector2.from_angle(shot_angle) * muzzle
+	var velocity := Vector2.from_angle(shot_angle) * speed
+	var bounces := 0
+	var steps := 2600 if laser else 200
+	var grace_steps := 12 if laser else 20
+	for step in steps:
+		var bounced := false
+		if fast_wall(Vector2(position.x + velocity.x, position.y)):
+			velocity.x *= -1.0
+			bounced = true
+		if fast_wall(Vector2(position.x, position.y + velocity.y)):
+			velocity.y *= -1.0
+			bounced = true
+		if bounced:
+			bounces += 1
+			if bounces >= 10: break
+		position += velocity
+		for i in tanks.size():
+			if not tanks[i].alive or (i == owner and step < grace_steps): continue
+			if bullet_hits_tank_at(position, tanks[i].pos, float(tanks[i].angle), 1.25 if laser else BULLET_R):
+				return i != owner
+	return true
+
 func find_path(start: Vector2i, goal: Vector2i) -> Array:
 	var queue: Array[Vector2i] = [start]
 	var came := {start: start}
@@ -1315,6 +1360,10 @@ func fire(index: int) -> void:
 	var kei_rage := bool(t.get("kei_rage", false))
 	if not kei_rage and regular_bullet_count() >= MAX_ACTIVE_BULLETS: return
 	var weapon: String = t.weapon
+	if str(t.name) == "才羽绿":
+		var offsets := [-0.24, -0.12, 0.0, 0.12, 0.24] if weapon == "shotgun" else [0.0]
+		for offset in offsets:
+			if not _midori_shot_safe(index, float(t.angle) + float(offset), weapon): return
 	var owned := 0
 	for b in bullets:
 		# 散弹与机关枪弹幕不占普通子弹上限。
@@ -1380,6 +1429,11 @@ func update_weapon_bursts(delta: float) -> void:
 		if float(t.burst_timer) <= 0.0:
 			var spread := rng.randf_range(-0.035, 0.035)
 			var angle: float = float(t.angle) + spread
+			if str(t.name) == "才羽绿" and not _midori_shot_safe(index, angle, "minigun"):
+				t.burst_remaining -= 1
+				t.burst_timer = 0.05
+				tanks[index] = t
+				continue
 			bullets.append({"pos": t.pos + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 				"vel": Vector2.from_angle(angle) * 250.0, "owner": index, "life": 2.4,
 				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0,
