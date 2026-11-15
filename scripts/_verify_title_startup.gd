@@ -48,6 +48,7 @@ func _run() -> void:
 	await intro._warm_up_shader()
 	await process_frame
 	_check(intro.get_node_or_null("MediaWarmUp") == null, "离屏预热画布用完释放")
+	_check(is_equal_approx(intro.SLIDE_DISPLAY_SEC, 5.0) and is_equal_approx(intro.SLIDE_SEC, 9.0), "图片每 5 秒切换，保留原 9 秒平移速度")
 	intro._slides.assign(["user://startup_missing.png"])
 	intro._tex_cache.clear()
 	intro._tex_cache.resize(1)

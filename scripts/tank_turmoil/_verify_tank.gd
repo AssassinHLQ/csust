@@ -151,6 +151,29 @@ func _run() -> void:
 	_tank.call("update_ai", 1, 1.0 / 60.0)
 	_check(not bool(battle[0].alive), "小绿持激光快速瞄准并命中")
 	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	battle[2].pos = Vector2(400, 400)
+	battle[2].angle = 0.4
+	battle[2].cooldown = 0.0
+	battle[0].pos = Vector2(500, 400)
+	for i in [1, 3, 4]: battle[i].alive = false
+	_tank.get("pickups").append({"pos": Vector2(700, 600), "kind": "shotgun"})
+	_tank.set("ai_danger_budget", 0)
+	for i in 120: _tank.call("update_ai", 2, 1.0 / 60.0)
+	var yuzu_fired := false
+	for projectile in _tank.get("bullets"):
+		if int(projectile.owner) == 2: yuzu_fired = true
+	_check(yuzu_fired, "柚子后退时仍能瞄准开火，不被远处道具分心")
+	_tank.get("bullets").clear()
+	battle[2].pos = Vector2(400, 400)
+	battle[2].angle = 0.0
+	for i in 4:
+		_tank.get("bullets").append({"pos": Vector2(800, 100 + i * 30), "vel": Vector2(0, -200), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
+	_tank.get("bullets").append({"pos": Vector2(470, 400), "vel": Vector2(-200, 0), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
+	_check((_tank.call("find_ai_evasion", battle[2].pos, battle[2].angle, 2) as Vector2).length_squared() > 0.0, "柚子优先预测靠近的危险子弹")
+	_tank.call("new_round")
 	var old_cell := float(_tank.get("CELL"))
 	var viewport := _tank.get_viewport() as SubViewport
 	viewport.size = Vector2i(1422, 800)

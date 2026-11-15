@@ -916,7 +916,7 @@ func move_tank(index: int, drive: float, turn: float, delta: float, max_speed :=
 
 func ai_skill(index: int) -> float:
 	match str(tanks[index].name):
-		"才羽桃井": return 0.45
+		"才羽桃井": return 0.62
 		"凯伊": return 0.70
 	return 1.0
 
@@ -955,6 +955,9 @@ func update_ai(index: int, delta: float) -> void:
 				nearest_pickup_distance = distance
 				pickup_target = pickup_position
 				wants_pickup = true
+	# A visible nearby opponent takes precedence over a distant pickup.
+	if has_sight and (ai.pos as Vector2).distance_to(opponent.pos) < 320.0:
+		wants_pickup = false
 	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index:
 		ai.ai_timer = 0.4 / skill
 		ai.target_index = target_index
@@ -997,7 +1000,9 @@ func update_ai(index: int, delta: float) -> void:
 		move_tank_direct(index, (target - ai.pos).normalized(), delta, ai_speed_path * lerpf(0.65, 1.0, skill))
 	else:
 		# 巡航速度取 chase / evade 的中间值（优香 120 / 142 ⇒ 136；原版普通 AI 是 120）
-		move_tank(index, drive, turn * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill))
+		# move_tank reverses steering while backing up; compensate when aiming.
+		var steering := -turn if drive < -0.05 else turn
+		move_tank(index, drive, steering * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill))
 	ai = tanks[index]
 	var player_angle: float = (ai.pos as Vector2).angle_to_point(opponent.pos as Vector2) + float(ai.get("aim_bias", 0.0))
 	var firing_angle: float = player_angle if has_sight else float(ai.attack_angle)
@@ -1089,11 +1094,16 @@ func find_ai_evasion(ai_pos: Vector2, ai_angle: float, ai_index: int) -> Vector2
 	var predict_steps := evade_step_count
 	var trajectories: Array[Dictionary] = []
 	var predicted_minigun_bullets := 0
-	for bullet in bullets:
-		if trajectories.size() >= ai_max_predicted_bullets:
+	# Nearby incoming shots matter more than the oldest projectiles in the arena.
+	var threats := bullets.duplicate()
+	threats.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (a.pos as Vector2).distance_squared_to(ai_pos) < (b.pos as Vector2).distance_squared_to(ai_pos))
+	var limit := 4 if str(tanks[ai_index].name) == "柚子" else ai_max_predicted_bullets
+	for bullet in threats:
+		if trajectories.size() >= limit:
 			break
 		if str(bullet.weapon) == "minigun":
-			if predicted_minigun_bullets >= ai_max_predicted_minigun_bullets:
+			if predicted_minigun_bullets >= (2 if limit > ai_max_predicted_bullets else ai_max_predicted_minigun_bullets):
 				continue
 			predicted_minigun_bullets += 1
 		var owner := int(bullet.owner)

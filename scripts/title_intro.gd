@@ -51,8 +51,8 @@ const SUB_TEXT := "Blue Archive 二次创作 · 个人非商业作品"
 
 ## 每张 PV 图「从左往右扫一遍」用多久（秒）。用户要的是「缓慢」。
 const SLIDE_SEC := 9.0
-## 两张图之间交叉淡化多久（秒）。下一张在 `SLIDE_SEC - SLIDE_FADE` 时进场。
-const SLIDE_FADE := 1.0
+## 保持原来的平移速度，每 5 秒切换，不等待扫完整张图。
+const SLIDE_DISPLAY_SEC := 5.0
 ## 上下各裁掉原图高度的 10%，让同屏幕比例的截图也有横向平移余量。
 const SLIDE_VERTICAL_CROP := 0.10
 ## 预载超时后跳过尚未就绪的图片，绝不在播放帧里同步解码。
@@ -391,8 +391,7 @@ func _build_fallback() -> void:
 
 # ── PV 图片：横向缓慢平移 ────────────────────────────────────────────────
 
-## 循环放图：每张「窗口」从图片最左边移到最右边（内容看起来往左滑），
-## 持续 `SLIDE_SEC` 秒，相邻两张交叉淡化 `SLIDE_FADE` 秒。
+## 循环放图：按原有速度平移，每 5 秒切到下一张。
 func _start_slideshow() -> void:
 	if _slides.is_empty():
 		return
@@ -566,11 +565,10 @@ func _loop_slides(gen: int) -> void:
 			await get_tree().process_frame
 			continue
 		_spawn_slide(tex)
-		# 等到下一张该进场：留出交叉淡化的重叠时间。
-		await get_tree().create_timer(maxf(SLIDE_SEC - SLIDE_FADE, 0.5)).timeout
+		await get_tree().create_timer(SLIDE_DISPLAY_SEC).timeout
 
 
-## 生成一张图并挂两个 Tween：平移（整段）+ 淡入（开头）+ 淡出（结尾前）。
+## 只播放原 9 秒平移中的前 5 秒。
 func _spawn_slide(tex: Texture2D) -> void:
 	if _backdrop == null or not is_instance_valid(_backdrop):
 		return
@@ -596,17 +594,12 @@ func _spawn_slide(tex: Texture2D) -> void:
 	tr.size = Vector2(w, h)
 	# 从图片最左边开始（窗口 x=0），纵向居中
 	tr.position = Vector2(0.0, (vp.y - h) * 0.5)
-	tr.modulate.a = 0.0
 	tr.material = _slide_material()
 	_backdrop.add_child(tr)
 
 	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(tr, "position:x", -travel, SLIDE_SEC) \
+	tw.tween_property(tr, "position:x", -travel * SLIDE_DISPLAY_SEC / SLIDE_SEC, SLIDE_DISPLAY_SEC) \
 		.set_trans(Tween.TRANS_LINEAR)
-	tw.tween_property(tr, "modulate:a", 1.0, SLIDE_FADE)
-	tw.tween_property(tr, "modulate:a", 0.0, SLIDE_FADE) \
-		.set_delay(maxf(SLIDE_SEC - SLIDE_FADE, 0.01))
 	tw.chain().tween_callback(tr.queue_free)
 
 
