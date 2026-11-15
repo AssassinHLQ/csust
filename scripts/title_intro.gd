@@ -53,6 +53,8 @@ const SUB_TEXT := "Blue Archive 二次创作 · 个人非商业作品"
 const SLIDE_SEC := 9.0
 ## 两张图之间交叉淡化多久（秒）。下一张在 `SLIDE_SEC - SLIDE_FADE` 时进场。
 const SLIDE_FADE := 1.0
+## 上下各裁掉原图高度的 10%，让同屏幕比例的截图也有横向平移余量。
+const SLIDE_VERTICAL_CROP := 0.10
 ## 预载超时后跳过尚未就绪的图片，绝不在播放帧里同步解码。
 const PREFETCH_MAX_SEC := 8.0
 ## 点开始之后整层淡出多久（秒）。
@@ -578,8 +580,10 @@ func _spawn_slide(tex: Texture2D) -> void:
 	var ts := tex.get_size()
 	if ts.x <= 0.0 or ts.y <= 0.0:
 		return
-	# 等比放大到「盖满屏幕」，宽出来的部分就是平移行程
-	var k := maxf(vp.x / ts.x, vp.y / ts.y)
+	# 用原图中间 80% 的高度铺满屏幕，上下居中裁切；保留原始纹理。
+	# 同屏幕比例的截图因此放大到 125%，宽出的部分用于从左向右扫图。
+	var visible_height := ts.y * (1.0 - 2.0 * SLIDE_VERTICAL_CROP)
+	var k := maxf(vp.x / ts.x, vp.y / visible_height)
 	var w := ts.x * k
 	var h := ts.y * k
 	var travel := maxf(w - vp.x, 0.0)
