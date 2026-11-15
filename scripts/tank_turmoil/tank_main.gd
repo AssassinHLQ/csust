@@ -455,7 +455,7 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 		"danger_timer": 0.0, "danger_velocity": Vector2.ZERO,
 		"reposition_timer": 0.0, "reposition_direction": Vector2.ZERO,
 		"attack_angle": NAN, "role": 0, "weapon": "normal", "ammo": 0,
-		"burst_remaining": 0, "burst_timer": 0.0,
+		"burst_remaining": 0, "burst_timer": 0.0, "burst_is_skill": false,
 		"kei_rage": false, "motion_sample_pos": pos, "measured_velocity": Vector2.ZERO,
 		"portrait": portrait, "boss": false, "boss_unit": false, "hp": 1, "max_hp": 1,
 		"squad": 0}
@@ -964,6 +964,7 @@ func update_ai(index: int, delta: float) -> void:
 			if is_midori and str(ai.weapon) == "normal":
 				ai.burst_remaining = 5
 				ai.burst_timer = 0.0
+				ai.burst_is_skill = false
 				ai.cooldown = 0.48
 				tanks[index] = ai
 			else:
@@ -1065,6 +1066,7 @@ func update_ai(index: int, delta: float) -> void:
 					ai.angle = safe_angle
 					ai.burst_remaining = 5
 					ai.burst_timer = 0.0
+					ai.burst_is_skill = false
 					ai.cooldown = 0.9
 					tanks[index] = ai
 				else:
@@ -1089,7 +1091,7 @@ func _yuzu_predictive_volley(index: int, target_index: int) -> bool:
 	var origin: Vector2 = shooter.pos
 	var target_pos: Vector2 = target.pos
 	var distance := origin.distance_to(target_pos)
-	if distance < 200.0:
+	if distance < 200.0 or normal_bullet_count(index) > 0:
 		return false
 	var velocity: Vector2 = Vector2(target.get("measured_velocity", Vector2.ZERO)).limit_length(250.0)
 	var forward := Vector2.from_angle(float(target.angle)) * maxf(velocity.length(), 100.0)
@@ -1105,7 +1107,7 @@ func _yuzu_predictive_volley(index: int, target_index: int) -> bool:
 	for angle in angles:
 		bullets.append({"pos": origin + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 			"vel": Vector2.from_angle(angle) * 200.0, "owner": index, "life": 60.0,
-			"grace": 0.24, "homing": false, "weapon": "normal", "bounces": 0, "kei_rage": false, "skill": true})
+			"grace": 0.24, "homing": false, "weapon": "normal", "bounces": 0, "kei_rage": false})
 	shooter.angle = angles[0]
 	shooter.cooldown = 0.34
 	tanks[index] = shooter
@@ -1495,6 +1497,7 @@ func fire(index: int) -> void:
 		# 一次道具触发一小段自动弹幕，后续子弹由计时器依次发射。
 		t.burst_remaining = 5
 		t.burst_timer = 0.0
+		t.burst_is_skill = true
 		t.weapon = "normal"
 		t.ammo = 0
 		t.cooldown = 0.78
@@ -1527,7 +1530,7 @@ func fire(index: int) -> void:
 func normal_bullet_count(owner: int) -> int:
 	var count := 0
 	for bullet in bullets:
-		if int(bullet.owner) == owner and str(bullet.weapon) == "normal" and not bool(bullet.get("kei_rage", false)) and not bool(bullet.get("skill", false)):
+		if int(bullet.owner) == owner and str(bullet.weapon) in ["normal", "minigun"] and not bool(bullet.get("kei_rage", false)) and not bool(bullet.get("skill", false)):
 			count += 1
 	return count
 
@@ -1535,6 +1538,10 @@ func update_weapon_bursts(delta: float) -> void:
 	for index in tanks.size():
 		if not tanks[index].alive or int(tanks[index].burst_remaining) <= 0: continue
 		var t := tanks[index]
+		if not bool(t.get("burst_is_skill", false)) and not bool(t.get("kei_rage", false)) and normal_bullet_count(index) >= MAX_OWN_NORMAL_BULLETS:
+			t.burst_remaining = 0
+			tanks[index] = t
+			continue
 		t.burst_timer -= delta
 		if float(t.burst_timer) <= 0.0:
 			var spread := rng.randf_range(-0.035, 0.035)
@@ -1552,7 +1559,7 @@ func update_weapon_bursts(delta: float) -> void:
 			bullets.append({"pos": t.pos + Vector2.from_angle(angle) * MUZZLE_OFFSET,
 				"vel": Vector2.from_angle(angle) * 250.0, "owner": index, "life": 2.4,
 				"grace": 0.24, "homing": false, "weapon": "minigun", "bounces": 0,
-				"kei_rage": bool(t.get("kei_rage", false))})
+				"kei_rage": bool(t.get("kei_rage", false)), "skill": bool(t.get("burst_is_skill", false))})
 			t.burst_remaining -= 1
 			t.burst_timer = 0.05 if str(t.name) == "才羽绿" else 0.085
 			# 每隔一发播放音效，避免同时创建过多音频节点。

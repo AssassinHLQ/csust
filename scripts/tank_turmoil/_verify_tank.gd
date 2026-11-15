@@ -280,10 +280,13 @@ func _run() -> void:
 		_check(Vector2(volley[3].vel).y * Vector2(volley[4].vel).y < 0.0, "另外两发覆盖目标两侧误差")
 	volley.clear()
 	for i in 20: volley.append({"owner": 0, "weapon": "normal"})
-	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 25, "其他角色的子弹不阻挡柚子的技能")
+	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 25 and int(_tank.call("normal_bullet_count", 2)) == 5, "其他角色的子弹不阻挡柚子五发预判，预判弹计入普通弹上限")
 	volley.clear()
-	for i in 5: volley.append({"owner": 2, "weapon": "normal"})
-	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 10 and int(_tank.call("normal_bullet_count", 2)) == 5, "柚子普通弹满五发时仍可使用技能，技能弹不占普通弹名额")
+	volley.append({"owner": 2, "weapon": "normal"})
+	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 1, "柚子已有普通弹时不会发射超出五发上限的预判")
+	volley.clear()
+	volley.append({"owner": 2, "weapon": "minigun", "skill": true})
+	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 6 and int(_tank.call("normal_bullet_count", 2)) == 5, "道具弹不占柚子的普通弹名额")
 	volley.clear()
 	_tank.get("walls").append(Rect2(440, 300, 10, 200))
 	_tank.call("build_prediction_mask")
@@ -305,12 +308,22 @@ func _run() -> void:
 	battle[1].burst_timer = 0.0
 	_tank.get("bullets").clear()
 	for i in 5: _tank.call("update_weapon_bursts", 0.1)
-	_check((_tank.get("bullets") as Array).size() == 5 and is_equal_approx(float(_tank.get("bullets")[0].life), 2.4), "小绿五连发产生五枚寿命 2.4 秒的机关枪弹")
+	_check((_tank.get("bullets") as Array).size() == 5 and int(_tank.call("normal_bullet_count", 1)) == 5 and is_equal_approx(float(_tank.get("bullets")[0].life), 2.4), "小绿五连发计入普通子弹上限，子弹寿命 2.4 秒")
+	battle[1].burst_remaining = 5
+	_tank.call("update_weapon_bursts", 0.1)
+	_check((_tank.get("bullets") as Array).size() == 5 and int(battle[1].burst_remaining) == 0, "小绿五发仍在场时不能继续普通连发")
+	_tank.get("bullets").clear()
+	for i in 4: _tank.get("bullets").append({"owner": 1, "weapon": "normal"})
+	battle[1].burst_remaining = 5
+	battle[1].burst_timer = 0.0
+	for i in 5: _tank.call("update_weapon_bursts", 0.1)
+	_check((_tank.get("bullets") as Array).size() == 5 and int(_tank.call("normal_bullet_count", 1)) == 5, "小绿只剩一个普通弹名额时连发最多补一发")
 	_tank.get("bullets").clear()
 	for i in 24: _tank.get("bullets").append({"owner": 0, "weapon": "normal"})
 	battle[1].burst_remaining = 5
 	_tank.call("update_weapon_bursts", 0.1)
 	_check((_tank.get("bullets") as Array).size() == 25 and int(battle[1].burst_remaining) == 4, "小绿五连发不受其他角色的子弹数量限制")
+	battle[1].burst_remaining = 0
 	_tank.get("bullets").clear()
 	battle[0].alive = true
 	battle[0].pos = Vector2(700, 400)
@@ -319,6 +332,13 @@ func _run() -> void:
 	for i in 5: _tank.get("bullets").append({"owner": 0, "weapon": "normal"})
 	_tank.call("fire", 0)
 	_check((_tank.get("bullets") as Array).size() == 5, "普通子弹满五发后不能发射第六发")
+	battle[0].weapon = "minigun"
+	battle[0].ammo = 1
+	_tank.call("fire", 0)
+	for i in 5: _tank.call("update_weapon_bursts", 0.1)
+	_check((_tank.get("bullets") as Array).size() == 10 and int(_tank.call("normal_bullet_count", 0)) == 5, "普通弹满额时拾取的机关枪仍可完整连发")
+	_tank.get("bullets").resize(5)
+	battle[0].cooldown = 0.0
 	battle[0].weapon = "homing"
 	battle[0].ammo = 1
 	_tank.call("fire", 0)
