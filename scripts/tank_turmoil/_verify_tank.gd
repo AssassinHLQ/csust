@@ -201,11 +201,30 @@ func _run() -> void:
 	battle[1].ammo = 1
 	battle[1].cooldown = 0.0
 	battle[0].pos = target_pos
-	var bank_angle: float = _tank.call("find_laser_bank_angle", 1, 0)
+	var search_duration := 0
+	var longest_search_slice := 0
+	var bank_angle := NAN
+	for _slice in 45:
+		var search_started := Time.get_ticks_usec()
+		bank_angle = _tank.call("find_laser_bank_angle", 1, 0)
+		var slice_duration := Time.get_ticks_usec() - search_started
+		search_duration += slice_duration
+		longest_search_slice = maxi(longest_search_slice, slice_duration)
+		if not is_nan(bank_angle): break
 	_check(not bool(_tank.call("clear_line", shooter_pos, target_pos)) and not is_nan(bank_angle) and bool(_tank.call("_laser_path_hits_target", 1, 0, bank_angle)), "小绿能计算隔墙折射后命中目标的激光路径")
+	_check(longest_search_slice < 30000 and search_duration < 500000, "折射搜索分帧执行，最长单帧 %.1f ms" % (float(longest_search_slice) / 1000.0))
 	_tank.set("ai_danger_budget", 0)
-	_tank.call("update_ai", 1, 1.0 / 60.0)
+	for _frame in 46:
+		_tank.call("update_ai", 1, 1.0 / 60.0)
+		if not bool(battle[0].alive): break
 	_check(not bool(battle[0].alive), "小绿不需露面或直视目标即可远程折射狙击")
+	battle[0].alive = true
+	battle[0].pos = target_pos
+	battle[1].weapon = "laser"
+	battle[1].cooldown = 0.0
+	battle[1].laser_solver_timer = 0.2
+	_tank.call("update_ai", 1, 0.05)
+	_check(is_equal_approx(float(battle[1].laser_solver_timer), 0.15), "小绿折射搜索受冷却节流，不会每帧重复")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()

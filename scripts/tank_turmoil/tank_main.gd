@@ -61,6 +61,7 @@ const TOUCH_JOYSTICK_INPUT_RADIUS := 100.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_RADIUS := 64.0 * TOUCH_CONTROL_SCALE
 const TOUCH_FIRE_INPUT_RADIUS := 84.0 * TOUCH_CONTROL_SCALE
 const MAX_OWN_NORMAL_BULLETS := 5
+const LASER_SEARCH_RAYS_PER_FRAME := 8
 ## AI 预测的子弹上限。原版 3 / 2，五台同时在场时会撞帧，降到 2 / 1（见 `_set_ai_tier()`）。
 var ai_max_predicted_bullets := 3
 var ai_max_predicted_minigun_bullets := 2
@@ -456,6 +457,9 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 		"reposition_timer": 0.0, "reposition_direction": Vector2.ZERO,
 		"attack_angle": NAN, "role": 0, "weapon": "normal", "ammo": 0,
 		"burst_remaining": 0, "burst_timer": 0.0, "burst_is_skill": false,
+		"laser_solver_timer": 0.0, "laser_search_target": -1,
+		"laser_search_target_pos": Vector2.ZERO, "laser_search_origin": Vector2.ZERO,
+		"laser_search_next_degree": 0,
 		"kei_rage": false, "motion_sample_pos": pos, "measured_velocity": Vector2.ZERO,
 		"portrait": portrait, "boss": false, "boss_unit": false, "hp": 1, "max_hp": 1,
 		"squad": 0}
@@ -959,14 +963,21 @@ func update_ai(index: int, delta: float) -> void:
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
 	var midori_laser_fired := false
-	if has_midori_laser and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0:
+	ai.laser_solver_timer = maxf(0.0, float(ai.get("laser_solver_timer", 0.0)) - delta)
+	var laser_target_moved := int(ai.get("laser_search_target", -1)) != target_index or Vector2(ai.get("laser_search_target_pos", Vector2.ZERO)).distance_to(opponent.pos) > 64.0 or Vector2(ai.get("laser_search_origin", Vector2.ZERO)).distance_to(ai.pos) > 12.0
+	if has_midori_laser and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and (float(ai.laser_solver_timer) <= 0.0 or laser_target_moved):
+		tanks[index] = ai
 		var laser_angle := find_laser_bank_angle(index, target_index)
+		ai = tanks[index]
 		if not is_nan(laser_angle):
 			ai.angle = laser_angle
 			tanks[index] = ai
 			fire(index)
 			ai = tanks[index]
 			midori_laser_fired = true
+		elif int(ai.get("laser_search_next_degree", 0)) > 0:
+			tanks[index] = ai
+			return
 	# Fire at a visible opponent before moving or evading. Yuzu only uses the
 	# instant normal-shot path; laser shots turn and fire at her imperfect aim.
 	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
@@ -1159,13 +1170,38 @@ func tactical_cell(index: int) -> Vector2i:
 
 func find_laser_bank_angle(owner: int, target: int) -> float:
 	if target < 0 or target >= tanks.size() or not tanks[target].alive: return NAN
-	var origin: Vector2 = tanks[owner].pos
+	var shooter: Dictionary = tanks[owner]
+	var origin: Vector2 = shooter.pos
 	var destination: Vector2 = tanks[target].pos
+	if int(shooter.get("laser_search_target", -1)) != target or Vector2(shooter.get("laser_search_target_pos", Vector2.ZERO)).distance_to(destination) > 64.0 or Vector2(shooter.get("laser_search_origin", Vector2.ZERO)).distance_to(origin) > 12.0:
+		shooter.laser_search_target = target
+		shooter.laser_search_target_pos = destination
+		shooter.laser_search_origin = origin
+		shooter.laser_search_next_degree = 0
+		shooter.laser_solver_timer = 0.0
+		tanks[owner] = shooter
 	var direct := origin.angle_to_point(destination)
-	if _laser_path_hits_target(owner, target, direct): return direct
-	for degrees in range(0, 360):
+	if _laser_path_hits_target(owner, target, direct):
+		shooter.laser_search_next_degree = 0
+		tanks[owner] = shooter
+		return direct
+	for _ray_index in LASER_SEARCH_RAYS_PER_FRAME:
+		var degrees := int(shooter.get("laser_search_next_degree", 0))
+		if degrees >= 360:
+			shooter.laser_search_next_degree = 0
+			shooter.laser_solver_timer = 0.35
+			tanks[owner] = shooter
+			return NAN
+		shooter.laser_search_next_degree = degrees + 1
 		var candidate := deg_to_rad(float(degrees))
-		if _laser_path_hits_target(owner, target, candidate): return candidate
+		if _laser_path_hits_target(owner, target, candidate):
+			shooter.laser_search_next_degree = 0
+			tanks[owner] = shooter
+			return candidate
+	if int(shooter.laser_search_next_degree) >= 360:
+		shooter.laser_search_next_degree = 0
+		shooter.laser_solver_timer = 0.35
+	tanks[owner] = shooter
 	return NAN
 
 func _laser_path_hits_target(owner: int, target: int, angle: float) -> bool:
@@ -1173,18 +1209,53 @@ func _laser_path_hits_target(owner: int, target: int, angle: float) -> bool:
 	var position: Vector2 = shooter.pos + Vector2.from_angle(angle) * (TANK_LENGTH / 2.0 + 2.0)
 	var velocity := Vector2.from_angle(angle) * 2.0
 	var bounces := 0
+	var segment_start := position
+	var segment_start_step := 0
 	for step_index in 2600:
 		var bounced := false
-		if circle_hits_wall(Vector2(position.x + velocity.x, position.y), 1.0): velocity.x *= -1.0; bounced = true
-		if circle_hits_wall(Vector2(position.x, position.y + velocity.y), 1.0): velocity.y *= -1.0; bounced = true
+		if fast_wall(Vector2(position.x + velocity.x, position.y)): velocity.x *= -1.0; bounced = true
+		if fast_wall(Vector2(position.x, position.y + velocity.y)): velocity.y *= -1.0; bounced = true
+		if bounced:
+			if step_index >= 12 and segment_hits_tank_rect(segment_start, position, tanks[target].pos, float(tanks[target].angle), 1.25):
+				return _laser_path_hits_target_exact(owner, target, angle)
+			bounces += 1
+			if bounces >= 10: return false
+			segment_start = position
+			segment_start_step = step_index
+		position += velocity
+		if step_index - segment_start_step >= 3:
+			if step_index >= 12 and segment_hits_tank_rect(segment_start, position, tanks[target].pos, float(tanks[target].angle), 1.25):
+				return _laser_path_hits_target_exact(owner, target, angle)
+			segment_start = position
+			segment_start_step = step_index
+	return false
+
+func _laser_path_hits_target_exact(owner: int, target: int, angle: float) -> bool:
+	var shooter: Dictionary = tanks[owner]
+	var target_positions: Array[Vector2] = []
+	var target_angles: Array[float] = []
+	var target_indices: Array[int] = []
+	for tank_index in tanks.size():
+		if not tanks[tank_index].alive or _kei_protects_alice(owner, tank_index): continue
+		target_positions.append(tanks[tank_index].pos)
+		target_angles.append(float(tanks[tank_index].angle))
+		target_indices.append(tank_index)
+	var position: Vector2 = shooter.pos + Vector2.from_angle(angle) * (TANK_LENGTH / 2.0 + 2.0)
+	var velocity := Vector2.from_angle(angle) * 2.0
+	var bounces := 0
+	for step_index in 2600:
+		var bounced := false
+		if fast_wall(Vector2(position.x + velocity.x, position.y)): velocity.x *= -1.0; bounced = true
+		if fast_wall(Vector2(position.x, position.y + velocity.y)): velocity.y *= -1.0; bounced = true
 		if bounced:
 			bounces += 1
 			if bounces >= 10: return false
 		position += velocity
-		for tank_index in tanks.size():
-			if not tanks[tank_index].alive or (tank_index == owner and step_index < 12): continue
-			if _kei_protects_alice(owner, tank_index): continue
-			if bullet_hits_tank_at(position, tanks[tank_index].pos, float(tanks[tank_index].angle), 1.25):
+		for tank_slot in target_positions.size():
+			var tank_index := target_indices[tank_slot]
+			if tank_index == owner and step_index < 12: continue
+			if position.distance_squared_to(target_positions[tank_slot]) > 500.0: continue
+			if bullet_hits_tank_at(position, target_positions[tank_slot], target_angles[tank_slot], 1.25):
 				return tank_index == target
 	return false
 
