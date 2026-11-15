@@ -1,5 +1,20 @@
 # `assets/music/` —— 背景音乐投放目录
 
+## Boss 曲尾部裁切（2026-11-15）
+
+`doom_theme.ogg` 对应 P158「Encroached Sky」。从本机原始 MP3 重新编码为
+44.1 kHz 立体声 Vorbis q5，保留 `[0, 116.266598639]` 秒。
+原曲长 119.118367347 秒，裁掉尾部 2.851768708 秒的低音量衰减及静音。
+检测阈值为 -35 dBFS，切点在最后可听尾音附近的小幅值位置；原有前奏保留，
+没有新增淡入淡出或裁掉音乐中间的停顿。
+
+```powershell
+ffmpeg -nostdin -i "<原始 Encroached Sky.mp3>" -t 116.266598639 -c:a libvorbis -q:a 5 assets/music/doom_theme.ogg
+```
+
+`doom_theme.ogg.import` 保持 `loop=true`、`loop_offset=0`；重新导入后应报告长度
+116.26660 秒。音频本体沿用本目录既有规则保存在本机，导出打包仍包含它。
+
 这个目录下的**音频文件不进仓库**（`.gitignore` 已排除），
 但**导入配置 `*.ogg.import` 会进仓库** —— 循环开关存在那里面，
 克隆者只要把音频按下面的文件名放进来，就直接是循环的，不用再改任何设置。
