@@ -253,6 +253,67 @@ func _run() -> void:
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	for i in [1, 3, 4]: battle[i].alive = false
+	battle[2].pos = Vector2(300, 400)
+	battle[2].angle = 0.0
+	battle[2].cooldown = 0.0
+	battle[0].pos = Vector2(600, 400)
+	battle[0].angle = PI / 2.0
+	battle[0].measured_velocity = Vector2(0, 100)
+	_tank.get("bullets").clear()
+	_tank.set("ai_danger_budget", 0)
+	_tank.call("update_ai", 2, 0.0)
+	var volley: Array = _tank.get("bullets")
+	_check(volley.size() == 5, "柚子安全远距离自动发射五发预判")
+	if volley.size() == 5:
+		var origin := Vector2(300, 400)
+		var hit_paths := true
+		for pair in [[0, Vector2.ZERO], [1, Vector2(0, 100)], [2, Vector2(0, -100)]]:
+			var projectile: Dictionary = volley[pair[0]]
+			var velocity: Vector2 = pair[1]
+			var intercept: Vector2 = _tank.call("_yuzu_intercept", origin, Vector2(600, 400), velocity)
+			var flight_time := (origin.distance_to(intercept) - float(_tank.get("MUZZLE_OFFSET"))) / 200.0
+			var bullet_pos: Vector2 = Vector2(projectile.pos) + Vector2(projectile.vel) * flight_time
+			hit_paths = hit_paths and bullet_pos.distance_to(Vector2(600, 400) + velocity * flight_time) < 0.1
+		_check(hit_paths, "五发中的三发分别命中静止、前进和后退轨迹")
+		_check(Vector2(volley[3].vel).y * Vector2(volley[4].vel).y < 0.0, "另外两发覆盖目标两侧误差")
+	volley.clear()
+	for i in 20: volley.append({"owner": 0, "weapon": "normal"})
+	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 20, "全场剩余弹位不足五发时不会超限")
+	volley.clear()
+	volley.append({"owner": 2, "weapon": "normal"})
+	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 1, "柚子已有普通子弹时不会超出个人五发上限")
+	volley.clear()
+	_tank.get("walls").append(Rect2(440, 300, 10, 200))
+	_tank.call("build_prediction_mask")
+	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.is_empty(), "墙壁阻挡时不发射预判弹")
+	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	volley.append({"pos": Vector2(360, 400), "vel": Vector2(-200, 0), "owner": 0, "weapon": "normal", "life": 2.0, "grace": 0.0, "bounces": 0})
+	battle[2].cooldown = 0.0
+	battle[2].danger_velocity = Vector2.UP
+	_tank.call("update_ai", 2, 0.0)
+	_check(volley.size() <= 2, "柚子遭遇近身来弹时不会发射五发预判")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	for i in [0, 2, 3, 4]: battle[i].alive = false
+	battle[1].pos = Vector2(400, 400)
+	battle[1].burst_remaining = 5
+	battle[1].burst_timer = 0.0
+	_tank.get("bullets").clear()
+	for i in 5: _tank.call("update_weapon_bursts", 0.1)
+	_check((_tank.get("bullets") as Array).size() == 5 and is_equal_approx(float(_tank.get("bullets")[0].life), 2.4), "小绿五连发产生五枚寿命 2.4 秒的机关枪弹")
+	_tank.get("bullets").clear()
+	for i in 24: _tank.get("bullets").append({"owner": 0, "weapon": "normal"})
+	battle[1].burst_remaining = 5
+	_tank.call("update_weapon_bursts", 0.1)
+	_check((_tank.get("bullets") as Array).size() == 24 and int(battle[1].burst_remaining) == 0, "小绿五连发受全场 24 发上限约束")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
 	_tank.set("ai_danger_budget", 0)
 	_tank.call("build_prediction_mask")
 	battle[4].pos = Vector2(400, 400)

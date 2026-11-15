@@ -456,7 +456,7 @@ func tank(pos: Vector2, angle: float, color: Color, name: String, portrait: Text
 		"reposition_timer": 0.0, "reposition_direction": Vector2.ZERO,
 		"attack_angle": NAN, "role": 0, "weapon": "normal", "ammo": 0,
 		"burst_remaining": 0, "burst_timer": 0.0,
-		"kei_rage": false,
+		"kei_rage": false, "motion_sample_pos": pos, "measured_velocity": Vector2.ZERO,
 		"portrait": portrait, "boss": false, "boss_unit": false, "hp": 1, "max_hp": 1,
 		"squad": 0}
 
@@ -712,6 +712,10 @@ func point_cell(p: Vector2) -> Vector2i:
 
 func _process(delta: float) -> void:
 	if mode > 0 and not paused and not round_over and countdown <= 0.0:
+		if delta > 0.0:
+			for fighter in tanks:
+				fighter.measured_velocity = (Vector2(fighter.pos) - Vector2(fighter.motion_sample_pos)) / delta
+				fighter.motion_sample_pos = fighter.pos
 		if mode == 1 or mode == 3:
 			squad_clock -= delta
 			if squad_clock <= 0.0:
@@ -964,7 +968,8 @@ func update_ai(index: int, delta: float) -> void:
 				tanks[index] = ai
 			else:
 				tanks[index] = ai
-				fire(index)
+				if not (is_yuzu and str(ai.weapon) == "normal" and Vector2(ai.danger_velocity).is_zero_approx() and not _yuzu_immediate_threat(index) and _yuzu_predictive_volley(index, target_index)):
+					fire(index)
 				ai = tanks[index]
 				if not bool(opponent.alive) or round_over: return
 	var evade_direction: Vector2 = ai.danger_velocity
@@ -1077,6 +1082,55 @@ func _yuzu_immediate_threat(index: int) -> bool:
 		if segment_hits_tank_rect(start, end, ai.pos, float(ai.angle), BULLET_R + 5.0):
 			return true
 	return false
+
+func _yuzu_predictive_volley(index: int, target_index: int) -> bool:
+	var shooter: Dictionary = tanks[index]
+	var target: Dictionary = tanks[target_index]
+	var origin: Vector2 = shooter.pos
+	var target_pos: Vector2 = target.pos
+	var distance := origin.distance_to(target_pos)
+	if distance < 200.0 or regular_bullet_count() + 5 > MAX_ACTIVE_BULLETS:
+		return false
+	var owned := 0
+	for bullet in bullets:
+		if int(bullet.owner) == index and str(bullet.weapon) != "shotgun" and str(bullet.weapon) != "minigun": owned += 1
+	if owned > 0: return false
+	var velocity: Vector2 = Vector2(target.get("measured_velocity", Vector2.ZERO)).limit_length(250.0)
+	var forward := Vector2.from_angle(float(target.angle)) * maxf(velocity.length(), 100.0)
+	if velocity.length() > 10.0: forward = velocity
+	var error := (target_pos - origin).normalized().orthogonal() * (TANK_WIDTH * 0.6)
+	var points := [target_pos, _yuzu_intercept(origin, target_pos, forward), _yuzu_intercept(origin, target_pos, -forward), target_pos + error, target_pos - error]
+	var angles: Array[float] = []
+	for point: Vector2 in points:
+		var angle := origin.angle_to_point(point)
+		if not clear_line(origin, point) or tank_hits_wall(origin, angle) or tank_hits_other_tank(index, origin, angle) or circle_hits_wall(origin + Vector2.from_angle(angle) * MUZZLE_OFFSET, BULLET_R) or not _ai_shot_safe(index, angle, "normal"):
+			return false
+		angles.append(angle)
+	for angle in angles:
+		bullets.append({"pos": origin + Vector2.from_angle(angle) * MUZZLE_OFFSET,
+			"vel": Vector2.from_angle(angle) * 200.0, "owner": index, "life": 60.0,
+			"grace": 0.24, "homing": false, "weapon": "normal", "bounces": 0, "kei_rage": false})
+	shooter.angle = angles[0]
+	shooter.cooldown = 0.34
+	tanks[index] = shooter
+	play_sound(sound_shoot, rng.randf_range(0.92, 1.08))
+	return true
+
+func _yuzu_intercept(origin: Vector2, target: Vector2, velocity: Vector2) -> Vector2:
+	var offset := target - origin
+	var a := velocity.length_squared() - 200.0 * 200.0
+	var b := 2.0 * (offset.dot(velocity) - 200.0 * MUZZLE_OFFSET)
+	var c := offset.length_squared() - MUZZLE_OFFSET * MUZZLE_OFFSET
+	var time := INF
+	if absf(a) < 0.001:
+		if absf(b) > 0.001: time = -c / b
+	else:
+		var discriminant := b * b - 4.0 * a * c
+		if discriminant >= 0.0:
+			var root := sqrt(discriminant)
+			for candidate in [(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]:
+				if candidate > 0.0: time = minf(time, candidate)
+	return target + velocity * time if is_finite(time) and time > 0.0 else target
 
 func tactical_cell(index: int) -> Vector2i:
 	var target_index := homing_target(index, tanks[index].pos)
