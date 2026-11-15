@@ -171,6 +171,7 @@ func _run() -> void:
 	_check(not bool(_tank.call("_kei_protects_alice", 0, 4)), "爱丽丝仍可攻击凯伊")
 	_check(int(_tank.call("homing_target", 4, battle[0].pos)) != 0, "凯伊不会以爱丽丝为目标")
 	_check(float(_tank.call("ai_skill", 3)) < float(_tank.call("ai_skill", 4)), "桃井反应弱于凯伊")
+	_check(is_equal_approx(float(_tank.call("ai_laser_skill", 2)), 0.72) and is_equal_approx(float(_tank.call("ai_laser_skill", 4)), 0.58), "柚子和凯伊使用较低的激光命中率")
 	battle[1].pos = Vector2(400, 400)
 	battle[1].angle = PI / 2.0
 	battle[1].weapon = "laser"
@@ -183,6 +184,61 @@ func _run() -> void:
 	_tank.set("ai_danger_budget", 0)
 	_tank.call("update_ai", 1, 1.0 / 60.0)
 	_check(not bool(battle[0].alive), "小绿持激光快速瞄准并命中")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.get("walls").append(Rect2(float(_tank.get("OX")), float(_tank.get("OY")), float(_tank.get("COLS")) * float(_tank.get("CELL")), 6.0))
+	_tank.get("walls").append(Rect2(float(_tank.get("OX")), float(_tank.get("OY")) + float(_tank.get("ROWS")) * float(_tank.get("CELL")) - 6.0, float(_tank.get("COLS")) * float(_tank.get("CELL")), 6.0))
+	_tank.get("walls").append(Rect2(float(_tank.get("OX")), float(_tank.get("OY")), 6.0, float(_tank.get("ROWS")) * float(_tank.get("CELL"))))
+	_tank.get("walls").append(Rect2(float(_tank.get("OX")) + float(_tank.get("COLS")) * float(_tank.get("CELL")) - 6.0, float(_tank.get("OY")), 6.0, float(_tank.get("ROWS")) * float(_tank.get("CELL"))))
+	var shooter_pos := Vector2(350, 350)
+	var target_pos := Vector2(650, 350)
+	_tank.get("walls").append(Rect2(480, 220, 6, 220))
+	_tank.call("build_prediction_mask")
+	for i in [2, 3, 4]: battle[i].alive = false
+	battle[1].pos = shooter_pos
+	battle[1].weapon = "laser"
+	battle[1].ammo = 1
+	battle[1].cooldown = 0.0
+	battle[0].pos = target_pos
+	var bank_angle: float = _tank.call("find_laser_bank_angle", 1, 0)
+	_check(not bool(_tank.call("clear_line", shooter_pos, target_pos)) and not is_nan(bank_angle) and bool(_tank.call("_laser_path_hits_target", 1, 0, bank_angle)), "小绿能计算隔墙折射后命中目标的激光路径")
+	_tank.set("ai_danger_budget", 0)
+	_tank.call("update_ai", 1, 1.0 / 60.0)
+	_check(not bool(battle[0].alive), "小绿不需露面或直视目标即可远程折射狙击")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	_tank.get("walls").clear()
+	_tank.call("build_prediction_mask")
+	for i in [0, 3, 4]: battle[i].alive = false
+	battle[0].alive = true
+	battle[2].pos = Vector2(300, 400)
+	battle[2].name = "柚子"
+	battle[2].angle = 0.0
+	battle[2].weapon = "laser"
+	battle[2].ammo = 1
+	battle[2].cooldown = 0.0
+	battle[1].pos = Vector2(500, 400)
+	battle[1].angle = 0.0
+	battle[0].pos = Vector2(300, 600)
+	_tank.call("fire", 2)
+	_check(is_zero_approx(float(battle[2].angle)) and bool(battle[0].alive), "柚子开激光不瞬间校准炮口，允许射偏")
+	_tank.call("new_round")
+	battle = _tank.get("tanks")
+	for i in [0, 2, 3]: battle[i].alive = false
+	battle[0].alive = true
+	battle[4].name = "凯伊"
+	battle[4].pos = Vector2(800, 400)
+	battle[4].angle = 0.0
+	battle[4].weapon = "laser"
+	battle[4].ammo = 1
+	battle[4].cooldown = 0.0
+	battle[4].kei_rage = true
+	battle[1].name = "才羽绿"
+	battle[1].pos = Vector2(900, 400)
+	battle[0].pos = Vector2(800, 600)
+	_tank.call("fire", 4)
+	_check(is_zero_approx(float(battle[4].angle)) and bool(battle[0].alive), "凯伊开激光不瞬间校准炮口，允许射偏")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()

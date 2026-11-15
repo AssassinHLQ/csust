@@ -930,11 +930,18 @@ func ai_skill(index: int) -> float:
 		"凯伊": return 0.70
 	return 1.0
 
+func ai_laser_skill(index: int) -> float:
+	match str(tanks[index].name):
+		"柚子": return 0.72
+		"凯伊": return 0.58
+	return ai_skill(index)
+
 func update_ai(index: int, delta: float) -> void:
 	if not tanks[index].alive: return
 	var ai := tanks[index]
 	var is_yuzu := str(ai.name) == "柚子"
 	var is_midori := str(ai.name) == "才羽绿"
+	var has_midori_laser := is_midori and str(ai.weapon) == "laser"
 	var kei_rage := bool(ai.get("kei_rage", false))
 	var movement_scale := 2.0 if kei_rage else 1.0
 	var skill := ai_skill(index)
@@ -951,8 +958,18 @@ func update_ai(index: int, delta: float) -> void:
 		ai.danger_timer = (0.035 if is_yuzu else ai_danger_interval) / (skill * skill)
 		ai.danger_velocity = find_ai_evasion(ai.pos, float(ai.angle), index)
 		ai_danger_budget -= 1
-	# Fire at a visible opponent before moving or evading.
-	if (is_midori or kei_rage or is_yuzu) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
+	var midori_laser_fired := false
+	if has_midori_laser and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0:
+		var laser_angle := find_laser_bank_angle(index, target_index)
+		if not is_nan(laser_angle):
+			ai.angle = laser_angle
+			tanks[index] = ai
+			fire(index)
+			ai = tanks[index]
+			midori_laser_fired = true
+	# Fire at a visible opponent before moving or evading. Yuzu only uses the
+	# instant normal-shot path; laser shots turn and fire at her imperfect aim.
+	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
 		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
@@ -1014,7 +1031,11 @@ func update_ai(index: int, delta: float) -> void:
 	if ai.ai_timer <= 0.0 or int(ai.get("target_index", -1)) != target_index or ai.get("path_goal", Vector2i(-1, -1)) != objective_cell or (not ai.ai_path.is_empty() and ai.ai_path[0] != point_cell(ai.pos)):
 		ai.ai_timer = 0.4 / skill
 		ai.target_index = target_index
-		ai.aim_bias = rng.randf_range(-0.22, 0.22) * (1.0 - skill)
+		if str(ai.weapon) == "laser" and (is_yuzu or str(ai.name) == "凯伊"):
+			var laser_error := 0.075 if is_yuzu else 0.13
+			ai.aim_bias = rng.randf_range(-laser_error, laser_error)
+		else:
+			ai.aim_bias = rng.randf_range(-0.22, 0.22) * (1.0 - skill)
 		ai.path_goal = objective_cell
 		ai.ai_path = find_path(point_cell(ai.pos), objective_cell)
 		ai.attack_angle = NAN
@@ -1052,14 +1073,16 @@ func update_ai(index: int, delta: float) -> void:
 		# 巡航速度取 chase / evade 的中间值（优香 120 / 142 ⇒ 136；原版普通 AI 是 120）
 		# move_tank reverses steering while backing up; compensate when aiming.
 		var steering := -turn if drive < -0.05 else turn
-		move_tank(index, drive, steering * skill, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill) * movement_scale)
+		var turn_scale := 0.48 if str(ai.weapon) == "laser" and (is_yuzu or str(ai.name) == "凯伊") else 1.0
+		move_tank(index, drive, steering * skill * turn_scale, delta, (ai_speed_chase + ai_speed_evade) * 0.5 * lerpf(0.65, 1.0, skill) * movement_scale)
 	ai = tanks[index]
 	var player_angle: float = (ai.pos as Vector2).angle_to_point(opponent.pos as Vector2) + float(ai.get("aim_bias", 0.0))
 	var firing_angle: float = player_angle if has_sight else float(ai.attack_angle)
 	var aim_error: float = INF if is_nan(firing_angle) else absf(wrapf(firing_angle - float(ai.angle), -PI, PI))
-	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, skill)
+	var fire_skill := ai_laser_skill(index) if str(ai.weapon) == "laser" else skill
+	var fire_tolerance := lerpf(0.09, ai_fire_tolerance, fire_skill)
 	if has_sight and aim_error < fire_tolerance and float(ai.cooldown) <= 0.0 and int(ai.burst_remaining) <= 0:
-		if rng.randf() <= skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
+		if rng.randf() <= fire_skill and not circle_hits_wall(Vector2(ai.pos) + Vector2.from_angle(float(ai.angle)) * MUZZLE_OFFSET, BULLET_R):
 			if is_midori and str(ai.weapon) == "normal" and int(ai.burst_remaining) <= 0:
 				var safe_angle := _safe_ai_aim(index, target_index, float(ai.angle), "minigun")
 				if not is_nan(safe_angle):
@@ -1133,6 +1156,37 @@ func _yuzu_intercept(origin: Vector2, target: Vector2, velocity: Vector2) -> Vec
 func tactical_cell(index: int) -> Vector2i:
 	var target_index := homing_target(index, tanks[index].pos)
 	return point_cell(tanks[target_index].pos) if target_index >= 0 else point_cell(tanks[index].pos)
+
+func find_laser_bank_angle(owner: int, target: int) -> float:
+	if target < 0 or target >= tanks.size() or not tanks[target].alive: return NAN
+	var origin: Vector2 = tanks[owner].pos
+	var destination: Vector2 = tanks[target].pos
+	var direct := origin.angle_to_point(destination)
+	if _laser_path_hits_target(owner, target, direct): return direct
+	for degrees in range(0, 360):
+		var candidate := deg_to_rad(float(degrees))
+		if _laser_path_hits_target(owner, target, candidate): return candidate
+	return NAN
+
+func _laser_path_hits_target(owner: int, target: int, angle: float) -> bool:
+	var shooter: Dictionary = tanks[owner]
+	var position: Vector2 = shooter.pos + Vector2.from_angle(angle) * (TANK_LENGTH / 2.0 + 2.0)
+	var velocity := Vector2.from_angle(angle) * 2.0
+	var bounces := 0
+	for step_index in 2600:
+		var bounced := false
+		if circle_hits_wall(Vector2(position.x + velocity.x, position.y), 1.0): velocity.x *= -1.0; bounced = true
+		if circle_hits_wall(Vector2(position.x, position.y + velocity.y), 1.0): velocity.y *= -1.0; bounced = true
+		if bounced:
+			bounces += 1
+			if bounces >= 10: return false
+		position += velocity
+		for tank_index in tanks.size():
+			if not tanks[tank_index].alive or (tank_index == owner and step_index < 12): continue
+			if _kei_protects_alice(owner, tank_index): continue
+			if bullet_hits_tank_at(position, tanks[tank_index].pos, float(tanks[tank_index].angle), 1.25):
+				return tank_index == target
+	return false
 
 func find_bank_angle(origin: Vector2, target: Vector2) -> float:
 	var direct := origin.angle_to_point(target)
@@ -1479,12 +1533,17 @@ func fire(index: int) -> void:
 	if t.cooldown > 0.0 or (not kei_rage and weapon == "normal" and normal_bullet_count(index) >= MAX_OWN_NORMAL_BULLETS): return
 	if index > 0 and (mode == 1 or mode == 3):
 		var target := homing_target(index, t.pos)
-		var safe_angle := _safe_ai_aim(index, target, float(t.angle), weapon)
-		if is_nan(safe_angle):
-			_reposition_after_unsafe_shot(index, float(t.angle))
-			return
-		t.angle = safe_angle
-		tanks[index] = t
+		if weapon == "laser" and str(t.name) == "才羽绿":
+			if not _laser_path_hits_target(index, target, float(t.angle)): return
+		elif weapon == "laser" and (str(t.name) == "柚子" or str(t.name) == "凯伊"):
+			if not _ai_shot_safe(index, float(t.angle), "laser"): return
+		else:
+			var safe_angle := _safe_ai_aim(index, target, float(t.angle), weapon)
+			if is_nan(safe_angle):
+				_reposition_after_unsafe_shot(index, float(t.angle))
+				return
+			t.angle = safe_angle
+			tanks[index] = t
 	if weapon == "laser":
 		fire_laser(index)
 		play_sound(sound_shoot, 1.35)
