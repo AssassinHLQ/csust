@@ -188,8 +188,8 @@ func _check_ready() -> void:
 		_check(mat != null and mat.emission_enabled, "贴片自发光（会真的亮起来）")
 		# 贴片必须和屏面等大：大了溢到显示器边框、小了留一圈亮屏
 		var q := (screens[0] as MeshInstance3D).mesh as QuadMesh
-		_check(q != null and is_equal_approx(q.size.x, 0.645) and is_equal_approx(q.size.y, 0.425),
-			"贴片尺寸 = 屏面 0.645×0.425（实际 %s）" % (str(q.size) if q else "无"))
+		_check(q != null and is_equal_approx(q.size.x, 0.568) and is_equal_approx(q.size.y, 0.370),
+			"贴片尺寸 = 可见显示区 0.568×0.370（实际 %s）" % (str(q.size) if q else "无"))
 	_check(is_equal_approx(_host.call("screen_level"), 0.0), "屏幕亮度初值 0")
 
 
