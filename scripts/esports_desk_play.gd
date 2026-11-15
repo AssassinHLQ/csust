@@ -176,6 +176,7 @@ func _settings_menu() -> Node:
 
 
 func _exit_tree() -> void:
+	_stop_tank()
 	# 返回标题或切换场景时，根视口不能留在仅绘制小游戏的状态。
 	if _phase == Phase.PLAY:
 		var viewport := get_viewport()
@@ -436,6 +437,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _resize_tank_viewport() -> void:
+	if _phase != Phase.GLOW and _phase != Phase.PLAY:
+		return
 	if _wide == null or tank_viewport == null or _wide.size.x < 10.0 or _wide.size.y < 10.0:
 		return
 	var aspect := _wide.size.x / _wide.size.y
@@ -653,11 +656,24 @@ func _end_play() -> void:
 		return
 	_overlay.visible = false
 	get_viewport().disable_3d = _viewport_3d_was_disabled
-	if tank != null and is_instance_valid(tank) and tank.has_method("release_all"):
-		tank.call("release_all")
-		tank.process_mode = Node.PROCESS_MODE_DISABLED
-	tank_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_stop_tank()
 	_begin_stand()
+
+
+## 合上小游戏时销毁整局，包括 AI、计时器、声音和纹理，不能只藏覆盖层。
+func _stop_tank() -> void:
+	if is_instance_valid(tank):
+		if tank.has_method("shutdown"):
+			tank.call("shutdown")
+		tank.process_mode = Node.PROCESS_MODE_DISABLED
+		tank.set_process_input(false)
+		tank.set_process_unhandled_input(false)
+		tank.queue_free()
+	tank = null
+	if is_instance_valid(tank_viewport):
+		tank_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		tank_viewport.size_2d_override = Vector2i.ZERO
+		tank_viewport.size = Vector2i(2, 2)
 
 
 # ══════════════ 过场：跳下来 ══════════════

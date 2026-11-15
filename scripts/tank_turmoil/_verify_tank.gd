@@ -24,6 +24,7 @@ var _frames := 0
 var _stage := 0
 var _start_pos := Vector2.ZERO
 var _start_angle := 0.0
+var _finishing := false
 
 
 func _init() -> void:
@@ -148,6 +149,30 @@ func _run() -> void:
 		if int(projectile.owner) == 0: player_fired = true
 	_check(player_fired, "键盘单次开火在清除按键边沿前执行")
 	_tank.call("release_all")
+	_tank.call("new_round")
+	_tank.get("walls").clear()
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.pressed = true
+	_tank.call("feed", space)
+	_tank.call("ui_event", space)
+	_check(is_zero_approx(float(_tank.get("countdown"))) and bool(_tank.get("suppress_space_fire")), "物理空格跳过倒计时，当前这次按键不误发射")
+	space.pressed = false
+	_tank.call("feed", space)
+	_tank.call("ui_event", space)
+	_check(not bool(_tank.get("suppress_space_fire")), "中文输入法下释放物理空格解除抑制")
+	_tank.call("_clear_frame_presses")
+	space.pressed = true
+	_tank.call("feed", space)
+	_tank.call("ui_event", space)
+	_tank.call("update_human", 0, 1.0 / 60.0)
+	player_fired = false
+	for projectile in _tank.get("bullets"):
+		if int(projectile.owner) == 0: player_fired = true
+	_check(player_fired, "跳过倒计时后再次按物理空格可发射")
+	_tank.set("suppress_space_fire", true)
+	_tank.call("release_all")
+	_check(not bool(_tank.get("suppress_space_fire")), "退出与重新进入时清除残留空格抑制")
 	_tank.call("new_round")
 
 	# ── ⑥ 输入：喂一个 W 事件，主角应该动 ──
@@ -303,9 +328,17 @@ func _check(ok: bool, what: String) -> void:
 
 
 func _finish() -> void:
+	if _finishing:
+		return
+	_finishing = true
+	_stage = -1
+	if is_instance_valid(_tank):
+		_tank.call("shutdown")
+		_tank.queue_free()
 	print("---------- %d 项，失败 %d ----------" % [_checks, _fails])
 	print("★ 全部通过" if _fails == 0 else "✗ 有 %d 项没过" % _fails)
-	quit(0 if _fails == 0 else 1)
+	# Let the audio server retire its playback references before engine teardown.
+	create_timer(0.2).timeout.connect(quit.bind(0 if _fails == 0 else 1))
 
 
 

@@ -845,9 +845,20 @@ func _clear_frame_presses() -> void:
 func release_all() -> void:
 	_keys_down.clear()
 	_keys_pressed.clear()
+	suppress_space_fire = false
 	_mouse_down = false
 	mouse_joystick_active = false
 	touch_move = Vector2.ZERO
+
+
+func shutdown() -> void:
+	release_all()
+	paused = true
+	for child in get_children():
+		if child is AudioStreamPlayer:
+			child.stop()
+			child.stream = null
+	process_mode = Node.PROCESS_MODE_DISABLED
 
 func update_human(index: int, delta: float) -> void:
 	if not tanks[index].alive: return
@@ -872,7 +883,8 @@ func update_human(index: int, delta: float) -> void:
 	if not direct_control:
 		move_tank(index, drive, turn, delta)
 	tanks[index].cooldown = maxf(0.0, tanks[index].cooldown - delta)
-	if just_pressed("fire", player) and not (index == 0 and suppress_space_fire):
+	var blocked_space := index == 0 and suppress_space_fire and not (_keys_pressed.has(KEY_J) or _keys_pressed.has(KEY_Z))
+	if just_pressed("fire", player) and not blocked_space:
 		fire(index)
 
 func move_tank_direct(index: int, stick: Vector2, delta: float, max_speed := 120.0) -> void:
@@ -1543,28 +1555,30 @@ func _unhandled_input(event: InputEvent) -> void:
 	_handle_gameplay_mouse(event)
 
 func _handle_menu_keys(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	var code := int(key.physical_keycode) if key != null and key.physical_keycode != 0 else (int(key.keycode) if key != null else 0)
 	if intro_playing:
 		# Permit a tap/click/Space to skip the startup video on touch devices too.
-		var skip_intro: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_SPACE or event.keycode == KEY_ESCAPE))
+		var skip_intro: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed) or (key != null and key.pressed and not key.echo and (code == KEY_SPACE or code == KEY_ESCAPE))
 		if skip_intro:
 			finish_intro()
 		return
-	if event is InputEventKey and event.keycode == KEY_SPACE and not event.pressed:
+	if key != null and code == KEY_SPACE and not key.pressed:
 		suppress_space_fire = false
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE and pause_settings_open:
+	if key != null and key.pressed and not key.echo:
+		if code == KEY_ESCAPE and pause_settings_open:
 			pause_settings_open = false
 			queue_redraw()
-		elif event.keycode == KEY_SPACE and countdown > 0.0:
+		elif code == KEY_SPACE and countdown > 0.0:
 			suppress_space_fire = true
 			countdown = 0.0
 			queue_redraw()
-		elif event.keycode == KEY_SPACE and round_over and next_round_timer <= 0.0: new_round()
-		elif event.keycode == KEY_1: start_game(1)
-		elif event.keycode == KEY_2: start_game(2)
-		elif (event.keycode == KEY_ESCAPE or event.keycode == KEY_P) and mode > 0: paused = not paused
-		elif event.keycode == KEY_M and paused: return_to_menu()
-		elif event.keycode == KEY_R and mode > 0: scores = [0, 0, 0, 0, 0]; new_round()
+		elif code == KEY_SPACE and round_over and next_round_timer <= 0.0: new_round()
+		elif code == KEY_1: start_game(1)
+		elif code == KEY_2: start_game(2)
+		elif (code == KEY_ESCAPE or code == KEY_P) and mode > 0: paused = not paused
+		elif code == KEY_M and paused: return_to_menu()
+		elif code == KEY_R and mode > 0: scores = [0, 0, 0, 0, 0]; new_round()
 
 func _handle_gameplay_mouse(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:

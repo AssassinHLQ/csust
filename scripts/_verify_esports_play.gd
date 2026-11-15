@@ -21,6 +21,8 @@ var _frames := 0
 var _host: Node3D
 var _player: CharacterBody3D
 var _tp := Vector3.ZERO
+var _cycles := 0
+var _old_tank: WeakRef
 var _phase_names: Array = ["IDLE", "SIT", "GLOW", "PLAY", "STAND"]
 
 
@@ -168,8 +170,13 @@ func _process(_delta: float) -> bool:
 					"按 Esc 退出小游戏（阶段 %s）" % str(_host.call("phase_name")))
 			if _host.call("phase_name") == "IDLE" and _frames > 3:
 				_check_idle()
-				_stage = 5
-				_finish()
+				_cycles += 1
+				_frames = 0
+				if _cycles < 3:
+					_stage = 2
+				else:
+					_stage = 5
+					_finish()
 			elif _frames > 240:
 				_check(false, "240 帧内没回到 IDLE（当前 %s）" % str(_host.call("phase_name")))
 				_stage = 5
@@ -208,6 +215,7 @@ func _check_play() -> void:
 		_check(lmat != null and lmat.emission_enabled, "亮屏材质自发光（会真的亮起来）")
 	var tank: Node = _host.get("tank")
 	_check(tank != null and is_instance_valid(tank), "坦克动荡已实例化进画布")
+	_old_tank = weakref(tank)
 	_check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "小游戏期间鼠标可见")
 	_check(get_root().disable_3d, "小游戏期间停止主画面的 3D 绘制")
 	_check(not _player.is_processing_input(), "小游戏期间主角不接收战斗输入")
@@ -249,7 +257,11 @@ func _check_play() -> void:
 func _check_idle() -> void:
 	var canvas: SubViewport = _host.get("tank_viewport")
 	_check(canvas.render_target_update_mode == SubViewport.UPDATE_DISABLED, "退出后停止小游戏画布渲染")
-	_check((_host.get("tank") as Node).process_mode == Node.PROCESS_MODE_DISABLED, "退出后暂停小游戏运算")
+	_check(_host.get("tank") == null and canvas.get_child_count() == 0, "退出后销毁小游戏，AI 和声音均不残留")
+	_check(canvas.size == Vector2i(2, 2), "退出后释放大画布纹理")
+	_check(_old_tank.get_ref() == null, "旧小游戏实例已释放")
+	_host.call("_resize_tank_viewport")
+	_check(canvas.size == Vector2i(2, 2), "退出后窗口尺寸变化不会重建大画布")
 	_check(not get_root().disable_3d, "退出后恢复主画面的 3D 绘制")
 	_check(_player.is_processing_input(), "退出后恢复主角输入")
 	_check(is_equal_approx(_host.call("screen_level"), 0.0), "人走了屏幕也灭了")

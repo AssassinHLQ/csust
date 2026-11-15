@@ -268,7 +268,7 @@ func _build_ui() -> void:
 	# 靠近时的提示（小、在屏幕下方）
 	_hint = Label.new()
 	_hint.name = "Hint"
-	_hint.text = "按 F 使用电脑 · 按 G 玩坦克动荡"
+	_hint.text = "按 F 使用电脑"
 	_hint.add_theme_font_size_override("font_size", 20)
 	_hint.add_theme_color_override("font_color", Color(1, 1, 1))
 	_hint.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
