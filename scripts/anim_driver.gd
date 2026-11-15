@@ -45,6 +45,7 @@ enum State { LOCOMOTION, FIRE, RELOAD }
 ##    **已知代价**：走路时武器被素材缩没了（见 ①）。要再翻回来，改这一段 + `_update_locomotion()`。
 const CYCLE_SPEED := {
 	"Normal_Idle": 0.0,
+	"Cafe_Idle": 0.0,
 	"Cafe_Walk": 1.6,
 	"Move_Ing": 5.2,
 }
@@ -203,6 +204,7 @@ const ARMS_EXCLUDE := ["clavicle"]
 var state := State.LOCOMOTION
 ## 基础层：整体动画（`Normal_Idle` / `Move_Ing`），一直播着，包括开火期间。
 var player: AnimationPlayer
+var idle_animation := "Normal_Idle"
 ## 叠加层（静止）：完整上半身的开火 / 换弹，含脊椎 / 胸 —— 站桩开火用这层。
 ## `process_priority` 比基础层大 ⇒ 后写、赢；下半身只有基础层写，所以腿照样跑。
 var upper: AnimationPlayer
@@ -852,9 +854,8 @@ func _is_lower_bone(bone: String) -> bool:
 
 
 func _configure_library() -> void:
-	# 只给**用到的**两条循环动画设循环；`Cafe_Walk` 也在模型里，但本工程不播它
-	# （理由见 CYCLE_SPEED 上面那段），所以不用管它。
-	for n in ["Normal_Idle", "Move_Ing"]:
+	# 给基础层会播到的循环动画设循环，避免模型素材的非循环导入标记让待机停住。
+	for n in ["Normal_Idle", "Cafe_Idle", "Move_Ing"]:
 		if player.has_animation(n):
 			player.get_animation(n).loop_mode = Animation.LOOP_LINEAR
 	for n in ["Normal_Attack_Ing", "Normal_Reload"]:
@@ -1072,7 +1073,7 @@ func _update_locomotion() -> void:
 	# ⚠️ 这是「改回来」的一条：中间有一阵子全用 `Move_Ing`（为了让大家走路也拿枪），
 	#    但那样「走路是跑步的姿势放慢 0.46 倍」，用户看着别扭，要求换回真正的走路动作。
 	#    代价回到老样子：`Cafe_Walk` 里武器骨被缩到 ≈0，**走路时看不到枪**（素材如此）。
-	var want := "Normal_Idle"
+	var want := idle_animation if player.has_animation(idle_animation) else "Normal_Idle"
 	if _speed >= WALK_THRESHOLD:
 		want = "Move_Ing"
 	elif _speed > IDLE_SPEED:

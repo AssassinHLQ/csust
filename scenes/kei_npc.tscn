@@ -17,6 +17,7 @@ collision_mask = 1
 script = ExtResource("1_kei")
 model_path = "res://models/companions/Kei_ext.glb"
 display_name = "凯伊"
+idle_animation_override = "Cafe_Idle"
 player_path = NodePath("../Player")
 
 [node name="Collision" type="CollisionShape3D" parent="."]

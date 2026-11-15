@@ -43,6 +43,7 @@ const HIPS_CANDIDATES := ["Bip001 Pelvis", "Hips", "Pelvis", "bone_Hips", "pelvi
 
 @export_file("*.glb") var model_path := ""
 @export var display_name := "同伴"
+@export var idle_animation_override := ""
 ## 站位，玩家局部坐标：+X 右，**+Z 是玩家背后（也就是镜头那一侧）**。
 ##
 ## ⚠️ 站位有一条硬约束：**别落在「相机 ↔ 玩家」之间**。
@@ -147,7 +148,11 @@ func _build_model() -> void:
 	# AnimationPlayer / Skeleton3D（三只 GLB 的内部节点名各不相同，写死会互相冲突）
 	anim = AnimDriver.new()
 	anim.name = "AnimDriver"
+	if not idle_animation_override.is_empty():
+		anim.set("idle_animation", idle_animation_override)
 	model.add_child(anim)
+	if anim.has_method("set_locomotion"):
+		anim.call("set_locomotion", _speed, is_on_floor(), velocity.y)
 	print("[Companion %s] 模型就位：%s" % [display_name, model_path.get_file()])
 
 

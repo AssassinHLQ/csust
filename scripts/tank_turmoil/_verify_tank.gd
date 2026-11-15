@@ -131,6 +131,14 @@ func _run() -> void:
 	_tank.call("tank_was_hit", 0)
 	_check(not bool(_tank.get("round_over")), "爱丽丝出局后继续观战")
 	_check(int(_tank.call("homing_target", 1, tanks[2]["pos"])) == 2, "AI 能追踪其他存活角色")
+	tanks[1].pos = Vector2(400, 400)
+	tanks[1].target_index = 2
+	tanks[2].pos = Vector2(500, 400)
+	tanks[3].pos = Vector2(450, 400)
+	tanks[4].pos = Vector2(900, 700)
+	_check(int(_tank.call("_stable_ai_target", 1, tanks[1].pos)) == 2, "距离相近时 AI 保持目标，避免追击来回切换")
+	tanks[3].pos = Vector2(410, 400)
+	_check(int(_tank.call("_stable_ai_target", 1, tanks[1].pos)) == 3, "新目标明显更近时 AI 会及时切换")
 	for i in [1, 2, 3]: _tank.call("tank_was_hit", i)
 	var momoi_volume := INF
 	for child in _tank.get_children():
@@ -240,7 +248,7 @@ func _run() -> void:
 	battle[1].laser_search_next_degree = 80
 	battle[0].pos = target_pos + Vector2(70, 0)
 	var moved_target_angle: float = _tank.call("find_laser_bank_angle", 1, 0)
-	_check(not is_nan(moved_target_angle) or int(battle[1].laser_search_next_degree) >= 96, "目标移动超过 64 px 时小绿保留折射扫描进度")
+	_check(not is_nan(moved_target_angle) or int(battle[1].laser_search_next_degree) < 80, "小绿目标移动后重启折射扫描，避免使用旧位置解")
 	_tank.call("new_round")
 	battle = _tank.get("tanks")
 	_tank.get("walls").clear()
@@ -397,6 +405,24 @@ func _run() -> void:
 	volley.append({"owner": 2, "weapon": "normal"})
 	_check(not bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 1, "柚子已有普通弹时不会发射超出五发上限的预判")
 	volley.clear()
+	battle[2].cooldown = 0.0
+	battle[2].pos = Vector2(300, 400)
+	battle[0].pos = Vector2(450, 400)
+	battle[0].measured_velocity = Vector2(0, 100)
+	battle[0].angle = PI / 2.0
+	for i in [1, 3, 4]: battle[i].alive = false
+	_tank.call("update_ai", 2, 0.0)
+	var close_shot: Dictionary = volley[0] if not volley.is_empty() else {}
+	var close_hit := false
+	if not close_shot.is_empty():
+		var intercept: Vector2 = _tank.call("_yuzu_intercept", Vector2(300, 400), Vector2(450, 400), Vector2(0, 100))
+		var flight_time := (Vector2(300, 400).distance_to(intercept) - float(_tank.get("MUZZLE_OFFSET"))) / 200.0
+		var bullet_at_target := Vector2(close_shot.pos) + Vector2(close_shot.vel) * flight_time
+		close_hit = bullet_at_target.distance_to(Vector2(450, 400) + Vector2(0, 100) * flight_time) < 1.0
+	_check(close_hit, "柚子近距离普通弹按目标移动速度预判")
+	volley.clear()
+	battle[0].pos = Vector2(600, 400)
+	battle[0].measured_velocity = Vector2(0, 100)
 	volley.append({"owner": 2, "weapon": "minigun", "skill": true})
 	_check(bool(_tank.call("_yuzu_predictive_volley", 2, 0)) and volley.size() == 6 and int(_tank.call("normal_bullet_count", 2)) == 5, "道具弹不占柚子的普通弹名额")
 	volley.clear()

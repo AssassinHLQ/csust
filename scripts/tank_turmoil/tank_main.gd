@@ -949,7 +949,7 @@ func update_ai(index: int, delta: float) -> void:
 	var kei_rage := bool(ai.get("kei_rage", false))
 	var movement_scale := 2.0 if kei_rage else 1.0
 	var skill := ai_skill(index)
-	var target_index := homing_target(index, ai.pos)
+	var target_index := _stable_ai_target(index, ai.pos)
 	if target_index < 0: return
 	var opponent: Dictionary = tanks[target_index]
 	ai.cooldown = maxf(0.0, ai.cooldown - delta)
@@ -984,6 +984,10 @@ func update_ai(index: int, delta: float) -> void:
 	# instant normal-shot path; laser shots turn and fire at her imperfect aim.
 	if not midori_laser_fired and ((is_midori and not has_midori_laser) or (kei_rage and str(ai.weapon) != "laser") or (is_yuzu and str(ai.weapon) != "laser")) and float(ai.cooldown) <= 0.0 and float(ai.reposition_timer) <= 0.0 and int(ai.burst_remaining) <= 0 and (not (is_midori or kei_rage) or (not immediate_threat and Vector2(ai.danger_velocity).is_zero_approx())) and clear_line(ai.pos, opponent.pos):
 		var shot_angle := (ai.pos as Vector2).angle_to_point(opponent.pos)
+		if is_yuzu and str(ai.weapon) == "normal":
+			var target_velocity: Vector2 = Vector2(opponent.get("measured_velocity", Vector2.ZERO)).limit_length(250.0)
+			var intercept := _yuzu_intercept(ai.pos, opponent.pos, target_velocity)
+			shot_angle = (ai.pos as Vector2).angle_to_point(intercept)
 		var predicted_weapon := "minigun" if is_midori and str(ai.weapon) == "normal" else str(ai.weapon)
 		var safe_angle := _safe_ai_aim(index, target_index, shot_angle, predicted_weapon)
 		if is_nan(safe_angle):
@@ -1067,9 +1071,9 @@ func update_ai(index: int, delta: float) -> void:
 	var desired: float = (ai.pos as Vector2).angle_to_point(target) + float(ai.get("aim_bias", 0.0))
 	if not wants_pickup and not has_sight and not is_nan(float(ai.attack_angle)): desired = float(ai.attack_angle)
 	var diff: float = wrapf(desired - float(ai.angle), -PI, PI)
-	var turn: float = clampf(diff * 3.2, -1.0, 1.0)
+	var turn: float = 0.0 if absf(diff) < 0.035 else clampf(diff * 2.7, -1.0, 1.0)
 	var distance_to_player: float = ai.pos.distance_to(opponent.pos)
-	var drive: float = 1.0 if absf(diff) < 0.9 else 0.15
+	var drive: float = clampf((1.25 - absf(diff)) / 0.7, 0.15, 1.0)
 	if not wants_pickup and not has_sight and not is_nan(float(ai.attack_angle)): drive = 0.0
 	if has_sight and not wants_pickup:
 		# Suppressors hold ground, bait units reverse, assault units close in.
@@ -1178,7 +1182,8 @@ func find_laser_bank_angle(owner: int, target: int) -> float:
 	var shooter: Dictionary = tanks[owner]
 	var origin: Vector2 = shooter.pos
 	var destination: Vector2 = tanks[target].pos
-	if int(shooter.get("laser_search_target", -1)) != target or Vector2(shooter.get("laser_search_origin", Vector2.ZERO)).distance_to(origin) > 12.0:
+	var old_target_pos := Vector2(shooter.get("laser_search_target_pos", destination))
+	if int(shooter.get("laser_search_target", -1)) != target or Vector2(shooter.get("laser_search_origin", Vector2.ZERO)).distance_to(origin) > 12.0 or old_target_pos.distance_to(destination) > 42.0:
 		shooter.laser_search_target = target
 		shooter.laser_search_origin = origin
 		shooter.laser_search_next_degree = 0
@@ -1520,15 +1525,19 @@ func _safe_ai_aim(owner: int, target: int, desired: float, weapon: String) -> fl
 	if target < 0 or target >= tanks.size() or not tanks[target].alive: return NAN
 	var shooter: Dictionary = tanks[owner]
 	var target_tank: Dictionary = tanks[target]
-	var distance: float = (shooter.pos as Vector2).distance_to(target_tank.pos)
+	var safe_target_pos: Vector2 = target_tank.pos
+	if weapon == "normal" and str(shooter.name) == "柚子":
+		var target_velocity: Vector2 = Vector2(target_tank.get("measured_velocity", Vector2.ZERO)).limit_length(250.0)
+		safe_target_pos = _yuzu_intercept(shooter.pos, target_tank.pos, target_velocity)
+	var distance: float = (shooter.pos as Vector2).distance_to(safe_target_pos)
 	var max_offset := minf(0.32, atan2(TANK_WIDTH * 0.35, maxf(distance, 1.0)))
-	var target_angle := (shooter.pos as Vector2).angle_to_point(target_tank.pos)
+	var target_angle := (shooter.pos as Vector2).angle_to_point(safe_target_pos)
 	for angle in [desired, target_angle, target_angle - max_offset * 0.5, target_angle + max_offset * 0.5, target_angle - max_offset, target_angle + max_offset]:
 		if tank_hits_wall(shooter.pos, angle) or tank_hits_other_tank(owner, shooter.pos, angle): continue
 		var muzzle := Vector2(shooter.pos) + Vector2.from_angle(angle) * MUZZLE_OFFSET
 		if circle_hits_wall(muzzle, BULLET_R): continue
 		var end: Vector2 = shooter.pos + Vector2.from_angle(angle) * (distance + TANK_LENGTH)
-		if not segment_hits_tank_rect(shooter.pos, end, target_tank.pos, float(target_tank.angle), BULLET_R): continue
+		if not segment_hits_tank_rect(shooter.pos, end, safe_target_pos, float(target_tank.angle), BULLET_R): continue
 		var safe := true
 		var offsets := [-0.24, -0.12, 0.0, 0.12, 0.24] if weapon == "shotgun" else [0.0]
 		for offset in offsets:
@@ -1609,6 +1618,10 @@ func fire(index: int) -> void:
 	if t.cooldown > 0.0 or (not kei_rage and weapon == "normal" and normal_bullet_count(index) >= MAX_OWN_NORMAL_BULLETS): return
 	if index > 0 and (mode == 1 or mode == 3):
 		var target := homing_target(index, t.pos)
+		if weapon == "laser" and str(t.name) == "才羽绿":
+			var searched_target := int(t.get("laser_search_target", -1))
+			if searched_target >= 0 and searched_target < tanks.size() and bool(tanks[searched_target].alive):
+				target = searched_target
 		if weapon == "laser" and str(t.name) == "才羽绿":
 			if not _laser_path_hits_target(index, target, float(t.angle)): return
 		elif weapon == "laser" and (str(t.name) == "柚子" or str(t.name) == "凯伊"):
@@ -1766,6 +1779,17 @@ func update_bullets(delta: float) -> void:
 			if hit: break
 		if hit or (b.life <= 0.0 and not bool(b.get("persist_until_bounces", false))) or int(b.bounces) >= 10: bullets.remove_at(i)
 		else: bullets[i] = b
+
+func _stable_ai_target(owner: int, position: Vector2) -> int:
+	var nearest := homing_target(owner, position)
+	if nearest < 0 or owner < 0 or owner >= tanks.size():
+		return nearest
+	var previous := int(tanks[owner].get("target_index", -1))
+	if previous < 0 or previous >= tanks.size() or previous == owner or not bool(tanks[previous].alive) or _kei_protects_alice(owner, previous):
+		return nearest
+	var current_distance := position.distance_to(tanks[previous].pos)
+	var nearest_distance := position.distance_to(tanks[nearest].pos)
+	return previous if current_distance <= nearest_distance + 72.0 else nearest
 
 func homing_target(owner: int, bullet_pos: Vector2) -> int:
 	var result := -1

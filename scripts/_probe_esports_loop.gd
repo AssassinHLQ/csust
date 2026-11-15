@@ -3,7 +3,7 @@ extends SceneTree
 ##
 ##   Godot --headless --script res://scripts/_probe_esports_loop.gd
 ##
-## 判据：loop=true、loop_offset≈22.7656、时长≈111.77 s。
+## 判据：loop=true、loop_offset≈22.32、时长≈111.77 s。
 
 const PATH := "res://assets/music/esports_theme.ogg"
 
@@ -20,6 +20,6 @@ func _initialize() -> void:
 	var body := s.get_length() - s.loop_offset
 	print("[loop] 循环段长  : %.4f s（%.0f 秒处回到 %.2f s）"
 		% [body, s.get_length(), s.loop_offset])
-	var ok := s.loop and absf(s.loop_offset - 22.7656) < 0.01
+	var ok := s.loop and absf(s.loop_offset - 22.32) < 0.001
 	print("[loop] ★ %s" % ("通过" if ok else "不符合预期"))
 	quit(0 if ok else 2)
