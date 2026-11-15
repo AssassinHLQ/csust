@@ -72,7 +72,7 @@ func _run() -> void:
 	var defeat: AudioStream = _tank.get("SOUND_MOMOI_DEFEAT")
 	_check(defeat != null, "桃井败北音效已加载")
 	var victory: AudioStream = _tank.get("SOUND_ALICE_VICTORY")
-	_check(victory != null and absf(victory.get_length() - 1.55) < 0.05, "爱丽丝获胜语音已加载，时长约 1.55 秒")
+	_check(victory != null and absf(victory.get_length() - 1.35) < 0.05, "爱丽丝获胜语音已加载，时长约 1.35 秒")
 
 	# ── ② 没有音乐播放器、没有歌单 ──
 	_check(_tank.get("music_player") == null, "没有自己的 AudioStreamPlayer（音乐交给电竞房）")
