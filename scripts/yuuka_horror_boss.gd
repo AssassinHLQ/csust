@@ -293,6 +293,9 @@ var _blink_cd := 9.0
 var _blinks := 0
 var _chase_blocked := 0
 var _chase_on := true
+var _ground_fall_speed := 0.0
+var _has_grounded_position := false
+var _last_grounded_position := Vector3.ZERO
 ## 探针用：>=0 时强制这个闪避率（默认 -1 = 用护盾自带的值）
 var _evasion_fixed := -1.0
 
@@ -475,6 +478,10 @@ func _additive(col: Color) -> StandardMaterial3D:
 # ────────────────────────── 每帧 ──────────────────────────
 
 func _physics_process(delta: float) -> void:
+	# StaticBody3D 不受重力影响；出招、复活期间也必须维护本体的地面支撑。
+	# 跳砸只移动 model，因此不会被本体的回落保护取消。
+	if not _dead and _aura_built:
+		_settle_on_ground(delta)
 	# ⚠️ 见文件头 ①：骨骼碰撞盒必须继续跟随
 	super._physics_process(delta)
 	if not _aura_built:
@@ -2097,10 +2104,12 @@ func _chase(delta: float) -> void:
 		var d2 := dir.rotated(Vector3.UP, deg_to_rad(float(ang)))
 		if _walk_step(d2, delta):
 			return
-	# 七个方向全被挡（贴墙 / 卡在树缝里）：**保持高度直接平移**。
-	# 宁可擦着墙走，也不要钉在原地 —— 用户明确说了「现在一动不动」。
+	# 七个方向全被挡时允许擦墙，但不能横移到无支撑的扫描空白。
 	_chase_blocked += 1
-	global_position += Vector3(dir.x, 0.0, dir.z) * CHASE_SPEED * delta
+	var next := global_position + dir * CHASE_SPEED * delta
+	var gy := _sample_ground(next.x, next.z)
+	if not is_nan(gy) and absf(gy - global_position.y) <= CHASE_STEP_MAX:
+		global_position = Vector3(next.x, gy + 0.05, next.z)
 
 
 ## 试走一步：前方 4.5 m 没墙、下一格地面高差 ≤ CHASE_STEP_MAX 才走
@@ -2120,33 +2129,103 @@ func _walk_step(dir: Vector3, delta: float) -> bool:
 	var nz := global_position.z + dir.z * step
 	var gy := _sample_ground(nx, nz)
 	if is_nan(gy):
-		# 校园碰撞网格有洞、采样不到地面 → **保持当前高度**先走过去，
-		# 别因为"量不出地面"就整只钉在原地（实测被挡 2788 帧）。
-		global_position = Vector3(nx, global_position.y, nz)
-		return true
+		return false
 	if absf(gy - global_position.y) > CHASE_STEP_MAX:
 		return false
 	global_position = Vector3(nx, gy + 0.05, nz)
 	return true
 
 
-## 采样 (x,z) 的地面高度；不可信（打穿了校园网格）时返回 NAN
+## 从本体脚边向下找可站立的静态地面，不从天空射线挑中屋顶或其他 Boss。
+## 缺失地面必须返回 NAN，不能用飞行玩家的高度伪造落点。
 func _sample_ground(x: float, z: float) -> float:
 	var space := get_world_3d().direct_space_state
 	if space == null:
 		return NAN
 	var q := PhysicsRayQueryParameters3D.create(
-		Vector3(x, global_position.y + 200.0, z),
+		Vector3(x, global_position.y + CHASE_STEP_MAX, z),
 		Vector3(x, global_position.y - 200.0, z))
 	q.collision_mask = 1
 	q.exclude = [get_rid()]
-	var hit := space.intersect_ray(q)
-	if hit.is_empty():
-		return NAN
-	var gy := (hit["position"] as Vector3).y
-	if gy < -20.0:
-		return NAN
-	return gy
+	for boss in get_tree().get_nodes_in_group("bosses"):
+		if boss is PhysicsBody3D and boss != self:
+			q.exclude = q.exclude + [boss.get_rid()]
+	for attempt in 8:
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			return NAN
+		if not (hit.collider is StaticBody3D):
+			q.exclude = q.exclude + [hit.rid]
+			continue
+		var gy := (hit.position as Vector3).y
+		if gy < -20.0:
+			return NAN
+		if (hit.normal as Vector3).y < 0.65:
+			# 扫描树冠/墙皮下仍可能有街面；不能排除整块校园网格。
+			q.from = hit.position + Vector3.DOWN * 0.03
+			continue
+		return gy
+	return NAN
+
+
+func _settle_on_ground(delta: float) -> void:
+	var gy := _sample_ground(global_position.x, global_position.z)
+	if is_nan(gy):
+		# 追击到扫描空白时回到最近有支撑的位置，不能永久悬在空中。
+		if _has_grounded_position:
+			global_position = _last_grounded_position
+		_ground_fall_speed = 0.0
+		return
+	var floor_y := gy + 0.05
+	if global_position.y - floor_y > CHASE_STEP_MAX:
+		_ground_fall_speed = minf(_ground_fall_speed + 22.0 * delta, 40.0)
+		global_position.y = maxf(floor_y, global_position.y - _ground_fall_speed * delta)
+		if global_position.y > floor_y + 0.01:
+			return
+	global_position.y = floor_y
+	_ground_fall_speed = 0.0
+	_last_grounded_position = global_position
+	_has_grounded_position = true
+
+
+func _blink_landing_for(center: Vector3, facing: Vector3) -> Vector3:
+	# 首选玩家身后，空白或陡面则尝试附近；高度只参考本体所处的地面层。
+	for radius in [BLINK_BEHIND, 5.0, 9.0, 3.0, 11.0, BLINK_BEHIND * 2.0]:
+		for angle in [0.0, PI / 8.0, -PI / 8.0, PI / 4.0, -PI / 4.0,
+				3.0 * PI / 8.0, -3.0 * PI / 8.0]:
+			var point := center - facing.rotated(Vector3.UP, float(angle)) * float(radius)
+			var gy := _sample_ground(point.x, point.z)
+			if is_nan(gy):
+				continue
+			var supported := true
+			for edge in [Vector3(0.75, 0, 0), Vector3(-0.75, 0, 0),
+					Vector3(0, 0, 0.75), Vector3(0, 0, -0.75)]:
+				var edge_y := _sample_ground(point.x + edge.x, point.z + edge.z)
+				if is_nan(edge_y) or absf(edge_y - gy) > 1.0:
+					supported = false
+					break
+			if supported:
+				return Vector3(point.x, gy + 0.05, point.z)
+	return Vector3(NAN, NAN, NAN)
+
+
+func _clone_landing_for(center: Vector3, angle: float) -> Vector3:
+	for radius in [CLONE_RING, 8.0, 12.0, 6.0, 14.0]:
+		for turn in [0.0, 0.16, -0.16, 0.32, -0.32]:
+			var at := center + Vector3(cos(angle + float(turn)), 0,
+				sin(angle + float(turn))) * float(radius)
+			var gy := _sample_ground(at.x, at.z)
+			if is_nan(gy):
+				continue
+			var occupied := false
+			for clone in _clones:
+				if is_instance_valid(clone) and Vector2(clone.global_position.x - at.x,
+						clone.global_position.z - at.z).length() < 2.0:
+					occupied = true
+					break
+			if not occupied:
+				return Vector3(at.x, gy + 0.05, at.z)
+	return Vector3(NAN, NAN, NAN)
 
 
 ## 闪现：长冷却；玩家跑远了她直接出现在**背后**
@@ -2157,27 +2236,30 @@ func _tick_blink(delta: float) -> void:
 	var p := _find_player()
 	if p == null:
 		return
-	if global_position.distance_to(p.global_position) < BLINK_MIN_DIST:
+	var offset := p.global_position - global_position
+	if Vector2(offset.x, offset.z).length() < BLINK_MIN_DIST:
 		return
-	_blink_cd = BLINK_CD
-	_blinks += 1
-	_do_blink(p)
+	if _do_blink(p):
+		_blink_cd = BLINK_CD
+	else:
+		_blink_cd = 1.0
 
 
-func _do_blink(p: Node3D) -> void:
+func _do_blink(p: Node3D) -> bool:
 	# 玩家脸朝 = (sin(_facing_yaw), 0, cos(_facing_yaw))（见 `player.gd` 注释）
 	var yaw := float(p.get("_facing_yaw")) if p.get("_facing_yaw") != null else p.rotation.y
 	var facing := Vector3(sin(yaw), 0.0, cos(yaw))
-	var behind := p.global_position - facing * BLINK_BEHIND
-	var gy := _ground_below(Vector3(behind.x, p.global_position.y, behind.z))
-	# 落点地面不可信（打穿了）→ 直接贴玩家那一层，别闪到地底去
-	if absf(gy - p.global_position.y) > 8.0:
-		gy = p.global_position.y - 0.9
-	var at := Vector3(behind.x, gy + 0.05, behind.z)
+	var at := _blink_landing_for(p.global_position, facing)
+	if is_nan(at.y):
+		return false
+	_blinks += 1
 	_blast_fx(global_position + Vector3.UP * height * 0.45)
 	Vfx.burst(self, global_position + Vector3.UP * height * 0.45,
 		Color(1.0, 0.2, 0.3), 40, 2.0, 20.0, 0.5, 0.0)
 	global_position = at
+	_last_grounded_position = at
+	_has_grounded_position = true
+	_ground_fall_speed = 0.0
 	_blast_fx(at + Vector3.UP * height * 0.45)
 	Vfx.burst(self, at + Vector3.UP * height * 0.45, Color(1.0, 0.2, 0.3), 55, 2.2,
 		24.0, 0.55, 0.0)
@@ -2189,6 +2271,7 @@ func _do_blink(p: Node3D) -> void:
 	# 落地就接一招，别让闪现只当位移
 	_t_skill = minf(_t_skill, 0.4)
 	print("[YuukaHorror] 闪现到玩家身后：%s（第 %d 次）" % [str(at.snappedf(0.1)), _blinks])
+	return true
 
 
 ## 召唤 10 个分身围住玩家；只有本体放技能，分身只会普攻
@@ -2209,29 +2292,31 @@ func _skill_clones() -> void:
 		return
 	var host := get_parent() if get_parent() != null else get_tree().root
 	var center := p.global_position
+	var spawned := 0
 	for i in CLONE_COUNT:
 		if _dead or not is_instance_valid(self) or generation != _clone_generation:
 			return
 		var ang := TAU * float(i) / float(CLONE_COUNT)
-		var x := center.x + cos(ang) * CLONE_RING
-		var z := center.z + sin(ang) * CLONE_RING
-		var gy := _ground_below(Vector3(x, center.y, z))
+		var at := _clone_landing_for(center, ang)
+		if is_nan(at.y):
+			continue
 		var clone := CLONE_SCRIPT.new() as Node3D
 		if clone == null:
 			continue
 		host.add_child(clone)
-		clone.global_position = Vector3(x, gy + 0.05, z)
+		clone.global_position = at
 		if clone.has_method("setup"):
 			clone.call("setup", p)
 		_clones.append(clone)
-		Vfx.ring(self, Vector3(x, gy + 0.1, z), Color(1.0, 0.2, 0.3, 0.9), 7.0, 0.55)
-		Vfx.burst(self, Vector3(x, gy + 1.5, z), Color(1.0, 0.18, 0.25), 26, 1.4,
+		spawned += 1
+		Vfx.ring(self, at + Vector3.UP * 0.05, Color(1.0, 0.2, 0.3, 0.9), 7.0, 0.55)
+		Vfx.burst(self, at + Vector3.UP * 1.45, Color(1.0, 0.18, 0.25), 26, 1.4,
 			12.0, 0.5, -3.0)
 		# Spread ten model/skeleton instantiations across rendered frames.
 		# Physics frames can catch up within a single render frame after a stall.
 		if i + 1 < CLONE_COUNT:
 			await get_tree().process_frame
-	print("[YuukaHorror] 分身 ×%d 围住玩家（只有本体放技能）" % CLONE_COUNT)
+	print("[YuukaHorror] 分身 ×%d 围住玩家（只有本体放技能）" % spawned)
 
 
 func _prune_clones() -> void:
