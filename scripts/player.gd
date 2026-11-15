@@ -4,6 +4,8 @@ extends CharacterBody3D
 ## 上台阶辅助。用 `preload` 而不是 `class_name` 引用 —— 见 `step_climb.gd` 文件头第一条。
 const StepClimb := preload("res://scripts/step_climb.gd")
 const CollisionEscape := preload("res://scripts/collision_escape.gd")
+const CampusFlightPassage := preload("res://scripts/campus_flight_passage.gd")
+var _campus_passage := CampusFlightPassage.new()
 ## 开发者快捷键（F3/F4/F5/F6）用到的两个静态工具
 const DevMode := preload("res://scripts/dev_mode.gd")
 const SceneFlowDev := preload("res://scripts/scene_flow.gd")
@@ -897,6 +899,7 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = horiz.x
 	velocity.z = horiz.z
+	_campus_passage.prepare(self, _flight_lock, delta)
 	# 上台阶：`CharacterBody3D` 自己不会，Godot 也没有内置开关（见 `step_climb.gd`）。
 	#
 	# 顺序要紧 —— **先抬上去、再 `move_and_slide()`**：先把人放到台阶顶面，
@@ -906,7 +909,7 @@ func _physics_process(delta: float) -> void:
 	# 只在「上一帧想走却没走动」时才试，所以平地上零开销、原手感一点不动
 	# （`_verify_move_feel.gd` 那套断言照旧）。
 	var before := global_position
-	if _blocked_last_frame and horiz.length_squared() > 0.01:
+	if not _flight_lock and _blocked_last_frame and horiz.length_squared() > 0.01:
 		var y0 := global_position.y
 		if StepClimb.try_step(self, horiz * delta):
 			# ── 上台阶的**相机缓冲**（用户 2026-10-26：「上楼梯生硬」）──

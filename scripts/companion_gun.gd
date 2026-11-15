@@ -121,7 +121,7 @@ func _ensure_fx_root() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _is_active() or _companion == null:
+	if not _is_active() or _companion == null or not _companion.is_visible_in_tree():
 		return
 	_ensure_fx_root()
 	_refresh_t -= delta

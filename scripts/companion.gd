@@ -1,6 +1,8 @@
 class_name Companion
 extends CharacterBody3D
-## 同伴 NPC：跟着玩家走位，**不开火**（本阶段是纯观赏，行为以后再加）。
+const CombatPosition := preload("res://scripts/companion_combat_position.gd")
+var _combat_position: RefCounted
+## 同伴 NPC：平时跟随玩家；终局使用独立地面站位，射击交给 CompanionGun。
 ##
 ## 为什么要单独占一个「朋友层」（collision_layer = 2，见 weapon.gd）：
 ##   1. **子弹要穿透同伴。** Weapon 的射线用 PhysicsRayQueryParameters3D.create()，
@@ -224,7 +226,22 @@ func is_standby() -> bool:
 	return _standby
 
 
+func start_combat(target: Node3D, index: int) -> void:
+	_combat_position = CombatPosition.new()
+	_combat_position.start(self, target, index)
+
+
+func combat_status() -> Dictionary:
+	return _combat_position.status() if _combat_position != null else {"ready": false}
+
+
 func _physics_process(delta: float) -> void:
+	if _combat_position != null:
+		_combat_position.tick(delta)
+		_speed = Vector2(velocity.x, velocity.z).length()
+		if anim and anim.has_method("set_locomotion"):
+			anim.set_locomotion(_speed, is_on_floor(), velocity.y)
+		return
 	if _player == null:
 		return
 
