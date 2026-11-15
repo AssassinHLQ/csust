@@ -37,6 +37,8 @@ uniform float pulse_depth = 0.22;
 // 竖向边缘的亮线强度 / 宽度（把墙的四角勾出来，看着像"罩子"）。
 uniform float edge_glow = 1.1;
 uniform float edge_width = 0.06;
+// 顶盖独立淡入/解除，侧墙保持默认不透明度。
+uniform float opacity : hint_range(0.0, 1.0) = 1.0;
 
 void fragment() {
 	// ── 横向扫描线 ──
@@ -59,5 +61,5 @@ void fragment() {
 	a = max(a, e * 0.90);
 
 	ALBEDO = col;
-	ALPHA = clamp(a, 0.0, 1.0);
+	ALPHA = clamp(a * opacity, 0.0, 1.0);
 }

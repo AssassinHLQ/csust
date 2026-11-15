@@ -41,9 +41,10 @@ const SKY_PATH := "res://assets/sky/sky_doom.jpg"
 ## `scripts/music.gd` 里这一首的逻辑名（Encroached Sky）
 const TRACK := "finalboss"
 
-## 墙的视觉参数。60 m 高 —— 校园里的楼最高到 y≈53（`CampusCollision` 实测），
-## 所以站在校园里看，这圈墙是真的"出不去"，不是一道齐腰的栏杆。
-const WALL_HEIGHT := 60.0
+## 四面侧墙统一封到世界坐标 y=100 m，并以同高度的红色顶盖封住飞行出口。
+const CEILING_Y := 100.0
+## 顶盖独占一层，避免向下找地面的 mask=1 射线把它当成屋顶/地面。
+const CEILING_LAYER := 20
 const WALL_THICK := 2.0
 ## 上升用时（秒）。太快像贴图弹出，太慢没有压迫感。
 const RISE_SEC := 3.4
@@ -75,6 +76,12 @@ const GROUND_MIN := -20.0
 const GROUND_MAX := 90.0
 
 var _walls: Array[Node3D] = []
+var _ceiling: Node3D
+var _ceiling_collision: CollisionShape3D
+var _ceiling_mat: ShaderMaterial
+var _ceiling_tween: Tween
+var _ceiling_player: CollisionObject3D
+var _player_had_ceiling_layer := false
 var _fill_mat: ShaderMaterial
 var _band_mat_up: ShaderMaterial
 var _band_mat_down: ShaderMaterial
@@ -111,6 +118,8 @@ func start(env: WorldEnvironment, sun: DirectionalLight3D,
 	_sun = sun
 	_snapshot_env()
 	_build_walls(bounds)
+	_bind_ceiling_player(who)
+	_confine_below_ceiling(who)
 	_apply_doom_sky(env, sun)
 	Music.play(TRACK)
 	_rise()
@@ -134,6 +143,7 @@ func _build_walls(bounds: AABB) -> void:
 	_add_wall("N", true, z0, x0, x1)
 	_add_wall("W", false, x0, z0, z1)
 	_add_wall("E", false, x1, z0, z1)
+	_build_ceiling(x0, x1, z0, z1)
 
 
 ## `along_x = true` → 这面墙沿 x 方向延伸，`fixed` 是它的 z 坐标；反之亦然。
@@ -143,15 +153,19 @@ func _add_wall(tag: String, along_x: bool, fixed: float,
 	var mid := (span0 + span1) * 0.5
 	var cx := mid if along_x else fixed
 	var cz := fixed if along_x else mid
-	var gy := _ground_y(cx, cz)
-	var size := Vector3(length, WALL_HEIGHT, WALL_THICK) if along_x \
-		else Vector3(WALL_THICK, WALL_HEIGHT, length)
+	# 树冠/屋顶不能把墙底抬离街面；四边必须共用同一个顶部高度。
+	var gy := minf(_ground_y(cx, cz), GROUND_FALLBACK)
+	var wall_height := CEILING_Y - gy + BURY
+	var size := Vector3(length, wall_height, WALL_THICK) if along_x \
+		else Vector3(WALL_THICK, wall_height, length)
 
 	var holder := Node3D.new()
 	holder.name = "Wall%s" % tag
 	# 埋起来：盒子顶面落在 (地面 − BURY)
-	holder.position = Vector3(cx, gy - WALL_HEIGHT * 0.5 - BURY, cz)
-	holder.set_meta("stand_y", gy + WALL_HEIGHT * 0.5 - BURY)
+	var buried_y := gy - wall_height * 0.5 - BURY
+	holder.position = Vector3(cx, buried_y, cz)
+	holder.set_meta("stand_y", CEILING_Y - wall_height * 0.5)
+	holder.set_meta("buried_y", buried_y)
 	holder.set_meta("ground_y", gy)
 	add_child(holder)
 
@@ -188,7 +202,7 @@ func _add_wall(tag: String, along_x: bool, fixed: float,
 		q.mesh = qm
 		q.material_override = spec[2]
 		q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var y := sign_y * (WALL_HEIGHT * 0.5 - BAND_H * 0.5 - BAND_INSET)
+		var y := sign_y * (wall_height * 0.5 - BAND_H * 0.5 - BAND_INSET)
 		if along_x:
 			q.position = Vector3(0, y, 0)
 		else:
@@ -197,6 +211,91 @@ func _add_wall(tag: String, along_x: bool, fixed: float,
 		holder.add_child(q)
 
 	_walls.append(holder)
+
+
+func _build_ceiling(x0: float, x1: float, z0: float, z1: float) -> void:
+	_ceiling = Node3D.new()
+	_ceiling.name = "Ceiling"
+	# 顶盖固定在高处淡入，不能从地面扫上去把玩家托出封锁区。
+	_ceiling.position = Vector3((x0 + x1) * 0.5, CEILING_Y + WALL_THICK * 0.5,
+		(z0 + z1) * 0.5)
+	_ceiling.visible = false
+	add_child(_ceiling)
+	var body := StaticBody3D.new()
+	body.name = "Body"
+	body.collision_layer = 1 << (CEILING_LAYER - 1)
+	body.collision_mask = 0
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(x1 - x0 + WALL_THICK, WALL_THICK, z1 - z0 + WALL_THICK)
+	_ceiling_collision = CollisionShape3D.new()
+	_ceiling_collision.name = "Collision"
+	_ceiling_collision.shape = shape
+	_ceiling_collision.disabled = true
+	body.add_child(_ceiling_collision)
+	_ceiling.add_child(body)
+	_ceiling_mat = _fill_mat.duplicate() as ShaderMaterial
+	_ceiling_mat.set_shader_parameter("fill_color", Color(0.90, 0.06, 0.07, 0.12))
+	_ceiling_mat.set_shader_parameter("line_color", Color(1.0, 0.20, 0.13, 0.55))
+	_ceiling_mat.set_shader_parameter("line_count", 96.0)
+	_ceiling_mat.set_shader_parameter("opacity", 0.0)
+	var fill := MeshInstance3D.new()
+	fill.name = "Fill"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(shape.size.x, shape.size.z)
+	fill.mesh = plane
+	fill.position.y = -WALL_THICK * 0.5
+	fill.material_override = _ceiling_mat
+	fill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ceiling.add_child(fill)
+
+
+func _bind_ceiling_player(who: Node3D) -> void:
+	_restore_ceiling_player()
+	if who is CollisionObject3D:
+		_ceiling_player = who as CollisionObject3D
+		_player_had_ceiling_layer = _ceiling_player.get_collision_mask_value(CEILING_LAYER)
+		_ceiling_player.set_collision_mask_value(CEILING_LAYER, true)
+
+
+func _restore_ceiling_player() -> void:
+	if is_instance_valid(_ceiling_player):
+		_ceiling_player.set_collision_mask_value(CEILING_LAYER, _player_had_ceiling_layer)
+	_ceiling_player = null
+
+
+func _exit_tree() -> void:
+	_restore_ceiling_player()
+
+
+func _confine_below_ceiling(who: Node3D) -> void:
+	if who == null or not is_instance_valid(who):
+		return
+	var headroom := 2.0
+	var collision := who.get_node_or_null("Collision") as CollisionShape3D
+	if collision != null and collision.shape is CapsuleShape3D:
+		var capsule := collision.shape as CapsuleShape3D
+		headroom = maxf(headroom, who.to_local(collision.global_position).y +
+			capsule.height * 0.5 * collision.global_basis.y.length())
+	var max_y := CEILING_Y - headroom - 0.1
+	if who.global_position.y > max_y:
+		who.global_position.y = max_y
+		if who is CharacterBody3D:
+			who.velocity.y = minf(who.velocity.y, 0.0)
+
+
+func _fade_ceiling(opacity: float, duration: float) -> void:
+	if not is_instance_valid(_ceiling):
+		return
+	if _ceiling_tween != null and _ceiling_tween.is_valid():
+		_ceiling_tween.kill()
+	_ceiling.visible = true
+	_ceiling_collision.set_deferred("disabled", opacity <= 0.0)
+	if opacity <= 0.0:
+		_restore_ceiling_player()
+	_ceiling_tween = create_tween()
+	_ceiling_tween.tween_property(_ceiling_mat, "shader_parameter/opacity", opacity, duration)
+	if opacity <= 0.0:
+		_ceiling_tween.tween_callback(func() -> void: _ceiling.visible = false)
 
 
 func _make_fill_mat() -> ShaderMaterial:
@@ -236,6 +335,7 @@ func _make_band_mat(count: float, width: float, scroll: float) -> ShaderMaterial
 
 
 func _rise() -> void:
+	_fade_ceiling(1.0, RISE_SEC)
 	var i := 0
 	for w in _walls:
 		if w == null or not is_instance_valid(w):
@@ -425,11 +525,12 @@ func _on_boss_died(_by: float) -> void:
 
 
 func _lower_walls() -> void:
+	_fade_ceiling(0.0, 2.6)
 	var i := 0
 	for w in _walls:
 		if w == null or not is_instance_valid(w):
 			continue
-		var buried := float(w.get_meta("ground_y", 0.0)) - WALL_HEIGHT * 0.5 - BURY
+		var buried := float(w.get_meta("buried_y", w.position.y))
 		var tw := create_tween()
 		tw.tween_interval(0.12 * float(i))
 		tw.tween_property(w, "position:y", buried, 2.6) \
@@ -564,6 +665,8 @@ func status() -> Dictionary:
 		})
 	return {
 		"walls": rows,
+		"ceiling_y": CEILING_Y,
+		"ceiling_active": is_instance_valid(_ceiling_collision) and not _ceiling_collision.disabled,
 		"boss": String(_boss.name) if _boss != null and is_instance_valid(_boss) else "",
 		"boss_pos": (_boss as Node3D).global_position if _boss != null \
 			and is_instance_valid(_boss) else Vector3.ZERO,
